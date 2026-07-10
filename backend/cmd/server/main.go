@@ -616,7 +616,7 @@ func determineChange(month time.Time, prevData FeeRelevantData, curData FeeRelev
 			parts = append(parts, child+": Betreuung endet")
 		}
 		if isInPrev && isInCur && prevFeeType != curFeeType {
-			parts = append(parts, child+": Betreuungsgebühr alt: "+describeFee(prevFeeType)+" -> neu: "+describeFee(curFeeType))
+			parts = append(parts, child+": "+describeFee(prevFeeType)+" -> "+describeFee(curFeeType))
 		}
 	}
 

@@ -155,11 +155,39 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
 }) => {
   const currentYear = new Date().getFullYear();
 
-  // Month range state
-  const [startYear, setStartYear] = useState(currentYear);
-  const [startMonth, setStartMonth] = useState('01');
-  const [endYear, setEndYear] = useState(currentYear);
-  const [endMonth, setEndMonth] = useState('12');
+  // Month range state (persisted in browser localStorage)
+  const [startYear, setStartYear] = useState<number>(() => {
+    const saved = localStorage.getItem('childcare_fees_start_year');
+    return saved ? parseInt(saved, 10) : currentYear;
+  });
+  const [startMonth, setStartMonth] = useState<string>(() => {
+    const saved = localStorage.getItem('childcare_fees_start_month');
+    return saved ? saved : '01';
+  });
+  const [endYear, setEndYear] = useState<number>(() => {
+    const saved = localStorage.getItem('childcare_fees_end_year');
+    return saved ? parseInt(saved, 10) : currentYear;
+  });
+  const [endMonth, setEndMonth] = useState<string>(() => {
+    const saved = localStorage.getItem('childcare_fees_end_month');
+    return saved ? saved : '12';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('childcare_fees_start_year', String(startYear));
+    localStorage.setItem('childcare_fees_start_month', startMonth);
+    localStorage.setItem('childcare_fees_end_year', String(endYear));
+    localStorage.setItem('childcare_fees_end_month', endMonth);
+  }, [startYear, startMonth, endYear, endMonth]);
+
+  const selectableYears = useMemo(() => {
+    const years = [];
+    const maxYear = Math.max(2028, currentYear + 2);
+    for (let y = currentYear - 2; y <= maxYear; y++) {
+      years.push(y);
+    }
+    return years;
+  }, [currentYear]);
 
   // Selected families state
   const [selectedFamilyIds, setSelectedFamilyIds] = useState<string[]>(
@@ -190,6 +218,17 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
       return indexA - indexB;
     });
   }, [results, families]);
+
+  // Sort fee changes primarily by "Wirksamer Monat" (month string), then secondary by family name
+  const sortedFeeChanges = useMemo(() => {
+    if (!results || !results.fee_changes) return [];
+    return [...results.fee_changes].sort((a, b) => {
+      if (a.month !== b.month) {
+        return a.month.localeCompare(b.month);
+      }
+      return (a.family_name || '').localeCompare(b.family_name || '');
+    });
+  }, [results]);
 
   // Helper to format family names
   const getFamilyName = (f: Family) => {
@@ -344,7 +383,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
                 onChange={(e) => setStartYear(parseInt(e.target.value, 10))}
                 style={{ padding: '0.35rem', border: '1px solid var(--border)', borderRadius: '4px' }}
               >
-                {Array.from({ length: 5 }, (_, i) => currentYear - 2 + i).map((y) => (
+                {selectableYears.map((y) => (
                   <option key={y} value={y}>
                     {y}
                   </option>
@@ -375,7 +414,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
                 onChange={(e) => setEndYear(parseInt(e.target.value, 10))}
                 style={{ padding: '0.35rem', border: '1px solid var(--border)', borderRadius: '4px' }}
               >
-                {Array.from({ length: 5 }, (_, i) => currentYear - 2 + i).map((y) => (
+                {selectableYears.map((y) => (
                   <option key={y} value={y}>
                     {y}
                   </option>
@@ -545,7 +584,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
             <table className="data-table" style={{ width: 'max-content', minWidth: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  <th style={{ width: '220px', border: '1px solid #475569', padding: '0.5rem' }}>{t('family')}</th>
+                  <th style={{ border: '1px solid #475569', padding: '0.5rem', whiteSpace: 'nowrap' }}>{t('family')}</th>
                   {monthsColumns.map((m) => (
                     <th key={m} style={{ textAlign: 'right', border: '1px solid #475569', padding: '0.5rem' }}>
                       {formatMonth(m)}
@@ -556,7 +595,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
               <tbody>
                 {sortedFamilyFees.map((res) => (
                   <tr key={res.family_id}>
-                    <td style={{ fontWeight: 600, color: 'var(--text-h)', border: '1px solid #475569', padding: '0.5rem' }}>{res.family_name}</td>
+                    <td style={{ fontWeight: 600, color: 'var(--text-h)', border: '1px solid #475569', padding: '0.5rem', whiteSpace: 'nowrap' }}>{res.family_name}</td>
                     {monthsColumns.map((m) => {
                       const monthData = (res.monthly_fees || []).find((mf) => mf.month === m);
                       const change = (results.fee_changes || []).find(
@@ -601,17 +640,17 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
               <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr>
-                    <th style={{ border: '1px solid #475569', padding: '0.5rem' }}>{t('family')}</th>
-                    <th style={{ border: '1px solid #475569', padding: '0.5rem' }}>{t('effectiveMonth')}</th>
-                    <th style={{ textAlign: 'right', border: '1px solid #475569', padding: '0.5rem' }}>{t('previousFee')}</th>
-                    <th style={{ textAlign: 'right', border: '1px solid #475569', padding: '0.5rem' }}>{t('newFee')}</th>
+                    <th style={{ border: '1px solid #475569', padding: '0.5rem', whiteSpace: 'nowrap' }}>{t('family')}</th>
+                    <th style={{ border: '1px solid #475569', padding: '0.5rem', width: '150px' }}>{t('effectiveMonth')}</th>
+                    <th style={{ textAlign: 'right', border: '1px solid #475569', padding: '0.5rem', width: '140px' }}>{t('previousFee')}</th>
+                    <th style={{ textAlign: 'right', border: '1px solid #475569', padding: '0.5rem', width: '120px' }}>{t('newFee')}</th>
                     <th style={{ border: '1px solid #475569', padding: '0.5rem' }}>{t('reason')}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(results.fee_changes || []).map((chg, idx) => (
+                  {sortedFeeChanges.map((chg, idx) => (
                     <tr key={`${chg.family_id}-${chg.month}-${idx}`}>
-                      <td style={{ fontWeight: 600, color: 'var(--text-h)', border: '1px solid #475569', padding: '0.5rem' }}>{chg.family_name}</td>
+                      <td style={{ fontWeight: 600, color: 'var(--text-h)', border: '1px solid #475569', padding: '0.5rem', whiteSpace: 'nowrap' }}>{chg.family_name}</td>
                       <td style={{ border: '1px solid #475569', padding: '0.5rem' }}>{formatMonth(chg.month)}</td>
                       <td style={{ textAlign: 'right', color: '#64748b', border: '1px solid #475569', padding: '0.5rem' }}>{chg.previous_fee.toFixed(2)} EUR</td>
                       <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--primary)', border: '1px solid #475569', padding: '0.5rem' }}>

@@ -356,7 +356,7 @@ const Dashboard: React.FC = () => {
   React.useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#', '');
-      if (hash === 'parents' || hash === 'children' || hash === 'childcareFees') {
+      if (hash === 'parents' || hash === 'children' || hash === 'childcareFees' || hash === 'hygieneBelehrung') {
         setActiveTab(hash);
         localStorage.setItem('thweb_active_tab', hash);
       }
