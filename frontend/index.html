@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TH Liste</title>
+    <script>
+      window.addEventListener('error', (event) => {
+        const root = document.getElementById('root');
+        if (root) {
+          root.innerHTML = `
+            <div style="padding: 20px; color: #ff3333; background: #fee; border: 1px solid #fcc; border-radius: 4px; font-family: monospace; margin: 20px; text-align: left;">
+              <h3>🔴 Runtime Error</h3>
+              <p><strong>Message:</strong> ${event.message}</p>
+              <p><strong>Source:</strong> ${event.filename}:${event.lineno}:${event.colno}</p>
+              <pre style="white-space: pre-wrap; margin-top: 10px;">${event.error ? event.error.stack : ''}</pre>
+            </div>
+          `;
+        }
+      });
+      window.addEventListener('unhandledrejection', (event) => {
+        const root = document.getElementById('root');
+        if (root) {
+          root.innerHTML = `
+            <div style="padding: 20px; color: #ff3333; background: #fee; border: 1px solid #fcc; border-radius: 4px; font-family: monospace; margin: 20px; text-align: left;">
+              <h3>🔴 Unhandled Promise Rejection</h3>
+              <p><strong>Reason:</strong> ${event.reason}</p>
+            </div>
+          `;
+        }
+      });
+      
+      const originalConsoleError = console.error;
+      console.error = (...args) => {
+        originalConsoleError.apply(console, args);
+        const root = document.getElementById('root');
+        if (root) {
+          const errorMsg = args.map(arg => {
+            if (arg instanceof Error) return arg.message + '\n' + arg.stack;
+            if (typeof arg === 'object') {
+              try { return JSON.stringify(arg, null, 2); } catch(e) { return String(arg); }
+            }
+            return String(arg);
+          }).join(' ');
+          
+          const errDiv = document.createElement('div');
+          errDiv.style.cssText = "padding: 15px; color: #d32f2f; background: #ffebee; border: 1px solid #ffcdd2; border-radius: 4px; font-family: monospace; margin: 10px 20px; text-align: left;";
+          errDiv.innerHTML = `<h4>⚠️ Console Error</h4><pre style="white-space: pre-wrap; margin: 0;">${errorMsg}</pre>`;
+          root.appendChild(errDiv);
+        }
+      };
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
