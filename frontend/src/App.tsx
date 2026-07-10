@@ -15,6 +15,16 @@ import { t, CURRENT_LOCALE, formatDisplayDate, parseInputDate } from './utils/i1
 const EasyEditComponent = EasyEdit;
 const EasyEditTypes = Types;
 
+interface THMembership {
+  id: string;
+  parent_id: string;
+  start_date: string;
+  end_date: string | null;
+  membership_type: 'full_member' | 'supporting_member';
+  created_at: string;
+  updated_at: string;
+}
+
 interface HygieneBelehrungEvent {
   id: string;
   parent_id: string;
@@ -34,6 +44,7 @@ interface Parent {
   phones?: string[];
   notes?: string;
   events?: HygieneBelehrungEvent[];
+  memberships?: THMembership[];
   family_name?: string;
 }
 
@@ -58,6 +69,37 @@ interface Family {
   parents: Parent[];
   children?: Child[];
 }
+
+const getMembershipStatus = (memberships: THMembership[] | undefined) => {
+  if (!memberships || memberships.length === 0) return { text: '', color: 'inherit' };
+  
+  const today = new Date().toISOString().split('T')[0];
+
+  const active = memberships.find(m => {
+    const start = m.start_date.split('T')[0];
+    const end = m.end_date ? m.end_date.split('T')[0] : null;
+    return start <= today && (!end || end >= today);
+  });
+
+  if (active) {
+    if (active.membership_type === 'full_member') {
+      return { text: t('full_member'), color: 'var(--text-h)', fontWeight: '600' };
+    } else {
+      return { text: t('supporting_member'), color: 'var(--text-h)', fontWeight: '600' };
+    }
+  }
+
+  const expired = memberships.some(m => {
+    const end = m.end_date ? m.end_date.split('T')[0] : null;
+    return end && end < today;
+  });
+
+  if (expired) {
+    return { text: t('expired'), color: '#94a3b8', fontStyle: 'italic' };
+  }
+
+  return { text: '', color: 'inherit' };
+};
 
 const LandingPage: React.FC = () => {
   return (
@@ -106,6 +148,13 @@ const Dashboard: React.FC = () => {
   const [newEventDate, setNewEventDate] = React.useState('');
   const [newEventType, setNewEventType] = React.useState<'initial' | 'recertify'>('recertify');
   const [newEventDocumentation, setNewEventDocumentation] = React.useState('');
+
+  // Membership states
+  const [manageMembershipsOpen, setManageMembershipsOpen] = React.useState(false);
+  const [targetParentMemberships, setTargetParentMemberships] = React.useState<Parent | null>(null);
+  const [newMembershipStartDate, setNewMembershipStartDate] = React.useState('');
+  const [newMembershipEndDate, setNewMembershipEndDate] = React.useState('');
+  const [newMembershipType, setNewMembershipType] = React.useState<'full_member' | 'supporting_member'>('full_member');
 
   const [confirmDelete, setConfirmDelete] = React.useState<{
     isOpen: boolean;
@@ -386,13 +435,13 @@ const Dashboard: React.FC = () => {
         setAddChildOpen(false);
       }
     };
-    if (addParentOpen || addFamilyOpen || addChildOpen || manageHygieneOpen) {
+    if (addParentOpen || addFamilyOpen || addChildOpen || manageHygieneOpen || manageMembershipsOpen) {
       window.addEventListener('keydown', handleKeyDown);
     }
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [addParentOpen, addFamilyOpen, addChildOpen, manageHygieneOpen]);
+  }, [addParentOpen, addFamilyOpen, addChildOpen, manageHygieneOpen, manageMembershipsOpen]);
 
   const openAddParent = (familyId: string, familyName: string) => {
     setTargetFamily({ id: familyId, name: familyName });
@@ -502,6 +551,69 @@ const Dashboard: React.FC = () => {
         });
         fetchFamilies();
         setAddChildOpen(false);
+      })
+      .catch((err) => alert(err.message));
+  };
+
+  const openManageMemberships = (parent: Parent) => {
+    setTargetParentMemberships(parent);
+    setNewMembershipStartDate(new Date().toISOString().split('T')[0]);
+    setNewMembershipEndDate('');
+    setNewMembershipType('full_member');
+    setManageMembershipsOpen(true);
+  };
+
+  const handleAddMembership = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetParentMemberships) return;
+    if (!newMembershipStartDate) {
+      alert(t('invalidDate'));
+      return;
+    }
+
+    const payload = {
+      parent_id: targetParentMemberships.id,
+      start_date: `${newMembershipStartDate}T00:00:00Z`,
+      end_date: newMembershipEndDate ? `${newMembershipEndDate}T00:00:00Z` : null,
+      membership_type: newMembershipType,
+    };
+
+    fetch('/api/memberships', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to create membership');
+        return res.json();
+      })
+      .then((created) => {
+        fetchFamilies();
+        const updatedMemberships = [created, ...(targetParentMemberships.memberships || [])].sort(
+          (a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
+        );
+        setTargetParentMemberships({ ...targetParentMemberships, memberships: updatedMemberships });
+        setNewMembershipEndDate('');
+      })
+      .catch((err) => alert(err.message));
+  };
+
+  const handleDeleteMembership = (membershipId: string) => {
+    if (!targetParentMemberships) return;
+    if (!window.confirm(t('membershipDeleteConfirm'))) return;
+
+    fetch(`/api/memberships/${membershipId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to delete membership');
+        fetchFamilies();
+        const updatedMemberships = (targetParentMemberships.memberships || []).filter((m) => m.id !== membershipId);
+        setTargetParentMemberships({ ...targetParentMemberships, memberships: updatedMemberships });
       })
       .catch((err) => alert(err.message));
   };
@@ -1042,6 +1154,46 @@ const Dashboard: React.FC = () => {
               value={parent.notes || ''}
               onSave={(val: string) => handleSaveParentField(parent, 'notes', val)}
             />
+          );
+        }
+      },
+      {
+        header: t('th_membership'),
+        id: 'th_membership',
+        size: 150,
+        cell: (info) => {
+          const parent = info.row.original;
+          if (!parent || !parent.id) return null;
+          const status = getMembershipStatus(parent.memberships);
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+              <span style={{
+                color: status.color,
+                fontWeight: (status as any).fontWeight || 'normal',
+                fontStyle: (status as any).fontStyle || 'normal',
+              }}>
+                {status.text}
+              </span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openManageMemberships(parent);
+                }}
+                className="easy-edit-button"
+                style={{
+                  padding: '2px',
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  color: 'var(--primary)',
+                }}
+                title={t('manageMemberships')}
+              >
+                <Pencil size={14} />
+              </button>
+            </div>
           );
         }
       },
@@ -1971,6 +2123,208 @@ const Dashboard: React.FC = () => {
                   </button>
                   <button type="submit" className="submit-btn">
                     {t('addEvent')}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Manage Memberships Modal */}
+        {manageMembershipsOpen && targetParentMemberships && (
+          <div className="modal-overlay">
+            <div className="modal-container" style={{ maxWidth: '600px' }}>
+              <h2>{t('manageMemberships')} - {targetParentMemberships.first_name} {targetParentMemberships.last_name}</h2>
+              
+              {/* List of existing memberships */}
+              <div style={{ marginBottom: '1.5rem', maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '6px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc', borderBottom: '1px solid var(--border)' }}>
+                      <th style={{ padding: '0.5rem', textAlign: 'left' }}>{t('membershipType')}</th>
+                      <th style={{ padding: '0.5rem', textAlign: 'left' }}>{t('startDateLabel')}</th>
+                      <th style={{ padding: '0.5rem', textAlign: 'left' }}>{t('endDateLabel')}</th>
+                      <th style={{ padding: '0.5rem', width: '50px' }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(targetParentMemberships.memberships || []).length === 0 ? (
+                      <tr>
+                        <td colSpan={4} style={{ padding: '1rem', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic' }}>
+                          {t('noMembershipsRecorded')}
+                        </td>
+                      </tr>
+                    ) : (
+                      (targetParentMemberships.memberships || []).map((m) => (
+                        <tr key={m.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                          <td style={{ padding: '0.5rem', fontWeight: 600 }}>
+                            {m.membership_type === 'full_member' ? t('full_member') : t('supporting_member')}
+                          </td>
+                          <td style={{ padding: '0.5rem' }}>{formatDisplayDate(m.start_date)}</td>
+                          <td style={{ padding: '0.5rem' }}>{m.end_date ? formatDisplayDate(m.end_date) : '-'}</td>
+                          <td style={{ padding: '0.5rem', textAlign: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteMembership(m.id)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#ef4444',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                              }}
+                              title={t('delete')}
+                            >
+                              <Trash size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Add New Membership Form */}
+              <form onSubmit={handleAddMembership} style={{ borderTop: '2px dashed var(--border)', paddingTop: '1.25rem' }}>
+                <h3 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--text-h)' }}>
+                  {t('addMembership')}
+                </h3>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.25rem' }}>
+                  {/* Membership Type */}
+                  <div className="modal-form-group" style={{ marginBottom: 0 }}>
+                    <label>{t('membershipType')}</label>
+                    <select
+                      value={newMembershipType}
+                      onChange={(e) => setNewMembershipType(e.target.value as 'full_member' | 'supporting_member')}
+                      style={{ width: '100%', padding: '0.45rem', border: '1px solid var(--border)', borderRadius: '4px' }}
+                      required
+                    >
+                      <option value="full_member">{t('full_member')}</option>
+                      <option value="supporting_member">{t('supporting_member')}</option>
+                    </select>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '1rem' }}>
+                    {/* Start Date */}
+                    <div className="modal-form-group" style={{ flex: 1, marginBottom: 0 }}>
+                      <label>{t('startDateLabel')}</label>
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <input
+                          type="text"
+                          value={CURRENT_LOCALE === 'de' ? formatDisplayDate(newMembershipStartDate) : newMembershipStartDate}
+                          readOnly
+                          placeholder={CURRENT_LOCALE === 'de' ? 'TT.MM.JJJJ' : 'YYYY-MM-DD'}
+                          style={{ width: '100%', paddingRight: '2.5rem' }}
+                        />
+                        <button
+                          type="button"
+                          style={{
+                            position: 'absolute',
+                            right: '6px',
+                            background: 'transparent',
+                            border: 'none',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '4px',
+                            color: '#64748b',
+                          }}
+                          onClick={(e) => {
+                            const input = e.currentTarget.parentElement?.querySelector('input[type="date"]') as HTMLInputElement;
+                            if (input) {
+                              try {
+                                input.showPicker();
+                              } catch (err) {
+                                input.click();
+                              }
+                            }
+                          }}
+                        >
+                          <Calendar size={18} />
+                        </button>
+                        <input
+                          type="date"
+                          value={newMembershipStartDate}
+                          style={{
+                            position: 'absolute',
+                            right: '4px',
+                            width: '0px',
+                            height: '0px',
+                            opacity: 0,
+                            pointerEvents: 'none',
+                          }}
+                          onChange={(e) => setNewMembershipStartDate(e.target.value)}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    {/* End Date */}
+                    <div className="modal-form-group" style={{ flex: 1, marginBottom: 0 }}>
+                      <label>{t('endDateLabel')} ({CURRENT_LOCALE === 'de' ? 'optional' : 'Optional'})</label>
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <input
+                          type="text"
+                          value={newMembershipEndDate ? (CURRENT_LOCALE === 'de' ? formatDisplayDate(newMembershipEndDate) : newMembershipEndDate) : ''}
+                          readOnly
+                          placeholder={CURRENT_LOCALE === 'de' ? 'TT.MM.JJJJ' : 'YYYY-MM-DD'}
+                          style={{ width: '100%', paddingRight: '2.5rem' }}
+                        />
+                        <button
+                          type="button"
+                          style={{
+                            position: 'absolute',
+                            right: '6px',
+                            background: 'transparent',
+                            border: 'none',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '4px',
+                            color: '#64748b',
+                          }}
+                          onClick={(e) => {
+                            const input = e.currentTarget.parentElement?.querySelector('input[type="date"]') as HTMLInputElement;
+                            if (input) {
+                              try {
+                                input.showPicker();
+                              } catch (err) {
+                                input.click();
+                              }
+                            }
+                          }}
+                        >
+                          <Calendar size={18} />
+                        </button>
+                        <input
+                          type="date"
+                          value={newMembershipEndDate}
+                          style={{
+                            position: 'absolute',
+                            right: '4px',
+                            width: '0px',
+                            height: '0px',
+                            opacity: 0,
+                            pointerEvents: 'none',
+                          }}
+                          onChange={(e) => setNewMembershipEndDate(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="modal-actions">
+                  <button type="button" className="cancel-btn" onClick={() => setManageMembershipsOpen(false)}>
+                    {t('cancel')}
+                  </button>
+                  <button type="submit" className="submit-btn">
+                    {t('addMembership')}
                   </button>
                 </div>
               </form>

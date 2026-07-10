@@ -313,6 +313,66 @@ func main() {
 			jsonResponse(w, map[string]string{"status": "success"})
 		})
 
+		r.Post("/api/memberships", func(w http.ResponseWriter, r *http.Request) {
+			user := auth.GetUser(r.Context())
+			var m models.THMembership
+			if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+
+			if m.ParentID == uuid.Nil {
+				http.Error(w, "Parent ID is required", http.StatusBadRequest)
+				return
+			}
+			if m.StartDate.IsZero() {
+				http.Error(w, "Start date is required", http.StatusBadRequest)
+				return
+			}
+			if m.MembershipType != "full_member" && m.MembershipType != "supporting_member" {
+				http.Error(w, "Invalid membership type: must be 'full_member' or 'supporting_member'", http.StatusBadRequest)
+				return
+			}
+
+			created, err := appStore.CreateTHMembership(r.Context(), user.ID, m)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			hub.Broadcast(map[string]interface{}{
+				"type": "MEMBERSHIP_CREATED",
+				"data": created,
+			})
+
+			jsonResponse(w, created)
+		})
+
+		r.Delete("/api/memberships/{id}", func(w http.ResponseWriter, r *http.Request) {
+			user := auth.GetUser(r.Context())
+			idStr := chi.URLParam(r, "id")
+			membershipID, err := uuid.Parse(idStr)
+			if err != nil {
+				http.Error(w, "Invalid membership ID", http.StatusBadRequest)
+				return
+			}
+
+			err = appStore.DeleteTHMembership(r.Context(), user.ID, membershipID)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			hub.Broadcast(map[string]interface{}{
+				"type": "MEMBERSHIP_DELETED",
+				"data": map[string]interface{}{
+					"id": membershipID,
+				},
+			})
+
+			jsonResponse(w, map[string]string{"status": "success"})
+		})
+
 		r.Post("/api/fees/calculate", func(w http.ResponseWriter, r *http.Request) {
 			var req struct {
 				StartMonth string      `json:"start_month"` // e.g. "2026-01"

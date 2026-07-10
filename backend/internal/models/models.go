@@ -25,16 +25,17 @@ type Family struct {
 }
 
 type Parent struct {
-	ID        uuid.UUID               `json:"id"`
-	FamilyID  uuid.UUID               `json:"family_id"`
-	FirstName string                  `json:"first_name"`
-	LastName  string                  `json:"last_name"`
-	Emails    []string                `json:"emails"`
-	Phones    []string                `json:"phones"`
-	Notes     string                  `json:"notes"`
-	Events    []HygieneBelehrungEvent `json:"events"`
-	CreatedAt time.Time               `json:"created_at"`
-	UpdatedAt time.Time               `json:"updated_at"`
+	ID          uuid.UUID               `json:"id"`
+	FamilyID    uuid.UUID               `json:"family_id"`
+	FirstName   string                  `json:"first_name"`
+	LastName    string                  `json:"last_name"`
+	Emails      []string                `json:"emails"`
+	Phones      []string                `json:"phones"`
+	Notes       string                  `json:"notes"`
+	Events      []HygieneBelehrungEvent `json:"events"`
+	Memberships []THMembership          `json:"memberships"`
+	CreatedAt   time.Time               `json:"created_at"`
+	UpdatedAt   time.Time               `json:"updated_at"`
 }
 
 type HygieneBelehrungEvent struct {
@@ -73,4 +74,14 @@ type AuditLog struct {
 	Snapshot      json.RawMessage `json:"snapshot"`
 	ChangedBy     *uuid.UUID      `json:"changed_by"`
 	CreatedAt     time.Time       `json:"created_at"`
+}
+
+type THMembership struct {
+	ID             uuid.UUID  `json:"id"`
+	ParentID       uuid.UUID  `json:"parent_id"`
+	StartDate      time.Time  `json:"start_date"`
+	EndDate        *time.Time `json:"end_date"`
+	MembershipType string     `json:"membership_type"` // "full_member", "supporting_member"
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
 }

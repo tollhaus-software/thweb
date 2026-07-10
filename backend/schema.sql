@@ -93,6 +93,19 @@ CREATE TABLE hygiene_belehrung_events (
 
 CREATE TRIGGER update_hygiene_belehrung_events_updated_at BEFORE UPDATE ON hygiene_belehrung_events FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
+-- TH Memberships table
+CREATE TABLE th_memberships (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    parent_id UUID NOT NULL REFERENCES parents(id) ON DELETE CASCADE,
+    start_date DATE NOT NULL,
+    end_date DATE,
+    membership_type TEXT NOT NULL CHECK (membership_type IN ('full_member', 'supporting_member')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TRIGGER update_th_memberships_updated_at BEFORE UPDATE ON th_memberships FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+
 -- Default developer user for local testing
 INSERT INTO users (email, role) VALUES ('developer@example.com', 'admin') ON CONFLICT (email) DO NOTHING;
 

@@ -109,6 +109,18 @@ func (s *Store) ListFamilies(ctx context.Context) ([]models.Family, error) {
 						   ) ORDER BY e.event_date DESC)
 						   FROM hygiene_belehrung_events e WHERE e.parent_id = p.id
 					   ), '[]'),
+					   'memberships', COALESCE((
+						   SELECT json_agg(json_build_object(
+							   'id', m.id,
+							   'parent_id', m.parent_id,
+							   'start_date', m.start_date::timestamptz,
+							   'end_date', m.end_date::timestamptz,
+							   'membership_type', m.membership_type,
+							   'created_at', m.created_at,
+							   'updated_at', m.updated_at
+						   ) ORDER BY m.start_date DESC)
+						   FROM th_memberships m WHERE m.parent_id = p.id
+					   ), '[]'),
 					   'created_at', p.created_at,
 					   'updated_at', p.updated_at
 				   )) FROM parents p WHERE p.family_id = f.id
@@ -398,6 +410,67 @@ func (s *Store) DeleteHygieneEvent(ctx context.Context, userID uuid.UUID, eventI
 		}
 
 		_, err = tx.Exec(ctx, "DELETE FROM hygiene_belehrung_events WHERE id = $1", eventID)
+		return err
+	})
+}
+
+func (s *Store) CreateTHMembership(ctx context.Context, userID uuid.UUID, m models.THMembership) (models.THMembership, error) {
+	transactionID := uuid.New()
+	var created models.THMembership
+	err := s.WithTx(ctx, func(tx pgx.Tx) error {
+		var familyID uuid.UUID
+		err := tx.QueryRow(ctx, "SELECT family_id FROM parents WHERE id = $1", m.ParentID).Scan(&familyID)
+		if err != nil {
+			return err
+		}
+
+		err = tx.QueryRow(ctx, `
+			INSERT INTO th_memberships (parent_id, start_date, end_date, membership_type)
+			VALUES ($1, $2, $3, $4)
+			RETURNING id, parent_id, start_date, end_date, membership_type, created_at, updated_at
+		`, m.ParentID, m.StartDate, m.EndDate, m.MembershipType).Scan(
+			&created.ID, &created.ParentID, &created.StartDate, &created.EndDate, &created.MembershipType, &created.CreatedAt, &created.UpdatedAt,
+		)
+		if err != nil {
+			return err
+		}
+
+		return s.recordAudit(ctx, tx, transactionID, &familyID, "th_membership", created.ID, "CREATE", created, userID)
+	})
+	return created, err
+}
+
+func (s *Store) DeleteTHMembership(ctx context.Context, userID uuid.UUID, membershipID uuid.UUID) error {
+	transactionID := uuid.New()
+	return s.WithTx(ctx, func(tx pgx.Tx) error {
+		var parentID uuid.UUID
+		var startDate time.Time
+		var endDate *time.Time
+		var membershipType string
+		err := tx.QueryRow(ctx, "SELECT parent_id, start_date, end_date, membership_type FROM th_memberships WHERE id = $1", membershipID).Scan(&parentID, &startDate, &endDate, &membershipType)
+		if err != nil {
+			return err
+		}
+
+		var familyID uuid.UUID
+		err = tx.QueryRow(ctx, "SELECT family_id FROM parents WHERE id = $1", parentID).Scan(&familyID)
+		if err != nil {
+			return err
+		}
+
+		oldMembership := models.THMembership{
+			ID:             membershipID,
+			ParentID:       parentID,
+			StartDate:      startDate,
+			EndDate:        endDate,
+			MembershipType: membershipType,
+		}
+
+		if err := s.recordAudit(ctx, tx, transactionID, &familyID, "th_membership", membershipID, "DELETE", oldMembership, userID); err != nil {
+			return err
+		}
+
+		_, err = tx.Exec(ctx, "DELETE FROM th_memberships WHERE id = $1", membershipID)
 		return err
 	})
 }
