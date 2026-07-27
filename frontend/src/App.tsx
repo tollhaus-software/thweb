@@ -101,6 +101,180 @@ const getMembershipStatus = (memberships: THMembership[] | undefined) => {
   return { text: '', color: 'inherit' };
 };
 
+interface AuditLog {
+  id: string;
+  transaction_id: string;
+  family_id: string | null;
+  entity_type: string;
+  entity_id: string;
+  operation: string;
+  snapshot: any;
+  changed_by: string | null;
+  changed_by_email: string;
+  created_at: string;
+}
+
+const formatSnapshotDetails = (log: AuditLog) => {
+  const data = log.snapshot;
+  if (!data) return '-';
+
+  const parts: string[] = [];
+  
+  if (log.entity_type === 'family') {
+    if (data.parents && data.parents.length > 0) {
+      const names = data.parents.map((p: any) => `${p.first_name} ${p.last_name}`).join(' & ');
+      parts.push(`${t('family')}: ${names}`);
+    } else {
+      parts.push(`Family ID: ${log.entity_id}`);
+    }
+  }
+
+  if (log.entity_type === 'parent') {
+    parts.push(`${data.first_name || ''} ${data.last_name || ''}`);
+    if (data.emails && data.emails.length > 0) {
+      parts.push(`Emails: ${data.emails.join(', ')}`);
+    }
+    if (data.phones && data.phones.length > 0) {
+      parts.push(`Phones: ${data.phones.join(', ')}`);
+    }
+    if (data.notes) {
+      parts.push(`Notes: ${data.notes}`);
+    }
+  }
+
+  if (log.entity_type === 'child') {
+    parts.push(`${data.first_name || ''} ${data.last_name || ''}`);
+    if (data.birth_date) {
+      parts.push(`${t('birthDate')}: ${formatDisplayDate(data.birth_date)}`);
+    }
+    if (data.start_date) {
+      parts.push(`${t('startDate')}: ${formatDisplayDate(data.start_date)}`);
+    }
+    if (data.exit_date) {
+      parts.push(`${t('exitDate')}: ${formatDisplayDate(data.exit_date)}`);
+    }
+    if (data.start_group) {
+      const groupLabels: Record<number, string> = { 1: t('group1'), 2: t('group2'), 3: t('group3') };
+      parts.push(`${t('startGroup')}: ${groupLabels[data.start_group] || data.start_group}`);
+    }
+  }
+
+  if (log.entity_type === 'hygiene_event') {
+    const typeLabel = data.event_type === 'initial' ? t('initialType') : t('recertifyType');
+    parts.push(`${typeLabel}`);
+    if (data.event_date) {
+      parts.push(`Datum: ${formatDisplayDate(data.event_date)}`);
+    }
+    if (data.documentation) {
+      parts.push(`Info: ${data.documentation}`);
+    }
+  }
+
+  if (log.entity_type === 'th_membership') {
+    const typeLabel = data.membership_type === 'full_member' ? t('full_member') : t('supporting_member');
+    parts.push(`${typeLabel}`);
+    if (data.start_date) {
+      parts.push(`${t('startDateLabel')}: ${formatDisplayDate(data.start_date)}`);
+    }
+    if (data.end_date) {
+      parts.push(`${t('endDateLabel')}: ${formatDisplayDate(data.end_date)}`);
+    }
+  }
+
+  return parts.join(' | ');
+};
+
+const AuditLogView: React.FC<{ logs: AuditLog[]; loading: boolean }> = ({ logs, loading }) => {
+  if (loading) {
+    return <div style={{ color: '#64748b', padding: '1rem' }}>{t('loading')}</div>;
+  }
+
+  const getOperationBadgeStyle = (op: string) => {
+    const baseStyle = {
+      padding: '0.2rem 0.5rem',
+      borderRadius: '4px',
+      fontSize: '0.75rem',
+      fontWeight: 'bold' as const,
+      textTransform: 'uppercase' as const,
+      display: 'inline-block',
+    };
+    if (op === 'INSERT' || op === 'CREATE') {
+      return { ...baseStyle, backgroundColor: '#dcfce7', color: '#16a34a' };
+    }
+    if (op === 'UPDATE') {
+      return { ...baseStyle, backgroundColor: '#dbeafe', color: '#2563eb' };
+    }
+    if (op === 'DELETE') {
+      return { ...baseStyle, backgroundColor: '#fee2e2', color: '#dc2626' };
+    }
+    return { ...baseStyle, backgroundColor: '#f1f5f9', color: '#475569' };
+  };
+
+  const getEntityTypeLabel = (etype: string) => {
+    switch (etype) {
+      case 'family':
+        return t('family');
+      case 'parent':
+        return t('parent1');
+      case 'child':
+        return t('children');
+      case 'hygiene_event':
+        return t('hygieneBelehrung');
+      case 'th_membership':
+        return t('th_membership');
+      default:
+        return etype;
+    }
+  };
+
+  return (
+    <div className="table-container" style={{ overflowX: 'auto', background: 'white', borderRadius: '8px', border: '1px solid var(--border)', padding: '1.25rem', boxShadow: 'var(--shadow)' }}>
+      <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+        <thead>
+          <tr style={{ borderBottom: '2px solid var(--border)' }}>
+            <th style={{ padding: '0.75rem 0.5rem', width: '160px' }}>{t('timestamp')}</th>
+            <th style={{ padding: '0.75rem 0.5rem', width: '180px' }}>{t('userLabel')}</th>
+            <th style={{ padding: '0.75rem 0.5rem', width: '100px' }}>{t('operationLabel')}</th>
+            <th style={{ padding: '0.75rem 0.5rem', width: '150px' }}>{t('entityTypeLabel')}</th>
+            <th style={{ padding: '0.75rem 0.5rem' }}>{t('detailsLabel')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {logs.length === 0 ? (
+            <tr>
+              <td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic' }}>
+                {CURRENT_LOCALE === 'de' ? 'Keine Einträge vorhanden' : 'No entries found'}
+              </td>
+            </tr>
+          ) : (
+            logs.map((log) => (
+              <tr key={log.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                <td style={{ padding: '0.75rem 0.5rem', color: '#64748b', fontSize: '0.85rem' }}>
+                  {new Date(log.created_at).toLocaleString(CURRENT_LOCALE === 'de' ? 'de-DE' : 'en-US')}
+                </td>
+                <td style={{ padding: '0.75rem 0.5rem', fontWeight: 500, color: 'var(--text-h)', fontSize: '0.85rem' }}>
+                  {log.changed_by_email || '-'}
+                </td>
+                <td style={{ padding: '0.75rem 0.5rem' }}>
+                  <span style={getOperationBadgeStyle(log.operation)}>
+                    {log.operation === 'CREATE' ? 'INSERT' : log.operation}
+                  </span>
+                </td>
+                <td style={{ padding: '0.75rem 0.5rem', color: '#475569', fontSize: '0.85rem', fontWeight: 500 }}>
+                  {getEntityTypeLabel(log.entity_type)}
+                </td>
+                <td style={{ padding: '0.75rem 0.5rem', color: 'var(--text)', fontSize: '0.85rem', whiteSpace: 'pre-wrap', lineHeight: '1.4' }}>
+                  {formatSnapshotDetails(log)}
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
 const LandingPage: React.FC = () => {
   return (
     <div className="landing-container">
@@ -117,12 +291,16 @@ const Dashboard: React.FC = () => {
   const { user, token, logout } = useAuth();
   const [families, setFamilies] = React.useState<Family[]>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
-  const [activeTab, setActiveTab] = React.useState<'parents' | 'children' | 'childcareFees' | 'hygieneBelehrung'>(() => {
+  const [activeTab, setActiveTab] = React.useState<'parents' | 'children' | 'childcareFees' | 'hygieneBelehrung' | 'audit'>(() => {
     const hash = window.location.hash.replace('#', '');
-    if (hash === 'parents' || hash === 'children' || hash === 'childcareFees' || hash === 'hygieneBelehrung') return hash;
+    if (hash === 'parents' || hash === 'children' || hash === 'childcareFees' || hash === 'hygieneBelehrung' || hash === 'audit') return hash;
     const saved = localStorage.getItem('thweb_active_tab');
-    return (saved === 'parents' || saved === 'children' || saved === 'childcareFees' || saved === 'hygieneBelehrung') ? saved : 'parents';
+    return (saved === 'parents' || saved === 'children' || saved === 'childcareFees' || saved === 'hygieneBelehrung' || saved === 'audit') ? saved : 'parents';
   });
+
+  // Audit states
+  const [auditLogs, setAuditLogs] = React.useState<AuditLog[]>([]);
+  const [auditLoading, setAuditLoading] = React.useState(false);
 
   // Modal states
   const [addParentOpen, setAddParentOpen] = React.useState(false);
@@ -402,10 +580,32 @@ const Dashboard: React.FC = () => {
     fetchFamilies();
   }, [fetchFamilies]);
 
+  const fetchAuditLogs = React.useCallback(() => {
+    setAuditLoading(true);
+    fetch('/api/audit-logs', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch audit logs');
+        return res.json();
+      })
+      .then((data) => {
+        setAuditLogs(data);
+      })
+      .catch((err) => console.error(err))
+      .finally(() => setAuditLoading(false));
+  }, [token]);
+
+  React.useEffect(() => {
+    if (activeTab === 'audit') {
+      fetchAuditLogs();
+    }
+  }, [activeTab, fetchAuditLogs]);
+
   React.useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#', '');
-      if (hash === 'parents' || hash === 'children' || hash === 'childcareFees' || hash === 'hygieneBelehrung') {
+      if (hash === 'parents' || hash === 'children' || hash === 'childcareFees' || hash === 'hygieneBelehrung' || hash === 'audit') {
         setActiveTab(hash);
         localStorage.setItem('thweb_active_tab', hash);
       }
@@ -1614,9 +1814,25 @@ const Dashboard: React.FC = () => {
           >
             {t('hygieneBelehrung')}
           </button>
+          <button 
+            onClick={() => { window.location.hash = 'audit'; setGlobalFilter(''); }}
+            style={{
+              padding: '0.75rem 1rem',
+              background: 'none',
+              border: 'none',
+              borderBottom: activeTab === 'audit' ? '3px solid var(--primary)' : '3px solid transparent',
+              color: activeTab === 'audit' ? 'var(--primary)' : 'var(--text)',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              fontSize: '1rem',
+              transition: 'all 0.2s'
+            }}
+          >
+            {t('audit')}
+          </button>
         </div>
 
-        {activeTab !== 'childcareFees' && (
+        {activeTab !== 'childcareFees' && activeTab !== 'audit' && (
           <div className="controls-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
               <input
@@ -1709,6 +1925,8 @@ const Dashboard: React.FC = () => {
             columns={hygieneColumns}
             getSubRows={(row: any) => row.parents}
           />
+        ) : activeTab === 'audit' ? (
+          <AuditLogView logs={auditLogs} loading={auditLoading} />
         ) : (
           <ChildcareFeesCalculator
             token={token}

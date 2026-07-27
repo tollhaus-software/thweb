@@ -107,6 +107,15 @@ const translations: Record<Locale, Record<string, string>> = {
     noMembershipsRecorded: 'Keine Vereinsmitgliedschaft für diese Person erfasst',
     startDateLabel: 'Beginn',
     endDateLabel: 'Ende',
+    columns: 'Spalten',
+    toggleColumns: 'Spalten anzeigen/ausblenden',
+    audit: 'Audit',
+    timestamp: 'Zeitstempel',
+    userLabel: 'Benutzer',
+    operationLabel: 'Aktion',
+    entityTypeLabel: 'Objekt-Typ',
+    entityIdLabel: 'Objekt-ID',
+    detailsLabel: 'Details',
   },
   en: {
     title: 'Kindergarten Directory',
@@ -212,6 +221,15 @@ const translations: Record<Locale, Record<string, string>> = {
     noMembershipsRecorded: 'No membership records found for this parent',
     startDateLabel: 'Start Date',
     endDateLabel: 'End Date',
+    columns: 'Columns',
+    toggleColumns: 'Show/Hide Columns',
+    audit: 'Audit',
+    timestamp: 'Timestamp',
+    userLabel: 'User',
+    operationLabel: 'Action',
+    entityTypeLabel: 'Entity Type',
+    entityIdLabel: 'Entity ID',
+    detailsLabel: 'Details',
   }
 };
 

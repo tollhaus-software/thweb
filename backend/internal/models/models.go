@@ -65,15 +65,16 @@ type Child struct {
 }
 
 type AuditLog struct {
-	ID            uuid.UUID       `json:"id"`
-	TransactionID uuid.UUID       `json:"transaction_id"`
-	FamilyID      *uuid.UUID      `json:"family_id"`
-	EntityType    string          `json:"entity_type"`
-	EntityID      uuid.UUID       `json:"entity_id"`
-	Operation     string          `json:"operation"`
-	Snapshot      json.RawMessage `json:"snapshot"`
-	ChangedBy     *uuid.UUID      `json:"changed_by"`
-	CreatedAt     time.Time       `json:"created_at"`
+	ID             uuid.UUID       `json:"id"`
+	TransactionID  uuid.UUID       `json:"transaction_id"`
+	FamilyID       *uuid.UUID      `json:"family_id"`
+	EntityType     string          `json:"entity_type"`
+	EntityID       uuid.UUID       `json:"entity_id"`
+	Operation      string          `json:"operation"`
+	Snapshot       json.RawMessage `json:"snapshot"`
+	ChangedBy      *uuid.UUID      `json:"changed_by"`
+	ChangedByEmail string          `json:"changed_by_email"`
+	CreatedAt      time.Time       `json:"created_at"`
 }
 
 type THMembership struct {

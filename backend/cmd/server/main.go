@@ -77,6 +77,15 @@ func main() {
 			jsonResponse(w, families)
 		})
 
+		r.Get("/api/audit-logs", func(w http.ResponseWriter, r *http.Request) {
+			logs, err := appStore.ListAuditLogs(r.Context())
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			jsonResponse(w, logs)
+		})
+
 		r.Post("/api/families", func(w http.ResponseWriter, r *http.Request) {
 			user := auth.GetUser(r.Context())
 			var parent models.Parent
