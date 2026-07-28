@@ -20,6 +20,7 @@ func NewStore(db *pgxpool.Pool) *Store {
 	return &Store{db: db}
 }
 
+// Executes `fn` in a SQL transaction
 func (s *Store) WithTx(ctx context.Context, fn func(pgx.Tx) error) error {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -56,10 +57,10 @@ func (s *Store) CreateFamilyWithParent(ctx context.Context, userID uuid.UUID, pa
 		}
 
 		// 3. Audit logs
-		if err := s.recordAudit(ctx, tx, transactionID, &family.ID, "family", family.ID, "INSERT", family, userID); err != nil {
+		if err := s.recordAudit(ctx, tx, transactionID, &family.ID, "family", family.ID, "INSERT", nil, family, userID); err != nil {
 			return err
 		}
-		if err := s.recordAudit(ctx, tx, transactionID, &family.ID, "parent", parent.ID, "INSERT", parent, userID); err != nil {
+		if err := s.recordAudit(ctx, tx, transactionID, &family.ID, "parent", parent.ID, "INSERT", nil, parent, userID); err != nil {
 			return err
 		}
 
@@ -73,15 +74,27 @@ func (s *Store) CreateFamilyWithParent(ctx context.Context, userID uuid.UUID, pa
 	return family, nil
 }
 
-func (s *Store) recordAudit(ctx context.Context, tx pgx.Tx, tid uuid.UUID, fid *uuid.UUID, etype string, eid uuid.UUID, op string, snapshot interface{}, userID uuid.UUID) error {
-	payload, err := json.Marshal(snapshot)
-	if err != nil {
-		return err
+func (s *Store) recordAudit(ctx context.Context, tx pgx.Tx, tid uuid.UUID, fid *uuid.UUID, etype string, eid uuid.UUID, op string, before interface{}, after interface{}, userID uuid.UUID) error {
+	var beforePayload, afterPayload []byte
+	var err error
+
+	if before != nil {
+		beforePayload, err = json.Marshal(before)
+		if err != nil {
+			return err
+		}
+	}
+
+	if after != nil {
+		afterPayload, err = json.Marshal(after)
+		if err != nil {
+			return err
+		}
 	}
 
 	_, err = tx.Exec(ctx,
-		"INSERT INTO audit_log (transaction_id, family_id, entity_type, entity_id, operation, snapshot, changed_by) VALUES ($1, $2, $3, $4, $5, $6, $7)",
-		tid, fid, etype, eid, op, payload, userID)
+		"INSERT INTO audit_log (transaction_id, family_id, entity_type, entity_id, operation, before_snapshot, after_snapshot, changed_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+		tid, fid, etype, eid, op, beforePayload, afterPayload, userID)
 	return err
 }
 
@@ -169,7 +182,7 @@ func (s *Store) ListFamilies(ctx context.Context) ([]models.Family, error) {
 }
 
 func (s *Store) GetHistory(ctx context.Context, entityID uuid.UUID) ([]models.AuditLog, error) {
-	rows, err := s.db.Query(ctx, "SELECT id, transaction_id, family_id, entity_type, entity_id, operation, snapshot, changed_by, created_at FROM audit_log WHERE entity_id = $1 ORDER BY created_at DESC", entityID)
+	rows, err := s.db.Query(ctx, "SELECT id, transaction_id, family_id, entity_type, entity_id, operation, before_snapshot, after_snapshot, changed_by, created_at FROM audit_log WHERE entity_id = $1 ORDER BY created_at DESC", entityID)
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +191,7 @@ func (s *Store) GetHistory(ctx context.Context, entityID uuid.UUID) ([]models.Au
 	var logs []models.AuditLog
 	for rows.Next() {
 		var l models.AuditLog
-		if err := rows.Scan(&l.ID, &l.TransactionID, &l.FamilyID, &l.EntityType, &l.EntityID, &l.Operation, &l.Snapshot, &l.ChangedBy, &l.CreatedAt); err != nil {
+		if err := rows.Scan(&l.ID, &l.TransactionID, &l.FamilyID, &l.EntityType, &l.EntityID, &l.Operation, &l.BeforeSnapshot, &l.AfterSnapshot, &l.ChangedBy, &l.CreatedAt); err != nil {
 			return nil, err
 		}
 		logs = append(logs, l)
@@ -194,6 +207,12 @@ func (s *Store) UpdateFamilyParents(ctx context.Context, userID uuid.UUID, famil
 			return err
 		}
 		for _, p := range parents {
+			var oldParent models.Parent
+			err := tx.QueryRow(ctx, "SELECT id, family_id, first_name, last_name, emails, phones, notes FROM parents WHERE id = $1 AND family_id = $2", p.ID, familyID).Scan(
+				&oldParent.ID, &oldParent.FamilyID, &oldParent.FirstName, &oldParent.LastName, &oldParent.Emails, &oldParent.Phones, &oldParent.Notes,
+			)
+			isNew := (err == pgx.ErrNoRows)
+
 			res, err := tx.Exec(ctx,
 				"UPDATE parents SET first_name = $1, last_name = $2, emails = $3, phones = $4, notes = $5, updated_at = NOW() WHERE id = $6 AND family_id = $7",
 				p.FirstName, p.LastName, p.Emails, p.Phones, p.Notes, p.ID, familyID)
@@ -201,7 +220,7 @@ func (s *Store) UpdateFamilyParents(ctx context.Context, userID uuid.UUID, famil
 				return err
 			}
 
-			if res.RowsAffected() == 0 {
+			if res.RowsAffected() == 0 || isNew {
 				if p.ID == uuid.Nil {
 					p.ID = uuid.New()
 				}
@@ -212,11 +231,11 @@ func (s *Store) UpdateFamilyParents(ctx context.Context, userID uuid.UUID, famil
 				if err != nil {
 					return err
 				}
-				if err := s.recordAudit(ctx, tx, transactionID, &familyID, "parent", p.ID, "INSERT", p, userID); err != nil {
+				if err := s.recordAudit(ctx, tx, transactionID, &familyID, "parent", p.ID, "INSERT", nil, p, userID); err != nil {
 					return err
 				}
 			} else {
-				if err := s.recordAudit(ctx, tx, transactionID, &familyID, "parent", p.ID, "UPDATE", p, userID); err != nil {
+				if err := s.recordAudit(ctx, tx, transactionID, &familyID, "parent", p.ID, "UPDATE", oldParent, p, userID); err != nil {
 					return err
 				}
 			}
@@ -238,6 +257,13 @@ func (s *Store) UpdateChild(ctx context.Context, userID uuid.UUID, childID uuid.
 		if err != nil {
 			return err
 		}
+
+		var oldChild models.Child
+		err = tx.QueryRow(ctx, "SELECT id, family_id, first_name, last_name, birth_date, start_date, exit_date, start_group, hort_start_date, group2_start_date, notes FROM children WHERE id = $1", childID).Scan(
+			&oldChild.ID, &oldChild.FamilyID, &oldChild.FirstName, &oldChild.LastName, &oldChild.BirthDate, &oldChild.StartDate, &oldChild.ExitDate, &oldChild.StartGroup, &oldChild.HortStartDate, &oldChild.Group2StartDate, &oldChild.Notes,
+		)
+		isNew := (err == pgx.ErrNoRows)
+
 		res, err := tx.Exec(ctx,
 			"UPDATE children SET first_name = $1, last_name = $2, birth_date = $3, start_date = $4, exit_date = $5, start_group = $6, hort_start_date = $7, group2_start_date = $8, notes = $9, updated_at = NOW() WHERE id = $10",
 			child.FirstName, child.LastName, child.BirthDate, child.StartDate, child.ExitDate, child.StartGroup, child.HortStartDate, child.Group2StartDate, child.Notes, childID)
@@ -245,7 +271,7 @@ func (s *Store) UpdateChild(ctx context.Context, userID uuid.UUID, childID uuid.
 			return err
 		}
 
-		if res.RowsAffected() == 0 {
+		if res.RowsAffected() == 0 || isNew {
 			if child.ID == uuid.Nil {
 				child.ID = childID
 			}
@@ -255,9 +281,9 @@ func (s *Store) UpdateChild(ctx context.Context, userID uuid.UUID, childID uuid.
 			if err != nil {
 				return err
 			}
-			return s.recordAudit(ctx, tx, transactionID, &child.FamilyID, "child", child.ID, "INSERT", child, userID)
+			return s.recordAudit(ctx, tx, transactionID, &child.FamilyID, "child", child.ID, "INSERT", nil, child, userID)
 		} else {
-			return s.recordAudit(ctx, tx, transactionID, &child.FamilyID, "child", childID, "UPDATE", child, userID)
+			return s.recordAudit(ctx, tx, transactionID, &child.FamilyID, "child", childID, "UPDATE", oldChild, child, userID)
 		}
 	})
 }
@@ -265,7 +291,9 @@ func (s *Store) UpdateChild(ctx context.Context, userID uuid.UUID, childID uuid.
 func (s *Store) DeleteFamily(ctx context.Context, userID uuid.UUID, familyID uuid.UUID) error {
 	transactionID := uuid.New()
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
-		if err := s.recordAudit(ctx, tx, transactionID, &familyID, "family", familyID, "DELETE", nil, userID); err != nil {
+		var family models.Family
+		family.ID = familyID
+		if err := s.recordAudit(ctx, tx, transactionID, &familyID, "family", familyID, "DELETE", family, nil, userID); err != nil {
 			return err
 		}
 		_, err := tx.Exec(ctx, "DELETE FROM families WHERE id = $1", familyID)
@@ -276,12 +304,15 @@ func (s *Store) DeleteFamily(ctx context.Context, userID uuid.UUID, familyID uui
 func (s *Store) DeleteChild(ctx context.Context, userID uuid.UUID, childID uuid.UUID) error {
 	transactionID := uuid.New()
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
-		var familyID uuid.UUID
-		err := tx.QueryRow(ctx, "SELECT family_id FROM children WHERE id = $1", childID).Scan(&familyID)
+		var oldChild models.Child
+		err := tx.QueryRow(ctx, "SELECT id, family_id, first_name, last_name, birth_date, start_date, exit_date, start_group, hort_start_date, group2_start_date, notes FROM children WHERE id = $1", childID).Scan(
+			&oldChild.ID, &oldChild.FamilyID, &oldChild.FirstName, &oldChild.LastName, &oldChild.BirthDate, &oldChild.StartDate, &oldChild.ExitDate, &oldChild.StartGroup, &oldChild.HortStartDate, &oldChild.Group2StartDate, &oldChild.Notes,
+		)
 		if err != nil {
 			return err
 		}
-		if err := s.recordAudit(ctx, tx, transactionID, &familyID, "child", childID, "DELETE", nil, userID); err != nil {
+
+		if err := s.recordAudit(ctx, tx, transactionID, &oldChild.FamilyID, "child", childID, "DELETE", oldChild, nil, userID); err != nil {
 			return err
 		}
 		_, err = tx.Exec(ctx, "DELETE FROM children WHERE id = $1", childID)
@@ -291,20 +322,22 @@ func (s *Store) DeleteChild(ctx context.Context, userID uuid.UUID, childID uuid.
 
 		// Cleanup empty family
 		var parentCount int
-		err = tx.QueryRow(ctx, "SELECT COUNT(*) FROM parents WHERE family_id = $1", familyID).Scan(&parentCount)
+		err = tx.QueryRow(ctx, "SELECT COUNT(*) FROM parents WHERE family_id = $1", oldChild.FamilyID).Scan(&parentCount)
 		if err != nil {
 			return err
 		}
 		var childCount int
-		err = tx.QueryRow(ctx, "SELECT COUNT(*) FROM children WHERE family_id = $1", familyID).Scan(&childCount)
+		err = tx.QueryRow(ctx, "SELECT COUNT(*) FROM children WHERE family_id = $1", oldChild.FamilyID).Scan(&childCount)
 		if err != nil {
 			return err
 		}
 		if parentCount == 0 && childCount == 0 {
-			if err := s.recordAudit(ctx, tx, transactionID, &familyID, "family", familyID, "DELETE", nil, userID); err != nil {
+			var f models.Family
+			f.ID = oldChild.FamilyID
+			if err := s.recordAudit(ctx, tx, transactionID, &oldChild.FamilyID, "family", oldChild.FamilyID, "DELETE", f, nil, userID); err != nil {
 				return err
 			}
-			_, err = tx.Exec(ctx, "DELETE FROM families WHERE id = $1", familyID)
+			_, err = tx.Exec(ctx, "DELETE FROM families WHERE id = $1", oldChild.FamilyID)
 			return err
 		}
 		return nil
@@ -314,12 +347,15 @@ func (s *Store) DeleteChild(ctx context.Context, userID uuid.UUID, childID uuid.
 func (s *Store) DeleteParent(ctx context.Context, userID uuid.UUID, parentID uuid.UUID) error {
 	transactionID := uuid.New()
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
-		var familyID uuid.UUID
-		err := tx.QueryRow(ctx, "SELECT family_id FROM parents WHERE id = $1", parentID).Scan(&familyID)
+		var oldParent models.Parent
+		err := tx.QueryRow(ctx, "SELECT id, family_id, first_name, last_name, emails, phones, notes FROM parents WHERE id = $1", parentID).Scan(
+			&oldParent.ID, &oldParent.FamilyID, &oldParent.FirstName, &oldParent.LastName, &oldParent.Emails, &oldParent.Phones, &oldParent.Notes,
+		)
 		if err != nil {
 			return err
 		}
-		if err := s.recordAudit(ctx, tx, transactionID, &familyID, "parent", parentID, "DELETE", nil, userID); err != nil {
+
+		if err := s.recordAudit(ctx, tx, transactionID, &oldParent.FamilyID, "parent", parentID, "DELETE", oldParent, nil, userID); err != nil {
 			return err
 		}
 		_, err = tx.Exec(ctx, "DELETE FROM parents WHERE id = $1", parentID)
@@ -329,20 +365,22 @@ func (s *Store) DeleteParent(ctx context.Context, userID uuid.UUID, parentID uui
 
 		// Cleanup empty family
 		var parentCount int
-		err = tx.QueryRow(ctx, "SELECT COUNT(*) FROM parents WHERE family_id = $1", familyID).Scan(&parentCount)
+		err = tx.QueryRow(ctx, "SELECT COUNT(*) FROM parents WHERE family_id = $1", oldParent.FamilyID).Scan(&parentCount)
 		if err != nil {
 			return err
 		}
 		var childCount int
-		err = tx.QueryRow(ctx, "SELECT COUNT(*) FROM children WHERE family_id = $1", familyID).Scan(&childCount)
+		err = tx.QueryRow(ctx, "SELECT COUNT(*) FROM children WHERE family_id = $1", oldParent.FamilyID).Scan(&childCount)
 		if err != nil {
 			return err
 		}
 		if parentCount == 0 && childCount == 0 {
-			if err := s.recordAudit(ctx, tx, transactionID, &familyID, "family", familyID, "DELETE", nil, userID); err != nil {
+			var f models.Family
+			f.ID = oldParent.FamilyID
+			if err := s.recordAudit(ctx, tx, transactionID, &oldParent.FamilyID, "family", oldParent.FamilyID, "DELETE", f, nil, userID); err != nil {
 				return err
 			}
-			_, err = tx.Exec(ctx, "DELETE FROM families WHERE id = $1", familyID)
+			_, err = tx.Exec(ctx, "DELETE FROM families WHERE id = $1", oldParent.FamilyID)
 			return err
 		}
 		return nil
@@ -370,7 +408,7 @@ func (s *Store) CreateHygieneEvent(ctx context.Context, userID uuid.UUID, event 
 			return err
 		}
 
-		return s.recordAudit(ctx, tx, transactionID, &familyID, "hygiene_event", event.ID, "INSERT", event, userID)
+		return s.recordAudit(ctx, tx, transactionID, &familyID, "hygiene_event", event.ID, "INSERT", nil, event, userID)
 	})
 
 	if err != nil {
@@ -405,7 +443,7 @@ func (s *Store) DeleteHygieneEvent(ctx context.Context, userID uuid.UUID, eventI
 			Documentation: documentation,
 		}
 
-		if err := s.recordAudit(ctx, tx, transactionID, &familyID, "hygiene_event", eventID, "DELETE", oldEvent, userID); err != nil {
+		if err := s.recordAudit(ctx, tx, transactionID, &familyID, "hygiene_event", eventID, "DELETE", oldEvent, nil, userID); err != nil {
 			return err
 		}
 
@@ -435,7 +473,7 @@ func (s *Store) CreateTHMembership(ctx context.Context, userID uuid.UUID, m mode
 			return err
 		}
 
-		return s.recordAudit(ctx, tx, transactionID, &familyID, "th_membership", created.ID, "CREATE", created, userID)
+		return s.recordAudit(ctx, tx, transactionID, &familyID, "th_membership", created.ID, "INSERT", nil, created, userID)
 	})
 	return created, err
 }
@@ -466,7 +504,7 @@ func (s *Store) DeleteTHMembership(ctx context.Context, userID uuid.UUID, member
 			MembershipType: membershipType,
 		}
 
-		if err := s.recordAudit(ctx, tx, transactionID, &familyID, "th_membership", membershipID, "DELETE", oldMembership, userID); err != nil {
+		if err := s.recordAudit(ctx, tx, transactionID, &familyID, "th_membership", membershipID, "DELETE", oldMembership, nil, userID); err != nil {
 			return err
 		}
 
@@ -477,7 +515,7 @@ func (s *Store) DeleteTHMembership(ctx context.Context, userID uuid.UUID, member
 
 func (s *Store) ListAuditLogs(ctx context.Context) ([]models.AuditLog, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT a.id, a.transaction_id, a.family_id, a.entity_type, a.entity_id, a.operation, a.snapshot, a.changed_by, COALESCE(u.email, ''), a.created_at
+		SELECT a.id, a.transaction_id, a.family_id, a.entity_type, a.entity_id, a.operation, a.before_snapshot, a.after_snapshot, a.changed_by, COALESCE(u.email, ''), a.created_at
 		FROM audit_log a
 		LEFT JOIN users u ON a.changed_by = u.id
 		ORDER BY a.created_at DESC
@@ -490,7 +528,7 @@ func (s *Store) ListAuditLogs(ctx context.Context) ([]models.AuditLog, error) {
 	var logs []models.AuditLog
 	for rows.Next() {
 		var l models.AuditLog
-		err := rows.Scan(&l.ID, &l.TransactionID, &l.FamilyID, &l.EntityType, &l.EntityID, &l.Operation, &l.Snapshot, &l.ChangedBy, &l.ChangedByEmail, &l.CreatedAt)
+		err := rows.Scan(&l.ID, &l.TransactionID, &l.FamilyID, &l.EntityType, &l.EntityID, &l.Operation, &l.BeforeSnapshot, &l.AfterSnapshot, &l.ChangedBy, &l.ChangedByEmail, &l.CreatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -500,4 +538,261 @@ func (s *Store) ListAuditLogs(ctx context.Context) ([]models.AuditLog, error) {
 		return nil, err
 	}
 	return logs, nil
+}
+
+func (s *Store) ListRoles(ctx context.Context) ([]models.Role, error) {
+	rows, err := s.db.Query(ctx, "SELECT id, name, description, permissions, created_at, updated_at FROM roles ORDER BY id ASC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var roles []models.Role
+	for rows.Next() {
+		var r models.Role
+		var permsJSON []byte
+		if err := rows.Scan(&r.ID, &r.Name, &r.Description, &permsJSON, &r.CreatedAt, &r.UpdatedAt); err != nil {
+			return nil, err
+		}
+		if len(permsJSON) > 0 {
+			_ = json.Unmarshal(permsJSON, &r.Permissions)
+		}
+		if r.Permissions == nil {
+			r.Permissions = []string{}
+		}
+		roles = append(roles, r)
+	}
+	return roles, nil
+}
+
+func (s *Store) CreateRole(ctx context.Context, role models.Role) (*models.Role, error) {
+	permsJSON, err := json.Marshal(role.Permissions)
+	if err != nil {
+		return nil, err
+	}
+
+	err = s.db.QueryRow(ctx, `
+		INSERT INTO roles (id, name, description, permissions)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, name, description, permissions, created_at, updated_at
+	`, role.ID, role.Name, role.Description, permsJSON).Scan(
+		&role.ID, &role.Name, &role.Description, &permsJSON, &role.CreatedAt, &role.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &role, nil
+}
+
+func (s *Store) UpdateRole(ctx context.Context, role models.Role) error {
+	permsJSON, err := json.Marshal(role.Permissions)
+	if err != nil {
+		return err
+	}
+
+	_, err = s.db.Exec(ctx, `
+		UPDATE roles SET name = $1, description = $2, permissions = $3, updated_at = NOW()
+		WHERE id = $4
+	`, role.Name, role.Description, permsJSON, role.ID)
+	return err
+}
+
+func (s *Store) DeleteRole(ctx context.Context, id string) error {
+	_, err := s.db.Exec(ctx, "DELETE FROM roles WHERE id = $1", id)
+	return err
+}
+
+func (s *Store) GetUserWithPermissionsByEmail(ctx context.Context, email string) (*models.UserWithPermissions, error) {
+	query := `
+		SELECT 
+			u.id, 
+			u.email, 
+			u.permissions,
+			u.last_login,
+			u.created_at,
+			u.updated_at,
+			COALESCE(array_agg(r.id) FILTER (WHERE r.id IS NOT NULL), '{}') as roles,
+			COALESCE(jsonb_agg(r.permissions) FILTER (WHERE r.permissions IS NOT NULL), '[]'::jsonb) as role_permissions
+		FROM users u
+		LEFT JOIN user_roles ur ON u.id = ur.user_id
+		LEFT JOIN roles r ON ur.role_id = r.id
+		WHERE u.email = $1
+		GROUP BY u.id, u.email, u.permissions, u.last_login, u.created_at, u.updated_at
+	`
+
+	var u models.UserWithPermissions
+	var userPermissionsJSON, rolePermissionsJSON []byte
+
+	err := s.db.QueryRow(ctx, query, email).Scan(
+		&u.ID, &u.Email, &userPermissionsJSON, &u.LastLogin, &u.CreatedAt, &u.UpdatedAt, &u.Roles, &rolePermissionsJSON,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(userPermissionsJSON) > 0 {
+		_ = json.Unmarshal(userPermissionsJSON, &u.Permissions)
+	}
+	if u.Permissions == nil {
+		u.Permissions = []string{}
+	}
+
+	var rolePermsList [][]string
+	if len(rolePermissionsJSON) > 0 {
+		_ = json.Unmarshal(rolePermissionsJSON, &rolePermsList)
+	}
+
+	permMap := make(map[string]bool)
+	for _, p := range u.Permissions {
+		permMap[p] = true
+	}
+	for _, rPerms := range rolePermsList {
+		for _, p := range rPerms {
+			permMap[p] = true
+		}
+	}
+
+	u.EffectivePermissions = make([]string, 0, len(permMap))
+	for p := range permMap {
+		u.EffectivePermissions = append(u.EffectivePermissions, p)
+	}
+
+	return &u, nil
+}
+
+func (s *Store) ListUsers(ctx context.Context) ([]models.UserWithPermissions, error) {
+	query := `
+		SELECT 
+			u.id, 
+			u.email, 
+			u.permissions,
+			u.last_login,
+			u.created_at,
+			u.updated_at,
+			COALESCE(array_agg(r.id) FILTER (WHERE r.id IS NOT NULL), '{}') as roles,
+			COALESCE(jsonb_agg(r.permissions) FILTER (WHERE r.permissions IS NOT NULL), '[]'::jsonb) as role_permissions
+		FROM users u
+		LEFT JOIN user_roles ur ON u.id = ur.user_id
+		LEFT JOIN roles r ON ur.role_id = r.id
+		GROUP BY u.id, u.email, u.permissions, u.last_login, u.created_at, u.updated_at
+		ORDER BY u.created_at ASC
+	`
+	rows, err := s.db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []models.UserWithPermissions
+	for rows.Next() {
+		var u models.UserWithPermissions
+		var userPermissionsJSON, rolePermissionsJSON []byte
+
+		err := rows.Scan(&u.ID, &u.Email, &userPermissionsJSON, &u.LastLogin, &u.CreatedAt, &u.UpdatedAt, &u.Roles, &rolePermissionsJSON)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(userPermissionsJSON) > 0 {
+			_ = json.Unmarshal(userPermissionsJSON, &u.Permissions)
+		}
+		if u.Permissions == nil {
+			u.Permissions = []string{}
+		}
+
+		var rolePermsList [][]string
+		if len(rolePermissionsJSON) > 0 {
+			_ = json.Unmarshal(rolePermissionsJSON, &rolePermsList)
+		}
+
+		permMap := make(map[string]bool)
+		for _, p := range u.Permissions {
+			permMap[p] = true
+		}
+		for _, rPerms := range rolePermsList {
+			for _, p := range rPerms {
+				permMap[p] = true
+			}
+		}
+
+		u.EffectivePermissions = make([]string, 0, len(permMap))
+		for p := range permMap {
+			u.EffectivePermissions = append(u.EffectivePermissions, p)
+		}
+
+		users = append(users, u)
+	}
+	return users, nil
+}
+
+func (s *Store) CreateUser(ctx context.Context, email string, roles []string, permissions []string) (*models.UserWithPermissions, error) {
+	if permissions == nil {
+		permissions = []string{}
+	}
+	permsJSON, err := json.Marshal(permissions)
+	if err != nil {
+		return nil, err
+	}
+
+	userID := uuid.New()
+	err = s.WithTx(ctx, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, "INSERT INTO users (id, email, permissions) VALUES ($1, $2, $3)", userID, email, permsJSON)
+		if err != nil {
+			return err
+		}
+
+		for _, roleID := range roles {
+			_, err = tx.Exec(ctx, "INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)", userID, roleID)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &models.UserWithPermissions{
+		ID:          userID,
+		Email:       email,
+		Roles:       roles,
+		Permissions: permissions,
+	}, nil
+}
+
+func (s *Store) UpdateUser(ctx context.Context, id uuid.UUID, roles []string, permissions []string) error {
+	if permissions == nil {
+		permissions = []string{}
+	}
+	permsJSON, err := json.Marshal(permissions)
+	if err != nil {
+		return err
+	}
+
+	return s.WithTx(ctx, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, "UPDATE users SET permissions = $1, updated_at = NOW() WHERE id = $2", permsJSON, id)
+		if err != nil {
+			return err
+		}
+
+		_, err = tx.Exec(ctx, "DELETE FROM user_roles WHERE user_id = $1", id)
+		if err != nil {
+			return err
+		}
+
+		for _, roleID := range roles {
+			_, err = tx.Exec(ctx, "INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)", id, roleID)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func (s *Store) DeleteUser(ctx context.Context, id uuid.UUID) error {
+	_, err := s.db.Exec(ctx, "DELETE FROM users WHERE id = $1", id)
+	return err
 }

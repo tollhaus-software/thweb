@@ -2,12 +2,13 @@ package auth
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pavolmarko/thweb-backend/internal/models"
+	"github.com/pavolmarko/thweb-backend/internal/store"
 	"google.golang.org/api/idtoken"
 )
 
@@ -17,13 +18,13 @@ const UserContextKey contextKey = "user"
 
 type Authenticator struct {
 	GoogleClientID string
-	DB             *pgxpool.Pool
+	Store          *store.Store
 }
 
-func NewAuthenticator(clientID string, db *pgxpool.Pool) *Authenticator {
+func NewAuthenticator(clientID string, store *store.Store) *Authenticator {
 	return &Authenticator{
 		GoogleClientID: clientID,
-		DB:             db,
+		Store:          store,
 	}
 }
 
@@ -48,29 +49,40 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 			email = payload.Claims["email"].(string)
 		}
 
-		var user models.User
-		err := a.DB.QueryRow(r.Context(),
-			"SELECT id, email, role, permissions FROM users WHERE email = $1",
-			email).Scan(&user.ID, &user.Email, &user.Role, &user.Permissions)
-
+		user, err := a.Store.GetUserWithPermissionsByEmail(r.Context(), email)
 		if err != nil {
 			if err == pgx.ErrNoRows {
+				log.Printf("[AUTH WARNING] User email %q not found in allow-list", email)
 				http.Error(w, "User not allowed", http.StatusForbidden)
 				return
 			}
-			http.Error(w, "Database error", http.StatusInternalServerError)
+			log.Printf("[AUTH ERROR] Failed to fetch user %q from database: %v", email, err)
+			http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), UserContextKey, &user)
+		ctx := context.WithValue(r.Context(), UserContextKey, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-func GetUser(ctx context.Context) *models.User {
-	user, ok := ctx.Value(UserContextKey).(*models.User)
+func GetUser(ctx context.Context) *models.UserWithPermissions {
+	user, ok := ctx.Value(UserContextKey).(*models.UserWithPermissions)
 	if !ok {
 		return nil
 	}
 	return user
+}
+
+func RequirePermission(perm string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			user := GetUser(r.Context())
+			if user == nil || !user.HasPermission(perm) {
+				http.Error(w, "Forbidden", http.StatusForbidden)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }

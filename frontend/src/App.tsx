@@ -108,14 +108,15 @@ interface AuditLog {
   entity_type: string;
   entity_id: string;
   operation: string;
-  snapshot: any;
+  before_snapshot: any;
+  after_snapshot: any;
   changed_by: string | null;
   changed_by_email: string;
   created_at: string;
 }
 
 const formatSnapshotDetails = (log: AuditLog) => {
-  const data = log.snapshot;
+  const data = log.after_snapshot || log.before_snapshot;
   if (!data) return '-';
 
   const parts: string[] = [];
@@ -285,17 +286,520 @@ const LandingPage: React.FC = () => {
   );
 };
 
+interface AdminUser {
+  id: string;
+  email: string;
+  roles: string[];
+  permissions: string[];
+  effective_permissions: string[];
+  last_login?: string;
+  created_at: string;
+}
+
+interface AdminRole {
+  id: string;
+  name: string;
+  description: string;
+  permissions: string[];
+}
+
+const ALL_AVAILABLE_PERMISSIONS = [
+  '*',
+  'families.all.read',
+  'families.all.write',
+  'children.all.write',
+  'fees.all.read',
+  'fees.self.read',
+  'hygiene.all.write',
+  'memberships.all.write',
+  'audit.all.read',
+  'users.all.manage'
+];
+
+const AdminView: React.FC = () => {
+  const { token } = useAuth();
+  const [subTab, setSubTab] = React.useState<'users' | 'roles'>('users');
+  
+  const [users, setUsers] = React.useState<AdminUser[]>([]);
+  const [roles, setRoles] = React.useState<AdminRole[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  // User modal states
+  const [userModalOpen, setUserModalOpen] = React.useState(false);
+  const [editingUser, setEditingUser] = React.useState<AdminUser | null>(null);
+  const [userEmail, setUserEmail] = React.useState('');
+  const [selectedUserRoles, setSelectedUserRoles] = React.useState<string[]>([]);
+  const [selectedUserPerms, setSelectedUserPerms] = React.useState<string[]>([]);
+
+  // Role modal states
+  const [roleModalOpen, setRoleModalOpen] = React.useState(false);
+  const [editingRole, setEditingRole] = React.useState<AdminRole | null>(null);
+  const [roleId, setRoleId] = React.useState('');
+  const [roleName, setRoleName] = React.useState('');
+  const [roleDesc, setRoleDesc] = React.useState('');
+  const [selectedRolePerms, setSelectedRolePerms] = React.useState<string[]>([]);
+
+  const fetchUsers = React.useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/users', { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) {
+        const data = await res.json();
+        setUsers(data || []);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, [token]);
+
+  const fetchRoles = React.useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/roles', { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) {
+        const data = await res.json();
+        setRoles(data || []);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, [token]);
+
+  const refreshData = React.useCallback(async () => {
+    setLoading(true);
+    await Promise.all([fetchUsers(), fetchRoles()]);
+    setLoading(false);
+  }, [fetchUsers, fetchRoles]);
+
+  React.useEffect(() => {
+    refreshData();
+  }, [refreshData]);
+
+  // Handle User Submit
+  const handleUserSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userEmail) return;
+
+    if (editingUser) {
+      const res = await fetch(`/api/admin/users/${editingUser.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ roles: selectedUserRoles, permissions: selectedUserPerms })
+      });
+      if (res.ok) {
+        setUserModalOpen(false);
+        refreshData();
+      } else {
+        alert('Failed to update user');
+      }
+    } else {
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ email: userEmail, roles: selectedUserRoles, permissions: selectedUserPerms })
+      });
+      if (res.ok) {
+        setUserModalOpen(false);
+        refreshData();
+      } else {
+        alert('Failed to create user');
+      }
+    }
+  };
+
+  const handleDeleteUser = async (id: string) => {
+    if (!window.confirm(t('deleteUserConfirm'))) return;
+    const res = await fetch(`/api/admin/users/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) refreshData();
+  };
+
+  const openAddUserModal = () => {
+    setEditingUser(null);
+    setUserEmail('');
+    setSelectedUserRoles([]);
+    setSelectedUserPerms([]);
+    setUserModalOpen(true);
+  };
+
+  const openEditUserModal = (u: AdminUser) => {
+    setEditingUser(u);
+    setUserEmail(u.email);
+    setSelectedUserRoles(u.roles || []);
+    setSelectedUserPerms(u.permissions || []);
+    setUserModalOpen(true);
+  };
+
+  // Handle Role Submit
+  const handleRoleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!roleId || !roleName) return;
+
+    if (editingRole) {
+      const res = await fetch(`/api/admin/roles/${editingRole.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name: roleName, description: roleDesc, permissions: selectedRolePerms })
+      });
+      if (res.ok) {
+        setRoleModalOpen(false);
+        refreshData();
+      } else {
+        alert('Failed to update role');
+      }
+    } else {
+      const res = await fetch('/api/admin/roles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ id: roleId.toLowerCase().trim(), name: roleName, description: roleDesc, permissions: selectedRolePerms })
+      });
+      if (res.ok) {
+        setRoleModalOpen(false);
+        refreshData();
+      } else {
+        alert('Failed to create role');
+      }
+    }
+  };
+
+  const handleDeleteRole = async (id: string) => {
+    if (!window.confirm(t('deleteRoleConfirm'))) return;
+    const res = await fetch(`/api/admin/roles/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) refreshData();
+  };
+
+  const openAddRoleModal = () => {
+    setEditingRole(null);
+    setRoleId('');
+    setRoleName('');
+    setRoleDesc('');
+    setSelectedRolePerms([]);
+    setRoleModalOpen(true);
+  };
+
+  const openEditRoleModal = (r: AdminRole) => {
+    setEditingRole(r);
+    setRoleId(r.id);
+    setRoleName(r.name);
+    setRoleDesc(r.description || '');
+    setSelectedRolePerms(r.permissions || []);
+    setRoleModalOpen(true);
+  };
+
+  const toggleUserRole = (rId: string) => {
+    setSelectedUserRoles(prev => prev.includes(rId) ? prev.filter(x => x !== rId) : [...prev, rId]);
+  };
+
+  const toggleUserPerm = (pStr: string) => {
+    setSelectedUserPerms(prev => prev.includes(pStr) ? prev.filter(x => x !== pStr) : [...prev, pStr]);
+  };
+
+  const toggleRolePerm = (pStr: string) => {
+    setSelectedRolePerms(prev => prev.includes(pStr) ? prev.filter(x => x !== pStr) : [...prev, pStr]);
+  };
+
+  if (loading) {
+    return <div style={{ padding: '1rem', color: '#64748b' }}>{t('loading')}</div>;
+  }
+
+  return (
+    <div className="admin-container" style={{ background: 'white', borderRadius: '8px', border: '1px solid var(--border)', padding: '1.25rem', boxShadow: 'var(--shadow)' }}>
+      {/* Sub Tabs */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem' }}>
+        <div style={{ display: 'flex', gap: '1rem' }}>
+          <button
+            onClick={() => setSubTab('users')}
+            style={{
+              padding: '0.5rem 1rem',
+              background: subTab === 'users' ? 'var(--primary)' : '#f1f5f9',
+              color: subTab === 'users' ? 'white' : '#475569',
+              border: 'none',
+              borderRadius: '6px',
+              fontWeight: 'bold',
+              cursor: 'pointer'
+            }}
+          >
+            {t('users')} ({users.length})
+          </button>
+          <button
+            onClick={() => setSubTab('roles')}
+            style={{
+              padding: '0.5rem 1rem',
+              background: subTab === 'roles' ? 'var(--primary)' : '#f1f5f9',
+              color: subTab === 'roles' ? 'white' : '#475569',
+              border: 'none',
+              borderRadius: '6px',
+              fontWeight: 'bold',
+              cursor: 'pointer'
+            }}
+          >
+            {t('roles')} ({roles.length})
+          </button>
+        </div>
+        {subTab === 'users' ? (
+          <button onClick={openAddUserModal} className="btn-primary" style={{ padding: '0.5rem 1rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+            + {t('addUser')}
+          </button>
+        ) : (
+          <button onClick={openAddRoleModal} className="btn-primary" style={{ padding: '0.5rem 1rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+            + {t('addRole')}
+          </button>
+        )}
+      </div>
+
+      {/* Users Section */}
+      {subTab === 'users' && (
+        <div style={{ overflowX: 'auto' }}>
+          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid var(--border)' }}>
+                <th style={{ padding: '0.75rem 0.5rem' }}>{t('userLabel')}</th>
+                <th style={{ padding: '0.75rem 0.5rem' }}>{t('assignedRoles')}</th>
+                <th style={{ padding: '0.75rem 0.5rem' }}>{t('customPermissions')}</th>
+                <th style={{ padding: '0.75rem 0.5rem' }}>{t('effectivePermissions')}</th>
+                <th style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>Aktionen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map(u => (
+                <tr key={u.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>{u.email}</td>
+                  <td style={{ padding: '0.75rem 0.5rem' }}>
+                    <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+                      {u.roles && u.roles.length > 0 ? u.roles.map(rId => (
+                        <span key={rId} style={{ background: '#e0f2fe', color: '#0369a1', padding: '0.2rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+                          {rId}
+                        </span>
+                      )) : <span style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.85rem' }}>Keine</span>}
+                    </div>
+                  </td>
+                  <td style={{ padding: '0.75rem 0.5rem' }}>
+                    <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+                      {u.permissions && u.permissions.length > 0 ? u.permissions.map(p => (
+                        <span key={p} style={{ background: '#fef3c7', color: '#b45309', padding: '0.15rem 0.4rem', borderRadius: '4px', fontSize: '0.75rem', fontFamily: 'monospace' }}>
+                          {p}
+                        </span>
+                      )) : <span style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.85rem' }}>Keine</span>}
+                    </div>
+                  </td>
+                  <td style={{ padding: '0.75rem 0.5rem' }}>
+                    <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+                      {u.effective_permissions && u.effective_permissions.length > 0 ? u.effective_permissions.map(p => (
+                        <span key={p} style={{ background: '#dcfce7', color: '#15803d', padding: '0.15rem 0.4rem', borderRadius: '4px', fontSize: '0.75rem', fontFamily: 'monospace' }}>
+                          {p}
+                        </span>
+                      )) : <span style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.85rem' }}>Keine</span>}
+                    </div>
+                  </td>
+                  <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>
+                    <button onClick={() => openEditUserModal(u)} style={{ background: 'none', border: '1px solid #cbd5e1', padding: '0.25rem 0.5rem', borderRadius: '4px', cursor: 'pointer', marginRight: '0.5rem', fontSize: '0.8rem' }}>
+                      Bearbeiten
+                    </button>
+                    <button onClick={() => handleDeleteUser(u.id)} style={{ background: 'none', border: '1px solid #fca5a5', color: '#dc2626', padding: '0.25rem 0.5rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}>
+                      Löschen
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Roles Section */}
+      {subTab === 'roles' && (
+        <div style={{ overflowX: 'auto' }}>
+          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid var(--border)' }}>
+                <th style={{ padding: '0.75rem 0.5rem', width: '120px' }}>{t('roleId')}</th>
+                <th style={{ padding: '0.75rem 0.5rem', width: '160px' }}>{t('roleName')}</th>
+                <th style={{ padding: '0.75rem 0.5rem' }}>Beschreibung</th>
+                <th style={{ padding: '0.75rem 0.5rem' }}>{t('permissions')}</th>
+                <th style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>Aktionen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {roles.map(r => (
+                <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td style={{ padding: '0.75rem 0.5rem', fontFamily: 'monospace', fontWeight: 'bold' }}>{r.id}</td>
+                  <td style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>{r.name}</td>
+                  <td style={{ padding: '0.75rem 0.5rem', color: '#64748b', fontSize: '0.85rem' }}>{r.description || '-'}</td>
+                  <td style={{ padding: '0.75rem 0.5rem' }}>
+                    <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+                      {r.permissions && r.permissions.length > 0 ? r.permissions.map(p => (
+                        <span key={p} style={{ background: '#f3e8ff', color: '#7e22ce', padding: '0.15rem 0.4rem', borderRadius: '4px', fontSize: '0.75rem', fontFamily: 'monospace' }}>
+                          {p}
+                        </span>
+                      )) : <span style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.85rem' }}>Keine</span>}
+                    </div>
+                  </td>
+                  <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>
+                    <button onClick={() => openEditRoleModal(r)} style={{ background: 'none', border: '1px solid #cbd5e1', padding: '0.25rem 0.5rem', borderRadius: '4px', cursor: 'pointer', marginRight: '0.5rem', fontSize: '0.8rem' }}>
+                      Bearbeiten
+                    </button>
+                    <button onClick={() => handleDeleteRole(r.id)} style={{ background: 'none', border: '1px solid #fca5a5', color: '#dc2626', padding: '0.25rem 0.5rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}>
+                      Löschen
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* User Modal */}
+      {userModalOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'white', borderRadius: '8px', padding: '1.5rem', width: '500px', maxWidth: '90vw', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3>{editingUser ? t('editUser') : t('addUser')}</h3>
+            <form onSubmit={handleUserSubmit}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.25rem' }}>E-Mail Address</label>
+                <input
+                  type="email"
+                  value={userEmail}
+                  onChange={e => setUserEmail(e.target.value)}
+                  disabled={!!editingUser}
+                  required
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border)' }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.5rem' }}>{t('assignedRoles')}</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                  {roles.map(r => (
+                    <label key={r.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedUserRoles.includes(r.id)}
+                        onChange={() => toggleUserRole(r.id)}
+                      />
+                      <span><strong>{r.name}</strong> ({r.id})</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.5rem' }}>{t('customPermissions')} (Direct Overrides)</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.35rem', maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border)', padding: '0.5rem', borderRadius: '4px' }}>
+                  {ALL_AVAILABLE_PERMISSIONS.map(p => (
+                    <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontFamily: 'monospace' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedUserPerms.includes(p)}
+                        onChange={() => toggleUserPerm(p)}
+                      />
+                      <span>{p}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                <button type="button" onClick={() => setUserModalOpen(false)} style={{ padding: '0.5rem 1rem', background: '#e2e8f0', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                  {t('cancel')}
+                </button>
+                <button type="submit" style={{ padding: '0.5rem 1rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+                  {t('save')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Role Modal */}
+      {roleModalOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'white', borderRadius: '8px', padding: '1.5rem', width: '500px', maxWidth: '90vw', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3>{editingRole ? t('editRole') : t('addRole')}</h3>
+            <form onSubmit={handleRoleSubmit}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.25rem' }}>{t('roleId')}</label>
+                <input
+                  type="text"
+                  value={roleId}
+                  onChange={e => setRoleId(e.target.value)}
+                  disabled={!!editingRole}
+                  placeholder="e.g. manager"
+                  required
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border)' }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.25rem' }}>{t('roleName')}</label>
+                <input
+                  type="text"
+                  value={roleName}
+                  onChange={e => setRoleName(e.target.value)}
+                  placeholder="e.g. Manager"
+                  required
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border)' }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.25rem' }}>Beschreibung</label>
+                <input
+                  type="text"
+                  value={roleDesc}
+                  onChange={e => setRoleDesc(e.target.value)}
+                  placeholder="Kurze Beschreibung der Rolle"
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border)' }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.5rem' }}>{t('permissions')}</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.35rem', maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border)', padding: '0.5rem', borderRadius: '4px' }}>
+                  {ALL_AVAILABLE_PERMISSIONS.map(p => (
+                    <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontFamily: 'monospace' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedRolePerms.includes(p)}
+                        onChange={() => toggleRolePerm(p)}
+                      />
+                      <span>{p}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                <button type="button" onClick={() => setRoleModalOpen(false)} style={{ padding: '0.5rem 1rem', background: '#e2e8f0', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                  {t('cancel')}
+                </button>
+                <button type="submit" style={{ padding: '0.5rem 1rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+                  {t('save')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 import { useRealtime } from './hooks/useRealtime';
 
 const Dashboard: React.FC = () => {
-  const { user, token, logout } = useAuth();
+  const { user, token, logout, hasPermission } = useAuth();
   const [families, setFamilies] = React.useState<Family[]>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
-  const [activeTab, setActiveTab] = React.useState<'parents' | 'children' | 'childcareFees' | 'hygieneBelehrung' | 'audit'>(() => {
+  const [activeTab, setActiveTab] = React.useState<'parents' | 'children' | 'childcareFees' | 'hygieneBelehrung' | 'audit' | 'admin'>(() => {
     const hash = window.location.hash.replace('#', '');
-    if (hash === 'parents' || hash === 'children' || hash === 'childcareFees' || hash === 'hygieneBelehrung' || hash === 'audit') return hash;
+    if (hash === 'parents' || hash === 'children' || hash === 'childcareFees' || hash === 'hygieneBelehrung' || hash === 'audit' || hash === 'admin') return hash;
     const saved = localStorage.getItem('thweb_active_tab');
-    return (saved === 'parents' || saved === 'children' || saved === 'childcareFees' || saved === 'hygieneBelehrung' || saved === 'audit') ? saved : 'parents';
+    return (saved === 'parents' || saved === 'children' || saved === 'childcareFees' || saved === 'hygieneBelehrung' || saved === 'audit' || saved === 'admin') ? saved : 'parents';
   });
 
   // Audit states
@@ -605,8 +1109,8 @@ const Dashboard: React.FC = () => {
   React.useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#', '');
-      if (hash === 'parents' || hash === 'children' || hash === 'childcareFees' || hash === 'hygieneBelehrung' || hash === 'audit') {
-        setActiveTab(hash);
+      if (hash === 'parents' || hash === 'children' || hash === 'childcareFees' || hash === 'hygieneBelehrung' || hash === 'audit' || hash === 'admin') {
+        setActiveTab(hash as any);
         localStorage.setItem('thweb_active_tab', hash);
       }
     };
@@ -1830,9 +2334,27 @@ const Dashboard: React.FC = () => {
           >
             {t('audit')}
           </button>
+          {(hasPermission('users.all.manage') || hasPermission('*')) && (
+            <button 
+              onClick={() => { window.location.hash = 'admin'; setGlobalFilter(''); }}
+              style={{
+                padding: '0.75rem 1rem',
+                background: 'none',
+                border: 'none',
+                borderBottom: activeTab === 'admin' ? '3px solid var(--primary)' : '3px solid transparent',
+                color: activeTab === 'admin' ? 'var(--primary)' : 'var(--text)',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                fontSize: '1rem',
+                transition: 'all 0.2s'
+              }}
+            >
+              {t('admin')}
+            </button>
+          )}
         </div>
 
-        {activeTab !== 'childcareFees' && activeTab !== 'audit' && (
+        {activeTab !== 'childcareFees' && activeTab !== 'audit' && activeTab !== 'admin' && (
           <div className="controls-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
               <input
@@ -1927,6 +2449,8 @@ const Dashboard: React.FC = () => {
           />
         ) : activeTab === 'audit' ? (
           <AuditLogView logs={auditLogs} loading={auditLoading} />
+        ) : activeTab === 'admin' ? (
+          <AdminView />
         ) : (
           <ChildcareFeesCalculator
             token={token}

@@ -3,25 +3,50 @@
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- Roles table for access control
+CREATE TABLE IF NOT EXISTS roles (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    permissions JSONB NOT NULL DEFAULT '[]',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Users table (Allow-list for Google Auth)
-CREATE TABLE users (
+-- (users of the application)
+-- Currently the system is matching against e-mail.
+-- For Google Auth it could be better to match against "sub"
+-- (subject id) to support user e-mail changes.
+CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email TEXT UNIQUE NOT NULL,
-    role TEXT NOT NULL DEFAULT 'viewer',
-    permissions JSONB NOT NULL DEFAULT '{}',
+    permissions JSONB NOT NULL DEFAULT '[]',
     last_login TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Incremental column migrations for existing databases
+ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions JSONB NOT NULL DEFAULT '[]';
+
+-- User-Roles junction table
+CREATE TABLE IF NOT EXISTS user_roles (
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    role_id TEXT REFERENCES roles(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, role_id)
+);
+
 -- Families table
-CREATE TABLE families (
+-- Note a family doesn't have a name at the moment - how it's displayed on the
+-- UI is currently defined by the `parents` that belong to that family.
+CREATE TABLE IF NOT EXISTS families (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Parents table
-CREATE TABLE parents (
+CREATE TABLE IF NOT EXISTS parents (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     family_id UUID NOT NULL REFERENCES families(id) ON DELETE CASCADE,
     first_name TEXT NOT NULL,
@@ -34,38 +59,50 @@ CREATE TABLE parents (
 );
 
 -- Children table
-CREATE TABLE children (
+CREATE TABLE IF NOT EXISTS children (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     family_id UUID NOT NULL REFERENCES families(id) ON DELETE CASCADE,
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
     birth_date DATE NOT NULL,
     start_date DATE,
-    exit_date DATE,
-    start_group INTEGER,
-    hort_start_date DATE,
     group2_start_date DATE,
+    hort_start_date DATE,
+    exit_date DATE,
+    -- TODO this may be redundant. We may want to merge this with the 
+    -- start_dates.
+    start_group INTEGER, -- 1: Kleine Gruppe, 2: Grosse Gruppe, 3: Hort
     notes TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Audit Log table for history tracking
-CREATE TABLE audit_log (
+CREATE TABLE IF NOT EXISTS audit_log (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     transaction_id UUID NOT NULL,
     family_id UUID REFERENCES families(id) ON DELETE SET NULL,
-    entity_type TEXT NOT NULL, -- 'family', 'parent', 'child'
+    entity_type TEXT NOT NULL, -- 'family', 'parent', 'child', 'hygiene_event', 'th_membership'
     entity_id UUID NOT NULL,
     operation TEXT NOT NULL, -- 'INSERT', 'UPDATE', 'DELETE'
-    snapshot JSONB NOT NULL,
+    -- JSON snapshot of the entity model:
+    --   INSERT: before = null, after = new state
+    --   UPDATE: before = old state, after = new state
+    --   DELETE: before = old state, after = null
+    before_snapshot JSONB,
+    after_snapshot JSONB,
     changed_by UUID REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Incremental column migrations for audit_log
+-- TODO: Remove this
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS before_snapshot JSONB;
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS after_snapshot JSONB;
+
 -- Index for history lookup
-CREATE INDEX idx_audit_log_entity ON audit_log (entity_type, entity_id);
-CREATE INDEX idx_audit_log_family ON audit_log (family_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log (entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_family ON audit_log (family_id);
 
 -- Trigger to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -76,12 +113,17 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+DROP TRIGGER IF EXISTS update_users_updated_at ON users;
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_parents_updated_at ON parents;
 CREATE TRIGGER update_parents_updated_at BEFORE UPDATE ON parents FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_children_updated_at ON children;
 CREATE TRIGGER update_children_updated_at BEFORE UPDATE ON children FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 -- Hygiene instruction events table
-CREATE TABLE hygiene_belehrung_events (
+CREATE TABLE IF NOT EXISTS hygiene_belehrung_events (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     parent_id UUID NOT NULL REFERENCES parents(id) ON DELETE CASCADE,
     event_date DATE NOT NULL,
@@ -91,10 +133,11 @@ CREATE TABLE hygiene_belehrung_events (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+DROP TRIGGER IF EXISTS update_hygiene_belehrung_events_updated_at ON hygiene_belehrung_events;
 CREATE TRIGGER update_hygiene_belehrung_events_updated_at BEFORE UPDATE ON hygiene_belehrung_events FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 -- TH Memberships table
-CREATE TABLE th_memberships (
+CREATE TABLE IF NOT EXISTS th_memberships (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     parent_id UUID NOT NULL REFERENCES parents(id) ON DELETE CASCADE,
     start_date DATE NOT NULL,
@@ -104,20 +147,36 @@ CREATE TABLE th_memberships (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+DROP TRIGGER IF EXISTS update_th_memberships_updated_at ON th_memberships;
 CREATE TRIGGER update_th_memberships_updated_at BEFORE UPDATE ON th_memberships FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
+-- Default roles
+INSERT INTO roles (id, name, description, permissions) VALUES
+    ('admin', 'Administrator', 'Full system access', '["*"]'),
+    ('viewer', 'Viewer', 'Read-only access', '["families.all.read", "fees.self.read", "audit.all.read"]'),
+    ('treasurer', 'Treasurer', 'Fee calculation and membership management', '["families.all.read", "fees.all.read", "memberships.all.write"]'),
+    ('caregiver', 'Caregiver', 'Child and hygiene tracking', '["families.all.read", "children.all.write", "hygiene.all.write"]')
+ON CONFLICT (id) DO NOTHING;
+
 -- Default developer user for local testing
-INSERT INTO users (email, role) VALUES ('developer@example.com', 'admin') ON CONFLICT (email) DO NOTHING;
+-- TODO: Remove this
+INSERT INTO users (email) VALUES ('developer@example.com') ON CONFLICT (email) DO NOTHING;
+INSERT INTO user_roles (user_id, role_id)
+SELECT id, 'admin' FROM users WHERE email = 'developer@example.com'
+ON CONFLICT (user_id, role_id) DO NOTHING;
 
 -- Seed a test family
+-- TODO: Remove this
 INSERT INTO families (id) VALUES ('d3b07384-d113-4956-a5cc-987813a89001') ON CONFLICT (id) DO NOTHING;
 
 -- Seed parent for the test family
-INSERT INTO parents (id, family_id, first_name, last_name, email)
-VALUES ('e4a07384-d113-4956-a5cc-987813a89002', 'd3b07384-d113-4956-a5cc-987813a89001', 'Jane', 'Doe', 'jane.doe@example.com')
+-- TODO: Remove this
+INSERT INTO parents (id, family_id, first_name, last_name, emails)
+VALUES ('e4a07384-d113-4956-a5cc-987813a89002', 'd3b07384-d113-4956-a5cc-987813a89001', 'Jane', 'Doe', ARRAY['jane.doe@example.com'])
 ON CONFLICT (id) DO NOTHING;
 
 -- Seed child for the test family
+-- TODO: Remove this
 INSERT INTO children (id, family_id, first_name, last_name, birth_date)
 VALUES ('f5b07384-d113-4956-a5cc-987813a89003', 'd3b07384-d113-4956-a5cc-987813a89001', 'Tommy', 'Doe', '2021-05-15')
 ON CONFLICT (id) DO NOTHING;

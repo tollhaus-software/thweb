@@ -15,6 +15,11 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+type WSMessage struct {
+	Type    string      `json:"type"`
+	Payload interface{} `json:"payload"`
+}
+
 type Hub struct {
 	clients    map[*websocket.Conn]bool
 	broadcast  chan []byte

@@ -2,7 +2,9 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 interface User {
   email: string;
-  role: string;
+  roles: string[];
+  permissions: string[];
+  effective_permissions: string[];
 }
 
 interface AuthContextType {
@@ -11,6 +13,7 @@ interface AuthContextType {
   login: (token: string) => void;
   logout: () => void;
   loading: boolean;
+  hasPermission: (perm: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -56,8 +59,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [token]);
 
+  const hasPermission = (perm: string): boolean => {
+    if (!user || !user.effective_permissions) return false;
+    return user.effective_permissions.includes('*') || user.effective_permissions.includes(perm);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, loading }}>
+    <AuthContext.Provider value={{ user, token, login, logout, loading, hasPermission }}>
       {children}
     </AuthContext.Provider>
   );
