@@ -1,37 +1,36 @@
 # Local Testing Guide
 
-Follow these steps to run the application locally.
+## Prerequisites
+Install Docker Compose: https://docs.docker.com/compose/install/
 
-## 1. Start the Database
-The project includes a `docker-compose.yml` file to spin up a PostgreSQL instance and automatically initialize the schema.
+## Run
 
-From the root directory, run:
+docker compose --env-file .env.mock up --build
+
+This will:
+- Build all containers
+- Run a docker container with the Postgres database
+- Run a docker container with the backend go server
+- Run a docker container with a nginx server serving the frontend
+
+.env.mock contains mock settings that don't require real secrets / client IDs, e.g. for Google Auth.
+
+# Manual building
+You can build / run the backend / frontend manually for testing / easier debugging.
+
+## Build the Backend
 ```bash
-docker compose up -d
+cd backend
+go build ./...
+GOOGLE_CLIENT_ID=mock go run cmd/server/main.go
 ```
-
----
-
-## 2. Run the Backend
-The Go backend requires a `GOOGLE_CLIENT_ID` environment variable. For local testing, we can use `mock`.
-
-1. Navigate to the backend directory:
-   ```bash
-   cd backend
-   ```
-2. Start the server:
-   ```bash
-   GOOGLE_CLIENT_ID=mock go run cmd/server/main.go
-   ```
 
 *(Optional)* If you need to override the default database connection URL:
 ```bash
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable GOOGLE_CLIENT_ID=mock go run cmd/server/main.go
 ```
 
----
-
-## 3. Run the Frontend
+## Run the Frontend
 The frontend is a React + Vite application.
 
 1. Navigate to the frontend directory:
