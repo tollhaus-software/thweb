@@ -1,4 +1,4 @@
-# Step 1: Build stage
+# Step 1: Build stage (pure static compilation, no environment variables needed)
 FROM node:20-alpine AS builder
 
 WORKDIR /app
@@ -8,10 +8,6 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
-# Accept build argument for Vite environment variable
-ARG VITE_GOOGLE_CLIENT_ID
-ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
-
 # npm run build: Compile TypeScript and bundle static assets into the /dist directory
 RUN npm run build
 
@@ -24,7 +20,12 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 # Copy Nginx configuration with API & WebSocket proxies
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
+# Copy runtime environment variable generator script
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
 EXPOSE 80
 
+ENTRYPOINT ["/docker-entrypoint.sh"]
 # Run Nginx in the foreground so the Docker container stays active
 CMD ["nginx", "-g", "daemon off;"]

@@ -19,7 +19,15 @@ window.addEventListener('error', (event) => {
   }
 });
 
-const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+declare global {
+  interface Window {
+    ENV?: {
+      GOOGLE_CLIENT_ID?: string;
+    };
+  }
+}
+
+const clientId = window.ENV?.GOOGLE_CLIENT_ID || import.meta.env.VITE_GOOGLE_CLIENT_ID || 'mock';
 
 const rootElement = (
   <StrictMode>

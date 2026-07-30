@@ -6,7 +6,8 @@ export const LoginButton: React.FC = () => {
   const { login } = useAuth();
   const [email, setEmail] = useState('developer@example.com');
 
-  const isMock = import.meta.env.VITE_GOOGLE_CLIENT_ID === 'mock';
+  const clientId = window.ENV?.GOOGLE_CLIENT_ID || import.meta.env.VITE_GOOGLE_CLIENT_ID || 'mock';
+  const isMock = !clientId || clientId === 'mock';
 
   if (isMock) {
     return (
