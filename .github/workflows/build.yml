@@ -1,0 +1,30 @@
+name: Build and Push Docker Images
+
+on:
+  workflow_dispatch
+
+jobs:
+  build-and-push:
+    name: Build & Push to nscr.io
+    runs-on: namespace-profile-default
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build and push Backend Image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.NSC_CONTAINER_REGISTRY }}/thweb-backend:${{ github.sha }}
+
+      - name: Build and push Frontend Image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.NSC_CONTAINER_REGISTRY }}/thweb-frontend:${{ github.sha }}
