@@ -1,6 +1,7 @@
+# Local HTTP Server Block (Port 80)
 server {
     listen 80;
-    server_name localhost;
+    server_name ${DOMAIN_NAME};
 
     # Host frontend as static file
     location / {

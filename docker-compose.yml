@@ -41,6 +41,8 @@ services:
     restart: unless-stopped
     environment:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      USE_TLS: ${USE_TLS:-false}
+      DOMAIN_NAME: ${DOMAIN_NAME:-localhost}
     ports:
       - "80:80"
     depends_on:
