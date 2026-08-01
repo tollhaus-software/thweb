@@ -32,31 +32,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToken(null);
     setUser(null);
     localStorage.removeItem('token');
+    window.location.href = '/oauth2/sign_out';
   };
 
   useEffect(() => {
+    const headers: Record<string, string> = {};
     if (token) {
-      fetch('/api/me', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-        .then((res) => {
-          if (res.ok) return res.json();
-          throw new Error('Unauthorized');
-        })
-        .then((data) => {
-          setUser(data);
-        })
-        .catch(() => {
-          logout();
-        })
-        .finally(() => {
-          setLoading(false);
-        });
-    } else {
-      setLoading(false);
+      headers['Authorization'] = `Bearer ${token}`;
     }
+
+    fetch('/api/me', { headers })
+      .then((res) => {
+        if (res.ok) return res.json();
+        throw new Error('Unauthorized');
+      })
+      .then((data) => {
+        setUser(data);
+      })
+      .catch(() => {
+        setUser(null);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, [token]);
 
   const hasPermission = (perm: string): boolean => {

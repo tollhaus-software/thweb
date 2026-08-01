@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"strings"
@@ -18,46 +19,81 @@ const UserContextKey contextKey = "user"
 
 type Authenticator struct {
 	GoogleClientID string
+	AllowMockAuth  bool
 	Store          *store.Store
 }
 
-func NewAuthenticator(clientID string, store *store.Store) *Authenticator {
+func NewAuthenticator(clientID string, allowMockAuth bool, store *store.Store) *Authenticator {
 	return &Authenticator{
 		GoogleClientID: clientID,
+		AllowMockAuth:  allowMockAuth,
 		Store:          store,
 	}
 }
 
+func writeJSONError(w http.ResponseWriter, message string, statusCode int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(map[string]string{"error": message})
+}
+
 func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
+		var email string
+
+		// Extract ID token passed by oauth2-proxy (X-Forwarded-ID-Token) or direct Authorization Bearer header
+		idToken := r.Header.Get("X-Forwarded-ID-Token")
+		if idToken == "" {
+			authHeader := r.Header.Get("Authorization")
+			if strings.HasPrefix(authHeader, "Bearer ") {
+				idToken = strings.TrimPrefix(authHeader, "Bearer ")
+			}
 		}
 
-		idToken := strings.TrimPrefix(authHeader, "Bearer ")
-		var email string
-		if a.GoogleClientID == "mock" {
-			email = idToken
+		if idToken == "null" || idToken == "undefined" {
+			idToken = ""
+		}
+
+		if a.AllowMockAuth {
+			// Local development mode (ALLOW_MOCK_AUTH=true)
+			if headerEmail := r.Header.Get("X-Forwarded-Email"); headerEmail != "" && headerEmail != "null" && headerEmail != "undefined" {
+				email = headerEmail
+			} else if idToken != "" {
+				email = idToken
+			} else {
+				email = "developer@example.com"
+			}
 		} else {
-			payload, err := idtoken.Validate(r.Context(), idToken, a.GoogleClientID)
-			if err != nil {
-				http.Error(w, "Invalid token", http.StatusUnauthorized)
+			// Production zero-trust mode: Require valid Google ID token cryptographically verified against Google RSA keys
+			if idToken == "" {
+				writeJSONError(w, "Unauthorized: missing ID token", http.StatusUnauthorized)
 				return
 			}
-			email = payload.Claims["email"].(string)
+
+			payload, err := idtoken.Validate(r.Context(), idToken, a.GoogleClientID)
+			if err != nil {
+				log.Printf("[AUTH ERROR] Google ID token validation failed: %v", err)
+				writeJSONError(w, "Invalid Google ID token", http.StatusUnauthorized)
+				return
+			}
+
+			emailClaim, ok := payload.Claims["email"].(string)
+			if !ok || emailClaim == "" {
+				writeJSONError(w, "Token missing email claim", http.StatusUnauthorized)
+				return
+			}
+			email = emailClaim
 		}
 
 		user, err := a.Store.GetUserWithPermissionsByEmail(r.Context(), email)
 		if err != nil {
 			if err == pgx.ErrNoRows {
 				log.Printf("[AUTH WARNING] User email %q not found in allow-list", email)
-				http.Error(w, "User not allowed", http.StatusForbidden)
+				writeJSONError(w, "User not allowed", http.StatusForbidden)
 				return
 			}
 			log.Printf("[AUTH ERROR] Failed to fetch user %q from database: %v", email, err)
-			http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
+			writeJSONError(w, "Database error: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 
@@ -79,7 +115,7 @@ func RequirePermission(perm string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			user := GetUser(r.Context())
 			if user == nil || !user.HasPermission(perm) {
-				http.Error(w, "Forbidden", http.StatusForbidden)
+				writeJSONError(w, "Forbidden", http.StatusForbidden)
 				return
 			}
 			next.ServeHTTP(w, r)

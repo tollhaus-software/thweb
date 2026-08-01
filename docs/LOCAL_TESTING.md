@@ -11,9 +11,12 @@ This will:
 - Build all containers
 - Run a docker container with the Postgres database
 - Run a docker container with the backend go server
-- Run a docker container with a nginx server serving the frontend
+- Run a docker container with a nginx server serving the frontend files and forwarding API requests to the backend
+- Run a docker container with oauth2-proxy in testing mode
 
 .env.mock contains mock settings that don't require real secrets / client IDs, e.g. for Google Auth.
+
+Now you can access oauth2-proxy and through it the application on localhost:80
 
 # Manual building
 You can build / run the backend / frontend manually for testing / easier debugging.
@@ -22,7 +25,7 @@ You can build / run the backend / frontend manually for testing / easier debuggi
 ```bash
 cd backend
 go build ./...
-GOOGLE_CLIENT_ID=mock go run cmd/server/main.go
+ALLOW_MOCK_AUTH=true GOOGLE_CLIENT_ID=mock go run cmd/server/main.go
 ```
 
 *(Optional)* If you need to override the default database connection URL:

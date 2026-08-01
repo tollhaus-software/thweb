@@ -3,7 +3,7 @@ services:
     image: postgres:15-alpine
     container_name: thweb-db
     restart: unless-stopped
-    ports:
+    ports: # Exposed in local testing config for convenience
       - "5432:5432"
     environment:
       POSTGRES_USER: postgres
@@ -24,11 +24,12 @@ services:
       dockerfile: Dockerfile
     container_name: thweb-backend
     restart: unless-stopped
-    ports:
+    ports: # Exposed in local testing config for convenience
       - "8080:8080"
     environment:
       DATABASE_URL: postgres://postgres:postgres@db:5432/thweb?sslmode=disable
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-mock}
+      ALLOW_MOCK_AUTH: "true"
     depends_on:
       db:
         condition: service_healthy
@@ -40,15 +41,31 @@ services:
     container_name: thweb-frontend
     restart: unless-stopped
     environment:
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
-      USE_TLS: ${USE_TLS:-false}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-mock}
+      USE_TLS: "false"
       DOMAIN_NAME: ${DOMAIN_NAME:-localhost}
-    ports:
-      - "80:80"
     depends_on:
       - backend
 
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+    container_name: thweb-oauth2-proxy
+    restart: unless-stopped
+    ports:
+      - "80:4180"
+    environment:
+      OAUTH2_PROXY_HTTP_ADDRESS: "0.0.0.0:4180"
+      OAUTH2_PROXY_UPSTREAMS: "http://frontend:80"
+      OAUTH2_PROXY_SKIP_AUTH_REGEX: ".*"
+      OAUTH2_PROXY_PASS_ID_TOKEN: "true"
+      OAUTH2_PROXY_SET_XAUTHREQUEST: "true"
+      OAUTH2_PROXY_PASS_USER_HEADERS: "true"
+      OAUTH2_PROXY_COOKIE_SECRET: "12345678901234567890123456789012"
+      OAUTH2_PROXY_CLIENT_ID: "mock"
+      OAUTH2_PROXY_CLIENT_SECRET: "mock"
+      OAUTH2_PROXY_EMAIL_DOMAINS: "*"
+    depends_on:
+      - frontend
+
 volumes:
   pgdata:
-
-

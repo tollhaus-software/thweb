@@ -35,8 +35,17 @@ func main() {
 		log.Fatal("GOOGLE_CLIENT_ID environment variable is required")
 	}
 
+	allowMockAuth := os.Getenv("ALLOW_MOCK_AUTH") == "true"
+	if googleClientID == "mock" && !allowMockAuth {
+		log.Fatal("GOOGLE_CLIENT_ID cannot be 'mock' unless ALLOW_MOCK_AUTH=true is explicitly set for local development")
+	}
+
+	if allowMockAuth {
+		log.Println("[SECURITY WARNING] ALLOW_MOCK_AUTH=true is set. Mock authentication enabled for local testing.")
+	}
+
 	appStore := store.NewStore(pool)
-	authenticator := auth.NewAuthenticator(googleClientID, appStore)
+	authenticator := auth.NewAuthenticator(googleClientID, allowMockAuth, appStore)
 
 	hub := api.NewHub()
 	go hub.Run()
