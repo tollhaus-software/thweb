@@ -6,7 +6,7 @@ on:
 jobs:
   build-and-push:
     name: Build & Push to nscr.io
-    runs-on: namespace-profile-default
+    runs-on: namespace-profile-local-builder-to-save-namespace-some-resources
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
