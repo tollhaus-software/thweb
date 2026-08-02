@@ -158,26 +158,5 @@ INSERT INTO roles (id, name, description, permissions) VALUES
     ('caregiver', 'Caregiver', 'Child and hygiene tracking', '["families.all.read", "children.all.write", "hygiene.all.write"]')
 ON CONFLICT (id) DO NOTHING;
 
--- Default developer user for local testing
--- TODO: Remove this
-INSERT INTO users (email) VALUES ('developer@example.com') ON CONFLICT (email) DO NOTHING;
-INSERT INTO user_roles (user_id, role_id)
-SELECT id, 'admin' FROM users WHERE email = 'developer@example.com'
-ON CONFLICT (user_id, role_id) DO NOTHING;
 
--- Seed a test family
--- TODO: Remove this
-INSERT INTO families (id) VALUES ('d3b07384-d113-4956-a5cc-987813a89001') ON CONFLICT (id) DO NOTHING;
-
--- Seed parent for the test family
--- TODO: Remove this
-INSERT INTO parents (id, family_id, first_name, last_name, emails)
-VALUES ('e4a07384-d113-4956-a5cc-987813a89002', 'd3b07384-d113-4956-a5cc-987813a89001', 'Jane', 'Doe', ARRAY['jane.doe@example.com'])
-ON CONFLICT (id) DO NOTHING;
-
--- Seed child for the test family
--- TODO: Remove this
-INSERT INTO children (id, family_id, first_name, last_name, birth_date)
-VALUES ('f5b07384-d113-4956-a5cc-987813a89003', 'd3b07384-d113-4956-a5cc-987813a89001', 'Tommy', 'Doe', '2021-05-15')
-ON CONFLICT (id) DO NOTHING;
 

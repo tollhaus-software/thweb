@@ -18,6 +18,20 @@ This will:
 
 Now you can access oauth2-proxy and through it the application on localhost:80
 
+## Resetting Local Database & Environment
+
+To wipe local data and start fresh with a clean database:
+
+```bash
+docker compose down -v
+docker compose --env-file .env.mock up --build
+```
+
+**What `-v` does**:
+- Stops and removes all local Docker containers.
+- Deletes the local Docker volume (`pgdata`), wiping persistent database files.
+- On the next `docker compose up`, PostgreSQL performs a fresh database initialization, runs `00_init_db.sh` to create database extensions and the `thweb_app` user, and Goose applies the schema migrations from scratch.
+
 # Manual building
 You can build / run the backend / frontend manually for testing / easier debugging.
 

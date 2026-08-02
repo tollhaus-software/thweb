@@ -3,14 +3,27 @@ services:
     image: postgres:15-alpine
     container_name: thweb-db
     restart: unless-stopped
+    entrypoint:
+      - sh
+      - -c
+      - |
+        cp /etc/postgres-certs/server.crt /tmp/server.crt
+        cp /etc/postgres-certs/server.key /tmp/server.key
+        chown 70:70 /tmp/server.key /tmp/server.crt
+        chmod 600 /tmp/server.key
+        chmod 644 /tmp/server.crt
+        exec docker-entrypoint.sh postgres -c ssl=on -c ssl_cert_file=/tmp/server.crt -c ssl_key_file=/tmp/server.key
     ports: # Exposed in local testing config for convenience
       - "5432:5432"
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: thweb
+      THWEB_DB_APP_PASSWORD: ${THWEB_DB_APP_PASSWORD:-thweb_app_dev_secret}
     volumes:
-      - ./backend/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      - ./testing/db-init/00_init_db.sh:/docker-entrypoint-initdb.d/00_init_db.sh:ro
+      - ./testing/certs/postgres/server.crt:/etc/postgres-certs/server.crt:ro
+      - ./testing/certs/postgres/server.key:/etc/postgres-certs/server.key:ro
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d thweb"]
@@ -27,7 +40,7 @@ services:
     ports: # Exposed in local testing config for convenience
       - "8080:8080"
     environment:
-      DATABASE_URL: postgres://postgres:postgres@db:5432/thweb?sslmode=disable
+      DATABASE_URL: ${DATABASE_URL:-postgres://thweb_app:thweb_app_dev_secret@db:5432/thweb?sslmode=require}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-mock}
       ALLOW_MOCK_AUTH: "true"
     depends_on:

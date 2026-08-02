@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, Fragment } from 'react';
 import {
   useReactTable,
   getCoreRowModel,
@@ -16,6 +16,7 @@ interface DataTableProps<TData> {
   columns: ColumnDef<TData, any>[];
   getSubRows?: (row: TData) => any[] | undefined;
   onAddRow?: (familyId: string, familyName: string) => void;
+  emptySubRowsText?: string;
 }
 
 export function DataTable<TData>({
@@ -23,6 +24,7 @@ export function DataTable<TData>({
   columns,
   getSubRows,
   onAddRow,
+  emptySubRowsText,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
@@ -173,41 +175,51 @@ export function DataTable<TData>({
               if (isGroupedRow) {
                 const familyId = (row.original as any).id;
                 const familyName = (row.original as any).family_name;
+                const hasSubRows = row.subRows && row.subRows.length > 0;
                 return (
-                  <tr key={row.id} className="family-group-row" id={`row-${familyId}`}>
-                    <td colSpan={table.getVisibleLeafColumns().length}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                        <span>{familyName}</span>
-                        {onAddRow && (
-                          <button
-                            type="button"
-                            className="easy-edit-button primary-button"
-                            style={{
-                              padding: '0 0.5rem',
-                              fontSize: '1rem',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              border: 'none',
-                              color: 'white',
-                              height: '24px',
-                              minWidth: '24px',
-                              fontWeight: 'bold'
-                            }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onAddRow(familyId, familyName);
-                            }}
-                            title="Add"
-                          >
-                            +
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
+                  <Fragment key={row.id}>
+                    <tr className="family-group-row" id={`row-${familyId}`}>
+                      <td colSpan={table.getVisibleLeafColumns().length}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                          <span>{familyName}</span>
+                          {onAddRow && (
+                            <button
+                              type="button"
+                              className="easy-edit-button primary-button"
+                              style={{
+                                padding: '0 0.5rem',
+                                fontSize: '1rem',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                border: 'none',
+                                color: 'white',
+                                height: '24px',
+                                minWidth: '24px',
+                                fontWeight: 'bold'
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onAddRow(familyId, familyName);
+                              }}
+                              title="Add"
+                            >
+                              +
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                    {!hasSubRows && emptySubRowsText && (
+                      <tr className="empty-sub-row">
+                        <td colSpan={table.getVisibleLeafColumns().length} style={{ padding: '0.75rem 1.5rem', color: '#94a3b8', fontStyle: 'italic', fontSize: '0.85rem' }}>
+                          {emptySubRowsText}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               }
 

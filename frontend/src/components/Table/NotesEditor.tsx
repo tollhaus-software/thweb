@@ -149,15 +149,17 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
           className="glass-popup"
           style={{
             position: 'absolute',
-            top: '-10px',
-            left: '-10px',
+            bottom: '100%',
+            left: '0',
+            marginBottom: '6px',
             zIndex: 1000,
-            width: '280px',
-            background: 'var(--bg)',
+            width: '360px',
+            minWidth: '320px',
+            background: 'white',
             border: '1px solid var(--border)',
             borderRadius: '8px',
-            boxShadow: 'var(--shadow)',
-            padding: '8px',
+            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+            padding: '10px',
             display: 'flex',
             flexDirection: 'column',
             gap: '8px',
@@ -175,12 +177,13 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
             value={tempValue}
             onChange={(e) => setTempValue(e.target.value)}
             onKeyDown={handleKeyDown}
-            rows={4}
+            rows={6}
             autoFocus
             placeholder="Write some notes here..."
             style={{
               width: '100%',
-              padding: '6px 8px',
+              minHeight: '130px',
+              padding: '8px 10px',
               borderRadius: '4px',
               border: '1px solid var(--border)',
               background: 'white',

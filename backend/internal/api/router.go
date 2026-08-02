@@ -49,6 +49,7 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 
 		// Family & Child CRUD
 		r.With(auth.RequirePermission("families.all.write")).Post("/api/families", server.HandleCreateFamily)
+		r.With(auth.RequirePermission("families.all.write")).Put("/api/families/{id}", server.HandleUpdateFamilyParents)
 		r.With(auth.RequirePermission("families.all.write")).Post("/api/families/{id}/parents", server.HandleUpdateFamilyParents)
 		r.With(auth.RequirePermission("families.all.write")).Put("/api/families/{id}/parents", server.HandleUpdateFamilyParents)
 		r.With(auth.RequirePermission("families.all.write")).Delete("/api/families/{id}", server.HandleDeleteFamily)
@@ -59,10 +60,12 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		r.With(auth.RequirePermission("children.all.write")).Delete("/api/children/{id}", server.HandleDeleteChild)
 
 		// Hygiene Belehrung
+		r.With(auth.RequirePermission("hygiene.all.write")).Post("/api/hygiene-events", server.HandleCreateHygieneEvent)
 		r.With(auth.RequirePermission("hygiene.all.write")).Post("/api/parents/{id}/hygiene-events", server.HandleCreateHygieneEvent)
 		r.With(auth.RequirePermission("hygiene.all.write")).Delete("/api/hygiene-events/{id}", server.HandleDeleteHygieneEvent)
 
 		// TH Membership
+		r.With(auth.RequirePermission("memberships.all.write")).Post("/api/memberships", server.HandleCreateTHMembership)
 		r.With(auth.RequirePermission("memberships.all.write")).Post("/api/parents/{id}/memberships", server.HandleCreateTHMembership)
 		r.With(auth.RequirePermission("memberships.all.write")).Delete("/api/memberships/{id}", server.HandleDeleteTHMembership)
 

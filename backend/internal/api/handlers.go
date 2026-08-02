@@ -2,6 +2,9 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -23,6 +26,33 @@ func jsonResponse(w http.ResponseWriter, data interface{}) {
 	json.NewEncoder(w).Encode(data)
 }
 
+func httpErrorLog(w http.ResponseWriter, r *http.Request, msg string, code int, err error) {
+	if err != nil {
+		log.Printf("[HTTP %d] %s %s error: %s (detail: %v)", code, r.Method, r.URL.Path, msg, err)
+	} else {
+		log.Printf("[HTTP %d] %s %s error: %s", code, r.Method, r.URL.Path, msg)
+	}
+	http.Error(w, msg, code)
+}
+
+func parseFlexibleDate(dateStr string) (time.Time, error) {
+	if dateStr == "" {
+		return time.Time{}, errors.New("empty date string")
+	}
+	formats := []string{
+		"2006-01-02",
+		time.RFC3339,
+		"2006-01-02T15:04:05.999Z07:00",
+		"2006-01-02T15:04:05",
+	}
+	for _, fmtStr := range formats {
+		if t, err := time.Parse(fmtStr, dateStr); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("unable to parse date %q", dateStr)
+}
+
 func (s *Server) HandleGetMe(w http.ResponseWriter, r *http.Request) {
 	user := auth.GetUser(r.Context())
 	jsonResponse(w, map[string]interface{}{
@@ -36,7 +66,7 @@ func (s *Server) HandleGetMe(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleListFamilies(w http.ResponseWriter, r *http.Request) {
 	families, err := s.Store.ListFamilies(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpErrorLog(w, r, "Failed to list families", http.StatusInternalServerError, err)
 		return
 	}
 	jsonResponse(w, families)
@@ -45,8 +75,11 @@ func (s *Server) HandleListFamilies(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleListAuditLogs(w http.ResponseWriter, r *http.Request) {
 	logs, err := s.Store.ListAuditLogs(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpErrorLog(w, r, "Failed to list audit logs", http.StatusInternalServerError, err)
 		return
+	}
+	if logs == nil {
+		logs = []models.AuditLog{}
 	}
 	jsonResponse(w, logs)
 }
@@ -54,7 +87,11 @@ func (s *Server) HandleListAuditLogs(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleCreateFamily(w http.ResponseWriter, r *http.Request) {
 	user := auth.GetUser(r.Context())
 	var req struct {
-		Parents []struct {
+		FirstName string   `json:"first_name"`
+		LastName  string   `json:"last_name"`
+		Emails    []string `json:"emails"`
+		Phones    []string `json:"phones"`
+		Parents   []struct {
 			FirstName string   `json:"first_name"`
 			LastName  string   `json:"last_name"`
 			Emails    []string `json:"emails"`
@@ -63,23 +100,32 @@ func (s *Server) HandleCreateFamily(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		httpErrorLog(w, r, "Invalid request body JSON", http.StatusBadRequest, err)
 		return
 	}
 
-	var p models.Parent
+	var parents []models.Parent
 	if len(req.Parents) > 0 {
-		p = models.Parent{
-			FirstName: req.Parents[0].FirstName,
-			LastName:  req.Parents[0].LastName,
-			Emails:    req.Parents[0].Emails,
-			Phones:    req.Parents[0].Phones,
+		for _, p := range req.Parents {
+			parents = append(parents, models.Parent{
+				FirstName: p.FirstName,
+				LastName:  p.LastName,
+				Emails:    p.Emails,
+				Phones:    p.Phones,
+			})
 		}
+	} else if req.FirstName != "" || req.LastName != "" {
+		parents = append(parents, models.Parent{
+			FirstName: req.FirstName,
+			LastName:  req.LastName,
+			Emails:    req.Emails,
+			Phones:    req.Phones,
+		})
 	}
 
-	family, err := s.Store.CreateFamilyWithParent(r.Context(), user.ID, p)
+	family, err := s.Store.CreateFamilyWithParents(r.Context(), user.ID, parents)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpErrorLog(w, r, "Failed to create family with parents", http.StatusInternalServerError, err)
 		return
 	}
 
@@ -96,7 +142,7 @@ func (s *Server) HandleUpdateFamilyParents(w http.ResponseWriter, r *http.Reques
 	idStr := chi.URLParam(r, "id")
 	familyID, err := uuid.Parse(idStr)
 	if err != nil {
-		http.Error(w, "Invalid family ID", http.StatusBadRequest)
+		httpErrorLog(w, r, "Invalid family ID", http.StatusBadRequest, err)
 		return
 	}
 
@@ -105,12 +151,12 @@ func (s *Server) HandleUpdateFamilyParents(w http.ResponseWriter, r *http.Reques
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		httpErrorLog(w, r, "Invalid request body JSON", http.StatusBadRequest, err)
 		return
 	}
 
 	if err := s.Store.UpdateFamilyParents(r.Context(), user.ID, familyID, req.Parents); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpErrorLog(w, r, "Failed to update family parents", http.StatusInternalServerError, err)
 		return
 	}
 
@@ -127,12 +173,12 @@ func (s *Server) HandleDeleteFamily(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	familyID, err := uuid.Parse(idStr)
 	if err != nil {
-		http.Error(w, "Invalid family ID", http.StatusBadRequest)
+		httpErrorLog(w, r, "Invalid family ID", http.StatusBadRequest, err)
 		return
 	}
 
 	if err := s.Store.DeleteFamily(r.Context(), user.ID, familyID); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpErrorLog(w, r, "Failed to delete family", http.StatusInternalServerError, err)
 		return
 	}
 
@@ -153,12 +199,13 @@ func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 	// May be /api/families/{id}/children or /api/children/{id}
 	parsedID, err := uuid.Parse(idStr)
 	if err != nil {
-		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		httpErrorLog(w, r, "Invalid ID parameter", http.StatusBadRequest, err)
 		return
 	}
 
 	var req struct {
 		ID              *uuid.UUID `json:"id"`
+		FamilyID        *uuid.UUID `json:"family_id"`
 		FirstName       string     `json:"first_name"`
 		LastName        string     `json:"last_name"`
 		BirthDate       string     `json:"birth_date"`
@@ -171,48 +218,64 @@ func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		httpErrorLog(w, r, "Invalid request body JSON", http.StatusBadRequest, err)
 		return
 	}
 
-	birthDate, err := time.Parse("2006-01-02", req.BirthDate)
+	birthDate, err := parseFlexibleDate(req.BirthDate)
 	if err != nil {
-		http.Error(w, "Invalid birth_date format", http.StatusBadRequest)
+		httpErrorLog(w, r, fmt.Sprintf("Invalid birth_date format %q", req.BirthDate), http.StatusBadRequest, err)
 		return
 	}
 
 	var startDate, group2StartDate, hortStartDate, exitDate *time.Time
 	if req.StartDate != nil && *req.StartDate != "" {
-		t, err := time.Parse("2006-01-02", *req.StartDate)
-		if err == nil {
-			startDate = &t
+		t, err := parseFlexibleDate(*req.StartDate)
+		if err != nil {
+			httpErrorLog(w, r, fmt.Sprintf("Invalid start_date format %q", *req.StartDate), http.StatusBadRequest, err)
+			return
 		}
+		startDate = &t
 	}
 	if req.Group2StartDate != nil && *req.Group2StartDate != "" {
-		t, err := time.Parse("2006-01-02", *req.Group2StartDate)
-		if err == nil {
-			group2StartDate = &t
+		t, err := parseFlexibleDate(*req.Group2StartDate)
+		if err != nil {
+			httpErrorLog(w, r, fmt.Sprintf("Invalid group2_start_date format %q", *req.Group2StartDate), http.StatusBadRequest, err)
+			return
 		}
+		group2StartDate = &t
 	}
 	if req.HortStartDate != nil && *req.HortStartDate != "" {
-		t, err := time.Parse("2006-01-02", *req.HortStartDate)
-		if err == nil {
-			hortStartDate = &t
+		t, err := parseFlexibleDate(*req.HortStartDate)
+		if err != nil {
+			httpErrorLog(w, r, fmt.Sprintf("Invalid hort_start_date format %q", *req.HortStartDate), http.StatusBadRequest, err)
+			return
 		}
+		hortStartDate = &t
 	}
 	if req.ExitDate != nil && *req.ExitDate != "" {
-		t, err := time.Parse("2006-01-02", *req.ExitDate)
-		if err == nil {
-			exitDate = &t
+		t, err := parseFlexibleDate(*req.ExitDate)
+		if err != nil {
+			httpErrorLog(w, r, fmt.Sprintf("Invalid exit_date format %q", *req.ExitDate), http.StatusBadRequest, err)
+			return
 		}
+		exitDate = &t
 	}
 
 	if req.ID != nil && *req.ID != uuid.Nil {
 		childID = *req.ID
-		familyID = parsedID
+		if req.FamilyID != nil && *req.FamilyID != uuid.Nil {
+			familyID = *req.FamilyID
+		} else {
+			familyID = parsedID
+		}
 	} else {
 		childID = parsedID
-		familyID = parsedID
+		if req.FamilyID != nil && *req.FamilyID != uuid.Nil {
+			familyID = *req.FamilyID
+		} else {
+			familyID = parsedID
+		}
 	}
 
 	child := models.Child{
@@ -230,7 +293,7 @@ func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.Store.UpdateChild(r.Context(), user.ID, childID, child); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpErrorLog(w, r, "Failed to update child in database", http.StatusInternalServerError, err)
 		return
 	}
 
@@ -247,12 +310,12 @@ func (s *Server) HandleDeleteChild(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	childID, err := uuid.Parse(idStr)
 	if err != nil {
-		http.Error(w, "Invalid child ID", http.StatusBadRequest)
+		httpErrorLog(w, r, "Invalid child ID", http.StatusBadRequest, err)
 		return
 	}
 
 	if err := s.Store.DeleteChild(r.Context(), user.ID, childID); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpErrorLog(w, r, "Failed to delete child", http.StatusInternalServerError, err)
 		return
 	}
 
@@ -269,12 +332,12 @@ func (s *Server) HandleDeleteParent(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	parentID, err := uuid.Parse(idStr)
 	if err != nil {
-		http.Error(w, "Invalid parent ID", http.StatusBadRequest)
+		httpErrorLog(w, r, "Invalid parent ID", http.StatusBadRequest, err)
 		return
 	}
 
 	if err := s.Store.DeleteParent(r.Context(), user.ID, parentID); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpErrorLog(w, r, "Failed to delete parent", http.StatusInternalServerError, err)
 		return
 	}
 
@@ -289,25 +352,36 @@ func (s *Server) HandleDeleteParent(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleCreateHygieneEvent(w http.ResponseWriter, r *http.Request) {
 	user := auth.GetUser(r.Context())
 	idStr := chi.URLParam(r, "id")
-	parentID, err := uuid.Parse(idStr)
-	if err != nil {
-		http.Error(w, "Invalid parent ID", http.StatusBadRequest)
-		return
-	}
+	var parentID uuid.UUID
+	var err error
 
 	var req struct {
-		EventDate     string `json:"event_date"`
-		EventType     string `json:"event_type"`
-		Documentation string `json:"documentation"`
+		ParentID      *uuid.UUID `json:"parent_id"`
+		EventDate     string     `json:"event_date"`
+		EventType     string     `json:"event_type"`
+		Documentation string     `json:"documentation"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		httpErrorLog(w, r, "Invalid request body JSON", http.StatusBadRequest, err)
 		return
 	}
 
-	eventDate, err := time.Parse("2006-01-02", req.EventDate)
+	if idStr != "" {
+		parentID, err = uuid.Parse(idStr)
+		if err != nil {
+			httpErrorLog(w, r, "Invalid parent ID in URL", http.StatusBadRequest, err)
+			return
+		}
+	} else if req.ParentID != nil && *req.ParentID != uuid.Nil {
+		parentID = *req.ParentID
+	} else {
+		httpErrorLog(w, r, "Missing parent_id", http.StatusBadRequest, nil)
+		return
+	}
+
+	eventDate, err := parseFlexibleDate(req.EventDate)
 	if err != nil {
-		http.Error(w, "Invalid event_date format", http.StatusBadRequest)
+		httpErrorLog(w, r, fmt.Sprintf("Invalid event_date format %q", req.EventDate), http.StatusBadRequest, err)
 		return
 	}
 
@@ -320,7 +394,7 @@ func (s *Server) HandleCreateHygieneEvent(w http.ResponseWriter, r *http.Request
 
 	created, err := s.Store.CreateHygieneEvent(r.Context(), user.ID, event)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpErrorLog(w, r, "Failed to create hygiene event", http.StatusInternalServerError, err)
 		return
 	}
 
@@ -332,12 +406,12 @@ func (s *Server) HandleDeleteHygieneEvent(w http.ResponseWriter, r *http.Request
 	idStr := chi.URLParam(r, "id")
 	eventID, err := uuid.Parse(idStr)
 	if err != nil {
-		http.Error(w, "Invalid event ID", http.StatusBadRequest)
+		httpErrorLog(w, r, "Invalid event ID", http.StatusBadRequest, err)
 		return
 	}
 
 	if err := s.Store.DeleteHygieneEvent(r.Context(), user.ID, eventID); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpErrorLog(w, r, "Failed to delete hygiene event", http.StatusInternalServerError, err)
 		return
 	}
 
@@ -347,33 +421,44 @@ func (s *Server) HandleDeleteHygieneEvent(w http.ResponseWriter, r *http.Request
 func (s *Server) HandleCreateTHMembership(w http.ResponseWriter, r *http.Request) {
 	user := auth.GetUser(r.Context())
 	idStr := chi.URLParam(r, "id")
-	parentID, err := uuid.Parse(idStr)
-	if err != nil {
-		http.Error(w, "Invalid parent ID", http.StatusBadRequest)
-		return
-	}
+	var parentID uuid.UUID
+	var err error
 
 	var req struct {
-		StartDate      string  `json:"start_date"`
-		EndDate        *string `json:"end_date"`
-		MembershipType string  `json:"membership_type"`
+		ParentID       *uuid.UUID `json:"parent_id"`
+		StartDate      string     `json:"start_date"`
+		EndDate        *string    `json:"end_date"`
+		MembershipType string     `json:"membership_type"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		httpErrorLog(w, r, "Invalid request body JSON", http.StatusBadRequest, err)
 		return
 	}
 
-	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	if idStr != "" {
+		parentID, err = uuid.Parse(idStr)
+		if err != nil {
+			httpErrorLog(w, r, "Invalid parent ID in URL", http.StatusBadRequest, err)
+			return
+		}
+	} else if req.ParentID != nil && *req.ParentID != uuid.Nil {
+		parentID = *req.ParentID
+	} else {
+		httpErrorLog(w, r, "Missing parent_id", http.StatusBadRequest, nil)
+		return
+	}
+
+	startDate, err := parseFlexibleDate(req.StartDate)
 	if err != nil {
-		http.Error(w, "Invalid start_date format", http.StatusBadRequest)
+		httpErrorLog(w, r, fmt.Sprintf("Invalid start_date format %q", req.StartDate), http.StatusBadRequest, err)
 		return
 	}
 
 	var endDate *time.Time
 	if req.EndDate != nil && *req.EndDate != "" {
-		t, err := time.Parse("2006-01-02", *req.EndDate)
+		t, err := parseFlexibleDate(*req.EndDate)
 		if err != nil {
-			http.Error(w, "Invalid end_date format", http.StatusBadRequest)
+			httpErrorLog(w, r, fmt.Sprintf("Invalid end_date format %q", *req.EndDate), http.StatusBadRequest, err)
 			return
 		}
 		endDate = &t
@@ -388,7 +473,7 @@ func (s *Server) HandleCreateTHMembership(w http.ResponseWriter, r *http.Request
 
 	created, err := s.Store.CreateTHMembership(r.Context(), user.ID, membership)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpErrorLog(w, r, "Failed to create TH membership", http.StatusInternalServerError, err)
 		return
 	}
 
@@ -400,12 +485,12 @@ func (s *Server) HandleDeleteTHMembership(w http.ResponseWriter, r *http.Request
 	idStr := chi.URLParam(r, "id")
 	membershipID, err := uuid.Parse(idStr)
 	if err != nil {
-		http.Error(w, "Invalid membership ID", http.StatusBadRequest)
+		httpErrorLog(w, r, "Invalid membership ID", http.StatusBadRequest, err)
 		return
 	}
 
 	if err := s.Store.DeleteTHMembership(r.Context(), user.ID, membershipID); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		httpErrorLog(w, r, "Failed to delete TH membership", http.StatusInternalServerError, err)
 		return
 	}
 

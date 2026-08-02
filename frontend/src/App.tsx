@@ -228,6 +228,8 @@ const AuditLogView: React.FC<{ logs: AuditLog[]; loading: boolean }> = ({ logs, 
     }
   };
 
+  const safeLogs = Array.isArray(logs) ? logs : [];
+
   return (
     <div className="table-container" style={{ overflowX: 'auto', background: 'white', borderRadius: '8px', border: '1px solid var(--border)', padding: '1.25rem', boxShadow: 'var(--shadow)' }}>
       <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
@@ -241,14 +243,14 @@ const AuditLogView: React.FC<{ logs: AuditLog[]; loading: boolean }> = ({ logs, 
           </tr>
         </thead>
         <tbody>
-          {logs.length === 0 ? (
+          {safeLogs.length === 0 ? (
             <tr>
               <td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic' }}>
                 {CURRENT_LOCALE === 'de' ? 'Keine Einträge vorhanden' : 'No entries found'}
               </td>
             </tr>
           ) : (
-            logs.map((log) => (
+            safeLogs.map((log) => (
               <tr key={log.id} style={{ borderBottom: '1px solid var(--border)' }}>
                 <td style={{ padding: '0.75rem 0.5rem', color: '#64748b', fontSize: '0.85rem' }}>
                   {new Date(log.created_at).toLocaleString(CURRENT_LOCALE === 'de' ? 'de-DE' : 'en-US')}
@@ -1094,7 +1096,7 @@ const Dashboard: React.FC = () => {
         return res.json();
       })
       .then((data) => {
-        setAuditLogs(data);
+        setAuditLogs(Array.isArray(data) ? data : []);
       })
       .catch((err) => console.error(err))
       .finally(() => setAuditLoading(false));
@@ -1244,8 +1246,11 @@ const Dashboard: React.FC = () => {
       },
       body: JSON.stringify(newChild),
     })
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to add child');
+      .then(async (res) => {
+        if (!res.ok) {
+          const errText = await res.text().catch(() => '');
+          throw new Error(`Failed to add child: ${errText || res.statusText}`);
+        }
         pushAction({
           type: 'ADD_CHILD',
           payload: {
@@ -1408,8 +1413,23 @@ const Dashboard: React.FC = () => {
       return;
     }
 
-    let createdFamilyObj: any = null;
-    let finalParents: any[] = [];
+    const parentsToCreate = [
+      {
+        first_name: p1FirstName.trim(),
+        last_name: p1LastName.trim(),
+        emails: [] as string[],
+        phones: [] as string[],
+      },
+    ];
+
+    if (p2FirstName.trim() && p2LastName.trim()) {
+      parentsToCreate.push({
+        first_name: p2FirstName.trim(),
+        last_name: p2LastName.trim(),
+        emails: [] as string[],
+        phones: [] as string[],
+      });
+    }
 
     fetch('/api/families', {
       method: 'POST',
@@ -1418,10 +1438,7 @@ const Dashboard: React.FC = () => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        first_name: p1FirstName.trim(),
-        last_name: p1LastName.trim(),
-        emails: [],
-        phones: [],
+        parents: parentsToCreate,
       }),
     })
       .then((res) => {
@@ -1429,38 +1446,12 @@ const Dashboard: React.FC = () => {
         return res.json();
       })
       .then((createdFamily) => {
-        createdFamilyObj = createdFamily;
-        finalParents = createdFamily.parents || [];
-        if (p2FirstName.trim() && p2LastName.trim()) {
-          const parent2Id = crypto.randomUUID();
-          const parent2 = {
-            id: parent2Id,
-            family_id: createdFamily.id,
-            first_name: p2FirstName.trim(),
-            last_name: p2LastName.trim(),
-            emails: [] as string[],
-            phones: [] as string[],
-          };
-          finalParents = [...finalParents, parent2];
-          return fetch(`/api/families/${createdFamily.id}`, {
-            method: 'PUT',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ parents: [parent2] }),
-          }).then((putRes) => {
-            if (!putRes.ok) throw new Error(t('parent2Failed'));
-          });
-        }
-      })
-      .then(() => {
         pushAction({
           type: 'ADD_FAMILY',
           payload: {
             tab: 'parents',
-            familyId: createdFamilyObj.id,
-            parents: finalParents,
+            familyId: createdFamily.id,
+            parents: createdFamily.parents || [],
           }
         });
         fetchFamilies();
@@ -2440,6 +2431,7 @@ const Dashboard: React.FC = () => {
             columns={childColumns}
             getSubRows={(row: any) => row.children}
             onAddRow={openAddChild}
+            emptySubRowsText={t('noChildrenYet')}
           />
         ) : activeTab === 'hygieneBelehrung' ? (
           <DataTable

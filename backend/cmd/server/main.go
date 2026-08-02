@@ -27,9 +27,6 @@ func main() {
 	}
 	defer pool.Close()
 
-	// Automatically run database migrations on startup
-	database.ApplySchemaMigrations(ctx, pool)
-
 	googleClientID := os.Getenv("GOOGLE_CLIENT_ID")
 	if googleClientID == "" {
 		log.Fatal("GOOGLE_CLIENT_ID environment variable is required")
@@ -43,6 +40,9 @@ func main() {
 	if allowMockAuth {
 		log.Println("[SECURITY WARNING] ALLOW_MOCK_AUTH=true is set. Mock authentication enabled for local testing.")
 	}
+
+	// Automatically run database migrations on startup
+	database.ApplySchemaMigrations(ctx, dbURL, allowMockAuth)
 
 	appStore := store.NewStore(pool)
 	authenticator := auth.NewAuthenticator(googleClientID, allowMockAuth, appStore)

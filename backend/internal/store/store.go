@@ -20,6 +20,13 @@ func NewStore(db *pgxpool.Pool) *Store {
 	return &Store{db: db}
 }
 
+func sanitizeSlice(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+
 // Executes `fn` in a SQL transaction
 func (s *Store) WithTx(ctx context.Context, fn func(pgx.Tx) error) error {
 	tx, err := s.db.Begin(ctx)
@@ -35,9 +42,10 @@ func (s *Store) WithTx(ctx context.Context, fn func(pgx.Tx) error) error {
 	return tx.Commit(ctx)
 }
 
-func (s *Store) CreateFamilyWithParent(ctx context.Context, userID uuid.UUID, parent models.Parent) (*models.Family, error) {
+func (s *Store) CreateFamilyWithParents(ctx context.Context, userID uuid.UUID, parents []models.Parent) (*models.Family, error) {
 	family := &models.Family{ID: uuid.New()}
 	transactionID := uuid.New()
+	createdParents := make([]models.Parent, 0, len(parents))
 
 	err := s.WithTx(ctx, func(tx pgx.Tx) error {
 		// 1. Create family
@@ -46,22 +54,31 @@ func (s *Store) CreateFamilyWithParent(ctx context.Context, userID uuid.UUID, pa
 			return err
 		}
 
-		// 2. Create parent
-		parent.ID = uuid.New()
-		parent.FamilyID = family.ID
-		_, err = tx.Exec(ctx,
-			"INSERT INTO parents (id, family_id, first_name, last_name, emails, phones, notes) VALUES ($1, $2, $3, $4, $5, $6, $7)",
-			parent.ID, parent.FamilyID, parent.FirstName, parent.LastName, parent.Emails, parent.Phones, parent.Notes)
-		if err != nil {
-			return err
-		}
-
-		// 3. Audit logs
 		if err := s.recordAudit(ctx, tx, transactionID, &family.ID, "family", family.ID, "INSERT", nil, family, userID); err != nil {
 			return err
 		}
-		if err := s.recordAudit(ctx, tx, transactionID, &family.ID, "parent", parent.ID, "INSERT", nil, parent, userID); err != nil {
-			return err
+
+		// 2. Create parents
+		for _, p := range parents {
+			if p.FirstName == "" && p.LastName == "" {
+				continue
+			}
+			p.ID = uuid.New()
+			p.FamilyID = family.ID
+			p.Emails = sanitizeSlice(p.Emails)
+			p.Phones = sanitizeSlice(p.Phones)
+
+			_, err = tx.Exec(ctx,
+				"INSERT INTO parents (id, family_id, first_name, last_name, emails, phones, notes) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+				p.ID, p.FamilyID, p.FirstName, p.LastName, p.Emails, p.Phones, p.Notes)
+			if err != nil {
+				return err
+			}
+
+			if err := s.recordAudit(ctx, tx, transactionID, &family.ID, "parent", p.ID, "INSERT", nil, p, userID); err != nil {
+				return err
+			}
+			createdParents = append(createdParents, p)
 		}
 
 		return nil
@@ -71,6 +88,7 @@ func (s *Store) CreateFamilyWithParent(ctx context.Context, userID uuid.UUID, pa
 		return nil, err
 	}
 
+	family.Parents = createdParents
 	return family, nil
 }
 
@@ -207,6 +225,8 @@ func (s *Store) UpdateFamilyParents(ctx context.Context, userID uuid.UUID, famil
 			return err
 		}
 		for _, p := range parents {
+			p.Emails = sanitizeSlice(p.Emails)
+			p.Phones = sanitizeSlice(p.Phones)
 			var oldParent models.Parent
 			err := tx.QueryRow(ctx, "SELECT id, family_id, first_name, last_name, emails, phones, notes FROM parents WHERE id = $1 AND family_id = $2", p.ID, familyID).Scan(
 				&oldParent.ID, &oldParent.FamilyID, &oldParent.FirstName, &oldParent.LastName, &oldParent.Emails, &oldParent.Phones, &oldParent.Notes,

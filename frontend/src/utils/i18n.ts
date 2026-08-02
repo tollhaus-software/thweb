@@ -131,6 +131,7 @@ const translations: Record<Locale, Record<string, string>> = {
     editRole: 'Rolle bearbeiten',
     deleteUserConfirm: 'Möchten Sie diesen Benutzer wirklich löschen?',
     deleteRoleConfirm: 'Möchten Sie diese Rolle wirklich löschen?',
+    noChildrenYet: 'Noch keine Kinder hinzugefügt',
   },
   en: {
     title: 'Kindergarten Directory',
@@ -260,7 +261,8 @@ const translations: Record<Locale, Record<string, string>> = {
     editRole: 'Edit Role',
     deleteUserConfirm: 'Are you sure you want to delete this user?',
     deleteRoleConfirm: 'Are you sure you want to delete this role?',
-  }
+    noChildrenYet: 'No children added yet',
+  },
 };
 
 export const t = (key: string): string => {
