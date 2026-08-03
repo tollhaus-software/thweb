@@ -41,13 +41,11 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var email string
 
-		// Extract ID token passed by oauth2-proxy (X-Forwarded-ID-Token) or direct Authorization Bearer header
-		idToken := r.Header.Get("X-Forwarded-ID-Token")
-		if idToken == "" {
-			authHeader := r.Header.Get("Authorization")
-			if strings.HasPrefix(authHeader, "Bearer ") {
-				idToken = strings.TrimPrefix(authHeader, "Bearer ")
-			}
+		// Extract ID token from standard Authorization Bearer header (RFC 6750)
+		var idToken string
+		authHeader := r.Header.Get("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			idToken = strings.TrimPrefix(authHeader, "Bearer ")
 		}
 
 		if idToken == "null" || idToken == "undefined" {
