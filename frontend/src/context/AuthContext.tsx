@@ -7,8 +7,14 @@ interface User {
   effective_permissions: string[];
 }
 
+export interface AuthError {
+  message: string;
+  email?: string;
+}
+
 interface AuthContextType {
   user: User | null;
+  authError: AuthError | null;
   token: string | null;
   login: (token: string) => void;
   logout: () => void;
@@ -20,6 +26,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [authError, setAuthError] = useState<AuthError | null>(null);
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
 
@@ -31,6 +38,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => {
     setToken(null);
     setUser(null);
+    setAuthError(null);
     localStorage.removeItem('token');
     window.location.href = '/oauth2/sign_out';
   };
@@ -42,15 +50,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     fetch('/api/me', { headers })
-      .then((res) => {
-        if (res.ok) return res.json();
-        throw new Error('Unauthorized');
+      .then(async (res) => {
+        if (res.ok) {
+          const data = await res.json();
+          setUser(data);
+          setAuthError(null);
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          setUser(null);
+          setAuthError({
+            message: errData.error || 'User not allowed',
+            email: errData.email || undefined,
+          });
+        }
       })
-      .then((data) => {
-        setUser(data);
-      })
-      .catch(() => {
+      .catch((err) => {
         setUser(null);
+        setAuthError({ message: err.message || 'Unauthorized' });
       })
       .finally(() => {
         setLoading(false);
@@ -63,7 +79,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, loading, hasPermission }}>
+    <AuthContext.Provider value={{ user, authError, token, login, logout, loading, hasPermission }}>
       {children}
     </AuthContext.Provider>
   );

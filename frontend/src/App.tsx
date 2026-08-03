@@ -279,8 +279,30 @@ const AuditLogView: React.FC<{ logs: AuditLog[]; loading: boolean }> = ({ logs, 
 };
 
 const LandingPage: React.FC = () => {
+  const { authError, logout } = useAuth();
+
+  if (authError) {
+    return (
+      <div style={{ textAlign: 'center', marginTop: '50px', padding: '20px' }}>
+        <h1 style={{ color: 'var(--text-h)' }}>Access Restricted</h1>
+        <p style={{ color: '#ef4444', fontSize: '1.1rem', margin: '20px 0', fontWeight: 500 }}>
+          {authError.email
+            ? `The user ${authError.email} does not have access to the application.`
+            : `Access Denied: ${authError.message}`}
+        </p>
+        <button
+          className="primary-button"
+          onClick={logout}
+          style={{ padding: '10px 20px', fontSize: '1rem', cursor: 'pointer', fontWeight: 'bold' }}
+        >
+          Sign in with a different account
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="landing-container">
+    <div style={{ textAlign: 'center', marginTop: '50px' }}>
       <h1>Kindergarten Management System</h1>
       <p>Please log in to access the system.</p>
       <LoginButton />

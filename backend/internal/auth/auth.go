@@ -87,7 +87,12 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 		if err != nil {
 			if err == pgx.ErrNoRows {
 				log.Printf("[AUTH WARNING] User email %q not found in allow-list", email)
-				writeJSONError(w, "User not allowed", http.StatusForbidden)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				json.NewEncoder(w).Encode(map[string]string{
+					"error": "User not allowed",
+					"email": email,
+				})
 				return
 			}
 			log.Printf("[AUTH ERROR] Failed to fetch user %q from database: %v", email, err)
