@@ -9,6 +9,7 @@ import EasyEdit, { Types } from './components/InlineEdit';
 import { Pencil, Trash, Undo, Redo, Calendar, ClipboardList } from 'lucide-react';
 import { MultiValueListEditor } from './components/Table/MultiValueListEditor';
 import { NotesEditor } from './components/Table/NotesEditor';
+import { VaccinationStatusEditor, type VaccinationCheck } from './components/Table/VaccinationStatusEditor';
 import { ChildcareFeesCalculator } from './components/ChildcareFeesCalculator';
 import { t, CURRENT_LOCALE, formatDisplayDate, parseInputDate } from './utils/i18n';
 
@@ -60,6 +61,7 @@ interface Child {
   hort_start_date?: string | null;
   group2_start_date?: string | null;
   notes?: string;
+  vaccination_checks?: VaccinationCheck[];
   family_name?: string;
 }
 
@@ -279,7 +281,7 @@ const AuditLogView: React.FC<{ logs: AuditLog[]; loading: boolean }> = ({ logs, 
 };
 
 const LandingPage: React.FC = () => {
-  const { authError, logout } = useAuth();
+  const { authError } = useAuth();
 
   if (authError) {
     return (
@@ -290,13 +292,13 @@ const LandingPage: React.FC = () => {
             ? `The user ${authError.email} does not have access to the application.`
             : `Access Denied: ${authError.message}`}
         </p>
-        <button
+        <a
+          href="/oauth2/start"
           className="primary-button"
-          onClick={logout}
-          style={{ padding: '10px 20px', fontSize: '1rem', cursor: 'pointer', fontWeight: 'bold' }}
+          style={{ padding: '10px 20px', fontSize: '1rem', cursor: 'pointer', fontWeight: 'bold', textDecoration: 'none', display: 'inline-block' }}
         >
           Sign in with a different account
-        </button>
+        </a>
       </div>
     );
   }
@@ -2204,6 +2206,22 @@ const Dashboard: React.FC = () => {
             <NotesEditor
               value={child.notes || ''}
               onSave={(val: string) => handleSaveChildField(child, 'notes', val)}
+            />
+          );
+        }
+      },
+      {
+        id: 'vaccination_status',
+        header: 'Impfstatus',
+        accessorKey: 'vaccination_checks',
+        size: 180,
+        cell: (info) => {
+          const child = info.row.original;
+          return (
+            <VaccinationStatusEditor
+              checks={child.vaccination_checks}
+              currentUserEmail={user?.email || ''}
+              onSave={(newChecks) => handleSaveChildField(child, 'vaccination_checks', newChecks)}
             />
           );
         }

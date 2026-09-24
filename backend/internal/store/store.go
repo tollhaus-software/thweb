@@ -169,6 +169,7 @@ func (s *Store) ListFamilies(ctx context.Context) ([]models.Family, error) {
 					   'hort_start_date', c.hort_start_date::timestamptz,
 					   'group2_start_date', c.group2_start_date::timestamptz,
 					   'notes', c.notes,
+					   'vaccination_status_protected', encode(c.vaccination_status_protected, 'base64'),
 					   'created_at', c.created_at,
 					   'updated_at', c.updated_at
 				   )) FROM children c WHERE c.family_id = f.id
@@ -279,14 +280,18 @@ func (s *Store) UpdateChild(ctx context.Context, userID uuid.UUID, childID uuid.
 		}
 
 		var oldChild models.Child
-		err = tx.QueryRow(ctx, "SELECT id, family_id, first_name, last_name, birth_date, start_date, exit_date, start_group, hort_start_date, group2_start_date, notes FROM children WHERE id = $1", childID).Scan(
-			&oldChild.ID, &oldChild.FamilyID, &oldChild.FirstName, &oldChild.LastName, &oldChild.BirthDate, &oldChild.StartDate, &oldChild.ExitDate, &oldChild.StartGroup, &oldChild.HortStartDate, &oldChild.Group2StartDate, &oldChild.Notes,
+		err = tx.QueryRow(ctx, "SELECT id, family_id, first_name, last_name, birth_date, start_date, exit_date, start_group, hort_start_date, group2_start_date, notes, vaccination_status_protected FROM children WHERE id = $1", childID).Scan(
+			&oldChild.ID, &oldChild.FamilyID, &oldChild.FirstName, &oldChild.LastName, &oldChild.BirthDate, &oldChild.StartDate, &oldChild.ExitDate, &oldChild.StartGroup, &oldChild.HortStartDate, &oldChild.Group2StartDate, &oldChild.Notes, &oldChild.VaccinationStatusProtected,
 		)
 		isNew := (err == pgx.ErrNoRows)
 
+		if child.VaccinationStatusProtected == nil && child.VaccinationChecks == nil && len(oldChild.VaccinationStatusProtected) > 0 {
+			child.VaccinationStatusProtected = oldChild.VaccinationStatusProtected
+		}
+
 		res, err := tx.Exec(ctx,
-			"UPDATE children SET first_name = $1, last_name = $2, birth_date = $3, start_date = $4, exit_date = $5, start_group = $6, hort_start_date = $7, group2_start_date = $8, notes = $9, updated_at = NOW() WHERE id = $10",
-			child.FirstName, child.LastName, child.BirthDate, child.StartDate, child.ExitDate, child.StartGroup, child.HortStartDate, child.Group2StartDate, child.Notes, childID)
+			"UPDATE children SET first_name = $1, last_name = $2, birth_date = $3, start_date = $4, exit_date = $5, start_group = $6, hort_start_date = $7, group2_start_date = $8, notes = $9, vaccination_status_protected = $10, updated_at = NOW() WHERE id = $11",
+			child.FirstName, child.LastName, child.BirthDate, child.StartDate, child.ExitDate, child.StartGroup, child.HortStartDate, child.Group2StartDate, child.Notes, child.VaccinationStatusProtected, childID)
 		if err != nil {
 			return err
 		}
@@ -296,8 +301,8 @@ func (s *Store) UpdateChild(ctx context.Context, userID uuid.UUID, childID uuid.
 				child.ID = childID
 			}
 			_, err = tx.Exec(ctx,
-				"INSERT INTO children (id, family_id, first_name, last_name, birth_date, start_date, exit_date, start_group, hort_start_date, group2_start_date, notes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
-				child.ID, child.FamilyID, child.FirstName, child.LastName, child.BirthDate, child.StartDate, child.ExitDate, child.StartGroup, child.HortStartDate, child.Group2StartDate, child.Notes)
+				"INSERT INTO children (id, family_id, first_name, last_name, birth_date, start_date, exit_date, start_group, hort_start_date, group2_start_date, notes, vaccination_status_protected) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+				child.ID, child.FamilyID, child.FirstName, child.LastName, child.BirthDate, child.StartDate, child.ExitDate, child.StartGroup, child.HortStartDate, child.Group2StartDate, child.Notes, child.VaccinationStatusProtected)
 			if err != nil {
 				return err
 			}
@@ -325,8 +330,8 @@ func (s *Store) DeleteChild(ctx context.Context, userID uuid.UUID, childID uuid.
 	transactionID := uuid.New()
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
 		var oldChild models.Child
-		err := tx.QueryRow(ctx, "SELECT id, family_id, first_name, last_name, birth_date, start_date, exit_date, start_group, hort_start_date, group2_start_date, notes FROM children WHERE id = $1", childID).Scan(
-			&oldChild.ID, &oldChild.FamilyID, &oldChild.FirstName, &oldChild.LastName, &oldChild.BirthDate, &oldChild.StartDate, &oldChild.ExitDate, &oldChild.StartGroup, &oldChild.HortStartDate, &oldChild.Group2StartDate, &oldChild.Notes,
+		err := tx.QueryRow(ctx, "SELECT id, family_id, first_name, last_name, birth_date, start_date, exit_date, start_group, hort_start_date, group2_start_date, notes, vaccination_status_protected FROM children WHERE id = $1", childID).Scan(
+			&oldChild.ID, &oldChild.FamilyID, &oldChild.FirstName, &oldChild.LastName, &oldChild.BirthDate, &oldChild.StartDate, &oldChild.ExitDate, &oldChild.StartGroup, &oldChild.HortStartDate, &oldChild.Group2StartDate, &oldChild.Notes, &oldChild.VaccinationStatusProtected,
 		)
 		if err != nil {
 			return err

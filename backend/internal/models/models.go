@@ -90,20 +90,33 @@ type HygieneBelehrungEvent struct {
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 
+type VaccinationCheck struct {
+	VaccinationType string `json:"vaccination_type"`
+	CheckedBy       string `json:"checked_by"`
+	CheckedOn       string `json:"checked_on"`
+	ProofSeen       string `json:"proof_seen"`
+}
+
+type VaccinationStatusProtected struct {
+	VaccinationChecks []VaccinationCheck `json:"vaccination_checks"`
+}
+
 type Child struct {
-	ID            uuid.UUID  `json:"id"`
-	FamilyID      uuid.UUID  `json:"family_id"`
-	FirstName     string     `json:"first_name"`
-	LastName      string     `json:"last_name"`
-	BirthDate     time.Time  `json:"birth_date"`
-	StartDate     *time.Time `json:"start_date"`
-	ExitDate      *time.Time `json:"exit_date"`
-	StartGroup      *int       `json:"start_group"`
-	HortStartDate   *time.Time `json:"hort_start_date"`
-	Group2StartDate *time.Time `json:"group2_start_date"`
-	Notes           string     `json:"notes"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
+	ID                         uuid.UUID          `json:"id"`
+	FamilyID                   uuid.UUID          `json:"family_id"`
+	FirstName                  string             `json:"first_name"`
+	LastName                   string             `json:"last_name"`
+	BirthDate                  time.Time          `json:"birth_date"`
+	StartDate                  *time.Time         `json:"start_date"`
+	ExitDate                   *time.Time         `json:"exit_date"`
+	StartGroup                 *int               `json:"start_group"`
+	HortStartDate              *time.Time         `json:"hort_start_date"`
+	Group2StartDate            *time.Time         `json:"group2_start_date"`
+	Notes                      string             `json:"notes"`
+	VaccinationStatusProtected []byte             `json:"vaccination_status_protected,omitempty"`
+	VaccinationChecks          []VaccinationCheck `json:"vaccination_checks,omitempty"`
+	CreatedAt                  time.Time          `json:"created_at"`
+	UpdatedAt                  time.Time          `json:"updated_at"`
 }
 
 type AuditLog struct {

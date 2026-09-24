@@ -73,9 +73,13 @@ CREATE TABLE IF NOT EXISTS children (
     -- start_dates.
     start_group INTEGER, -- 1: Kleine Gruppe, 2: Grosse Gruppe, 3: Hort
     notes TEXT NOT NULL DEFAULT '',
+    vaccination_status_protected BYTEA,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Incremental column migrations for children
+ALTER TABLE children ADD COLUMN IF NOT EXISTS vaccination_status_protected BYTEA;
 
 -- Audit Log table for history tracking
 CREATE TABLE IF NOT EXISTS audit_log (

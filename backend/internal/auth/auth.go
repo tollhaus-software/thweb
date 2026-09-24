@@ -16,6 +16,7 @@ import (
 type contextKey string
 
 const UserContextKey contextKey = "user"
+const AccessTokenContextKey contextKey = "access_token"
 
 type Authenticator struct {
 	GoogleClientID string
@@ -41,7 +42,7 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var email string
 
-		// Extract ID token from standard Authorization Bearer header (RFC 6750)
+		// Extract OAuth / ID token from headers
 		var idToken string
 		authHeader := r.Header.Get("Authorization")
 		if strings.HasPrefix(authHeader, "Bearer ") {
@@ -50,6 +51,11 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 
 		if idToken == "null" || idToken == "undefined" {
 			idToken = ""
+		}
+
+		rawAccessToken := r.Header.Get("X-Forwarded-Access-Token")
+		if rawAccessToken == "" && a.AllowMockAuth && idToken != "" {
+			rawAccessToken = idToken
 		}
 
 		if a.AllowMockAuth {
@@ -101,6 +107,7 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 		}
 
 		ctx := context.WithValue(r.Context(), UserContextKey, user)
+		ctx = context.WithValue(ctx, AccessTokenContextKey, rawAccessToken)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -111,6 +118,11 @@ func GetUser(ctx context.Context) *models.UserWithPermissions {
 		return nil
 	}
 	return user
+}
+
+func GetAccessToken(ctx context.Context) string {
+	token, _ := ctx.Value(AccessTokenContextKey).(string)
+	return token
 }
 
 func RequirePermission(perm string) func(http.Handler) http.Handler {
