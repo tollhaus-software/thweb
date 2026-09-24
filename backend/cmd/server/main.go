@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pavolmarko/thweb-backend/internal/api"
 	"github.com/pavolmarko/thweb-backend/internal/auth"
+	"github.com/pavolmarko/thweb-backend/internal/crypto"
 	"github.com/pavolmarko/thweb-backend/internal/database"
 	"github.com/pavolmarko/thweb-backend/internal/store"
 )
@@ -41,6 +42,18 @@ func main() {
 		log.Println("[SECURITY WARNING] ALLOW_MOCK_AUTH=true is set. Mock authentication enabled for local testing.")
 	}
 
+	// Initialize KMS Provider
+	var kmsProvider crypto.KMSProvider
+	kmsKeyPath := os.Getenv("GCP_KMS_KEY_PATH")
+
+	if allowMockAuth || kmsKeyPath == "" || kmsKeyPath == "mock" {
+		log.Println("[INFO] Using Mock KMS Provider for local testing/development.")
+		kmsProvider = crypto.NewMockKMSProvider()
+	} else {
+		log.Printf("[INFO] Initializing GCP Cloud KMS Provider with Key: %s (per-request user OAuth credentials)\n", kmsKeyPath)
+		kmsProvider = crypto.NewGCPKMSProvider(nil, kmsKeyPath)
+	}
+
 	// Automatically run database migrations on startup
 	database.ApplySchemaMigrations(ctx, dbURL, allowMockAuth)
 
@@ -50,7 +63,7 @@ func main() {
 	hub := api.NewHub()
 	go hub.Run()
 
-	r := api.SetupRouter(appStore, authenticator, hub)
+	r := api.SetupRouter(appStore, authenticator, hub, kmsProvider)
 
 	log.Println("Server running on http://localhost:8080")
 	if err := http.ListenAndServe(":8080", r); err != nil {

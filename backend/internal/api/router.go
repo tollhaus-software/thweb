@@ -6,14 +6,16 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/pavolmarko/thweb-backend/internal/auth"
+	"github.com/pavolmarko/thweb-backend/internal/crypto"
 	"github.com/pavolmarko/thweb-backend/internal/store"
 )
 
-func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *Hub) *chi.Mux {
+func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *Hub, kmsProvider crypto.KMSProvider) *chi.Mux {
 	server := &Server{
 		Store:         appStore,
 		Authenticator: authenticator,
 		Hub:           hub,
+		KMSProvider:   kmsProvider,
 	}
 
 	r := chi.NewRouter()

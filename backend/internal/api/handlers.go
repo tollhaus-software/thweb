@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/pavolmarko/thweb-backend/internal/auth"
+	"github.com/pavolmarko/thweb-backend/internal/crypto"
 	"github.com/pavolmarko/thweb-backend/internal/models"
 	"github.com/pavolmarko/thweb-backend/internal/store"
 )
@@ -19,6 +20,7 @@ type Server struct {
 	Store         *store.Store
 	Authenticator *auth.Authenticator
 	Hub           *Hub
+	KMSProvider   crypto.KMSProvider
 }
 
 func jsonResponse(w http.ResponseWriter, data interface{}) {
@@ -69,6 +71,35 @@ func (s *Server) HandleListFamilies(w http.ResponseWriter, r *http.Request) {
 		httpErrorLog(w, r, "Failed to list families", http.StatusInternalServerError, err)
 		return
 	}
+
+	user := auth.GetUser(r.Context())
+	accessToken := auth.GetAccessToken(r.Context())
+	if s.KMSProvider != nil && user != nil {
+		reqCtx := crypto.NewRequestCipherContext(s.KMSProvider, user.Email, accessToken)
+		defer reqCtx.Close()
+
+		for fIdx := range families {
+			for cIdx := range families[fIdx].Children {
+				child := &families[fIdx].Children[cIdx]
+				if len(child.VaccinationStatusProtected) > 0 {
+					plainJSON, err := reqCtx.Decrypt(r.Context(), child.VaccinationStatusProtected)
+					if err != nil {
+						log.Printf("[WARN] Failed to decrypt vaccination status for child %s: %v\n", child.ID, err)
+					} else if len(plainJSON) > 0 {
+						var status models.VaccinationStatusProtected
+						if err := json.Unmarshal(plainJSON, &status); err == nil {
+							child.VaccinationChecks = status.VaccinationChecks
+						} else {
+							log.Printf("[WARN] Failed to unmarshal decrypted vaccination status for child %s: %v\n", child.ID, err)
+						}
+					}
+					// Clear the encrypted ciphertext blob so it is not exposed in the API response
+					child.VaccinationStatusProtected = nil
+				}
+			}
+		}
+	}
+
 	jsonResponse(w, families)
 }
 
@@ -204,17 +235,18 @@ func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		ID              *uuid.UUID `json:"id"`
-		FamilyID        *uuid.UUID `json:"family_id"`
-		FirstName       string     `json:"first_name"`
-		LastName        string     `json:"last_name"`
-		BirthDate       string     `json:"birth_date"`
-		StartDate       *string    `json:"start_date"`
-		Group2StartDate *string    `json:"group2_start_date"`
-		HortStartDate   *string    `json:"hort_start_date"`
-		ExitDate        *string    `json:"exit_date"`
-		StartGroup      *int       `json:"start_group"`
-		Notes           string     `json:"notes"`
+		ID                *uuid.UUID                `json:"id"`
+		FamilyID          *uuid.UUID                `json:"family_id"`
+		FirstName         string                    `json:"first_name"`
+		LastName          string                    `json:"last_name"`
+		BirthDate         string                    `json:"birth_date"`
+		StartDate         *string                   `json:"start_date"`
+		Group2StartDate   *string                   `json:"group2_start_date"`
+		HortStartDate     *string                   `json:"hort_start_date"`
+		ExitDate          *string                   `json:"exit_date"`
+		StartGroup        *int                      `json:"start_group"`
+		Notes             string                    `json:"notes"`
+		VaccinationChecks []models.VaccinationCheck `json:"vaccination_checks"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -278,18 +310,43 @@ func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var encryptedBlob []byte
+	if len(req.VaccinationChecks) > 0 && s.KMSProvider != nil && user != nil {
+		accessToken := auth.GetAccessToken(r.Context())
+		reqCtx := crypto.NewRequestCipherContext(s.KMSProvider, user.Email, accessToken)
+		defer reqCtx.Close()
+
+		statusPayload := models.VaccinationStatusProtected{
+			VaccinationChecks: req.VaccinationChecks,
+		}
+		rawJSON, err := json.Marshal(statusPayload)
+		if err != nil {
+			httpErrorLog(w, r, "Failed to marshal vaccination status JSON", http.StatusBadRequest, err)
+			return
+		}
+
+		blob, err := reqCtx.Encrypt(r.Context(), rawJSON)
+		if err != nil {
+			httpErrorLog(w, r, "Failed to encrypt vaccination status", http.StatusInternalServerError, err)
+			return
+		}
+		encryptedBlob = blob
+	}
+
 	child := models.Child{
-		ID:              childID,
-		FamilyID:        familyID,
-		FirstName:       req.FirstName,
-		LastName:        req.LastName,
-		BirthDate:       birthDate,
-		StartDate:       startDate,
-		Group2StartDate: group2StartDate,
-		HortStartDate:   hortStartDate,
-		ExitDate:        exitDate,
-		StartGroup:      req.StartGroup,
-		Notes:           req.Notes,
+		ID:                         childID,
+		FamilyID:                   familyID,
+		FirstName:                  req.FirstName,
+		LastName:                   req.LastName,
+		BirthDate:                  birthDate,
+		StartDate:                  startDate,
+		Group2StartDate:            group2StartDate,
+		HortStartDate:              hortStartDate,
+		ExitDate:                   exitDate,
+		StartGroup:                 req.StartGroup,
+		Notes:                      req.Notes,
+		VaccinationStatusProtected: encryptedBlob,
+		VaccinationChecks:          req.VaccinationChecks,
 	}
 
 	if err := s.Store.UpdateChild(r.Context(), user.ID, childID, child); err != nil {

@@ -20,6 +20,7 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header Authorization $http_authorization;
         proxy_set_header X-Forwarded-Email $http_x_forwarded_email;
+        proxy_set_header X-Forwarded-Access-Token $http_x_forwarded_access_token;
     }
 
     # Forward /ws websocket requests to backend go server
@@ -31,5 +32,9 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header X-Forwarded-Email $http_x_forwarded_email;
+        proxy_set_header X-Forwarded-Access-Token $http_x_forwarded_access_token;
     }
 }
