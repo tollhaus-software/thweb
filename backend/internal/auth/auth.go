@@ -53,7 +53,10 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 			idToken = ""
 		}
 
-		rawAccessToken := r.Header.Get("X-Forwarded-Access-Token")
+		rawAccessToken := r.Header.Get("X-KMS-Access-Token")
+		if rawAccessToken == "" {
+			rawAccessToken = r.Header.Get("X-Forwarded-Access-Token")
+		}
 		if rawAccessToken == "" && a.AllowMockAuth && idToken != "" {
 			rawAccessToken = idToken
 		}

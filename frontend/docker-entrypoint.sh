@@ -4,7 +4,8 @@ set -e
 # Generate runtime env-config.js from container environment variables
 cat <<EOF > /usr/share/nginx/html/env-config.js
 window.ENV = {
-  GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-mock}"
+  GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-mock}",
+  GOOGLE_PROTECTED_DATA_CLIENT_ID: "${GOOGLE_PROTECTED_DATA_CLIENT_ID:-mock-protected-data}"
 };
 EOF
 

@@ -74,7 +74,7 @@ func (s *Server) HandleListFamilies(w http.ResponseWriter, r *http.Request) {
 
 	user := auth.GetUser(r.Context())
 	accessToken := auth.GetAccessToken(r.Context())
-	if s.KMSProvider != nil && user != nil {
+	if s.KMSProvider != nil && user != nil && accessToken != "" {
 		reqCtx := crypto.NewRequestCipherContext(s.KMSProvider, user.Email, accessToken)
 		defer reqCtx.Close()
 
@@ -93,10 +93,15 @@ func (s *Server) HandleListFamilies(w http.ResponseWriter, r *http.Request) {
 							log.Printf("[WARN] Failed to unmarshal decrypted vaccination status for child %s: %v\n", child.ID, err)
 						}
 					}
-					// Clear the encrypted ciphertext blob so it is not exposed in the API response
-					child.VaccinationStatusProtected = nil
 				}
 			}
+		}
+	}
+
+	for fIdx := range families {
+		for cIdx := range families[fIdx].Children {
+			// Clear the encrypted ciphertext blob so it is not exposed in the API response
+			families[fIdx].Children[cIdx].VaccinationStatusProtected = nil
 		}
 	}
 
@@ -313,6 +318,10 @@ func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 	var encryptedBlob []byte
 	if len(req.VaccinationChecks) > 0 && s.KMSProvider != nil && user != nil {
 		accessToken := auth.GetAccessToken(r.Context())
+		if accessToken == "" {
+			httpErrorLog(w, r, "KMS authentication required to save vaccination status", http.StatusUnauthorized, nil)
+			return
+		}
 		reqCtx := crypto.NewRequestCipherContext(s.KMSProvider, user.Email, accessToken)
 		defer reqCtx.Close()
 

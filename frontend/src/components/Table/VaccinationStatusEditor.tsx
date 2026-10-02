@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { ShieldCheck, Plus, Trash2, Edit3, X, Check } from 'lucide-react';
+import { ShieldCheck, Plus, Trash2, Edit3, X, Check, Lock } from 'lucide-react';
+import { t } from '../../utils/i18n';
 
 export interface VaccinationCheck {
   vaccination_type: string;
@@ -12,12 +13,16 @@ interface VaccinationStatusEditorProps {
   checks?: VaccinationCheck[];
   currentUserEmail?: string;
   onSave: (newChecks: VaccinationCheck[]) => void;
+  isUnlocked?: boolean;
+  onUnlock?: () => void;
 }
 
 export const VaccinationStatusEditor: React.FC<VaccinationStatusEditorProps> = ({
   checks = [],
   currentUserEmail = '',
   onSave,
+  isUnlocked = true,
+  onUnlock,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [localChecks, setLocalChecks] = useState<VaccinationCheck[]>(checks);
@@ -56,6 +61,33 @@ export const VaccinationStatusEditor: React.FC<VaccinationStatusEditorProps> = (
     onSave(localChecks);
     setIsOpen(false);
   };
+
+  if (!isUnlocked) {
+    return (
+      <div style={{ position: 'relative', display: 'inline-block', maxWidth: '100%' }}>
+        <div
+          onClick={onUnlock}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.35rem',
+            padding: '0.25rem 0.5rem',
+            borderRadius: '6px',
+            background: '#fef2f2',
+            border: '1px dashed #fca5a5',
+            cursor: 'pointer',
+            fontSize: '0.825rem',
+            color: '#991b1b',
+            transition: 'all 0.15s ease',
+          }}
+          title={t('vaccinationStatusHidden')}
+        >
+          <Lock size={14} color="#dc2626" />
+          <span>{t('vaccinationStatusHidden')}</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ position: 'relative', display: 'inline-block', maxWidth: '100%' }}>

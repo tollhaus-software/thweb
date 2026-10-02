@@ -1,0 +1,15 @@
+node_modules
+dist
+dist-ssr
+*.local
+.env*
+.git
+.gitignore
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Editor & OS files
+.vscode

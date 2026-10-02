@@ -23,21 +23,21 @@ declare global {
   interface Window {
     ENV?: {
       GOOGLE_CLIENT_ID?: string;
+      GOOGLE_PROTECTED_DATA_CLIENT_ID?: string;
     };
   }
 }
 
-const clientId = window.ENV?.GOOGLE_CLIENT_ID || import.meta.env.VITE_GOOGLE_CLIENT_ID || 'mock';
+const protectedDataClientId =
+  window.ENV?.GOOGLE_PROTECTED_DATA_CLIENT_ID ||
+  import.meta.env.VITE_GOOGLE_PROTECTED_DATA_CLIENT_ID ||
+  'mock-protected-data';
 
 const rootElement = (
   <StrictMode>
-    {clientId && clientId !== 'mock' ? (
-      <GoogleOAuthProvider clientId={clientId}>
-        <App />
-      </GoogleOAuthProvider>
-    ) : (
+    <GoogleOAuthProvider clientId={protectedDataClientId}>
       <App />
-    )}
+    </GoogleOAuthProvider>
   </StrictMode>
 )
 
