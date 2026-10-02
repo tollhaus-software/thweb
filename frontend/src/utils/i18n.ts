@@ -132,6 +132,9 @@ const translations: Record<Locale, Record<string, string>> = {
     deleteUserConfirm: 'Möchten Sie diesen Benutzer wirklich löschen?',
     deleteRoleConfirm: 'Möchten Sie diese Rolle wirklich löschen?',
     noChildrenYet: 'Noch keine Kinder hinzugefügt',
+    showVaccinationStatus: 'Impfstatus anzeigen',
+    vaccinationStatusUnlocked: 'Impfstatus entschlüsselt',
+    vaccinationStatusHidden: 'Geschützt (Klicken zum Entsperren)',
   },
   en: {
     title: 'Kindergarten Directory',
@@ -262,6 +265,9 @@ const translations: Record<Locale, Record<string, string>> = {
     deleteUserConfirm: 'Are you sure you want to delete this user?',
     deleteRoleConfirm: 'Are you sure you want to delete this role?',
     noChildrenYet: 'No children added yet',
+    showVaccinationStatus: 'Show vaccination status',
+    vaccinationStatusUnlocked: 'Vaccination status decrypted',
+    vaccinationStatusHidden: 'Protected (Click to unlock)',
   },
 };
 

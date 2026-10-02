@@ -6,7 +6,8 @@ import './App.css';
 import { DataTable } from './components/Table/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import EasyEdit, { Types } from './components/InlineEdit';
-import { Pencil, Trash, Undo, Redo, Calendar, ClipboardList } from 'lucide-react';
+import { Pencil, Trash, Undo, Redo, Calendar, ClipboardList, Lock, Unlock } from 'lucide-react';
+import { useGoogleLogin } from '@react-oauth/google';
 import { MultiValueListEditor } from './components/Table/MultiValueListEditor';
 import { NotesEditor } from './components/Table/NotesEditor';
 import { VaccinationStatusEditor, type VaccinationCheck } from './components/Table/VaccinationStatusEditor';
@@ -819,6 +820,26 @@ import { useRealtime } from './hooks/useRealtime';
 
 const Dashboard: React.FC = () => {
   const { user, token, logout, hasPermission } = useAuth();
+
+  // KMS Step-up Auth state
+  const [kmsAccessToken, setKmsAccessToken] = React.useState<string | null>(() => {
+    return sessionStorage.getItem('kms_access_token');
+  });
+
+  const isVaccinationUnlocked = Boolean(kmsAccessToken);
+
+  const getAuthHeaders = React.useCallback((extraHeaders: Record<string, string> = {}, explicitKmsToken?: string) => {
+    const h: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+      ...extraHeaders,
+    };
+    const kToken = explicitKmsToken !== undefined ? explicitKmsToken : kmsAccessToken;
+    if (kToken) {
+      h['X-KMS-Access-Token'] = kToken;
+    }
+    return h;
+  }, [token, kmsAccessToken]);
+
   const [families, setFamilies] = React.useState<Family[]>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [activeTab, setActiveTab] = React.useState<'parents' | 'children' | 'childcareFees' | 'hygieneBelehrung' | 'audit' | 'admin'>(() => {
@@ -945,10 +966,7 @@ const Dashboard: React.FC = () => {
         const targetChild = isUndo ? payload.before : payload.after;
         const res = await fetch(`/api/children/${payload.childId}`, {
           method: 'PUT',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify(targetChild),
         });
         if (!res.ok) throw new Error();
@@ -957,10 +975,7 @@ const Dashboard: React.FC = () => {
         if (isUndo) {
           const res = await fetch(`/api/children/${payload.child.id}`, {
             method: 'PUT',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
+            headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify(payload.child),
           });
           if (!res.ok) throw new Error();
@@ -1094,9 +1109,9 @@ const Dashboard: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const fetchFamilies = React.useCallback(() => {
+  const fetchFamilies = React.useCallback((explicitKmsToken?: string) => {
     return fetch('/api/families', {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: getAuthHeaders({}, explicitKmsToken),
     })
       .then((res) => res.json())
       .then((data) => {
@@ -1104,10 +1119,50 @@ const Dashboard: React.FC = () => {
         return data;
       })
       .catch((err) => console.error(err));
-  }, [token]);
+  }, [getAuthHeaders]);
 
   React.useEffect(() => {
     fetchFamilies();
+  }, [fetchFamilies]);
+
+  const googleLogin = useGoogleLogin({
+    flow: 'implicit',
+    scope: 'https://www.googleapis.com/auth/cloudkms',
+    onSuccess: (tokenResponse) => {
+      const newToken = tokenResponse.access_token;
+      sessionStorage.setItem('kms_access_token', newToken);
+      setKmsAccessToken(newToken);
+      fetchFamilies(newToken);
+    },
+    onError: (error) => {
+      console.error('Google KMS OAuth error:', error);
+      alert('Google Authorization failed: ' + (error.error_description || error.error || 'Unknown error'));
+    },
+    onNonOAuthError: (nonOAuthError) => {
+      console.log('Google KMS OAuth event:', nonOAuthError);
+    },
+  });
+
+  const handleRequestKmsAuth = React.useCallback(() => {
+    const protectedDataClientId =
+      window.ENV?.GOOGLE_PROTECTED_DATA_CLIENT_ID ||
+      import.meta.env.VITE_GOOGLE_PROTECTED_DATA_CLIENT_ID ||
+      'mock-protected-data';
+    const isMock = !protectedDataClientId || protectedDataClientId === 'mock-protected-data' || protectedDataClientId === 'mock';
+    if (isMock) {
+      const mockToken = 'mock-kms-token';
+      sessionStorage.setItem('kms_access_token', mockToken);
+      setKmsAccessToken(mockToken);
+      fetchFamilies(mockToken);
+      return;
+    }
+    googleLogin();
+  }, [googleLogin, fetchFamilies]);
+
+  const handleLockKmsAuth = React.useCallback(() => {
+    sessionStorage.removeItem('kms_access_token');
+    setKmsAccessToken(null);
+    fetchFamilies('');
   }, [fetchFamilies]);
 
   const fetchAuditLogs = React.useCallback(() => {
@@ -1529,10 +1584,7 @@ const Dashboard: React.FC = () => {
     
     fetch(`/api/children/${child.id}`, {
       method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(updatedChild),
     })
       .then((res) => {
@@ -2222,6 +2274,8 @@ const Dashboard: React.FC = () => {
               checks={child.vaccination_checks}
               currentUserEmail={user?.email || ''}
               onSave={(newChecks) => handleSaveChildField(child, 'vaccination_checks', newChecks)}
+              isUnlocked={isVaccinationUnlocked}
+              onUnlock={handleRequestKmsAuth}
             />
           );
         }
@@ -2270,7 +2324,7 @@ const Dashboard: React.FC = () => {
         }
       }
     ],
-    [families, handleSaveChildField, handleDeleteChild]
+    [families, handleSaveChildField, handleDeleteChild, isVaccinationUnlocked, handleRequestKmsAuth]
   );
 
   return (
@@ -2439,6 +2493,55 @@ const Dashboard: React.FC = () => {
                   <Redo size={16} />
                 </button>
               </div>
+
+              {(activeTab === 'parents' || activeTab === 'children') && (
+                isVaccinationUnlocked ? (
+                  <button
+                    type="button"
+                    onClick={handleLockKmsAuth}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                      padding: '0.4rem 0.75rem',
+                      borderRadius: '4px',
+                      background: '#f0fdf4',
+                      border: '1px solid #bbf7d0',
+                      color: '#166534',
+                      fontSize: '0.875rem',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                    }}
+                    title="Klicken zum Sperren"
+                  >
+                    <Unlock size={15} color="#16a34a" />
+                    <span>{t('vaccinationStatusUnlocked')}</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleRequestKmsAuth}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      padding: '0.4rem 0.75rem',
+                      borderRadius: '4px',
+                      background: '#ffffff',
+                      border: '1px solid var(--border)',
+                      color: 'var(--text)',
+                      cursor: 'pointer',
+                      fontSize: '0.875rem',
+                      fontWeight: 500,
+                      transition: 'all 0.15s ease',
+                    }}
+                    title={t('showVaccinationStatus')}
+                  >
+                    <Lock size={15} color="#dc2626" />
+                    <span>{t('showVaccinationStatus')}</span>
+                  </button>
+                )
+              )}
             </div>
             {activeTab === 'parents' && (
               <button
