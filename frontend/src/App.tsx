@@ -1779,17 +1779,17 @@ const Dashboard: React.FC = () => {
       {
         header: t('firstName'),
         accessorKey: 'first_name',
-        size: 150,
+        size: 220,
       },
       {
         header: t('lastName'),
         accessorKey: 'last_name',
-        size: 150,
+        size: 220,
       },
       {
         header: t('initialTraining'),
         id: 'initial_training',
-        size: 150,
+        size: 320,
         cell: (info: any) => {
           const parent = info.row.original;
           if (!parent || !parent.id) return null;
@@ -1800,7 +1800,7 @@ const Dashboard: React.FC = () => {
       {
         header: t('lastInstruction'),
         id: 'last_instruction',
-        size: 150,
+        size: 320,
         cell: (info: any) => {
           const parent = info.row.original;
           if (!parent || !parent.id) return null;
@@ -1813,7 +1813,7 @@ const Dashboard: React.FC = () => {
       {
         header: '',
         id: 'actions',
-        size: 160,
+        size: 220,
         cell: (info: any) => {
           const parent = info.row.original;
           if (!parent || !parent.id) return null;
@@ -1917,7 +1917,7 @@ const Dashboard: React.FC = () => {
       {
         header: t('notes'),
         accessorKey: 'notes',
-        size: 200,
+        size: 260,
         cell: (info) => {
           const parent = info.row.original;
           return (
@@ -1931,7 +1931,7 @@ const Dashboard: React.FC = () => {
       {
         header: t('th_membership'),
         id: 'th_membership',
-        size: 150,
+        size: 180,
         cell: (info) => {
           const parent = info.row.original;
           if (!parent || !parent.id) return null;
@@ -1971,7 +1971,7 @@ const Dashboard: React.FC = () => {
       {
         id: 'actions',
         header: '',
-        size: 50,
+        size: 60,
         cell: (info) => {
           const parent = info.row.original;
           return (
@@ -2251,7 +2251,7 @@ const Dashboard: React.FC = () => {
       {
         header: t('notes'),
         accessorKey: 'notes',
-        size: 200,
+        size: 260,
         cell: (info) => {
           const child = info.row.original;
           return (
@@ -2283,7 +2283,7 @@ const Dashboard: React.FC = () => {
       {
         id: 'actions',
         header: '',
-        size: 50,
+        size: 60,
         cell: (info) => {
           const child = info.row.original;
           return (
@@ -2327,8 +2327,10 @@ const Dashboard: React.FC = () => {
     [families, handleSaveChildField, handleDeleteChild, isVaccinationUnlocked, handleRequestKmsAuth]
   );
 
+  const isTableTab = activeTab === 'parents' || activeTab === 'children' || activeTab === 'hygieneBelehrung';
+
   return (
-    <div className="dashboard-container">
+    <div className={`dashboard-container ${isTableTab ? 'table-view-active' : ''}`}>
       <header>
         <h1>{t('title')}</h1>
         <div className="user-info">
@@ -2336,7 +2338,7 @@ const Dashboard: React.FC = () => {
           <button onClick={logout}>{t('logout')}</button>
         </div>
       </header>
-      <main>
+      <main className={isTableTab ? 'main-table-view' : ''}>
         {/* Navigation Tabs */}
         <div className="tabs" style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid var(--border)', marginBottom: '1.5rem' }}>
           <button 
