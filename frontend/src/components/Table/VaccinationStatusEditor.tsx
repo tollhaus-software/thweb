@@ -70,20 +70,18 @@ export const VaccinationStatusEditor: React.FC<VaccinationStatusEditorProps> = (
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '0.35rem',
-            padding: '0.25rem 0.5rem',
-            borderRadius: '6px',
-            background: '#fef2f2',
-            border: '1px dashed #fca5a5',
+            justifyContent: 'center',
+            padding: '0.25rem 0.4rem',
+            borderRadius: '4px',
+            background: 'var(--bg-subtle)',
+            border: '1px solid var(--border)',
             cursor: 'pointer',
-            fontSize: '0.825rem',
-            color: '#991b1b',
+            color: 'var(--text-muted)',
             transition: 'all 0.15s ease',
           }}
           title={t('vaccinationStatusHidden')}
         >
-          <Lock size={14} color="#dc2626" />
-          <span>{t('vaccinationStatusHidden')}</span>
+          <Lock size={14} />
         </div>
       </div>
     );
@@ -99,25 +97,25 @@ export const VaccinationStatusEditor: React.FC<VaccinationStatusEditorProps> = (
           alignItems: 'center',
           gap: '0.35rem',
           padding: '0.25rem 0.5rem',
-          borderRadius: '6px',
-          background: checks.length > 0 ? '#f0fdf4' : '#f8fafc',
-          border: checks.length > 0 ? '1px solid #bbf7d0' : '1px dashed #cbd5e1',
+          borderRadius: '4px',
+          background: 'var(--bg-subtle)',
+          border: '1px solid var(--border)',
           cursor: 'pointer',
           fontSize: '0.825rem',
-          color: checks.length > 0 ? '#166534' : '#64748b',
+          color: 'var(--text)',
           transition: 'all 0.15s ease',
         }}
         title="Klicken zum Bearbeiten des Impfstatus"
       >
-        <ShieldCheck size={14} color={checks.length > 0 ? '#16a34a' : '#94a3b8'} />
+        <ShieldCheck size={14} style={{ color: 'var(--text-muted)' }} />
         {checks.length > 0 ? (
           <span>
             {checks.map((c) => c.vaccination_type).join(', ')} ({checks.length})
           </span>
         ) : (
-          <span style={{ fontStyle: 'italic' }}>Kein Impfnachweis</span>
+          <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Kein Impfnachweis</span>
         )}
-        <Edit3 size={12} style={{ marginLeft: '0.2rem', opacity: 0.7 }} />
+        <Edit3 size={12} style={{ marginLeft: '0.2rem', color: 'var(--text-muted)', opacity: 0.7 }} />
       </div>
 
       {/* Modal / Dialog Popover */}
@@ -140,13 +138,13 @@ export const VaccinationStatusEditor: React.FC<VaccinationStatusEditorProps> = (
         >
           <div
             style={{
-              backgroundColor: '#ffffff',
+              backgroundColor: 'var(--bg-surface)',
               borderRadius: '12px',
               padding: '1.25rem',
               width: '460px',
               maxWidth: '92vw',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-              border: '1px solid #e2e8f0',
+              boxShadow: 'var(--shadow)',
+              border: '1px solid var(--border)',
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -154,14 +152,14 @@ export const VaccinationStatusEditor: React.FC<VaccinationStatusEditorProps> = (
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <ShieldCheck size={20} color="#16a34a" />
-                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600, color: '#0f172a' }}>
+                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-h)' }}>
                   Geschützter Impfstatus
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
               >
                 <X size={18} />
               </button>
@@ -170,7 +168,7 @@ export const VaccinationStatusEditor: React.FC<VaccinationStatusEditorProps> = (
             {/* List of Current Checks */}
             <div style={{ marginBottom: '1rem', maxHeight: '200px', overflowY: 'auto' }}>
               {localChecks.length === 0 ? (
-                <div style={{ padding: '0.75rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem', background: '#f8fafc', borderRadius: '6px' }}>
+                <div style={{ padding: '0.75rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.875rem', background: 'var(--bg-subtle)', borderRadius: '6px' }}>
                   Keine verifizierten Impfnachweise eingetragen.
                 </div>
               ) : (
@@ -183,14 +181,14 @@ export const VaccinationStatusEditor: React.FC<VaccinationStatusEditorProps> = (
                       justifyContent: 'space-between',
                       padding: '0.5rem 0.75rem',
                       marginBottom: '0.35rem',
-                      background: '#f1f5f9',
+                      background: 'var(--bg-subtle)',
                       borderRadius: '6px',
                       fontSize: '0.85rem',
                     }}
                   >
                     <div>
-                      <div style={{ fontWeight: 600, color: '#0f172a' }}>{item.vaccination_type}</div>
-                      <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                      <div style={{ fontWeight: 600, color: 'var(--text-h)' }}>{item.vaccination_type}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                         Nachweis: {item.proof_seen} | Am: {item.checked_on} ({item.checked_by})
                       </div>
                     </div>
@@ -214,50 +212,50 @@ export const VaccinationStatusEditor: React.FC<VaccinationStatusEditorProps> = (
             </div>
 
             {/* Add New Check Form */}
-            <div style={{ background: '#f8fafc', padding: '0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '1rem' }}>
-              <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.5rem' }}>
+            <div style={{ background: 'var(--bg-subtle)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', marginBottom: '1rem' }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
                 Neuen Nachweis erfassen
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
                 <div>
-                  <label style={{ fontSize: '0.725rem', color: '#64748b', display: 'block', marginBottom: '0.2rem' }}>Impfung</label>
+                  <label style={{ fontSize: '0.725rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>Impfung</label>
                   <input
                     type="text"
                     value={vType}
                     onChange={(e) => setVType(e.target.value)}
                     placeholder="z.B. Masern"
-                    style={{ width: '100%', padding: '0.35rem 0.5rem', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '0.825rem' }}
+                    style={{ width: '100%', padding: '0.35rem 0.5rem', borderRadius: '4px', border: '1px solid var(--input-border)', background: 'var(--input-bg)', color: 'var(--input-text)', fontSize: '0.825rem' }}
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.725rem', color: '#64748b', display: 'block', marginBottom: '0.2rem' }}>Gesehener Nachweis</label>
+                  <label style={{ fontSize: '0.725rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>Gesehener Nachweis</label>
                   <input
                     type="text"
                     value={proof}
                     onChange={(e) => setProof(e.target.value)}
                     placeholder="z.B. Impfausweis"
-                    style={{ width: '100%', padding: '0.35rem 0.5rem', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '0.825rem' }}
+                    style={{ width: '100%', padding: '0.35rem 0.5rem', borderRadius: '4px', border: '1px solid var(--input-border)', background: 'var(--input-bg)', color: 'var(--input-text)', fontSize: '0.825rem' }}
                   />
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
                 <div>
-                  <label style={{ fontSize: '0.725rem', color: '#64748b', display: 'block', marginBottom: '0.2rem' }}>Geprüft am</label>
+                  <label style={{ fontSize: '0.725rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>Geprüft am</label>
                   <input
                     type="date"
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
-                    style={{ width: '100%', padding: '0.35rem 0.5rem', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '0.825rem' }}
+                    style={{ width: '100%', padding: '0.35rem 0.5rem', borderRadius: '4px', border: '1px solid var(--input-border)', background: 'var(--input-bg)', color: 'var(--input-text)', fontSize: '0.825rem' }}
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.725rem', color: '#64748b', display: 'block', marginBottom: '0.2rem' }}>Geprüft von</label>
+                  <label style={{ fontSize: '0.725rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>Geprüft von</label>
                   <input
                     type="text"
                     value={by}
                     onChange={(e) => setBy(e.target.value)}
                     placeholder="E-Mail"
-                    style={{ width: '100%', padding: '0.35rem 0.5rem', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '0.825rem' }}
+                    style={{ width: '100%', padding: '0.35rem 0.5rem', borderRadius: '4px', border: '1px solid var(--input-border)', background: 'var(--input-bg)', color: 'var(--input-text)', fontSize: '0.825rem' }}
                   />
                 </div>
               </div>
@@ -267,7 +265,7 @@ export const VaccinationStatusEditor: React.FC<VaccinationStatusEditorProps> = (
                 style={{
                   width: '100%',
                   padding: '0.4rem',
-                  backgroundColor: '#3b82f6',
+                  backgroundColor: 'var(--primary)',
                   color: '#ffffff',
                   border: 'none',
                   borderRadius: '4px',
@@ -291,12 +289,12 @@ export const VaccinationStatusEditor: React.FC<VaccinationStatusEditorProps> = (
                 onClick={() => setIsOpen(false)}
                 style={{
                   padding: '0.4rem 0.85rem',
-                  border: '1px solid #cbd5e1',
-                  background: '#ffffff',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-surface)',
                   borderRadius: '6px',
                   cursor: 'pointer',
                   fontSize: '0.85rem',
-                  color: '#475569',
+                  color: 'var(--text-secondary)',
                 }}
               >
                 Abbrechen

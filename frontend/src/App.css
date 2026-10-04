@@ -1,17 +1,21 @@
-:root {
-  --primary: #2563eb;
-  --bg: #f8fafc;
-  --text: #1e293b;
-  --border: #e2e8f0;
-}
-
 body {
   background-color: var(--bg);
   color: var(--text);
   margin: 0;
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: var(--sans);
   font-size: 14px;
   line-height: 1.4;
+}
+
+input, select, textarea {
+  color: var(--input-text);
+  background-color: var(--input-bg);
+  border-color: var(--input-border);
+}
+
+::placeholder {
+  color: var(--input-placeholder);
+  opacity: 1;
 }
 
 header h1 {
@@ -51,10 +55,15 @@ header {
 
 .user-info button {
   padding: 0.5rem 1rem;
-  background: white;
+  background: var(--bg-surface);
+  color: var(--text);
   border: 1px solid var(--border);
   border-radius: 4px;
   cursor: pointer;
+}
+
+.user-info button:hover {
+  background: var(--bg-subtle);
 }
 
 .primary-button {
@@ -64,9 +73,10 @@ header {
 }
 
 .table-container {
-  background: white;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  box-shadow: var(--shadow);
   overflow: hidden;
   margin-top: 1rem;
 }
@@ -81,24 +91,35 @@ header {
   padding: 0.4rem 0.6rem;
   text-align: left;
   border-bottom: 1px solid var(--border);
+  color: var(--text);
 }
 
 .data-table th {
-  background: #f1f5f9;
+  background: var(--bg-subtle);
+  color: var(--text-h);
   font-weight: 600;
   user-select: none;
 }
 
 .data-table tr:hover {
-  background: #f8fafc;
+  background: var(--bg-hover);
 }
 
 .search-input {
   padding: 0.5rem;
-  border: 1px solid var(--border);
+  border: 1px solid var(--input-border);
+  background-color: var(--input-bg);
+  color: var(--input-text);
   border-radius: 4px;
   width: 300px;
   margin-bottom: 1rem;
+  box-sizing: border-box;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--accent-bg);
 }
 
 /* EasyEdit elements styling */
@@ -115,11 +136,11 @@ header {
   flex: 1;
   min-width: 0;
   padding: 0.25rem 0.5rem;
-  border: 1px solid var(--border);
+  border: 1px solid var(--input-border);
   border-radius: 4px;
   font-size: 0.95rem;
-  background: white;
-  color: var(--text);
+  background: var(--input-bg);
+  color: var(--input-text);
   box-sizing: border-box;
 }
 
@@ -130,8 +151,9 @@ header {
 }
 
 .easy-edit-button {
-  background: #f1f5f9;
+  background: var(--bg-subtle);
   border: 1px solid var(--border);
+  color: var(--text);
   border-radius: 4px;
   cursor: pointer;
   padding: 0.2rem 0.4rem;
@@ -140,7 +162,7 @@ header {
 }
 
 .easy-edit-button:hover {
-  background: #e2e8f0;
+  background: var(--bg-hover);
 }
 
 /* View mode wrapper layout */
@@ -186,19 +208,19 @@ header {
 }
 
 .easy-edit-view-button-wrapper button.easy-edit-button:hover {
-  background-color: #eff6ff;
-  color: #1d4ed8;
+  background-color: var(--accent-bg);
+  color: var(--primary);
 }
 
 /* Family Group Header row in two-layer table */
 tr.family-group-row {
-  background-color: #f8fafc;
+  background-color: var(--bg-hover);
 }
 
 tr.family-group-row td {
   font-weight: 700;
-  color: #0f172a;
-  background-color: #f1f5f9;
+  color: var(--text-h);
+  background-color: var(--bg-subtle);
   letter-spacing: 0.025em;
   font-size: 0.85rem;
   border-bottom: 2px solid var(--border);
@@ -212,7 +234,7 @@ tr.family-group-row td {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(15, 23, 42, 0.6);
+  background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(4px);
   display: flex;
   justify-content: center;
@@ -223,10 +245,11 @@ tr.family-group-row td {
 
 /* Modal container styling */
 .modal-container {
-  background: white;
+  background: var(--bg-surface);
+  color: var(--text);
   padding: 2rem;
   border-radius: 12px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow);
   width: 100%;
   max-width: 520px;
   border: 1px solid var(--border);
@@ -236,7 +259,7 @@ tr.family-group-row td {
 .modal-container h2 {
   margin-top: 0;
   font-size: 1.5rem;
-  color: var(--text);
+  color: var(--text-h);
   margin-bottom: 1.5rem;
 }
 
@@ -248,26 +271,27 @@ tr.family-group-row td {
   display: block;
   font-size: 0.875rem;
   font-weight: 600;
-  color: #475569;
+  color: var(--text-secondary);
   margin-bottom: 0.5rem;
 }
 
 .modal-form-group input {
   width: 100%;
   padding: 0.625rem 0.875rem;
-  border: 1px solid var(--border);
+  border: 1px solid var(--input-border);
   border-radius: 6px;
   font-size: 0.95rem;
   box-sizing: border-box;
-  background-color: #f8fafc;
+  background-color: var(--input-bg);
+  color: var(--input-text);
   transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
 .modal-form-group input:focus {
   outline: none;
   border-color: var(--primary);
-  background-color: white;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  background-color: var(--input-bg);
+  box-shadow: 0 0 0 3px var(--accent-bg);
 }
 
 .modal-actions {
@@ -287,14 +311,14 @@ tr.family-group-row td {
 }
 
 .modal-actions button.cancel-btn {
-  background: white;
+  background: var(--bg-surface);
   border: 1px solid var(--border);
-  color: #475569;
+  color: var(--text-secondary);
 }
 
 .modal-actions button.cancel-btn:hover {
-  background: #f1f5f9;
-  color: var(--text);
+  background: var(--bg-subtle);
+  color: var(--text-h);
 }
 
 .modal-actions button.submit-btn {
@@ -304,7 +328,7 @@ tr.family-group-row td {
 }
 
 .modal-actions button.submit-btn:hover {
-  background: #1d4ed8;
+  background: var(--primary-hover);
 }
 
 .modal-divider {
@@ -322,5 +346,3 @@ tr.family-group-row td {
   from { transform: translateY(16px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
-
-

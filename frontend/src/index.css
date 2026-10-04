@@ -1,23 +1,63 @@
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
+  color-scheme: light;
+
+  /* Primary Brand */
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+
+  /* Surfaces & Backgrounds */
+  --bg: #f8fafc;
+  --bg-page: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-subtle: #f1f5f9;
+  --bg-hover: #f8fafc;
+
+  /* Text & Typography */
+  --text: #1e293b;
+  --text-h: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+
+  /* Borders & Dividers */
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+
+  /* Form Elements */
+  --input-bg: #ffffff;
+  --input-text: #0f172a;
+  --input-border: #cbd5e1;
+  --input-placeholder: #94a3b8;
+
+  /* Highlights & Badges */
+  --highlight-bg: #fef9c3;
   --accent: #aa3bff;
   --accent-bg: rgba(170, 59, 255, 0.1);
   --accent-border: rgba(170, 59, 255, 0.5);
   --social-bg: rgba(244, 243, 236, 0.5);
+  --code-bg: #f4f3ec;
+
+  /* Status & Alerts */
+  --danger-bg: #fef2f2;
+  --danger-border: #fecaca;
+  --danger-text: #b91c1c;
+  --success-bg: #f0fdf4;
+  --success-border: #bbf7d0;
+  --success-text: #15803d;
+  --warning-bg: #fefce8;
+  --warning-border: #fef08a;
+  --warning-text: #a16207;
+
+  /* Shadows */
   --shadow:
     rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
+  /* Fonts */
+  --sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --heading: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, Consolas, monospace;
 
   font: 18px/145% var(--sans);
   letter-spacing: 0.18px;
-  color-scheme: light dark;
   color: var(--text);
   background: var(--bg);
   font-synthesis: none;
@@ -31,16 +71,56 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    /* Primary Brand */
+    --primary: #3b82f6;
+    --primary-hover: #60a5fa;
+
+    /* Surfaces & Backgrounds */
+    --bg: #0b0f19;
+    --bg-page: #0b0f19;
+    --bg-surface: #151b28;
+    --bg-subtle: #1e293b;
+    --bg-hover: #263348;
+
+    /* Text & Typography */
+    --text: #cbd5e1;
+    --text-h: #f8fafc;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+
+    /* Borders & Dividers */
+    --border: #283548;
+    --border-strong: #334155;
+
+    /* Form Elements */
+    --input-bg: #1e293b;
+    --input-text: #f8fafc;
+    --input-border: #334155;
+    --input-placeholder: #64748b;
+
+    /* Highlights & Badges */
+    --highlight-bg: rgba(234, 179, 8, 0.2);
     --accent: #c084fc;
     --accent-bg: rgba(192, 132, 252, 0.15);
     --accent-border: rgba(192, 132, 252, 0.5);
     --social-bg: rgba(47, 48, 58, 0.5);
+    --code-bg: #1f2028;
+
+    /* Status & Alerts */
+    --danger-bg: rgba(239, 68, 68, 0.15);
+    --danger-border: rgba(239, 68, 68, 0.35);
+    --danger-text: #fca5a5;
+    --success-bg: rgba(34, 197, 94, 0.15);
+    --success-border: rgba(34, 197, 94, 0.35);
+    --success-text: #86efac;
+    --warning-bg: rgba(234, 179, 8, 0.15);
+    --warning-border: rgba(234, 179, 8, 0.35);
+    --warning-text: #fde047;
+
+    /* Shadows */
     --shadow:
       rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
   }
@@ -48,6 +128,60 @@
   #social .button-icon {
     filter: invert(1) brightness(2);
   }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Primary Brand */
+  --primary: #3b82f6;
+  --primary-hover: #60a5fa;
+
+  /* Surfaces & Backgrounds */
+  --bg: #0b0f19;
+  --bg-page: #0b0f19;
+  --bg-surface: #151b28;
+  --bg-subtle: #1e293b;
+  --bg-hover: #263348;
+
+  /* Text & Typography */
+  --text: #cbd5e1;
+  --text-h: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+
+  /* Borders & Dividers */
+  --border: #283548;
+  --border-strong: #334155;
+
+  /* Form Elements */
+  --input-bg: #1e293b;
+  --input-text: #f8fafc;
+  --input-border: #334155;
+  --input-placeholder: #64748b;
+
+  /* Highlights & Badges */
+  --highlight-bg: rgba(234, 179, 8, 0.2);
+  --accent: #c084fc;
+  --accent-bg: rgba(192, 132, 252, 0.15);
+  --accent-border: rgba(192, 132, 252, 0.5);
+  --social-bg: rgba(47, 48, 58, 0.5);
+  --code-bg: #1f2028;
+
+  /* Status & Alerts */
+  --danger-bg: rgba(239, 68, 68, 0.15);
+  --danger-border: rgba(239, 68, 68, 0.35);
+  --danger-text: #fca5a5;
+  --success-bg: rgba(34, 197, 94, 0.15);
+  --success-border: rgba(34, 197, 94, 0.35);
+  --success-text: #86efac;
+  --warning-bg: rgba(234, 179, 8, 0.15);
+  --warning-border: rgba(234, 179, 8, 0.35);
+  --warning-text: #fde047;
+
+  /* Shadows */
+  --shadow:
+    rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
 }
 
 #root {
@@ -64,7 +198,9 @@ body {
 }
 
 h1,
-h2 {
+h2,
+h3,
+h4 {
   font-family: var(--heading);
   font-weight: 500;
   color: var(--text-h);

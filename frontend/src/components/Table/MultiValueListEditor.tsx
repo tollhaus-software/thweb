@@ -163,8 +163,8 @@ export const MultiValueListEditor: React.FC<MultiValueListEditorProps> = ({
               height: '20px',
               minWidth: '20px',
               fontWeight: 'bold',
-              background: '#e2e8f0',
-              color: '#475569'
+              background: 'var(--bg-subtle)',
+              color: 'var(--text-secondary)'
             }}
             onClick={handleStartAdd}
             title="Add item"

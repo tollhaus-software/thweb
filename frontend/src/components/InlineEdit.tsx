@@ -218,10 +218,10 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
             top: '100%',
             left: 0,
             zIndex: 1000,
-            background: 'white',
+            background: 'var(--bg-surface)',
             border: '1px solid var(--border)',
             borderRadius: '4px',
-            boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06)',
+            boxShadow: 'var(--shadow)',
             width: '100%',
             boxSizing: 'border-box',
             marginTop: '2px',
@@ -241,7 +241,7 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
                 background: tempValue === opt.value ? 'var(--accent-bg)' : 'transparent',
                 color: 'var(--text-h)',
                 fontSize: '0.95rem',
-                borderBottom: '1px solid #f1f5f9',
+                borderBottom: '1px solid var(--border)',
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.background = 'var(--accent-bg)';
@@ -293,11 +293,11 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
             flex: 1,
             minWidth: 0,
             padding: '0.25rem 0.5rem',
-            border: '1px solid var(--border)',
+            border: '1px solid var(--input-border)',
             borderRadius: '4px',
             fontSize: '0.95rem',
-            background: 'white',
-            color: 'var(--text)',
+            background: 'var(--input-bg)',
+            color: 'var(--input-text)',
             boxSizing: 'border-box'
           }}
         />
@@ -308,10 +308,10 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
             top: '100%',
             left: 0,
             zIndex: 1000,
-            background: 'white',
+            background: 'var(--bg-surface)',
             border: '1px solid var(--border)',
             borderRadius: '6px',
-            boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)',
+            boxShadow: 'var(--shadow)',
             width: '240px',
             padding: '0.5rem',
             marginTop: '4px',
@@ -320,11 +320,11 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-            <button type="button" onClick={handlePrevMonth} style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem', padding: '2px 6px' }}>&lt;</button>
+            <button type="button" onClick={handlePrevMonth} style={{ border: 'none', background: 'transparent', color: 'var(--text)', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem', padding: '2px 6px' }}>&lt;</button>
             <span style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{monthNames[calMonth]} {calYear}</span>
-            <button type="button" onClick={handleNextMonth} style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem', padding: '2px 6px' }}>&gt;</button>
+            <button type="button" onClick={handleNextMonth} style={{ border: 'none', background: 'transparent', color: 'var(--text)', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem', padding: '2px 6px' }}>&gt;</button>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px', textAlign: 'center', fontWeight: 'bold', fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px', textAlign: 'center', fontWeight: 'bold', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
             {weekdays.map(d => <div key={d}>{d}</div>)}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px', textAlign: 'center' }}>
@@ -344,7 +344,7 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
                     backgroundColor: 'transparent',
                     transition: 'background-color 0.1s'
                   }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                 >
                   {day}
