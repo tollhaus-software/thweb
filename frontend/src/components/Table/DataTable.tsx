@@ -48,9 +48,9 @@ export function DataTable<TData>({
   });
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+    <div className="data-table-wrapper">
       {/* Column selector toolbar */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', position: 'relative' }}>
+      <div className="data-table-toolbar">
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
@@ -145,7 +145,14 @@ export function DataTable<TData>({
       </div>
 
       <div className="table-container">
-        <table className="data-table">
+        <table
+          className="data-table"
+          style={{
+            width: `${table.getTotalSize()}px`,
+            minWidth: '100%',
+            tableLayout: 'fixed',
+          }}
+        >
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
@@ -155,7 +162,10 @@ export function DataTable<TData>({
                     onClick={header.column.getCanSort() ? header.column.getToggleSortingHandler() : undefined}
                     style={{
                       cursor: header.column.getCanSort() ? 'pointer' : 'default',
-                      width: `${header.getSize()}px`
+                      width: `${header.getSize()}px`,
+                      minWidth: `${header.getSize()}px`,
+                      boxSizing: 'border-box',
+                      whiteSpace: 'nowrap',
                     }}
                   >
                     {flexRender(header.column.columnDef.header, header.getContext())}
@@ -180,7 +190,7 @@ export function DataTable<TData>({
                   <Fragment key={row.id}>
                     <tr className="family-group-row" id={`row-${familyId}`}>
                       <td colSpan={table.getVisibleLeafColumns().length}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem', position: 'sticky', left: '0.6rem' }}>
                           <span>{familyName}</span>
                           {onAddRow && (
                             <button
@@ -214,8 +224,8 @@ export function DataTable<TData>({
                     </tr>
                     {!hasSubRows && emptySubRowsText && (
                       <tr className="empty-sub-row">
-                        <td colSpan={table.getVisibleLeafColumns().length} style={{ padding: '0.75rem 1.5rem', color: '#94a3b8', fontStyle: 'italic', fontSize: '0.85rem' }}>
-                          {emptySubRowsText}
+                        <td colSpan={table.getVisibleLeafColumns().length} style={{ padding: '0.75rem 1.5rem', color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.85rem' }}>
+                          <span style={{ position: 'sticky', left: '1.5rem' }}>{emptySubRowsText}</span>
                         </td>
                       </tr>
                     )}
@@ -228,7 +238,11 @@ export function DataTable<TData>({
                   {row.getVisibleCells().map((cell) => (
                     <td
                       key={cell.id}
-                      style={{ width: `${cell.column.getSize()}px` }}
+                      style={{
+                        width: `${cell.column.getSize()}px`,
+                        minWidth: `${cell.column.getSize()}px`,
+                        boxSizing: 'border-box',
+                      }}
                     >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>

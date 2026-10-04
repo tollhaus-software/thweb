@@ -77,14 +77,13 @@ header {
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: var(--shadow);
-  overflow: hidden;
+  overflow: auto;
   margin-top: 1rem;
 }
 
 .data-table {
   width: 100%;
   border-collapse: collapse;
-  table-layout: fixed;
 }
 
 .data-table th, .data-table td {
@@ -99,10 +98,70 @@ header {
   color: var(--text-h);
   font-weight: 600;
   user-select: none;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .data-table tr:hover {
   background: var(--bg-hover);
+}
+
+/* Full-height layout when parents, children, or hygienebelehrung table is displayed */
+.dashboard-container.table-view-active {
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 1rem 1.5rem 1rem 1.5rem;
+}
+
+.dashboard-container.table-view-active header {
+  flex-shrink: 0;
+}
+
+.main-table-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.dashboard-container.table-view-active .tabs {
+  flex-shrink: 0;
+  margin-bottom: 0.75rem !important;
+}
+
+.dashboard-container.table-view-active .controls-row {
+  flex-shrink: 0;
+  margin-bottom: 0.75rem !important;
+}
+
+.data-table-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.data-table-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.data-table-wrapper .table-container {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin-top: 0;
 }
 
 .search-input {
