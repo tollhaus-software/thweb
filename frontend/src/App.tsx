@@ -203,13 +203,13 @@ const AuditLogView: React.FC<{ logs: AuditLog[]; loading: boolean }> = ({ logs, 
       display: 'inline-block',
     };
     if (op === 'INSERT' || op === 'CREATE') {
-      return { ...baseStyle, backgroundColor: '#dcfce7', color: '#16a34a' };
+      return { ...baseStyle, backgroundColor: 'var(--success-bg)', color: 'var(--success-text)' };
     }
     if (op === 'UPDATE') {
-      return { ...baseStyle, backgroundColor: '#dbeafe', color: '#2563eb' };
+      return { ...baseStyle, backgroundColor: 'var(--accent-bg)', color: 'var(--accent)' };
     }
     if (op === 'DELETE') {
-      return { ...baseStyle, backgroundColor: '#fee2e2', color: '#dc2626' };
+      return { ...baseStyle, backgroundColor: 'var(--danger-bg)', color: 'var(--danger-text)' };
     }
     return { ...baseStyle, backgroundColor: '#f1f5f9', color: '#475569' };
   };
@@ -234,7 +234,7 @@ const AuditLogView: React.FC<{ logs: AuditLog[]; loading: boolean }> = ({ logs, 
   const safeLogs = Array.isArray(logs) ? logs : [];
 
   return (
-    <div className="table-container" style={{ overflowX: 'auto', background: 'white', borderRadius: '8px', border: '1px solid var(--border)', padding: '1.25rem', boxShadow: 'var(--shadow)' }}>
+    <div className="table-container" style={{ overflowX: 'auto', background: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border)', padding: '1.25rem', boxShadow: 'var(--shadow)' }}>
       <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
         <thead>
           <tr style={{ borderBottom: '2px solid var(--border)' }}>
@@ -288,7 +288,7 @@ const LandingPage: React.FC = () => {
     return (
       <div style={{ textAlign: 'center', marginTop: '50px', padding: '20px' }}>
         <h1 style={{ color: 'var(--text-h)' }}>Access Restricted</h1>
-        <p style={{ color: '#ef4444', fontSize: '1.1rem', margin: '20px 0', fontWeight: 500 }}>
+        <p style={{ color: 'var(--danger-text)', fontSize: '1.1rem', margin: '20px 0', fontWeight: 500 }}>
           {authError.email
             ? `The user ${authError.email} does not have access to the application.`
             : `Access Denied: ${authError.message}`}
@@ -533,7 +533,7 @@ const AdminView: React.FC = () => {
   }
 
   return (
-    <div className="admin-container" style={{ background: 'white', borderRadius: '8px', border: '1px solid var(--border)', padding: '1.25rem', boxShadow: 'var(--shadow)' }}>
+    <div className="admin-container" style={{ background: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border)', padding: '1.25rem', boxShadow: 'var(--shadow)' }}>
       {/* Sub Tabs */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem' }}>
         <div style={{ display: 'flex', gap: '1rem' }}>
@@ -541,8 +541,8 @@ const AdminView: React.FC = () => {
             onClick={() => setSubTab('users')}
             style={{
               padding: '0.5rem 1rem',
-              background: subTab === 'users' ? 'var(--primary)' : '#f1f5f9',
-              color: subTab === 'users' ? 'white' : '#475569',
+              background: subTab === 'users' ? 'var(--primary)' : 'var(--bg-subtle)',
+              color: subTab === 'users' ? 'white' : 'var(--text-secondary)',
               border: 'none',
               borderRadius: '6px',
               fontWeight: 'bold',
@@ -555,8 +555,8 @@ const AdminView: React.FC = () => {
             onClick={() => setSubTab('roles')}
             style={{
               padding: '0.5rem 1rem',
-              background: subTab === 'roles' ? 'var(--primary)' : '#f1f5f9',
-              color: subTab === 'roles' ? 'white' : '#475569',
+              background: subTab === 'roles' ? 'var(--primary)' : 'var(--bg-subtle)',
+              color: subTab === 'roles' ? 'white' : 'var(--text-secondary)',
               border: 'none',
               borderRadius: '6px',
               fontWeight: 'bold',
@@ -682,23 +682,23 @@ const AdminView: React.FC = () => {
       {/* User Modal */}
       {userModalOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'white', borderRadius: '8px', padding: '1.5rem', width: '500px', maxWidth: '90vw', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3>{editingUser ? t('editUser') : t('addUser')}</h3>
+          <div style={{ background: 'var(--bg-surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '8px', padding: '1.5rem', width: '500px', maxWidth: '90vw', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3 style={{ color: 'var(--text-h)' }}>{editingUser ? t('editUser') : t('addUser')}</h3>
             <form onSubmit={handleUserSubmit}>
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.25rem' }}>E-Mail Address</label>
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.25rem', color: 'var(--text-secondary)' }}>E-Mail Address</label>
                 <input
                   type="email"
                   value={userEmail}
                   onChange={e => setUserEmail(e.target.value)}
                   disabled={!!editingUser}
                   required
-                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border)' }}
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--input-border)', background: 'var(--input-bg)', color: 'var(--input-text)' }}
                 />
               </div>
 
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.5rem' }}>{t('assignedRoles')}</label>
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>{t('assignedRoles')}</label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
                   {roles.map(r => (
                     <label key={r.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem' }}>
@@ -714,8 +714,8 @@ const AdminView: React.FC = () => {
               </div>
 
               <div style={{ marginBottom: '1.5rem' }}>
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.5rem' }}>{t('customPermissions')} (Direct Overrides)</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.35rem', maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border)', padding: '0.5rem', borderRadius: '4px' }}>
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>{t('customPermissions')} (Direct Overrides)</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.35rem', maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border)', background: 'var(--bg-subtle)', padding: '0.5rem', borderRadius: '4px' }}>
                   {ALL_AVAILABLE_PERMISSIONS.map(p => (
                     <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontFamily: 'monospace' }}>
                       <input
@@ -730,7 +730,7 @@ const AdminView: React.FC = () => {
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                <button type="button" onClick={() => setUserModalOpen(false)} style={{ padding: '0.5rem 1rem', background: '#e2e8f0', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                <button type="button" onClick={() => setUserModalOpen(false)} style={{ padding: '0.5rem 1rem', background: 'var(--bg-subtle)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '4px', cursor: 'pointer' }}>
                   {t('cancel')}
                 </button>
                 <button type="submit" style={{ padding: '0.5rem 1rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
@@ -745,11 +745,11 @@ const AdminView: React.FC = () => {
       {/* Role Modal */}
       {roleModalOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'white', borderRadius: '8px', padding: '1.5rem', width: '500px', maxWidth: '90vw', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3>{editingRole ? t('editRole') : t('addRole')}</h3>
+          <div style={{ background: 'var(--bg-surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '8px', padding: '1.5rem', width: '500px', maxWidth: '90vw', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3 style={{ color: 'var(--text-h)' }}>{editingRole ? t('editRole') : t('addRole')}</h3>
             <form onSubmit={handleRoleSubmit}>
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.25rem' }}>{t('roleId')}</label>
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.25rem', color: 'var(--text-secondary)' }}>{t('roleId')}</label>
                 <input
                   type="text"
                   value={roleId}
@@ -757,36 +757,36 @@ const AdminView: React.FC = () => {
                   disabled={!!editingRole}
                   placeholder="e.g. manager"
                   required
-                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border)' }}
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--input-border)', background: 'var(--input-bg)', color: 'var(--input-text)' }}
                 />
               </div>
 
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.25rem' }}>{t('roleName')}</label>
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.25rem', color: 'var(--text-secondary)' }}>{t('roleName')}</label>
                 <input
                   type="text"
                   value={roleName}
                   onChange={e => setRoleName(e.target.value)}
                   placeholder="e.g. Manager"
                   required
-                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border)' }}
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--input-border)', background: 'var(--input-bg)', color: 'var(--input-text)' }}
                 />
               </div>
 
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.25rem' }}>Beschreibung</label>
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.25rem', color: 'var(--text-secondary)' }}>Beschreibung</label>
                 <input
                   type="text"
                   value={roleDesc}
                   onChange={e => setRoleDesc(e.target.value)}
                   placeholder="Kurze Beschreibung der Rolle"
-                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border)' }}
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--input-border)', background: 'var(--input-bg)', color: 'var(--input-text)' }}
                 />
               </div>
 
               <div style={{ marginBottom: '1.5rem' }}>
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.5rem' }}>{t('permissions')}</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.35rem', maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border)', padding: '0.5rem', borderRadius: '4px' }}>
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>{t('permissions')}</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.35rem', maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border)', background: 'var(--bg-subtle)', padding: '0.5rem', borderRadius: '4px' }}>
                   {ALL_AVAILABLE_PERMISSIONS.map(p => (
                     <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontFamily: 'monospace' }}>
                       <input
@@ -801,7 +801,7 @@ const AdminView: React.FC = () => {
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                <button type="button" onClick={() => setRoleModalOpen(false)} style={{ padding: '0.5rem 1rem', background: '#e2e8f0', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                <button type="button" onClick={() => setRoleModalOpen(false)} style={{ padding: '0.5rem 1rem', background: 'var(--bg-subtle)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '4px', cursor: 'pointer' }}>
                   {t('cancel')}
                 </button>
                 <button type="submit" style={{ padding: '0.5rem 1rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
@@ -2505,16 +2505,17 @@ const Dashboard: React.FC = () => {
                       gap: '0.35rem',
                       padding: '0.4rem 0.75rem',
                       borderRadius: '4px',
-                      background: '#f0fdf4',
-                      border: '1px solid #bbf7d0',
-                      color: '#166534',
+                      background: 'var(--bg-surface)',
+                      border: '1px solid var(--border)',
+                      color: 'var(--text)',
                       fontSize: '0.875rem',
                       fontWeight: 500,
                       cursor: 'pointer',
+                      transition: 'all 0.15s ease',
                     }}
                     title="Klicken zum Sperren"
                   >
-                    <Unlock size={15} color="#16a34a" />
+                    <Unlock size={15} color="var(--primary)" />
                     <span>{t('vaccinationStatusUnlocked')}</span>
                   </button>
                 ) : (
@@ -2527,7 +2528,7 @@ const Dashboard: React.FC = () => {
                       gap: '0.4rem',
                       padding: '0.4rem 0.75rem',
                       borderRadius: '4px',
-                      background: '#ffffff',
+                      background: 'var(--bg-surface)',
                       border: '1px solid var(--border)',
                       color: 'var(--text)',
                       cursor: 'pointer',
@@ -2537,7 +2538,7 @@ const Dashboard: React.FC = () => {
                     }}
                     title={t('showVaccinationStatus')}
                   >
-                    <Lock size={15} color="#dc2626" />
+                    <Lock size={15} color="var(--text-muted)" />
                     <span>{t('showVaccinationStatus')}</span>
                   </button>
                 )
@@ -2854,7 +2855,7 @@ const Dashboard: React.FC = () => {
               <div style={{ marginBottom: '1.5rem', maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '6px' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                   <thead>
-                    <tr style={{ background: '#f8fafc', borderBottom: '1px solid var(--border)' }}>
+                    <tr style={{ background: 'var(--bg-subtle)', borderBottom: '1px solid var(--border)' }}>
                       <th style={{ padding: '0.5rem', textAlign: 'left' }}>{t('date')}</th>
                       <th style={{ padding: '0.5rem', textAlign: 'left' }}>{t('eventType')}</th>
                       <th style={{ padding: '0.5rem', textAlign: 'left' }}>{t('documentation')}</th>
@@ -3017,7 +3018,7 @@ const Dashboard: React.FC = () => {
               <div style={{ marginBottom: '1.5rem', maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '6px' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                   <thead>
-                    <tr style={{ background: '#f8fafc', borderBottom: '1px solid var(--border)' }}>
+                    <tr style={{ background: 'var(--bg-subtle)', borderBottom: '1px solid var(--border)' }}>
                       <th style={{ padding: '0.5rem', textAlign: 'left' }}>{t('membershipType')}</th>
                       <th style={{ padding: '0.5rem', textAlign: 'left' }}>{t('startDateLabel')}</th>
                       <th style={{ padding: '0.5rem', textAlign: 'left' }}>{t('endDateLabel')}</th>

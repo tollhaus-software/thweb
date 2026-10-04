@@ -64,7 +64,7 @@ export function DataTable<TData>({
             cursor: 'pointer',
             border: '1px solid var(--border)',
             borderRadius: '4px',
-            background: 'white',
+            background: 'var(--bg-surface)',
             color: 'var(--text)',
             transition: 'all 0.2s',
           }}
@@ -94,10 +94,10 @@ export function DataTable<TData>({
                 top: '100%',
                 right: 0,
                 marginTop: '0.25rem',
-                background: 'white',
+                background: 'var(--bg-surface)',
                 border: '1px solid var(--border)',
                 borderRadius: '6px',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                boxShadow: 'var(--shadow)',
                 padding: '0.5rem',
                 zIndex: 50,
                 minWidth: '180px',
@@ -106,7 +106,7 @@ export function DataTable<TData>({
                 textAlign: 'left',
               }}
             >
-              <div style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', borderBottom: '1px solid var(--border)', marginBottom: '0.4rem' }}>
+              <div style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', borderBottom: '1px solid var(--border)', marginBottom: '0.4rem' }}>
                 {t('toggleColumns')}
               </div>
               {table.getAllLeafColumns().map((column) => {
@@ -127,7 +127,7 @@ export function DataTable<TData>({
                       userSelect: 'none',
                       transition: 'background-color 0.15s',
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
                     onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                   >
                     <input

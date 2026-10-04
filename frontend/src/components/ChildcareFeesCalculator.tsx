@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Calculator, CheckSquare, Square, Info } from 'lucide-react';
+import { CheckSquare, Square, Info } from 'lucide-react';
 import { t, CURRENT_LOCALE } from '../utils/i18n';
 
 interface Parent {
@@ -100,7 +100,7 @@ const FeeTooltip: React.FC<{ description: string; change?: FeeChangeResult }> = 
       <Info
         size={13}
         strokeWidth={change ? 3 : 2}
-        style={{ color: change ? '#1e3a8a' : '#94a3b8' }}
+        style={{ color: change ? 'var(--primary)' : 'var(--text-muted)' }}
       />
       {visible && (
         <div
@@ -110,15 +110,16 @@ const FeeTooltip: React.FC<{ description: string; change?: FeeChangeResult }> = 
             right: '50%',
             transform: 'translateX(50%)',
             marginBottom: '8px',
-            background: 'rgba(15, 23, 42, 0.98)',
-            color: 'white',
+            background: 'var(--bg-surface)',
+            color: 'var(--text)',
+            border: '1px solid var(--border)',
             padding: '12px 16px',
             borderRadius: '8px',
             fontSize: '0.75rem',
             lineHeight: '1.5',
             width: '480px',
             textAlign: 'left',
-            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+            boxShadow: 'var(--shadow)',
             zIndex: 100,
             pointerEvents: 'auto',
             cursor: 'default',
@@ -128,13 +129,13 @@ const FeeTooltip: React.FC<{ description: string; change?: FeeChangeResult }> = 
           }}
         >
           {change && (
-            <div style={{ marginBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.2)', paddingBottom: '6px' }}>
-              <div style={{ fontWeight: 'bold', color: '#38bdf8', marginBottom: '2px' }}>{t('changeHeader')}</div>
-              <div style={{ fontWeight: 'bold' }}>
+            <div style={{ marginBottom: '8px', borderBottom: '1px solid var(--border)', paddingBottom: '6px' }}>
+              <div style={{ fontWeight: 'bold', color: 'var(--primary)', marginBottom: '2px' }}>{t('changeHeader')}</div>
+              <div style={{ fontWeight: 'bold', color: 'var(--text-h)' }}>
                 {change.previous_fee.toFixed(2)} EUR → {change.new_fee.toFixed(2)} EUR
               </div>
               {change.reason && (
-                <div style={{ fontStyle: 'italic', fontSize: '0.7rem', marginTop: '2px', color: '#cbd5e1' }}>
+                <div style={{ fontStyle: 'italic', fontSize: '0.7rem', marginTop: '2px', color: 'var(--text-muted)' }}>
                   {renderWithLineBreaks(change.reason)}
                 </div>
               )}
@@ -198,7 +199,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
   // Results state
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<CalculationResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   const hasInitializedRef = useRef(false);
 
@@ -209,26 +210,52 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
     }
   }, [families]);
 
-  // Sort family fees results to match the order of the families prop
+  const activeRequestIdRef = useRef(0);
+  const resultsRef = useRef(results);
+  resultsRef.current = results;
+  const prevSelectedFamilyIdsRef = useRef<string[] | null>(null);
+  const prevRangeRef = useRef<string | null>(null);
+  const prevTokenRef = useRef<string | null>(null);
+
+  // Derived validation error
+  const validationError = useMemo(() => {
+    if (families.length > 0 && selectedFamilyIds.length === 0) {
+      return t('selectAtLeastOneFamily') || 'Please select at least one family.';
+    }
+    const startMonthStr = `${startYear}-${startMonth}`;
+    const endMonthStr = `${endYear}-${endMonth}`;
+    if (startMonthStr > endMonthStr) {
+      return t('startMonthAfterEndMonth') || 'Start month cannot be after end month.';
+    }
+    return null;
+  }, [families.length, selectedFamilyIds.length, startYear, startMonth, endYear, endMonth]);
+
+  const error = validationError || apiError;
+
+  // Sort family fees results to match the order of the families prop, filtered by selected families
   const sortedFamilyFees = useMemo(() => {
     if (!results || !results.family_fees) return [];
-    return [...results.family_fees].sort((a, b) => {
-      const indexA = families.findIndex((f) => f.id === a.family_id);
-      const indexB = families.findIndex((f) => f.id === b.family_id);
-      return indexA - indexB;
-    });
-  }, [results, families]);
+    return results.family_fees
+      .filter((res) => selectedFamilyIds.includes(res.family_id))
+      .sort((a, b) => {
+        const indexA = families.findIndex((f) => f.id === a.family_id);
+        const indexB = families.findIndex((f) => f.id === b.family_id);
+        return indexA - indexB;
+      });
+  }, [results, families, selectedFamilyIds]);
 
-  // Sort fee changes primarily by "Wirksamer Monat" (month string), then secondary by family name
+  // Sort fee changes primarily by "Wirksamer Monat" (month string), then secondary by family name, filtered by selected families
   const sortedFeeChanges = useMemo(() => {
     if (!results || !results.fee_changes) return [];
-    return [...results.fee_changes].sort((a, b) => {
-      if (a.month !== b.month) {
-        return a.month.localeCompare(b.month);
-      }
-      return (a.family_name || '').localeCompare(b.family_name || '');
-    });
-  }, [results]);
+    return results.fee_changes
+      .filter((chg) => selectedFamilyIds.includes(chg.family_id))
+      .sort((a, b) => {
+        if (a.month !== b.month) {
+          return a.month.localeCompare(b.month);
+        }
+        return (a.family_name || '').localeCompare(b.family_name || '');
+      });
+  }, [results, selectedFamilyIds]);
 
   // Helper to format family names
   const getFamilyName = (f: Family) => {
@@ -259,59 +286,95 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
     );
   };
 
-  const handleCalculate = async () => {
-    if (selectedFamilyIds.length === 0) {
-      setError(t('selectAtLeastOneFamily') || 'Please select at least one family.');
+  useEffect(() => {
+    if (validationError || selectedFamilyIds.length === 0) {
+      prevSelectedFamilyIdsRef.current = selectedFamilyIds;
       return;
     }
 
     const startMonthStr = `${startYear}-${startMonth}`;
     const endMonthStr = `${endYear}-${endMonth}`;
+    const currentRange = `${startMonthStr}_${endMonthStr}`;
 
-    if (startMonthStr > endMonthStr) {
-      setError(
-        t('startMonthAfterEndMonth') || 'Start month cannot be after end month.'
-      );
+    const isFirstRun = prevSelectedFamilyIdsRef.current === null;
+    const tokenChanged = prevTokenRef.current !== token;
+    const rangeChanged = prevRangeRef.current !== currentRange;
+    const prevSelected = prevSelectedFamilyIdsRef.current || [];
+    const hasAddedFamilies = selectedFamilyIds.some((id) => !prevSelected.includes(id));
+
+    prevSelectedFamilyIdsRef.current = selectedFamilyIds;
+    prevRangeRef.current = currentRange;
+    prevTokenRef.current = token;
+
+    if (!isFirstRun && !tokenChanged && !rangeChanged && !hasAddedFamilies && resultsRef.current !== null) {
       return;
     }
 
-    setLoading(true);
-    setError(null);
-    setResults(null);
+    const controller = new AbortController();
+    const requestId = ++activeRequestIdRef.current;
+    let isSubscribed = true;
 
-    try {
-      const response = await fetch('/api/fees/calculate', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          start_month: startMonthStr,
-          end_month: endMonthStr,
-          family_ids: selectedFamilyIds,
-        }),
+    queueMicrotask(() => {
+      if (isSubscribed && requestId === activeRequestIdRef.current) {
+        setLoading(true);
+        setApiError(null);
+      }
+    });
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    };
+
+    fetch('/api/fees/calculate', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        start_month: startMonthStr,
+        end_month: endMonthStr,
+        family_ids: selectedFamilyIds,
+      }),
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error('Failed to calculate childcare fees');
+        }
+        const data: CalculationResponse = await response.json();
+        if (isSubscribed && requestId === activeRequestIdRef.current) {
+          setResults(data);
+        }
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.name === 'AbortError') {
+          return;
+        }
+        if (isSubscribed && requestId === activeRequestIdRef.current) {
+          const message =
+            err instanceof Error ? err.message : 'An error occurred during calculation.';
+          setApiError(message);
+        }
+      })
+      .finally(() => {
+        if (isSubscribed && requestId === activeRequestIdRef.current) {
+          setLoading(false);
+        }
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to calculate childcare fees');
-      }
+    return () => {
+      isSubscribed = false;
+      controller.abort();
+    };
+  }, [token, validationError, startYear, startMonth, endYear, endMonth, selectedFamilyIds]);
 
-      const data: CalculationResponse = await response.json();
-      setResults(data);
-    } catch (err: any) {
-      setError(err.message || 'An error occurred during calculation.');
-    } finally {
-      setLoading(false);
+  const monthsColumns = useMemo(() => {
+    if (!results) return [];
+    if (results.family_fees && results.family_fees.length > 0) {
+      return results.family_fees[0]?.monthly_fees?.map((mf) => mf.month) || [];
     }
-  };
-
-  // Get months list for rendering table columns
-  const getMonthsRange = () => {
     const list: string[] = [];
     let currYear = startYear;
     let currMonth = parseInt(startMonth, 10);
-
     const endY = endYear;
     const endM = parseInt(endMonth, 10);
 
@@ -324,9 +387,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
       }
     }
     return list;
-  };
-
-  const monthsColumns = results ? getMonthsRange() : [];
+  }, [results, startYear, startMonth, endYear, endMonth]);
 
   // Helper to format year-month (e.g. 2026-01 -> Jan 2026 or Jan 26)
   const formatMonth = (ym: string) => {
@@ -349,28 +410,35 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
       <div
         className="glass-card"
         style={{
-          background: 'white',
+          background: 'var(--bg-surface)',
           border: '1px solid var(--border)',
           borderRadius: '8px',
           padding: '1.25rem',
           boxShadow: 'var(--shadow)',
         }}
       >
-        <h3 style={{ margin: '0 0 1rem 0', color: 'var(--text-h)', fontSize: '1.1rem' }}>
-          {t('childcareFees') || 'Childcare Fees'}
-        </h3>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+          <h3 style={{ margin: 0, color: 'var(--text-h)', fontSize: '1.1rem' }}>
+            {t('childcareFees') || 'Childcare Fees'}
+          </h3>
+          {loading && (
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+              {t('calculating') || 'Calculating...'}
+            </span>
+          )}
+        </div>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', marginBottom: '1.25rem' }}>
           {/* Start Month */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#475569' }}>
+            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
               {t('startMonth') || 'Start Month'}
             </label>
             <div style={{ display: 'flex', gap: '0.25rem' }}>
               <select
                 value={startMonth}
                 onChange={(e) => setStartMonth(e.target.value)}
-                style={{ padding: '0.35rem', border: '1px solid var(--border)', borderRadius: '4px' }}
+                style={{ padding: '0.35rem', border: '1px solid var(--input-border)', borderRadius: '4px', background: 'var(--input-bg)', color: 'var(--input-text)' }}
               >
                 {Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0')).map((m) => (
                   <option key={m} value={m}>
@@ -381,7 +449,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
               <select
                 value={startYear}
                 onChange={(e) => setStartYear(parseInt(e.target.value, 10))}
-                style={{ padding: '0.35rem', border: '1px solid var(--border)', borderRadius: '4px' }}
+                style={{ padding: '0.35rem', border: '1px solid var(--input-border)', borderRadius: '4px', background: 'var(--input-bg)', color: 'var(--input-text)' }}
               >
                 {selectableYears.map((y) => (
                   <option key={y} value={y}>
@@ -394,14 +462,14 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
 
           {/* End Month */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#475569' }}>
+            <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
               {t('endMonth') || 'End Month'}
             </label>
             <div style={{ display: 'flex', gap: '0.25rem' }}>
               <select
                 value={endMonth}
                 onChange={(e) => setEndMonth(e.target.value)}
-                style={{ padding: '0.35rem', border: '1px solid var(--border)', borderRadius: '4px' }}
+                style={{ padding: '0.35rem', border: '1px solid var(--input-border)', borderRadius: '4px', background: 'var(--input-bg)', color: 'var(--input-text)' }}
               >
                 {Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0')).map((m) => (
                   <option key={m} value={m}>
@@ -412,7 +480,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
               <select
                 value={endYear}
                 onChange={(e) => setEndYear(parseInt(e.target.value, 10))}
-                style={{ padding: '0.35rem', border: '1px solid var(--border)', borderRadius: '4px' }}
+                style={{ padding: '0.35rem', border: '1px solid var(--input-border)', borderRadius: '4px', background: 'var(--input-bg)', color: 'var(--input-text)' }}
               >
                 {selectableYears.map((y) => (
                   <option key={y} value={y}>
@@ -426,7 +494,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
 
         {/* Families Checklist */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.25rem' }}>
-          <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#475569' }}>
+          <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
             {t('selectFamilies') || 'Select Families'}
           </label>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -445,7 +513,8 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
                 fontSize: '0.8rem',
                 fontWeight: 600,
                 border: '1px solid var(--border)',
-                background: '#f8fafc',
+                background: 'var(--bg-subtle)',
+                color: 'var(--text)',
                 borderRadius: '4px',
                 cursor: 'pointer',
               }}
@@ -459,7 +528,8 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
                 fontSize: '0.8rem',
                 fontWeight: 600,
                 border: '1px solid var(--border)',
-                background: '#f8fafc',
+                background: 'var(--bg-subtle)',
+                color: 'var(--text)',
                 borderRadius: '4px',
                 cursor: 'pointer',
               }}
@@ -478,11 +548,11 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
               display: 'flex',
               flexDirection: 'column',
               gap: '0.25rem',
-              background: '#f8fafc',
+              background: 'var(--bg-subtle)',
             }}
           >
             {filteredFamilies.length === 0 ? (
-              <div style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.85rem', padding: '0.5rem' }}>
+              <div style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.85rem', padding: '0.5rem' }}>
                 {t('noFamiliesFound') || 'No families found'}
               </div>
             ) : (
@@ -499,11 +569,11 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
                       padding: '0.25rem 0.5rem',
                       borderRadius: '4px',
                       cursor: 'pointer',
-                      background: isSelected ? '#eff6ff' : 'transparent',
+                      background: isSelected ? 'var(--accent-bg)' : 'transparent',
                       transition: 'background 0.1s',
                     }}
                     onMouseEnter={(e) => {
-                      if (!isSelected) e.currentTarget.style.background = '#f1f5f9';
+                      if (!isSelected) e.currentTarget.style.background = 'var(--bg-hover)';
                     }}
                     onMouseLeave={(e) => {
                       if (!isSelected) e.currentTarget.style.background = 'transparent';
@@ -512,7 +582,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
                     {isSelected ? (
                       <CheckSquare size={16} style={{ color: 'var(--primary)' }} />
                     ) : (
-                      <Square size={16} style={{ color: '#94a3b8' }} />
+                      <Square size={16} style={{ color: 'var(--text-muted)' }} />
                     )}
                     <span style={{ fontSize: '0.875rem', color: 'var(--text-h)', fontWeight: isSelected ? 600 : 500 }}>
                       {getFamilyName(f)}
@@ -522,7 +592,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
               })
             )}
           </div>
-          <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
             {selectedFamilyIds.length} {t('familiesSelected') || 'families selected'}
           </div>
         </div>
@@ -531,46 +601,33 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
           <div
             style={{
               padding: '0.5rem 0.75rem',
-              background: '#fef2f2',
-              border: '1px solid #fee2e2',
-              color: '#ef4444',
+              background: 'var(--danger-bg)',
+              border: '1px solid var(--danger-border)',
+              color: 'var(--danger-text)',
               borderRadius: '4px',
               fontSize: '0.85rem',
-              marginBottom: '1rem',
+              fontWeight: 500,
+              marginTop: '0.75rem',
             }}
           >
             {error}
           </div>
         )}
 
-        <button
-          onClick={handleCalculate}
-          disabled={loading}
-          className="primary-button"
-          style={{
-            padding: '0.5rem 1.25rem',
-            borderRadius: '4px',
-            cursor: loading ? 'default' : 'pointer',
-            fontWeight: '600',
-            border: 'none',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            opacity: loading ? 0.7 : 1,
-          }}
-        >
-          <Calculator size={16} />
-          {loading ? (t('calculating') || 'Calculating...') : (t('calculate') || 'Calculate')}
-        </button>
+        {loading && !results && (
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem', fontStyle: 'italic', marginTop: '0.75rem' }}>
+            {t('calculating') || 'Calculating...'}
+          </div>
+        )}
       </div>
 
-      {results && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      {results && !validationError && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', opacity: loading ? 0.6 : 1, transition: 'opacity 0.2s' }}>
           {/* Family Fees Grid */}
           <div
             className="table-container"
             style={{
-              background: 'white',
+              background: 'var(--bg-surface)',
               border: '1px solid var(--border)',
               borderRadius: '8px',
               padding: '1.25rem',
@@ -584,9 +641,9 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
             <table className="data-table" style={{ width: 'max-content', minWidth: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  <th style={{ border: '1px solid #475569', padding: '0.5rem', whiteSpace: 'nowrap' }}>{t('family')}</th>
+                  <th style={{ border: '1px solid var(--border)', padding: '0.5rem', whiteSpace: 'nowrap' }}>{t('family')}</th>
                   {monthsColumns.map((m) => (
-                    <th key={m} style={{ textAlign: 'right', border: '1px solid #475569', padding: '0.5rem' }}>
+                    <th key={m} style={{ textAlign: 'right', border: '1px solid var(--border)', padding: '0.5rem' }}>
                       {formatMonth(m)}
                     </th>
                   ))}
@@ -595,14 +652,14 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
               <tbody>
                 {sortedFamilyFees.map((res) => (
                   <tr key={res.family_id}>
-                    <td style={{ fontWeight: 600, color: 'var(--text-h)', border: '1px solid #475569', padding: '0.5rem', whiteSpace: 'nowrap' }}>{res.family_name}</td>
+                    <td style={{ fontWeight: 600, color: 'var(--text-h)', border: '1px solid var(--border)', padding: '0.5rem', whiteSpace: 'nowrap' }}>{res.family_name}</td>
                     {monthsColumns.map((m) => {
                       const monthData = (res.monthly_fees || []).find((mf) => mf.month === m);
                       const change = (results.fee_changes || []).find(
                         (chg) => chg.family_id === res.family_id && chg.month === m
                       );
                       return (
-                        <td key={m} style={{ textAlign: 'right', fontWeight: 500, color: 'var(--text)', border: '1px solid #475569', padding: '0.5rem', backgroundColor: change ? '#fef9c3' : 'transparent' }}>
+                        <td key={m} style={{ textAlign: 'right', fontWeight: 500, color: 'var(--text)', border: '1px solid var(--border)', padding: '0.5rem', backgroundColor: change ? 'var(--highlight-bg)' : 'transparent' }}>
                           {monthData ? (
                             <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', width: '100%' }}>
                               {monthData.fee.toFixed(2)}
@@ -622,7 +679,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
           <div
             className="table-container"
             style={{
-              background: 'white',
+              background: 'var(--bg-surface)',
               border: '1px solid var(--border)',
               borderRadius: '8px',
               padding: '1.25rem',
@@ -632,31 +689,31 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
             <h4 style={{ margin: '0 0 1rem 0', color: 'var(--text-h)', fontSize: '1rem', fontWeight: 600 }}>
               {t('feeChanges')}
             </h4>
-            {(!results.fee_changes || results.fee_changes.length === 0) ? (
-              <div style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.85rem', padding: '0.5rem' }}>
+            {sortedFeeChanges.length === 0 ? (
+              <div style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.85rem', padding: '0.5rem' }}>
                 {t('noFeeChanges')}
               </div>
             ) : (
               <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr>
-                    <th style={{ border: '1px solid #475569', padding: '0.5rem', whiteSpace: 'nowrap' }}>{t('family')}</th>
-                    <th style={{ border: '1px solid #475569', padding: '0.5rem', width: '150px' }}>{t('effectiveMonth')}</th>
-                    <th style={{ textAlign: 'right', border: '1px solid #475569', padding: '0.5rem', width: '140px' }}>{t('previousFee')}</th>
-                    <th style={{ textAlign: 'right', border: '1px solid #475569', padding: '0.5rem', width: '120px' }}>{t('newFee')}</th>
-                    <th style={{ border: '1px solid #475569', padding: '0.5rem' }}>{t('reason')}</th>
+                    <th style={{ border: '1px solid var(--border)', padding: '0.5rem', whiteSpace: 'nowrap' }}>{t('family')}</th>
+                    <th style={{ border: '1px solid var(--border)', padding: '0.5rem', width: '150px' }}>{t('effectiveMonth')}</th>
+                    <th style={{ textAlign: 'right', border: '1px solid var(--border)', padding: '0.5rem', width: '140px' }}>{t('previousFee')}</th>
+                    <th style={{ textAlign: 'right', border: '1px solid var(--border)', padding: '0.5rem', width: '120px' }}>{t('newFee')}</th>
+                    <th style={{ border: '1px solid var(--border)', padding: '0.5rem' }}>{t('reason')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {sortedFeeChanges.map((chg, idx) => (
                     <tr key={`${chg.family_id}-${chg.month}-${idx}`}>
-                      <td style={{ fontWeight: 600, color: 'var(--text-h)', border: '1px solid #475569', padding: '0.5rem', whiteSpace: 'nowrap' }}>{chg.family_name}</td>
-                      <td style={{ border: '1px solid #475569', padding: '0.5rem' }}>{formatMonth(chg.month)}</td>
-                      <td style={{ textAlign: 'right', color: '#64748b', border: '1px solid #475569', padding: '0.5rem' }}>{chg.previous_fee.toFixed(2)} EUR</td>
-                      <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--primary)', border: '1px solid #475569', padding: '0.5rem' }}>
+                      <td style={{ fontWeight: 600, color: 'var(--text-h)', border: '1px solid var(--border)', padding: '0.5rem', whiteSpace: 'nowrap' }}>{chg.family_name}</td>
+                      <td style={{ border: '1px solid var(--border)', padding: '0.5rem' }}>{formatMonth(chg.month)}</td>
+                      <td style={{ textAlign: 'right', color: 'var(--text-muted)', border: '1px solid var(--border)', padding: '0.5rem' }}>{chg.previous_fee.toFixed(2)} EUR</td>
+                      <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--primary)', border: '1px solid var(--border)', padding: '0.5rem' }}>
                         {chg.new_fee.toFixed(2)} EUR
                       </td>
-                      <td style={{ color: 'var(--text)', fontSize: '0.85rem', border: '1px solid #475569', padding: '0.5rem' }}>{renderWithLineBreaks(chg.reason) || '-'}</td>
+                      <td style={{ color: 'var(--text)', fontSize: '0.85rem', border: '1px solid var(--border)', padding: '0.5rem' }}>{renderWithLineBreaks(chg.reason) || '-'}</td>
                     </tr>
                   ))}
                 </tbody>

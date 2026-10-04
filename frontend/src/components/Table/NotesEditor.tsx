@@ -155,10 +155,10 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
             zIndex: 1000,
             width: '360px',
             minWidth: '320px',
-            background: 'white',
+            background: 'var(--bg-surface)',
             border: '1px solid var(--border)',
             borderRadius: '8px',
-            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+            boxShadow: 'var(--shadow)',
             padding: '10px',
             display: 'flex',
             flexDirection: 'column',
@@ -168,7 +168,7 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b', display: 'flex', justifyContent: 'space-between' }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
             <span>{t('editNotes') || 'Edit Notes'}</span>
             <span style={{ fontWeight: 'normal', opacity: 0.7 }}>(Ctrl+Enter to save)</span>
           </div>
@@ -185,9 +185,9 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
               minHeight: '130px',
               padding: '8px 10px',
               borderRadius: '4px',
-              border: '1px solid var(--border)',
-              background: 'white',
-              color: 'var(--text-h)',
+              border: '1px solid var(--input-border)',
+              background: 'var(--input-bg)',
+              color: 'var(--input-text)',
               fontSize: '0.875rem',
               fontFamily: 'inherit',
               resize: 'vertical',
@@ -209,13 +209,13 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
                 fontWeight: 600,
                 border: '1px solid var(--border)',
                 borderRadius: '4px',
-                background: 'white',
-                color: '#475569',
+                background: 'var(--bg-surface)',
+                color: 'var(--text-secondary)',
                 cursor: 'pointer',
                 transition: 'all 0.1s',
               }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-subtle)'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-surface)'}
             >
               <X size={12} />
               {t('cancel') || 'Cancel'}
