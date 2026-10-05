@@ -67,17 +67,19 @@ func (f Family) DisplayName() string {
 }
 
 type Parent struct {
-	ID          uuid.UUID               `json:"id"`
-	FamilyID    uuid.UUID               `json:"family_id"`
-	FirstName   string                  `json:"first_name"`
-	LastName    string                  `json:"last_name"`
-	Emails      []string                `json:"emails"`
-	Phones      []string                `json:"phones"`
-	Notes       string                  `json:"notes"`
-	Events      []HygieneBelehrungEvent `json:"events"`
-	Memberships []THMembership          `json:"memberships"`
-	CreatedAt   time.Time               `json:"created_at"`
-	UpdatedAt   time.Time               `json:"updated_at"`
+	ID                         uuid.UUID               `json:"id"`
+	FamilyID                   uuid.UUID               `json:"family_id"`
+	FirstName                  string                  `json:"first_name"`
+	LastName                   string                  `json:"last_name"`
+	Emails                     []string                `json:"emails"`
+	Phones                     []string                `json:"phones"`
+	Notes                      string                  `json:"notes"`
+	VaccinationStatusProtected []byte                  `json:"vaccination_status_protected,omitempty"`
+	VaccinationChecks          []VaccinationCheck      `json:"vaccination_checks,omitempty"`
+	Events                     []HygieneBelehrungEvent `json:"events"`
+	Memberships                []THMembership          `json:"memberships"`
+	CreatedAt                  time.Time               `json:"created_at"`
+	UpdatedAt                  time.Time               `json:"updated_at"`
 }
 
 type HygieneBelehrungEvent struct {

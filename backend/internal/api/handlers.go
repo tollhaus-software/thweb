@@ -74,7 +74,7 @@ func (s *Server) HandleListFamilies(w http.ResponseWriter, r *http.Request) {
 
 	user := auth.GetUser(r.Context())
 	accessToken := auth.GetAccessToken(r.Context())
-	if s.KMSProvider != nil && user != nil && accessToken != "" {
+	if s.KMSProvider != nil && user != nil && accessToken != "" && user.HasPermission("vaccination.status.manage") {
 		reqCtx := crypto.NewRequestCipherContext(s.KMSProvider, user.Email, accessToken)
 		defer reqCtx.Close()
 
@@ -95,6 +95,23 @@ func (s *Server) HandleListFamilies(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 			}
+
+			for pIdx := range families[fIdx].Parents {
+				parent := &families[fIdx].Parents[pIdx]
+				if len(parent.VaccinationStatusProtected) > 0 {
+					plainJSON, err := reqCtx.Decrypt(r.Context(), parent.VaccinationStatusProtected)
+					if err != nil {
+						log.Printf("[WARN] Failed to decrypt vaccination status for parent %s: %v\n", parent.ID, err)
+					} else if len(plainJSON) > 0 {
+						var status models.VaccinationStatusProtected
+						if err := json.Unmarshal(plainJSON, &status); err == nil {
+							parent.VaccinationChecks = status.VaccinationChecks
+						} else {
+							log.Printf("[WARN] Failed to unmarshal decrypted vaccination status for parent %s: %v\n", parent.ID, err)
+						}
+					}
+				}
+			}
 		}
 	}
 
@@ -102,6 +119,9 @@ func (s *Server) HandleListFamilies(w http.ResponseWriter, r *http.Request) {
 		for cIdx := range families[fIdx].Children {
 			// Clear the encrypted ciphertext blob so it is not exposed in the API response
 			families[fIdx].Children[cIdx].VaccinationStatusProtected = nil
+		}
+		for pIdx := range families[fIdx].Parents {
+			families[fIdx].Parents[pIdx].VaccinationStatusProtected = nil
 		}
 	}
 
@@ -189,6 +209,52 @@ func (s *Server) HandleUpdateFamilyParents(w http.ResponseWriter, r *http.Reques
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httpErrorLog(w, r, "Invalid request body JSON", http.StatusBadRequest, err)
 		return
+	}
+
+	hasVaccinationChange := false
+	hasChecksToEncrypt := false
+	for _, p := range req.Parents {
+		if p.VaccinationChecks != nil {
+			hasVaccinationChange = true
+		}
+		if len(p.VaccinationChecks) > 0 {
+			hasChecksToEncrypt = true
+		}
+	}
+
+	if hasVaccinationChange && (user == nil || !user.HasPermission("vaccination.status.manage")) {
+		httpErrorLog(w, r, "Forbidden: vaccination.status.manage permission required", http.StatusForbidden, nil)
+		return
+	}
+
+	if hasChecksToEncrypt && s.KMSProvider != nil && user != nil {
+		accessToken := auth.GetAccessToken(r.Context())
+		if accessToken == "" {
+			httpErrorLog(w, r, "KMS authentication required to save vaccination status", http.StatusUnauthorized, nil)
+			return
+		}
+		reqCtx := crypto.NewRequestCipherContext(s.KMSProvider, user.Email, accessToken)
+		defer reqCtx.Close()
+
+		for i := range req.Parents {
+			p := &req.Parents[i]
+			if len(p.VaccinationChecks) > 0 {
+				statusPayload := models.VaccinationStatusProtected{
+					VaccinationChecks: p.VaccinationChecks,
+				}
+				rawJSON, err := json.Marshal(statusPayload)
+				if err != nil {
+					httpErrorLog(w, r, "Failed to marshal vaccination status JSON", http.StatusBadRequest, err)
+					return
+				}
+				blob, err := reqCtx.Encrypt(r.Context(), rawJSON)
+				if err != nil {
+					httpErrorLog(w, r, "Failed to encrypt vaccination status", http.StatusInternalServerError, err)
+					return
+				}
+				p.VaccinationStatusProtected = blob
+			}
+		}
 	}
 
 	if err := s.Store.UpdateFamilyParents(r.Context(), user.ID, familyID, req.Parents); err != nil {
@@ -313,6 +379,11 @@ func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 		} else {
 			familyID = parsedID
 		}
+	}
+
+	if req.VaccinationChecks != nil && (user == nil || !user.HasPermission("vaccination.status.manage")) {
+		httpErrorLog(w, r, "Forbidden: vaccination.status.manage permission required", http.StatusForbidden, nil)
+		return
 	}
 
 	var encryptedBlob []byte

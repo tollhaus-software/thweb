@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 interface User {
   email: string;
@@ -18,6 +18,7 @@ interface AuthContextType {
   token: string | null;
   login: (token: string) => void;
   logout: () => void;
+  refreshUser: () => Promise<void>;
   loading: boolean;
   hasPermission: (perm: string) => boolean;
 }
@@ -43,35 +44,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     window.location.href = '/oauth2/sign_out';
   };
 
-  useEffect(() => {
+  const refreshUser = useCallback(async () => {
     const headers: Record<string, string> = {};
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    fetch('/api/me', { headers })
-      .then(async (res) => {
-        if (res.ok) {
-          const data = await res.json();
-          setUser(data);
-          setAuthError(null);
-        } else {
-          const errData = await res.json().catch(() => ({}));
-          setUser(null);
-          setAuthError({
-            message: errData.error || 'User not allowed',
-            email: errData.email || undefined,
-          });
-        }
-      })
-      .catch((err) => {
+    try {
+      const res = await fetch('/api/me', { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setUser(data);
+        setAuthError(null);
+      } else {
+        const errData = await res.json().catch(() => ({}));
         setUser(null);
-        setAuthError({ message: err.message || 'Unauthorized' });
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+        setAuthError({
+          message: errData.error || 'User not allowed',
+          email: errData.email || undefined,
+        });
+      }
+    } catch (err: any) {
+      setUser(null);
+      setAuthError({ message: err.message || 'Unauthorized' });
+    } finally {
+      setLoading(false);
+    }
   }, [token]);
+
+  useEffect(() => {
+    refreshUser();
+  }, [refreshUser]);
 
   const hasPermission = (perm: string): boolean => {
     if (!user || !user.effective_permissions) return false;
@@ -79,7 +82,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, authError, token, login, logout, loading, hasPermission }}>
+    <AuthContext.Provider value={{ user, authError, token, login, logout, refreshUser, loading, hasPermission }}>
       {children}
     </AuthContext.Provider>
   );
