@@ -107,6 +107,30 @@ header {
   background: var(--bg-hover);
 }
 
+/* Sticky first column (given name in data tables, family name in childcare fees) */
+.data-table .sticky-col {
+  position: sticky;
+  left: 0;
+  border-right: none !important;
+  box-shadow: inset -1px 0 0 0 var(--separator-border), 2px 0 4px var(--shadow-sticky);
+  box-sizing: border-box;
+}
+
+.data-table th.sticky-col {
+  top: 0;
+  z-index: 20;
+  background-color: var(--bg-subtle) !important;
+}
+
+.data-table td.sticky-col {
+  z-index: 2;
+  background-color: var(--bg-surface) !important;
+}
+
+.data-table tr:hover td.sticky-col {
+  background-color: var(--bg-hover) !important;
+}
+
 /* Full-height layout when parents, children, or hygienebelehrung table is displayed */
 .dashboard-container.table-view-active {
   height: 100vh;
@@ -284,6 +308,28 @@ tr.family-group-row td {
   font-size: 0.85rem;
   border-bottom: 2px solid var(--border);
   padding: 0.3rem 0.6rem;
+}
+
+.family-add-button {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  width: 22px;
+  min-width: 22px;
+  padding: 0;
+  transition: all 0.15s ease;
+}
+
+.family-add-button:hover {
+  background: var(--bg-hover);
+  color: var(--text-h);
+  border-color: var(--border-strong);
 }
 
 /* Modal overlay styling */
