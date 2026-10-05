@@ -71,3 +71,66 @@ func TestRequirePermission_VaccinationStatusManage(t *testing.T) {
 		})
 	}
 }
+
+func TestRequirePermission_AuditAllRead(t *testing.T) {
+	middleware := RequirePermission("audit.all.read")
+	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	})
+
+	handler := middleware(nextHandler)
+
+	tests := []struct {
+		name       string
+		user       *models.UserWithPermissions
+		wantStatus int
+	}{
+		{
+			name: "allowed with explicit audit.all.read permission",
+			user: &models.UserWithPermissions{
+				Email:                "auditor@example.com",
+				EffectivePermissions: []string{"audit.all.read"},
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name: "allowed with admin wildcard",
+			user: &models.UserWithPermissions{
+				Email:                "admin@example.com",
+				EffectivePermissions: []string{"*"},
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name: "forbidden without audit.all.read permission",
+			user: &models.UserWithPermissions{
+				Email:                "developer@example.com",
+				EffectivePermissions: []string{"families.all.read", "children.all.write"},
+			},
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "forbidden without user context",
+			user:       nil,
+			wantStatus: http.StatusForbidden,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/api/audit-logs", nil)
+			if tt.user != nil {
+				ctx := context.WithValue(req.Context(), UserContextKey, tt.user)
+				req = req.WithContext(ctx)
+			}
+			rec := httptest.NewRecorder()
+
+			handler.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Errorf("RequirePermission status = %d, want %d", rec.Code, tt.wantStatus)
+			}
+		})
+	}
+}

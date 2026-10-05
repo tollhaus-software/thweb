@@ -852,13 +852,35 @@ const Dashboard: React.FC = () => {
     return h;
   }, [token, kmsAccessToken]);
 
+  const canReadAudit = hasPermission('audit.all.read');
+  const canManageUsers = hasPermission('users.all.manage') || hasPermission('*');
+
   const [families, setFamilies] = React.useState<Family[]>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [activeTab, setActiveTab] = React.useState<'parents' | 'children' | 'childcareFees' | 'hygieneBelehrung' | 'audit' | 'admin'>(() => {
     const hash = window.location.hash.replace('#', '');
-    if (hash === 'parents' || hash === 'children' || hash === 'childcareFees' || hash === 'hygieneBelehrung' || hash === 'audit' || hash === 'admin') return hash;
+    if (
+      hash === 'parents' ||
+      hash === 'children' ||
+      hash === 'childcareFees' ||
+      hash === 'hygieneBelehrung' ||
+      (hash === 'audit' && canReadAudit) ||
+      (hash === 'admin' && canManageUsers)
+    ) {
+      return hash;
+    }
     const saved = localStorage.getItem('thweb_active_tab');
-    return (saved === 'parents' || saved === 'children' || saved === 'childcareFees' || saved === 'hygieneBelehrung' || saved === 'audit' || saved === 'admin') ? saved : 'parents';
+    if (
+      saved === 'parents' ||
+      saved === 'children' ||
+      saved === 'childcareFees' ||
+      saved === 'hygieneBelehrung' ||
+      (saved === 'audit' && canReadAudit) ||
+      (saved === 'admin' && canManageUsers)
+    ) {
+      return saved;
+    }
+    return 'parents';
   });
 
   // Audit states
@@ -1189,16 +1211,33 @@ const Dashboard: React.FC = () => {
 
   React.useEffect(() => {
     if (activeTab === 'audit') {
-      fetchAuditLogs();
+      if (canReadAudit) {
+        fetchAuditLogs();
+      } else {
+        setActiveTab('parents');
+        localStorage.setItem('thweb_active_tab', 'parents');
+        window.location.hash = 'parents';
+      }
     }
-  }, [activeTab, fetchAuditLogs]);
+  }, [activeTab, fetchAuditLogs, canReadAudit]);
 
   React.useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#', '');
-      if (hash === 'parents' || hash === 'children' || hash === 'childcareFees' || hash === 'hygieneBelehrung' || hash === 'audit' || hash === 'admin') {
+      if (
+        hash === 'parents' ||
+        hash === 'children' ||
+        hash === 'childcareFees' ||
+        hash === 'hygieneBelehrung' ||
+        (hash === 'audit' && canReadAudit) ||
+        (hash === 'admin' && canManageUsers)
+      ) {
         setActiveTab(hash as any);
         localStorage.setItem('thweb_active_tab', hash);
+      } else if (hash === 'audit' || hash === 'admin') {
+        setActiveTab('parents');
+        localStorage.setItem('thweb_active_tab', 'parents');
+        window.location.hash = 'parents';
       }
     };
     window.addEventListener('hashchange', handleHashChange);
@@ -1206,7 +1245,7 @@ const Dashboard: React.FC = () => {
       window.location.hash = activeTab;
     }
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [activeTab]);
+  }, [activeTab, canReadAudit, canManageUsers]);
 
   useRealtime(React.useCallback((message: any) => {
     if (
@@ -2433,22 +2472,24 @@ const Dashboard: React.FC = () => {
           >
             {t('hygieneBelehrung')}
           </button>
-          <button 
-            onClick={() => { window.location.hash = 'audit'; setGlobalFilter(''); }}
-            style={{
-              padding: '0.75rem 1rem',
-              background: 'none',
-              border: 'none',
-              borderBottom: activeTab === 'audit' ? '3px solid var(--primary)' : '3px solid transparent',
-              color: activeTab === 'audit' ? 'var(--primary)' : 'var(--text)',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              fontSize: '1rem',
-              transition: 'all 0.2s'
-            }}
-          >
-            {t('audit')}
-          </button>
+          {canReadAudit && (
+            <button 
+              onClick={() => { window.location.hash = 'audit'; setGlobalFilter(''); }}
+              style={{
+                padding: '0.75rem 1rem',
+                background: 'none',
+                border: 'none',
+                borderBottom: activeTab === 'audit' ? '3px solid var(--primary)' : '3px solid transparent',
+                color: activeTab === 'audit' ? 'var(--primary)' : 'var(--text)',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                fontSize: '1rem',
+                transition: 'all 0.2s'
+              }}
+            >
+              {t('audit')}
+            </button>
+          )}
           {(hasPermission('users.all.manage') || hasPermission('*')) && (
             <button 
               onClick={() => { window.location.hash = 'admin'; setGlobalFilter(''); }}
@@ -2613,9 +2654,9 @@ const Dashboard: React.FC = () => {
             columns={hygieneColumns}
             getSubRows={(row: any) => row.parents}
           />
-        ) : activeTab === 'audit' ? (
+        ) : activeTab === 'audit' && canReadAudit ? (
           <AuditLogView logs={auditLogs} loading={auditLoading} />
-        ) : activeTab === 'admin' ? (
+        ) : activeTab === 'admin' && canManageUsers ? (
           <AdminView />
         ) : (
           <ChildcareFeesCalculator

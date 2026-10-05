@@ -129,6 +129,13 @@ func (s *Server) HandleListFamilies(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) HandleListAuditLogs(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	if user == nil || !user.HasPermission("audit.all.read") {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Forbidden"})
+		return
+	}
 	logs, err := s.Store.ListAuditLogs(r.Context())
 	if err != nil {
 		httpErrorLog(w, r, "Failed to list audit logs", http.StatusInternalServerError, err)
