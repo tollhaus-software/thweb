@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Pencil, Check, X } from 'lucide-react';
 import { t } from '../../utils/i18n';
 
@@ -16,24 +17,143 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [tempValue, setTempValue] = useState(value);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const tempValueRef = useRef(tempValue);
+  const [positionStyle, setPositionStyle] = useState<React.CSSProperties>({});
 
-  // Keep tempValue in sync with prop updates
-  useEffect(() => {
+  const [prevValue, setPrevValue] = useState(value);
+  if (value !== prevValue) {
+    setPrevValue(value);
     setTempValue(value);
+  }
+
+  useEffect(() => {
+    tempValueRef.current = tempValue;
+  }, [tempValue]);
+
+  const handleSave = useCallback(() => {
+    onSave(tempValueRef.current);
+    setIsEditing(false);
+  }, [onSave]);
+
+  const handleCancel = useCallback(() => {
+    setTempValue(value);
+    tempValueRef.current = value;
+    setIsEditing(false);
   }, [value]);
+
+  const getPositionStyle = useCallback((): React.CSSProperties | null => {
+    if (!triggerRef.current) return null;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const POPUP_WIDTH = 360;
+    const PADDING = 8;
+    const GAP = 4;
+
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    const width = Math.min(POPUP_WIDTH, viewportWidth - 2 * PADDING);
+    let left = rect.left;
+    if (left + width > viewportWidth - PADDING) {
+      left = viewportWidth - width - PADDING;
+    }
+    if (left < PADDING) {
+      left = PADDING;
+    }
+
+    const popupHeight = popupRef.current?.offsetHeight || 240;
+    const spaceBelow = viewportHeight - rect.bottom - GAP - PADDING;
+    const spaceAbove = rect.top - GAP - PADDING;
+
+    const openBelow = spaceBelow >= popupHeight || spaceBelow >= spaceAbove;
+    const maxHeight = Math.max(160, openBelow ? spaceBelow : spaceAbove);
+
+    return {
+      position: 'fixed',
+      left: `${left}px`,
+      width: `${width}px`,
+      zIndex: 9999,
+      maxHeight: `${maxHeight}px`,
+      ...(openBelow
+        ? { top: `${rect.bottom + GAP}px`, bottom: 'auto' }
+        : { bottom: `${viewportHeight - rect.top + GAP}px`, top: 'auto' }),
+    };
+  }, []);
+
+  const startEditing = () => {
+    const initialStyle = getPositionStyle();
+    if (initialStyle) {
+      setPositionStyle(initialStyle);
+    }
+    setIsEditing(true);
+  };
+
+  // Position updates on scroll / resize
+  useLayoutEffect(() => {
+    if (!isEditing) return;
+
+    const updatePosition = () => {
+      if (!triggerRef.current) return;
+      const rect = triggerRef.current.getBoundingClientRect();
+      // If cell has scrolled completely out of view, save and close
+      if (
+        rect.bottom < 0 ||
+        rect.top > window.innerHeight ||
+        rect.right < 0 ||
+        rect.left > window.innerWidth
+      ) {
+        if (tempValueRef.current !== value) {
+          handleSave();
+        } else {
+          setIsEditing(false);
+        }
+        return;
+      }
+      const style = getPositionStyle();
+      if (style) {
+        setPositionStyle(style);
+      }
+    };
+
+    updatePosition();
+
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
+
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [isEditing, getPositionStyle, handleSave, value]);
+
+  // Focus textarea when editing begins
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      textareaRef.current.focus();
+      const length = textareaRef.current.value.length;
+      textareaRef.current.setSelectionRange(length, length);
+    }
+  }, [isEditing]);
 
   // Handle click outside to save/close
   useEffect(() => {
     if (!isEditing) return;
 
     const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
       if (
         popupRef.current &&
-        !popupRef.current.contains(event.target as Node)
+        !popupRef.current.contains(target) &&
+        triggerRef.current &&
+        !triggerRef.current.contains(target)
       ) {
-        handleSave();
+        if (tempValueRef.current !== value) {
+          handleSave();
+        } else {
+          setIsEditing(false);
+        }
       }
     };
 
@@ -41,17 +161,7 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isEditing, tempValue]);
-
-  const handleSave = () => {
-    onSave(tempValue);
-    setIsEditing(false);
-  };
-
-  const handleCancel = () => {
-    setTempValue(value);
-    setIsEditing(false);
-  };
+  }, [isEditing, handleSave, value]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
@@ -78,175 +188,202 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
 
   return (
     <div
+      ref={triggerRef}
       style={{ position: 'relative', width: '100%', display: 'inline-block' }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {!isEditing ? (
-        <div
-          onDoubleClick={() => setIsEditing(true)}
+      <div
+        onClick={() => {
+          if (!isEditing) {
+            startEditing();
+          }
+        }}
+        onDoubleClick={() => {
+          if (!isEditing) {
+            startEditing();
+          }
+        }}
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          width: '100%',
+          gap: '0.25rem',
+          cursor: 'pointer',
+          minHeight: '28px',
+          borderRadius: '4px',
+          backgroundColor: isEditing ? 'var(--accent-bg)' : 'transparent',
+        }}
+      >
+        <span
           style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            width: '100%',
-            gap: '0.25rem',
-            cursor: 'pointer',
-            minHeight: '28px',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            color: value ? 'var(--text-h)' : '#94a3b8',
+            fontStyle: value ? 'normal' : 'italic',
+            fontSize: '0.875rem',
+            flex: 1,
           }}
         >
-          <span
-            style={{
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              color: value ? 'var(--text-h)' : '#94a3b8',
-              fontStyle: value ? 'normal' : 'italic',
-              fontSize: '0.875rem',
-              flex: 1,
+          {preview || placeholder}
+        </span>
+        <div
+          style={{
+            opacity: hovered || isEditing ? 1 : 0,
+            transition: 'opacity 0.15s ease-in-out',
+            display: 'flex',
+            alignItems: 'center',
+          }}
+        >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isEditing) {
+                handleSave();
+              } else {
+                startEditing();
+              }
             }}
-          >
-            {preview || placeholder}
-          </span>
-          <div
             style={{
-              opacity: hovered ? 1 : 0,
-              transition: 'opacity 0.15s ease-in-out',
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--primary)',
+              cursor: 'pointer',
+              padding: '2px',
+              borderRadius: '4px',
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'center',
+              width: '24px',
+              height: '24px',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--accent-bg)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
             }}
           >
-            <button
-              type="button"
-              onClick={() => setIsEditing(true)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: 'var(--primary)',
-                cursor: 'pointer',
-                padding: '2px',
-                borderRadius: '4px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '24px',
-                height: '24px',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'var(--accent-bg)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'transparent';
-              }}
-            >
-              <Pencil size={12} />
-            </button>
-          </div>
+            <Pencil size={12} />
+          </button>
         </div>
-      ) : (
-        <div
-          ref={popupRef}
-          className="glass-popup"
-          style={{
-            position: 'absolute',
-            bottom: '100%',
-            left: '0',
-            marginBottom: '6px',
-            zIndex: 1000,
-            width: '360px',
-            minWidth: '320px',
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border)',
-            borderRadius: '8px',
-            boxShadow: 'var(--shadow)',
-            padding: '10px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
-            boxSizing: 'border-box',
-            animation: 'fadeIn 0.15s ease-out',
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
-            <span>{t('editNotes') || 'Edit Notes'}</span>
-            <span style={{ fontWeight: 'normal', opacity: 0.7 }}>(Ctrl+Enter to save)</span>
-          </div>
-          <textarea
-            ref={textareaRef}
-            value={tempValue}
-            onChange={(e) => setTempValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            rows={6}
-            autoFocus
-            placeholder="Write some notes here..."
+      </div>
+
+      {isEditing &&
+        createPortal(
+          <div
+            ref={popupRef}
+            className="glass-popup"
             style={{
-              width: '100%',
-              minHeight: '130px',
-              padding: '8px 10px',
-              borderRadius: '4px',
-              border: '1px solid var(--input-border)',
-              background: 'var(--input-bg)',
-              color: 'var(--input-text)',
-              fontSize: '0.875rem',
-              fontFamily: 'inherit',
-              resize: 'vertical',
-              outline: 'none',
+              ...positionStyle,
+              minWidth: '300px',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '8px',
+              boxShadow: 'var(--shadow)',
+              padding: '10px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
               boxSizing: 'border-box',
+              animation: 'fadeIn 0.15s ease-out',
+              overflowY: 'auto',
             }}
-          />
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
-            <button
-              type="button"
-              onClick={handleCancel}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
               style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '4px',
-                padding: '4px 8px',
-                fontSize: '0.8rem',
+                fontSize: '0.75rem',
                 fontWeight: 600,
-                border: '1px solid var(--border)',
-                borderRadius: '4px',
-                background: 'var(--bg-surface)',
-                color: 'var(--text-secondary)',
-                cursor: 'pointer',
-                transition: 'all 0.1s',
+                color: 'var(--text-muted)',
+                display: 'flex',
+                justifyContent: 'space-between',
               }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-subtle)'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-surface)'}
             >
-              <X size={12} />
-              {t('cancel') || 'Cancel'}
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
+              <span>{t('editNotes') || 'Edit Notes'}</span>
+              <span style={{ fontWeight: 'normal', opacity: 0.7 }}>(Ctrl+Enter to save)</span>
+            </div>
+            <textarea
+              ref={textareaRef}
+              value={tempValue}
+              onChange={(e) => {
+                setTempValue(e.target.value);
+                tempValueRef.current = e.target.value;
+              }}
+              onKeyDown={handleKeyDown}
+              rows={6}
+              placeholder="Write some notes here..."
               style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '4px',
-                padding: '4px 10px',
-                fontSize: '0.8rem',
-                fontWeight: 600,
-                border: 'none',
+                width: '100%',
+                minHeight: '130px',
+                padding: '8px 10px',
                 borderRadius: '4px',
-                background: 'var(--primary)',
-                color: 'white',
-                cursor: 'pointer',
-                transition: 'all 0.1s',
+                border: '1px solid var(--input-border)',
+                background: 'var(--input-bg)',
+                color: 'var(--input-text)',
+                fontSize: '0.875rem',
+                fontFamily: 'inherit',
+                resize: 'vertical',
+                outline: 'none',
+                boxSizing: 'border-box',
               }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1d4ed8'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--primary)'}
-            >
-              <Check size={12} />
-              {t('save') || 'Save'}
-            </button>
-          </div>
-        </div>
-      )}
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
+              <button
+                type="button"
+                onClick={handleCancel}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '4px',
+                  padding: '4px 8px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  border: '1px solid var(--border)',
+                  borderRadius: '4px',
+                  background: 'var(--bg-surface)',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  transition: 'all 0.1s',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-subtle)')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-surface)')}
+              >
+                <X size={12} />
+                {t('cancel') || 'Cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '4px',
+                  padding: '4px 10px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  border: 'none',
+                  borderRadius: '4px',
+                  background: 'var(--primary)',
+                  color: 'white',
+                  cursor: 'pointer',
+                  transition: 'all 0.1s',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#1d4ed8')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'var(--primary)')}
+              >
+                <Check size={12} />
+                {t('save') || 'Save'}
+              </button>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 };
