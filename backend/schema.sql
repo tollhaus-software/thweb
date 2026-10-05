@@ -58,6 +58,9 @@ CREATE TABLE IF NOT EXISTS parents (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Incremental column migrations for parents
+ALTER TABLE parents ADD COLUMN IF NOT EXISTS vaccination_status_protected BYTEA;
+
 -- Children table
 CREATE TABLE IF NOT EXISTS children (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -159,7 +162,8 @@ INSERT INTO roles (id, name, description, permissions) VALUES
     ('admin', 'Administrator', 'Full system access', '["*"]'),
     ('viewer', 'Viewer', 'Read-only access', '["families.all.read", "fees.self.read", "audit.all.read"]'),
     ('treasurer', 'Treasurer', 'Fee calculation and membership management', '["families.all.read", "fees.all.read", "memberships.all.write"]'),
-    ('caregiver', 'Caregiver', 'Child and hygiene tracking', '["families.all.read", "children.all.write", "hygiene.all.write"]')
+    ('caregiver', 'Caregiver', 'Child and hygiene tracking', '["families.all.read", "children.all.write", "hygiene.all.write"]'),
+    ('mga', 'MGA', 'Masernschutzgesetz (Vaccination status management)', '["families.all.read", "families.all.write", "children.all.write", "vaccination.status.manage"]')
 ON CONFLICT (id) DO NOTHING;
 
 

@@ -69,8 +69,8 @@ func (s *Store) CreateFamilyWithParents(ctx context.Context, userID uuid.UUID, p
 			p.Phones = sanitizeSlice(p.Phones)
 
 			_, err = tx.Exec(ctx,
-				"INSERT INTO parents (id, family_id, first_name, last_name, emails, phones, notes) VALUES ($1, $2, $3, $4, $5, $6, $7)",
-				p.ID, p.FamilyID, p.FirstName, p.LastName, p.Emails, p.Phones, p.Notes)
+				"INSERT INTO parents (id, family_id, first_name, last_name, emails, phones, notes, vaccination_status_protected) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+				p.ID, p.FamilyID, p.FirstName, p.LastName, p.Emails, p.Phones, p.Notes, p.VaccinationStatusProtected)
 			if err != nil {
 				return err
 			}
@@ -128,6 +128,7 @@ func (s *Store) ListFamilies(ctx context.Context) ([]models.Family, error) {
 					   'emails', p.emails,
 					   'phones', p.phones,
 					   'notes', p.notes,
+					   'vaccination_status_protected', encode(p.vaccination_status_protected, 'base64'),
 					   'events', COALESCE((
 						   SELECT json_agg(json_build_object(
 							   'id', e.id,
@@ -229,14 +230,18 @@ func (s *Store) UpdateFamilyParents(ctx context.Context, userID uuid.UUID, famil
 			p.Emails = sanitizeSlice(p.Emails)
 			p.Phones = sanitizeSlice(p.Phones)
 			var oldParent models.Parent
-			err := tx.QueryRow(ctx, "SELECT id, family_id, first_name, last_name, emails, phones, notes FROM parents WHERE id = $1 AND family_id = $2", p.ID, familyID).Scan(
-				&oldParent.ID, &oldParent.FamilyID, &oldParent.FirstName, &oldParent.LastName, &oldParent.Emails, &oldParent.Phones, &oldParent.Notes,
+			err := tx.QueryRow(ctx, "SELECT id, family_id, first_name, last_name, emails, phones, notes, vaccination_status_protected FROM parents WHERE id = $1 AND family_id = $2", p.ID, familyID).Scan(
+				&oldParent.ID, &oldParent.FamilyID, &oldParent.FirstName, &oldParent.LastName, &oldParent.Emails, &oldParent.Phones, &oldParent.Notes, &oldParent.VaccinationStatusProtected,
 			)
 			isNew := (err == pgx.ErrNoRows)
 
+			if p.VaccinationStatusProtected == nil && p.VaccinationChecks == nil && len(oldParent.VaccinationStatusProtected) > 0 {
+				p.VaccinationStatusProtected = oldParent.VaccinationStatusProtected
+			}
+
 			res, err := tx.Exec(ctx,
-				"UPDATE parents SET first_name = $1, last_name = $2, emails = $3, phones = $4, notes = $5, updated_at = NOW() WHERE id = $6 AND family_id = $7",
-				p.FirstName, p.LastName, p.Emails, p.Phones, p.Notes, p.ID, familyID)
+				"UPDATE parents SET first_name = $1, last_name = $2, emails = $3, phones = $4, notes = $5, vaccination_status_protected = $6, updated_at = NOW() WHERE id = $7 AND family_id = $8",
+				p.FirstName, p.LastName, p.Emails, p.Phones, p.Notes, p.VaccinationStatusProtected, p.ID, familyID)
 			if err != nil {
 				return err
 			}
@@ -247,8 +252,8 @@ func (s *Store) UpdateFamilyParents(ctx context.Context, userID uuid.UUID, famil
 				}
 				p.FamilyID = familyID
 				_, err = tx.Exec(ctx,
-					"INSERT INTO parents (id, family_id, first_name, last_name, emails, phones, notes) VALUES ($1, $2, $3, $4, $5, $6, $7)",
-					p.ID, p.FamilyID, p.FirstName, p.LastName, p.Emails, p.Phones, p.Notes)
+					"INSERT INTO parents (id, family_id, first_name, last_name, emails, phones, notes, vaccination_status_protected) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+					p.ID, p.FamilyID, p.FirstName, p.LastName, p.Emails, p.Phones, p.Notes, p.VaccinationStatusProtected)
 				if err != nil {
 					return err
 				}
@@ -373,8 +378,8 @@ func (s *Store) DeleteParent(ctx context.Context, userID uuid.UUID, parentID uui
 	transactionID := uuid.New()
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
 		var oldParent models.Parent
-		err := tx.QueryRow(ctx, "SELECT id, family_id, first_name, last_name, emails, phones, notes FROM parents WHERE id = $1", parentID).Scan(
-			&oldParent.ID, &oldParent.FamilyID, &oldParent.FirstName, &oldParent.LastName, &oldParent.Emails, &oldParent.Phones, &oldParent.Notes,
+		err := tx.QueryRow(ctx, "SELECT id, family_id, first_name, last_name, emails, phones, notes, vaccination_status_protected FROM parents WHERE id = $1", parentID).Scan(
+			&oldParent.ID, &oldParent.FamilyID, &oldParent.FirstName, &oldParent.LastName, &oldParent.Emails, &oldParent.Phones, &oldParent.Notes, &oldParent.VaccinationStatusProtected,
 		)
 		if err != nil {
 			return err

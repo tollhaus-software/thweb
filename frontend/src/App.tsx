@@ -45,6 +45,7 @@ interface Parent {
   emails?: string[];
   phones?: string[];
   notes?: string;
+  vaccination_checks?: VaccinationCheck[];
   events?: HygieneBelehrungEvent[];
   memberships?: THMembership[];
   family_name?: string;
@@ -340,11 +341,12 @@ const ALL_AVAILABLE_PERMISSIONS = [
   'hygiene.all.write',
   'memberships.all.write',
   'audit.all.read',
-  'users.all.manage'
+  'users.all.manage',
+  'vaccination.status.manage'
 ];
 
 const AdminView: React.FC = () => {
-  const { token } = useAuth();
+  const { token, refreshUser } = useAuth();
   const [subTab, setSubTab] = React.useState<'users' | 'roles'>('users');
   
   const [users, setUsers] = React.useState<AdminUser[]>([]);
@@ -414,6 +416,7 @@ const AdminView: React.FC = () => {
       if (res.ok) {
         setUserModalOpen(false);
         refreshData();
+        await refreshUser();
       } else {
         alert('Failed to update user');
       }
@@ -426,6 +429,7 @@ const AdminView: React.FC = () => {
       if (res.ok) {
         setUserModalOpen(false);
         refreshData();
+        await refreshUser();
       } else {
         alert('Failed to create user');
       }
@@ -438,7 +442,10 @@ const AdminView: React.FC = () => {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` }
     });
-    if (res.ok) refreshData();
+    if (res.ok) {
+      refreshData();
+      await refreshUser();
+    }
   };
 
   const openAddUserModal = () => {
@@ -471,6 +478,7 @@ const AdminView: React.FC = () => {
       if (res.ok) {
         setRoleModalOpen(false);
         refreshData();
+        await refreshUser();
       } else {
         alert('Failed to update role');
       }
@@ -483,6 +491,7 @@ const AdminView: React.FC = () => {
       if (res.ok) {
         setRoleModalOpen(false);
         refreshData();
+        await refreshUser();
       } else {
         alert('Failed to create role');
       }
@@ -495,7 +504,10 @@ const AdminView: React.FC = () => {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` }
     });
-    if (res.ok) refreshData();
+    if (res.ok) {
+      refreshData();
+      await refreshUser();
+    }
   };
 
   const openAddRoleModal = () => {
@@ -935,10 +947,7 @@ const Dashboard: React.FC = () => {
         const targetParents = isUndo ? payload.beforeParents : payload.afterParents;
         const res = await fetch(`/api/families/${payload.familyId}`, {
           method: 'PUT',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ parents: targetParents }),
         });
         if (!res.ok) throw new Error();
@@ -947,10 +956,7 @@ const Dashboard: React.FC = () => {
         if (isUndo) {
           const res = await fetch(`/api/families/${payload.familyId}`, {
             method: 'PUT',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
+            headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ parents: payload.beforeParents }),
           });
           if (!res.ok) throw new Error();
@@ -1550,10 +1556,7 @@ const Dashboard: React.FC = () => {
 
     fetch(`/api/families/${family.id}`, {
       method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ parents: updatedParents }),
     })
       .then((res) => {
@@ -1970,6 +1973,26 @@ const Dashboard: React.FC = () => {
           );
         }
       },
+      ...(hasPermission('vaccination.status.manage') ? [
+        {
+          id: 'vaccination_status',
+          header: t('vaccinationStatus'),
+          accessorKey: 'vaccination_checks',
+          size: 180,
+          cell: (info: any) => {
+            const parent = info.row.original;
+            return (
+              <VaccinationStatusEditor
+                checks={parent.vaccination_checks}
+                currentUserEmail={user?.email || ''}
+                onSave={(newChecks) => handleSaveParentField(parent, 'vaccination_checks', newChecks)}
+                isUnlocked={isVaccinationUnlocked}
+                onUnlock={handleRequestKmsAuth}
+              />
+            );
+          }
+        }
+      ] : []),
       {
         id: 'actions',
         header: '',
@@ -2014,7 +2037,7 @@ const Dashboard: React.FC = () => {
         }
       }
     ],
-    [families, handleSaveParentField, handleDeleteParent]
+    [families, handleSaveParentField, handleDeleteParent, isVaccinationUnlocked, handleRequestKmsAuth, hasPermission, user?.email]
   );
 
   const childColumns = React.useMemo<ColumnDef<any>[]>(
@@ -2265,24 +2288,26 @@ const Dashboard: React.FC = () => {
           );
         }
       },
-      {
-        id: 'vaccination_status',
-        header: 'Impfstatus',
-        accessorKey: 'vaccination_checks',
-        size: 180,
-        cell: (info) => {
-          const child = info.row.original;
-          return (
-            <VaccinationStatusEditor
-              checks={child.vaccination_checks}
-              currentUserEmail={user?.email || ''}
-              onSave={(newChecks) => handleSaveChildField(child, 'vaccination_checks', newChecks)}
-              isUnlocked={isVaccinationUnlocked}
-              onUnlock={handleRequestKmsAuth}
-            />
-          );
+      ...(hasPermission('vaccination.status.manage') ? [
+        {
+          id: 'vaccination_status',
+          header: t('vaccinationStatus'),
+          accessorKey: 'vaccination_checks',
+          size: 180,
+          cell: (info: any) => {
+            const child = info.row.original;
+            return (
+              <VaccinationStatusEditor
+                checks={child.vaccination_checks}
+                currentUserEmail={user?.email || ''}
+                onSave={(newChecks) => handleSaveChildField(child, 'vaccination_checks', newChecks)}
+                isUnlocked={isVaccinationUnlocked}
+                onUnlock={handleRequestKmsAuth}
+              />
+            );
+          }
         }
-      },
+      ] : []),
       {
         id: 'actions',
         header: '',
@@ -2327,7 +2352,7 @@ const Dashboard: React.FC = () => {
         }
       }
     ],
-    [families, handleSaveChildField, handleDeleteChild, isVaccinationUnlocked, handleRequestKmsAuth]
+    [families, handleSaveChildField, handleDeleteChild, isVaccinationUnlocked, handleRequestKmsAuth, hasPermission, user?.email]
   );
 
   const isTableTab = activeTab === 'parents' || activeTab === 'children' || activeTab === 'hygieneBelehrung';
@@ -2499,7 +2524,7 @@ const Dashboard: React.FC = () => {
                 </button>
               </div>
 
-              {(activeTab === 'parents' || activeTab === 'children') && (
+              {(activeTab === 'parents' || activeTab === 'children') && hasPermission('vaccination.status.manage') && (
                 isVaccinationUnlocked ? (
                   <button
                     type="button"
