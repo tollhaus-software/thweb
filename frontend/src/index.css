@@ -21,6 +21,8 @@
   /* Borders & Dividers */
   --border: #e2e8f0;
   --border-strong: #cbd5e1;
+  --separator-border: #94a3b8;
+  --shadow-sticky: rgba(0, 0, 0, 0.12);
 
   /* Form Elements */
   --input-bg: #ffffff;
@@ -94,6 +96,8 @@
     /* Borders & Dividers */
     --border: #283548;
     --border-strong: #334155;
+    --separator-border: #475569;
+    --shadow-sticky: rgba(0, 0, 0, 0.45);
 
     /* Form Elements */
     --input-bg: #1e293b;
@@ -153,6 +157,8 @@
   /* Borders & Dividers */
   --border: #283548;
   --border-strong: #334155;
+  --separator-border: #475569;
+  --shadow-sticky: rgba(0, 0, 0, 0.45);
 
   /* Form Elements */
   --input-bg: #1e293b;

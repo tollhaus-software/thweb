@@ -8,7 +8,7 @@ import {
   flexRender,
 } from '@tanstack/react-table';
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
-import { SlidersHorizontal } from 'lucide-react';
+import { SlidersHorizontal, Plus } from 'lucide-react';
 import { t } from '../../utils/i18n';
 
 interface DataTableProps<TData> {
@@ -148,33 +148,36 @@ export function DataTable<TData>({
         <table
           className="data-table"
           style={{
-            width: `${table.getTotalSize()}px`,
+            width: 'max-content',
             minWidth: '100%',
-            tableLayout: 'fixed',
           }}
         >
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <th
-                    key={header.id}
-                    onClick={header.column.getCanSort() ? header.column.getToggleSortingHandler() : undefined}
-                    style={{
-                      cursor: header.column.getCanSort() ? 'pointer' : 'default',
-                      width: `${header.getSize()}px`,
-                      minWidth: `${header.getSize()}px`,
-                      boxSizing: 'border-box',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {flexRender(header.column.columnDef.header, header.getContext())}
-                    {{
-                      asc: ' 🔼',
-                      desc: ' 🔽',
-                    }[header.column.getIsSorted() as string] ?? null}
-                  </th>
-                ))}
+                {headerGroup.headers.map((header) => {
+                  const isFixed = header.column.id === 'first_name';
+                  return (
+                    <th
+                      key={header.id}
+                      onClick={header.column.getCanSort() ? header.column.getToggleSortingHandler() : undefined}
+                      className={isFixed ? 'sticky-col' : undefined}
+                      style={{
+                        cursor: header.column.getCanSort() ? 'pointer' : 'default',
+                        width: isFixed ? '1%' : `${header.getSize()}px`,
+                        minWidth: `${header.getSize()}px`,
+                        boxSizing: 'border-box',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {flexRender(header.column.columnDef.header, header.getContext())}
+                      {{
+                        asc: ' 🔼',
+                        desc: ' 🔽',
+                      }[header.column.getIsSorted() as string] ?? null}
+                    </th>
+                  );
+                })}
               </tr>
             ))}
           </thead>
@@ -195,28 +198,14 @@ export function DataTable<TData>({
                           {onAddRow && (
                             <button
                               type="button"
-                              className="easy-edit-button primary-button"
-                              style={{
-                                padding: '0 0.5rem',
-                                fontSize: '1rem',
-                                borderRadius: '4px',
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                border: 'none',
-                                color: 'white',
-                                height: '24px',
-                                minWidth: '24px',
-                                fontWeight: 'bold'
-                              }}
+                              className="family-add-button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 onAddRow(familyId, familyName);
                               }}
                               title="Add"
                             >
-                              +
+                              <Plus size={14} />
                             </button>
                           )}
                         </div>
@@ -235,18 +224,23 @@ export function DataTable<TData>({
 
               return (
                 <tr key={row.id} id={`row-${(row.original as any).id}`}>
-                  {row.getVisibleCells().map((cell) => (
-                    <td
-                      key={cell.id}
-                      style={{
-                        width: `${cell.column.getSize()}px`,
-                        minWidth: `${cell.column.getSize()}px`,
-                        boxSizing: 'border-box',
-                      }}
-                    >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
+                  {row.getVisibleCells().map((cell) => {
+                    const isFixed = cell.column.id === 'first_name';
+                    return (
+                      <td
+                        key={cell.id}
+                        className={isFixed ? 'sticky-col' : undefined}
+                        style={{
+                          width: isFixed ? '1%' : `${cell.column.getSize()}px`,
+                          minWidth: `${cell.column.getSize()}px`,
+                          boxSizing: 'border-box',
+                          whiteSpace: isFixed ? 'nowrap' : undefined,
+                        }}
+                      >
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    );
+                  })}
                 </tr>
               );
             })}

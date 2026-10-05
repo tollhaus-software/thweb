@@ -1779,7 +1779,8 @@ const Dashboard: React.FC = () => {
       {
         header: t('firstName'),
         accessorKey: 'first_name',
-        size: 220,
+        size: 200,
+        minSize: 200,
       },
       {
         header: t('lastName'),
@@ -1846,6 +1847,7 @@ const Dashboard: React.FC = () => {
         header: t('firstNameEdit'),
         accessorKey: 'first_name',
         size: 200,
+        minSize: 200,
         cell: (info) => {
           const parent = info.row.original;
           return (
@@ -2020,7 +2022,8 @@ const Dashboard: React.FC = () => {
       {
         header: t('firstNameEdit'),
         accessorKey: 'first_name',
-        size: 150,
+        size: 200,
+        minSize: 200,
         cell: (info) => {
           const child = info.row.original;
           return (

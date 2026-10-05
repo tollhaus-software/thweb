@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { CheckSquare, Square, Info } from 'lucide-react';
+import { CheckSquare, Square, Info, ChevronDown, ChevronRight } from 'lucide-react';
 import { t, CURRENT_LOCALE } from '../utils/i18n';
 
 interface Parent {
@@ -195,6 +195,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
     families.map((f) => f.id)
   );
   const [familySearch, setFamilySearch] = useState('');
+  const [isFamiliesExpanded, setIsFamiliesExpanded] = useState<boolean>(false);
 
   // Results state
   const [loading, setLoading] = useState(false);
@@ -492,109 +493,149 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
           </div>
         </div>
 
-        {/* Families Checklist */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.25rem' }}>
-          <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-            {t('selectFamilies') || 'Select Families'}
-          </label>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <input
-              type="text"
-              placeholder={t('searchFamilies') || 'Search families...'}
-              value={familySearch}
-              onChange={(e) => setFamilySearch(e.target.value)}
-              className="search-input"
-              style={{ width: '220px', padding: '0.35rem 0.5rem', fontSize: '0.875rem', marginBottom: 0 }}
-            />
+        {/* Families Checklist (Expandable) */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.25rem' }}>
+          <div>
             <button
-              onClick={handleSelectAll}
+              type="button"
+              onClick={() => setIsFamiliesExpanded(!isFamiliesExpanded)}
               style={{
-                padding: '0.35rem 0.6rem',
-                fontSize: '0.8rem',
-                fontWeight: 600,
-                border: '1px solid var(--border)',
-                background: 'var(--bg-subtle)',
-                color: 'var(--text)',
-                borderRadius: '4px',
+                background: 'transparent',
+                border: 'none',
+                padding: '0.35rem 0.5rem',
+                margin: '-0.35rem -0.5rem',
+                borderRadius: '6px',
                 cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                color: 'var(--text-h)',
+                fontFamily: 'inherit',
+                transition: 'background-color 0.15s ease',
               }}
-            >
-              {t('selectAll') || 'Select All'}
-            </button>
-            <button
-              onClick={handleDeselectAll}
-              style={{
-                padding: '0.35rem 0.6rem',
-                fontSize: '0.8rem',
-                fontWeight: 600,
-                border: '1px solid var(--border)',
-                background: 'var(--bg-subtle)',
-                color: 'var(--text)',
-                borderRadius: '4px',
-                cursor: 'pointer',
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'var(--bg-subtle)';
               }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+              aria-expanded={isFamiliesExpanded}
             >
-              {t('deselectAll') || 'Deselect All'}
+              {isFamiliesExpanded ? (
+                <ChevronDown size={18} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
+              ) : (
+                <ChevronRight size={18} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
+              )}
+              <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>
+                {t('selectFamilies') || 'Select Families'}
+              </span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 400 }}>
+                ({selectedFamilyIds.length} {t('familiesSelected') || 'families selected'})
+              </span>
             </button>
           </div>
 
-          <div
-            style={{
-              border: '1px solid var(--border)',
-              borderRadius: '6px',
-              maxHeight: '180px',
-              overflowY: 'auto',
-              padding: '0.5rem',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '0.25rem',
-              background: 'var(--bg-subtle)',
-            }}
-          >
-            {filteredFamilies.length === 0 ? (
-              <div style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.85rem', padding: '0.5rem' }}>
-                {t('noFamiliesFound') || 'No families found'}
+          {isFamiliesExpanded && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  placeholder={t('searchFamilies') || 'Search families...'}
+                  value={familySearch}
+                  onChange={(e) => setFamilySearch(e.target.value)}
+                  className="search-input"
+                  style={{ width: '220px', padding: '0.35rem 0.5rem', fontSize: '0.875rem', marginBottom: 0 }}
+                />
+                <button
+                  type="button"
+                  onClick={handleSelectAll}
+                  style={{
+                    padding: '0.35rem 0.6rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    border: '1px solid var(--border)',
+                    background: 'var(--bg-subtle)',
+                    color: 'var(--text)',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {t('selectAll') || 'Select All'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeselectAll}
+                  style={{
+                    padding: '0.35rem 0.6rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    border: '1px solid var(--border)',
+                    background: 'var(--bg-subtle)',
+                    color: 'var(--text)',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {t('deselectAll') || 'Deselect All'}
+                </button>
               </div>
-            ) : (
-              filteredFamilies.map((f) => {
-                const isSelected = selectedFamilyIds.includes(f.id);
-                return (
-                  <div
-                    key={f.id}
-                    onClick={() => handleToggleFamily(f.id)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                      padding: '0.25rem 0.5rem',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      background: isSelected ? 'var(--accent-bg)' : 'transparent',
-                      transition: 'background 0.1s',
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isSelected) e.currentTarget.style.background = 'var(--bg-hover)';
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isSelected) e.currentTarget.style.background = 'transparent';
-                    }}
-                  >
-                    {isSelected ? (
-                      <CheckSquare size={16} style={{ color: 'var(--primary)' }} />
-                    ) : (
-                      <Square size={16} style={{ color: 'var(--text-muted)' }} />
-                    )}
-                    <span style={{ fontSize: '0.875rem', color: 'var(--text-h)', fontWeight: isSelected ? 600 : 500 }}>
-                      {getFamilyName(f)}
-                    </span>
+
+              <div
+                style={{
+                  border: '1px solid var(--border)',
+                  borderRadius: '6px',
+                  maxHeight: '180px',
+                  overflowY: 'auto',
+                  padding: '0.5rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.25rem',
+                  background: 'var(--bg-subtle)',
+                }}
+              >
+                {filteredFamilies.length === 0 ? (
+                  <div style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.85rem', padding: '0.5rem' }}>
+                    {t('noFamiliesFound') || 'No families found'}
                   </div>
-                );
-              })
-            )}
-          </div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            {selectedFamilyIds.length} {t('familiesSelected') || 'families selected'}
-          </div>
+                ) : (
+                  filteredFamilies.map((f) => {
+                    const isSelected = selectedFamilyIds.includes(f.id);
+                    return (
+                      <div
+                        key={f.id}
+                        onClick={() => handleToggleFamily(f.id)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.5rem',
+                          padding: '0.25rem 0.5rem',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          background: isSelected ? 'var(--accent-bg)' : 'transparent',
+                          transition: 'background 0.1s',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isSelected) e.currentTarget.style.background = 'var(--bg-hover)';
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isSelected) e.currentTarget.style.background = 'transparent';
+                        }}
+                      >
+                        {isSelected ? (
+                          <CheckSquare size={16} style={{ color: 'var(--primary)' }} />
+                        ) : (
+                          <Square size={16} style={{ color: 'var(--text-muted)' }} />
+                        )}
+                        <span style={{ fontSize: '0.875rem', color: 'var(--text-h)', fontWeight: isSelected ? 600 : 500 }}>
+                          {getFamilyName(f)}
+                        </span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {error && (
@@ -625,59 +666,58 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', opacity: loading ? 0.6 : 1, transition: 'opacity 0.2s' }}>
           {/* Family Fees Grid */}
           <div
-            className="table-container"
             style={{
               background: 'var(--bg-surface)',
               border: '1px solid var(--border)',
               borderRadius: '8px',
               padding: '1.25rem',
               boxShadow: 'var(--shadow)',
-              overflowX: 'auto',
             }}
           >
             <h4 style={{ margin: '0 0 1rem 0', color: 'var(--text-h)', fontSize: '1rem', fontWeight: 600 }}>
               {t('familyFeesGrid')}
             </h4>
-            <table className="data-table" style={{ width: 'max-content', minWidth: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={{ border: '1px solid var(--border)', padding: '0.5rem', whiteSpace: 'nowrap' }}>{t('family')}</th>
-                  {monthsColumns.map((m) => (
-                    <th key={m} style={{ textAlign: 'right', border: '1px solid var(--border)', padding: '0.5rem' }}>
-                      {formatMonth(m)}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {sortedFamilyFees.map((res) => (
-                  <tr key={res.family_id}>
-                    <td style={{ fontWeight: 600, color: 'var(--text-h)', border: '1px solid var(--border)', padding: '0.5rem', whiteSpace: 'nowrap' }}>{res.family_name}</td>
-                    {monthsColumns.map((m) => {
-                      const monthData = (res.monthly_fees || []).find((mf) => mf.month === m);
-                      const change = (results.fee_changes || []).find(
-                        (chg) => chg.family_id === res.family_id && chg.month === m
-                      );
-                      return (
-                        <td key={m} style={{ textAlign: 'right', fontWeight: 500, color: 'var(--text)', border: '1px solid var(--border)', padding: '0.5rem', backgroundColor: change ? 'var(--highlight-bg)' : 'transparent' }}>
-                          {monthData ? (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', width: '100%' }}>
-                              {monthData.fee.toFixed(2)}
-                              <FeeTooltip description={monthData.description} change={change} />
-                            </span>
-                          ) : '-'}
-                        </td>
-                      );
-                    })}
+            <div style={{ overflowX: 'auto' }}>
+              <table className="data-table" style={{ width: 'max-content', minWidth: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr>
+                    <th className="sticky-col" style={{ border: '1px solid var(--border)', padding: '0.5rem', whiteSpace: 'nowrap', width: '1%' }}>{t('family')}</th>
+                    {monthsColumns.map((m) => (
+                      <th key={m} style={{ textAlign: 'right', border: '1px solid var(--border)', padding: '0.5rem' }}>
+                        {formatMonth(m)}
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {sortedFamilyFees.map((res) => (
+                    <tr key={res.family_id}>
+                      <td className="sticky-col" style={{ fontWeight: 600, color: 'var(--text-h)', border: '1px solid var(--border)', padding: '0.5rem', whiteSpace: 'nowrap', width: '1%' }}>{res.family_name}</td>
+                      {monthsColumns.map((m) => {
+                        const monthData = (res.monthly_fees || []).find((mf) => mf.month === m);
+                        const change = (results.fee_changes || []).find(
+                          (chg) => chg.family_id === res.family_id && chg.month === m
+                        );
+                        return (
+                          <td key={m} style={{ textAlign: 'right', fontWeight: 500, color: 'var(--text)', border: '1px solid var(--border)', padding: '0.5rem', backgroundColor: change ? 'var(--highlight-bg)' : 'transparent' }}>
+                            {monthData ? (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', width: '100%' }}>
+                                {monthData.fee.toFixed(2)}
+                                <FeeTooltip description={monthData.description} change={change} />
+                              </span>
+                            ) : '-'}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {/* Fee Changes Table */}
           <div
-            className="table-container"
             style={{
               background: 'var(--bg-surface)',
               border: '1px solid var(--border)',
@@ -694,30 +734,32 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
                 {t('noFeeChanges')}
               </div>
             ) : (
-              <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr>
-                    <th style={{ border: '1px solid var(--border)', padding: '0.5rem', whiteSpace: 'nowrap' }}>{t('family')}</th>
-                    <th style={{ border: '1px solid var(--border)', padding: '0.5rem', width: '150px' }}>{t('effectiveMonth')}</th>
-                    <th style={{ textAlign: 'right', border: '1px solid var(--border)', padding: '0.5rem', width: '140px' }}>{t('previousFee')}</th>
-                    <th style={{ textAlign: 'right', border: '1px solid var(--border)', padding: '0.5rem', width: '120px' }}>{t('newFee')}</th>
-                    <th style={{ border: '1px solid var(--border)', padding: '0.5rem' }}>{t('reason')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedFeeChanges.map((chg, idx) => (
-                    <tr key={`${chg.family_id}-${chg.month}-${idx}`}>
-                      <td style={{ fontWeight: 600, color: 'var(--text-h)', border: '1px solid var(--border)', padding: '0.5rem', whiteSpace: 'nowrap' }}>{chg.family_name}</td>
-                      <td style={{ border: '1px solid var(--border)', padding: '0.5rem' }}>{formatMonth(chg.month)}</td>
-                      <td style={{ textAlign: 'right', color: 'var(--text-muted)', border: '1px solid var(--border)', padding: '0.5rem' }}>{chg.previous_fee.toFixed(2)} EUR</td>
-                      <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--primary)', border: '1px solid var(--border)', padding: '0.5rem' }}>
-                        {chg.new_fee.toFixed(2)} EUR
-                      </td>
-                      <td style={{ color: 'var(--text)', fontSize: '0.85rem', border: '1px solid var(--border)', padding: '0.5rem' }}>{renderWithLineBreaks(chg.reason) || '-'}</td>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      <th className="sticky-col" style={{ border: '1px solid var(--border)', padding: '0.5rem', whiteSpace: 'nowrap' }}>{t('family')}</th>
+                      <th style={{ border: '1px solid var(--border)', padding: '0.5rem', width: '150px' }}>{t('effectiveMonth')}</th>
+                      <th style={{ textAlign: 'right', border: '1px solid var(--border)', padding: '0.5rem', width: '140px' }}>{t('previousFee')}</th>
+                      <th style={{ textAlign: 'right', border: '1px solid var(--border)', padding: '0.5rem', width: '120px' }}>{t('newFee')}</th>
+                      <th style={{ border: '1px solid var(--border)', padding: '0.5rem' }}>{t('reason')}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {sortedFeeChanges.map((chg, idx) => (
+                      <tr key={`${chg.family_id}-${chg.month}-${idx}`}>
+                        <td className="sticky-col" style={{ fontWeight: 600, color: 'var(--text-h)', border: '1px solid var(--border)', padding: '0.5rem', whiteSpace: 'nowrap' }}>{chg.family_name}</td>
+                        <td style={{ border: '1px solid var(--border)', padding: '0.5rem' }}>{formatMonth(chg.month)}</td>
+                        <td style={{ textAlign: 'right', color: 'var(--text-muted)', border: '1px solid var(--border)', padding: '0.5rem' }}>{chg.previous_fee.toFixed(2)} EUR</td>
+                        <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--primary)', border: '1px solid var(--border)', padding: '0.5rem' }}>
+                          {chg.new_fee.toFixed(2)} EUR
+                        </td>
+                        <td style={{ color: 'var(--text)', fontSize: '0.85rem', border: '1px solid var(--border)', padding: '0.5rem' }}>{renderWithLineBreaks(chg.reason) || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </div>
