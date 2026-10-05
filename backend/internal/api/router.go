@@ -35,7 +35,7 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 
 		r.Get("/api/me", server.HandleGetMe)
 		r.Get("/api/families", server.HandleListFamilies)
-		r.Get("/api/audit-logs", server.HandleListAuditLogs)
+		r.With(auth.RequirePermission("audit.all.read")).Get("/api/audit-logs", server.HandleListAuditLogs)
 
 		// Admin - Role Management
 		r.Get("/api/admin/roles", server.HandleListRoles)
