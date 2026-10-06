@@ -857,11 +857,12 @@ const Dashboard: React.FC = () => {
 
   const [families, setFamilies] = React.useState<Family[]>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
-  const [activeTab, setActiveTab] = React.useState<'parents' | 'children' | 'childcareFees' | 'hygieneBelehrung' | 'audit' | 'admin'>(() => {
+  const [activeTab, setActiveTab] = React.useState<'parents' | 'children' | 'families' | 'childcareFees' | 'hygieneBelehrung' | 'audit' | 'admin'>(() => {
     const hash = window.location.hash.replace('#', '');
     if (
       hash === 'parents' ||
       hash === 'children' ||
+      hash === 'families' ||
       hash === 'childcareFees' ||
       hash === 'hygieneBelehrung' ||
       (hash === 'audit' && canReadAudit) ||
@@ -873,6 +874,7 @@ const Dashboard: React.FC = () => {
     if (
       saved === 'parents' ||
       saved === 'children' ||
+      saved === 'families' ||
       saved === 'childcareFees' ||
       saved === 'hygieneBelehrung' ||
       (saved === 'audit' && canReadAudit) ||
@@ -1227,6 +1229,7 @@ const Dashboard: React.FC = () => {
       if (
         hash === 'parents' ||
         hash === 'children' ||
+        hash === 'families' ||
         hash === 'childcareFees' ||
         hash === 'hygieneBelehrung' ||
         (hash === 'audit' && canReadAudit) ||
@@ -1378,7 +1381,7 @@ const Dashboard: React.FC = () => {
         pushAction({
           type: 'ADD_CHILD',
           payload: {
-            tab: 'children',
+            tab: activeTab === 'families' ? 'families' : 'children',
             child: newChild,
           }
         });
@@ -1795,6 +1798,66 @@ const Dashboard: React.FC = () => {
         family_name: familyName,
         children: filteredChildren,
         nameMatch: familyName.toLowerCase().includes(query),
+      };
+    });
+
+    if (!query) return mapped;
+    return mapped.filter(f => f.nameMatch || f.children.length > 0)
+      .map(f => {
+        if (f.nameMatch && f.children.length === 0) {
+          const originalFamily = families.find(orig => orig.id === f.id);
+          return {
+            ...f,
+            children: (originalFamily?.children || []).map(c => ({
+              ...c,
+              family_id: f.id,
+              family_name: f.family_name,
+            }))
+          };
+        }
+        return f;
+      });
+  }, [families, globalFilter]);
+
+  // Structure families with their children sub-rows for the families tab
+  const familiesTabData = React.useMemo(() => {
+    const query = (globalFilter || '').trim().toLowerCase();
+    const mapped = families.map(f => {
+      const lastNames = Array.from(new Set((f.parents || []).map(p => p.last_name).filter(Boolean)));
+      const familyName = lastNames.join(' / ') || 'New Family';
+      const parentNames = (f.parents || [])
+        .map(p => `${p.first_name || ''} ${p.last_name || ''}`.trim())
+        .filter(Boolean)
+        .join(', ');
+
+      const allChildren = (f.children || []).map(c => ({
+        ...c,
+        family_id: f.id,
+        family_name: familyName,
+      }));
+
+      // Filter children
+      const filteredChildren = allChildren.filter(c => {
+        if (!query) return true;
+        const fullName = `${c.first_name || ''} ${c.last_name || ''}`.trim().toLowerCase();
+        const fnMatch = (c.first_name || '').toLowerCase().includes(query);
+        const lnMatch = (c.last_name || '').toLowerCase().includes(query);
+        const bdFormatted = formatDisplayDate(c.birth_date).toLowerCase();
+        const bdRaw = (c.birth_date || '').split('T')[0];
+        const bdMatch = bdFormatted.includes(query) || bdRaw.includes(query);
+        const familyNameMatch = familyName.toLowerCase().includes(query);
+        const parentMatch = parentNames.toLowerCase().includes(query);
+        return fnMatch || lnMatch || fullName.includes(query) || bdMatch || familyNameMatch || parentMatch;
+      });
+
+      const familyMatch = familyName.toLowerCase().includes(query) || parentNames.toLowerCase().includes(query);
+
+      return {
+        id: f.id,
+        family_name: familyName,
+        sub_header: parentNames,
+        children: filteredChildren,
+        nameMatch: familyMatch,
       };
     });
 
@@ -2394,7 +2457,34 @@ const Dashboard: React.FC = () => {
     [families, handleSaveChildField, handleDeleteChild, isVaccinationUnlocked, handleRequestKmsAuth, hasPermission, user?.email]
   );
 
-  const isTableTab = activeTab === 'parents' || activeTab === 'children' || activeTab === 'hygieneBelehrung';
+  const familyChildColumns = React.useMemo<ColumnDef<any>[]>(
+    () => [
+      {
+        id: 'child_name',
+        header: t('firstNameEdit'),
+        size: 260,
+        minSize: 200,
+        cell: (info) => {
+          const child = info.row.original;
+          const fullName = `${child.first_name || ''} ${child.last_name || ''}`.trim() || '-';
+          return <span>{fullName}</span>;
+        }
+      },
+      {
+        id: 'birth_date',
+        header: t('birthDateEdit'),
+        size: 160,
+        minSize: 120,
+        cell: (info) => {
+          const child = info.row.original;
+          return <span>{formatDisplayDate(child.birth_date) || '-'}</span>;
+        }
+      }
+    ],
+    []
+  );
+
+  const isTableTab = activeTab === 'parents' || activeTab === 'children' || activeTab === 'families' || activeTab === 'hygieneBelehrung';
 
   return (
     <div className={`dashboard-container ${isTableTab ? 'table-view-active' : ''}`}>
@@ -2439,6 +2529,22 @@ const Dashboard: React.FC = () => {
             }}
           >
             {t('children')}
+          </button>
+          <button 
+            onClick={() => { window.location.hash = 'families'; setGlobalFilter(''); }}
+            style={{
+              padding: '0.75rem 1rem',
+              background: 'none',
+              border: 'none',
+              borderBottom: activeTab === 'families' ? '3px solid var(--primary)' : '3px solid transparent',
+              color: activeTab === 'families' ? 'var(--primary)' : 'var(--text)',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              fontSize: '1rem',
+              transition: 'all 0.2s'
+            }}
+          >
+            {t('families')}
           </button>
           <button 
             onClick={() => { window.location.hash = 'childcareFees'; setGlobalFilter(''); }}
@@ -2517,7 +2623,7 @@ const Dashboard: React.FC = () => {
                 value={globalFilter ?? ''}
                 onChange={(e) => setGlobalFilter(e.target.value)}
                 className="search-input"
-                placeholder={activeTab === 'children' ? t('searchChildren') : t('searchParents')}
+                placeholder={activeTab === 'children' ? t('searchChildren') : activeTab === 'families' ? t('searchFamilies') : t('searchParents')}
                 style={{ marginBottom: 0 }}
               />
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -2647,6 +2753,15 @@ const Dashboard: React.FC = () => {
             getSubRows={(row: any) => row.children}
             onAddRow={openAddChild}
             emptySubRowsText={t('noChildrenYet')}
+          />
+        ) : activeTab === 'families' ? (
+          <DataTable
+            data={familiesTabData}
+            columns={familyChildColumns}
+            getSubRows={(row: any) => row.children}
+            onAddRow={openAddChild}
+            emptySubRowsText={t('noChildrenYet')}
+            hideHeader={true}
           />
         ) : activeTab === 'hygieneBelehrung' ? (
           <DataTable
