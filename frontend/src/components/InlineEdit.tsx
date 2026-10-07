@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { CURRENT_LOCALE } from '../utils/i18n';
+import CalendarDropdown, { parseDateStringToObj } from './CalendarDropdown';
+
+export { CalendarDropdown, parseDateStringToObj };
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const Types = {
@@ -23,26 +26,6 @@ interface InlineEditProps {
   onValidate?: (val: string) => boolean;
   options?: { label: string; value: string }[];
 }
-
-const parseDateStringToObj = (str: string): Date => {
-  if (!str) return new Date();
-  if (str.includes('.')) {
-    const parts = str.split('.');
-    if (parts.length === 3) {
-      const d = parseInt(parts[0], 10);
-      const m = parseInt(parts[1], 10) - 1;
-      const y = parseInt(parts[2], 10);
-      if (!isNaN(d) && !isNaN(m) && !isNaN(y)) {
-        return new Date(y, m, d);
-      }
-    }
-  }
-  const parsed = Date.parse(str);
-  if (!isNaN(parsed)) {
-    return new Date(parsed);
-  }
-  return new Date();
-};
 
 export const InlineEdit: React.FC<InlineEditProps> = ({
   type = 'text',
@@ -75,16 +58,7 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
     setTempValue(value);
   }
 
-  // Calendar Picker state
-  const [calMonth, setCalMonth] = useState(new Date().getMonth());
-  const [calYear, setCalYear] = useState(new Date().getFullYear());
-
   const startEditing = () => {
-    if (type === Types.DATE) {
-      const d = tempValue ? parseDateStringToObj(tempValue) : new Date();
-      setCalMonth(d.getMonth());
-      setCalYear(d.getFullYear());
-    }
     setIsEditing(true);
   };
 
@@ -138,7 +112,9 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
       // Find out if the active element is still inside the current edit wrapper or dropdown
       const wrapper = currentTarget.closest('.easy-edit-inline-wrapper');
       const inWrapper = wrapper?.contains(document.activeElement);
-      const inDropdown = dropdownRef.current?.contains(document.activeElement);
+      const inDropdown =
+        dropdownRef.current?.contains(document.activeElement) ||
+        Boolean(document.activeElement?.closest?.('.easy-edit-calendar-dropdown'));
       if (!inWrapper && !inDropdown) {
         if (isEditingRef.current) {
           handleSave();
@@ -147,9 +123,9 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
     }, 150);
   };
 
-  // Outside click listener to dismiss floating portal dropdowns
+  // Outside click listener to dismiss floating portal dropdowns (for SELECT)
   useEffect(() => {
-    if (!isEditing || (type !== Types.SELECT && type !== Types.DATE)) return;
+    if (!isEditing || type !== Types.SELECT) return;
 
     const handleOutsideClick = (e: MouseEvent) => {
       const target = e.target as Node;
@@ -170,7 +146,7 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
   }, [isEditing, type, handleSave]);
 
   useLayoutEffect(() => {
-    if (!isEditing || (type !== Types.SELECT && type !== Types.DATE)) {
+    if (!isEditing || type !== Types.SELECT) {
       return;
     }
 
@@ -183,33 +159,18 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
 
-      if (type === Types.SELECT) {
-        const dropdownWidth = Math.max(rect.width, 160);
-        const dropdownHeight = Math.min(options.length * 40 + 10, 240);
-        let top = rect.bottom + 2;
-        let left = rect.left;
-        if (top + dropdownHeight > viewportHeight - 8 && rect.top > dropdownHeight + 8) {
-          top = rect.top - dropdownHeight - 2;
-        }
-        if (left + dropdownWidth > viewportWidth - 8) {
-          left = viewportWidth - dropdownWidth - 8;
-        }
-        if (left < 8) left = 8;
-        setDropdownCoords({ top, left, width: dropdownWidth });
-      } else if (type === Types.DATE) {
-        const dropdownWidth = 240;
-        const dropdownHeight = 220;
-        let top = rect.bottom + 4;
-        let left = rect.left;
-        if (top + dropdownHeight > viewportHeight - 8 && rect.top > dropdownHeight + 8) {
-          top = rect.top - dropdownHeight - 4;
-        }
-        if (left + dropdownWidth > viewportWidth - 8) {
-          left = viewportWidth - dropdownWidth - 8;
-        }
-        if (left < 8) left = 8;
-        setDropdownCoords({ top, left, width: dropdownWidth });
+      const dropdownWidth = Math.max(rect.width, 160);
+      const dropdownHeight = Math.min(options.length * 40 + 10, 240);
+      let top = rect.bottom + 2;
+      let left = rect.left;
+      if (top + dropdownHeight > viewportHeight - 8 && rect.top > dropdownHeight + 8) {
+        top = rect.top - dropdownHeight - 2;
       }
+      if (left + dropdownWidth > viewportWidth - 8) {
+        left = viewportWidth - dropdownWidth - 8;
+      }
+      if (left < 8) left = 8;
+      setDropdownCoords({ top, left, width: dropdownWidth });
     };
 
     updateCoords();
@@ -220,41 +181,6 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
       window.removeEventListener('scroll', updateCoords, true);
     };
   }, [isEditing, type, options.length]);
-
-  const handlePrevMonth = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    setCalMonth(m => {
-      if (m === 0) {
-        setCalYear(y => y - 1);
-        return 11;
-      }
-      return m - 1;
-    });
-  };
-
-  const handleNextMonth = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    setCalMonth(m => {
-      if (m === 11) {
-        setCalYear(y => y + 1);
-        return 0;
-      }
-      return m + 1;
-    });
-  };
-
-  const handleSelectDay = (day: number) => {
-    const d = String(day).padStart(2, '0');
-    const m = String(calMonth + 1).padStart(2, '0');
-    const y = calYear;
-    const formatted = CURRENT_LOCALE === 'de' ? `${d}.${m}.${y}` : `${y}-${m}-${d}`;
-    setTempValue(formatted);
-    // Trigger save immediately
-    tempValueRef.current = formatted;
-    handleSave();
-  };
 
   if (!isEditing) {
     return (
@@ -361,21 +287,6 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
   }
 
   if (type === Types.DATE) {
-    const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
-    const firstDayIndex = (new Date(calYear, calMonth, 1).getDay() + 6) % 7; // Monday start
-
-    const blanks = Array(firstDayIndex).fill(null);
-    const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-    const calendarCells = [...blanks, ...days];
-
-    const weekdays = CURRENT_LOCALE === 'de'
-      ? ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
-      : ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
-
-    const monthNames = CURRENT_LOCALE === 'de'
-      ? ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember']
-      : ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-
     return (
       <div
         ref={wrapperRef}
@@ -401,68 +312,20 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
             fontSize: '0.95rem',
             background: 'var(--input-bg)',
             color: 'var(--input-text)',
-            boxSizing: 'border-box'
+            boxSizing: 'border-box',
           }}
         />
-        {dropdownCoords && createPortal(
-          <div
-            ref={dropdownRef}
-            className="easy-edit-calendar-dropdown"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-            style={{
-              position: 'fixed',
-              top: `${dropdownCoords.top}px`,
-              left: `${dropdownCoords.left}px`,
-              width: `${dropdownCoords.width}px`,
-              zIndex: 10005,
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border)',
-              borderRadius: '6px',
-              boxShadow: 'var(--shadow)',
-              padding: '0.5rem',
-              boxSizing: 'border-box',
-              color: 'var(--text-h)',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-              <button type="button" onClick={handlePrevMonth} style={{ border: 'none', background: 'transparent', color: 'var(--text)', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem', padding: '2px 6px' }}>&lt;</button>
-              <span style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{monthNames[calMonth]} {calYear}</span>
-              <button type="button" onClick={handleNextMonth} style={{ border: 'none', background: 'transparent', color: 'var(--text)', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem', padding: '2px 6px' }}>&gt;</button>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px', textAlign: 'center', fontWeight: 'bold', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
-              {weekdays.map(d => <div key={d}>{d}</div>)}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px', textAlign: 'center' }}>
-              {calendarCells.map((day, idx) => {
-                if (day === null) {
-                  return <div key={`empty-${idx}`} />;
-                }
-                return (
-                  <div
-                    key={`day-${day}`}
-                    onClick={() => handleSelectDay(day)}
-                    style={{
-                      padding: '4px 0',
-                      fontSize: '0.8rem',
-                      cursor: 'pointer',
-                      borderRadius: '4px',
-                      backgroundColor: 'transparent',
-                      transition: 'background-color 0.1s'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                  >
-                    {day}
-                  </div>
-                );
-              })}
-            </div>
-          </div>,
-          document.body
-        )}
+        <CalendarDropdown
+          anchorRef={wrapperRef}
+          isOpen={isEditing}
+          onClose={handleSave}
+          selectedDateStr={tempValue}
+          onSelectDate={(formatted) => {
+            setTempValue(formatted);
+            tempValueRef.current = formatted;
+            handleSave();
+          }}
+        />
       </div>
     );
   }

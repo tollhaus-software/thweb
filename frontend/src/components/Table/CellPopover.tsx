@@ -95,7 +95,9 @@ export const CellPopover: React.FC<CellPopoverProps> = ({
     };
   }, [getTargetEl, width]);
 
-  const [positionStyle, setPositionStyle] = useState<React.CSSProperties>({});
+  const [positionStyle, setPositionStyle] = useState<React.CSSProperties>(() => {
+    return getPositionStyle() || { position: 'fixed', visibility: 'hidden' };
+  });
 
   // Position updates on scroll / resize / open
   useLayoutEffect(() => {
