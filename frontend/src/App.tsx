@@ -6,7 +6,7 @@ import './App.css';
 import { DataTable } from './components/Table/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import EasyEdit, { Types } from './components/InlineEdit';
-import { Pencil, Trash, Undo, Redo, Calendar, ClipboardList, Lock, Unlock, ArrowLeft, X } from 'lucide-react';
+import { Pencil, Trash, Undo, Redo, Calendar, ClipboardList, Lock, Unlock, ArrowLeft, ArrowRight, X, Clock } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { MultiValueListEditor } from './components/Table/MultiValueListEditor';
 import { NotesEditor } from './components/Table/NotesEditor';
@@ -73,7 +73,33 @@ interface Child {
   group_changes?: ChildGroupChange[];
 }
 
-const getChildGroupInfo = (changes: ChildGroupChange[] | undefined) => {
+const getGroupShortLabel = (targetGroup: number): string => {
+  switch (targetGroup) {
+    case 1:
+      return 'Kleine Gr.';
+    case 2:
+      return 'Grosse Gr.';
+    case 3:
+      return 'Hort';
+    default:
+      return String(targetGroup);
+  }
+};
+
+interface ChildGroupInfo {
+  currentGroup: number | null;
+  groupLabel: string;
+  startDate: string | null;
+  exitDate: string | null;
+  isExited: boolean;
+  isFuture: boolean;
+  groupName?: string;
+  sinceText?: string;
+  futureDateText?: string;
+  durationStr?: string;
+}
+
+const getChildGroupInfo = (changes: ChildGroupChange[] | undefined): ChildGroupInfo => {
   if (!changes || changes.length === 0) {
     return {
       currentGroup: null,
@@ -92,20 +118,19 @@ const getChildGroupInfo = (changes: ChildGroupChange[] | undefined) => {
   const firstEnroll = sorted.find((c) => c.target_group > 0);
   const startDate = firstEnroll ? firstEnroll.change_date : null;
 
-  const groupLabels: Record<number, string> = {
-    0: t('exit'),
-    1: t('group1'),
-    2: t('group2'),
-    3: t('group3'),
-  };
-
   // Case 1: If child has not started yet (the earliest group change with target group != 0 is in the future),
-  // it should say "will start in <group name>" (en) / "kommt in <group name>" (de).
+  // it formats as <group> and <clock symbol> ab <date>.
   if (firstEnroll && firstEnroll.change_date.split('T')[0] > todayStr) {
-    const groupName = groupLabels[firstEnroll.target_group] || String(firstEnroll.target_group);
+    const groupName = getGroupShortLabel(firstEnroll.target_group);
+    const dateStr = formatDisplayDate(firstEnroll.change_date);
+    const abWord = CURRENT_LOCALE === 'de' ? 'ab' : 'from';
+    const futureDateText = `${abWord} ${dateStr}`;
+    const groupLabel = `→ ${groupName} ${futureDateText}`;
     return {
       currentGroup: firstEnroll.target_group,
-      groupLabel: CURRENT_LOCALE === 'de' ? `kommt in ${groupName}` : `will start in ${groupName}`,
+      groupLabel,
+      groupName,
+      futureDateText,
       startDate,
       exitDate: null,
       isExited: false,
@@ -128,16 +153,19 @@ const getChildGroupInfo = (changes: ChildGroupChange[] | undefined) => {
   const latest = effectiveSoFar[effectiveSoFar.length - 1];
 
   // Case 2: If the child has left the group (the most recent group change, as of today, has target group = 0),
-  // it should say "left <last group name> on <end date>" (en) / "Betreeungsende <end date>, davor <last group name>" (de).
+  // it should say "left <last group name> on <end date>" (en) / "Betreuungsende <end date>, davor <last group name>" (de).
+  // If no previous group was recorded, it simply says "Betreuungsende <end date>" (de) / "left on <end date>" (en).
   if (latest.target_group === 0) {
-    const prevEnroll = [...effectiveSoFar].reverse().find((c) => c.target_group > 0);
-    const lastGroupName = prevEnroll ? (groupLabels[prevEnroll.target_group] || String(prevEnroll.target_group)) : '-';
+    const prevEnroll = [...sorted].filter((c) => c.target_group > 0 && c.change_date.split('T')[0] <= latest.change_date.split('T')[0]).pop()
+      || [...sorted].reverse().find((c) => c.target_group > 0);
+    const lastGroupName = prevEnroll ? getGroupShortLabel(prevEnroll.target_group) : '';
     const endDateStr = formatDisplayDate(latest.change_date);
+    const groupLabel = CURRENT_LOCALE === 'de'
+      ? (lastGroupName ? `Betreuungsende ${endDateStr}, davor ${lastGroupName}` : `Betreuungsende ${endDateStr}`)
+      : (lastGroupName ? `left ${lastGroupName} on ${endDateStr}` : `left on ${endDateStr}`);
     return {
       currentGroup: 0,
-      groupLabel: CURRENT_LOCALE === 'de'
-        ? `Betreuungsende ${endDateStr}, davor ${lastGroupName}`
-        : `left ${lastGroupName} on ${endDateStr}`,
+      groupLabel,
       startDate,
       exitDate: latest.change_date,
       isExited: true,
@@ -146,16 +174,20 @@ const getChildGroupInfo = (changes: ChildGroupChange[] | undefined) => {
   }
 
   // Case 3: Otherwise (the child is currently in a group), it should contain the group name,
-  // suffixed with " since <most recent group change date> (<a>y <b>m)" (en) / "seit <most recent group change date> (<a>J <b>M)" (de).
-  const groupName = groupLabels[latest.target_group] || String(latest.target_group);
+  // suffixed with "since <date> (<duration>)".
+  const groupName = getGroupShortLabel(latest.target_group);
   const changeDateStr = formatDisplayDate(latest.change_date);
   const { years, months } = calculateYearsAndMonths(latest.change_date, now);
   const durationStr = CURRENT_LOCALE === 'de' ? `(${years}J ${months}M)` : `(${years}y ${months}m)`;
   const sinceWord = CURRENT_LOCALE === 'de' ? 'seit' : 'since';
+  const sinceText = `${sinceWord} ${changeDateStr}`;
 
   return {
     currentGroup: latest.target_group,
-    groupLabel: `${groupName} ${sinceWord} ${changeDateStr} ${durationStr}`,
+    groupLabel: `${groupName} ${sinceText} ${durationStr}`,
+    groupName,
+    sinceText,
+    durationStr,
     startDate,
     exitDate: null,
     isExited: false,
@@ -196,6 +228,7 @@ const ChildGroupCell: React.FC<ChildGroupCellProps> = ({
         padding: '2px 4px',
         backgroundColor: isActive ? 'var(--accent-bg)' : 'transparent',
         transition: 'background-color 0.15s ease-in-out',
+        fontWeight: 'normal',
       }}
       onMouseEnter={(e) => {
         if (!isActive) {
@@ -209,18 +242,89 @@ const ChildGroupCell: React.FC<ChildGroupCellProps> = ({
       }}
       title={t('manageGroupChanges')}
     >
-      <span
+      <div
         style={{
-          fontWeight: groupInfo.isExited ? 'normal' : 600,
-          color: groupInfo.isExited ? 'var(--text-muted)' : (groupInfo.isFuture ? '#0284c7' : 'inherit'),
+          display: 'flex',
+          alignItems: 'center',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
           flex: 1,
+          minWidth: 0,
+          fontWeight: 'normal',
+          color: groupInfo.isExited ? 'var(--text-muted)' : 'inherit',
         }}
       >
-        {groupInfo.groupLabel}
-      </span>
+        {groupInfo.isFuture && groupInfo.groupName ? (
+          <span style={{ display: 'inline-flex', alignItems: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                width: '100px',
+                minWidth: '100px',
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
+                color: 'var(--text-muted)',
+              }}
+            >
+              <ArrowRight size={13} style={{ flexShrink: 0 }} />
+              <span>{groupInfo.groupName}</span>
+            </span>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                width: '135px',
+                minWidth: '135px',
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <Clock size={14} style={{ flexShrink: 0 }} />
+              <span>{groupInfo.futureDateText}</span>
+            </span>
+          </span>
+        ) : groupInfo.groupName && groupInfo.sinceText ? (
+          <span style={{ display: 'inline-flex', alignItems: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span
+              style={{
+                display: 'inline-block',
+                width: '100px',
+                minWidth: '100px',
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {groupInfo.groupName}
+            </span>
+            <span
+              style={{
+                display: 'inline-block',
+                width: '135px',
+                minWidth: '135px',
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {groupInfo.sinceText}
+            </span>
+            <span
+              style={{
+                display: 'inline-block',
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {groupInfo.durationStr}
+            </span>
+          </span>
+        ) : (
+          <span>{groupInfo.groupLabel}</span>
+        )}
+      </div>
       <button
         type="button"
         onClick={(e) => {
@@ -2576,6 +2680,7 @@ const Dashboard: React.FC = () => {
       header: t('group'),
       id: 'group',
       size: 340,
+      minSize: 320,
       cell: (info) => {
         const child = info.row.original;
         const isCurrentActive = Boolean(groupPopoverAnchor && targetChildGroupChanges?.id === child.id);
@@ -2676,7 +2781,14 @@ const Dashboard: React.FC = () => {
           return (
             <div
               id={cellId}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                window.getSelection()?.removeAllRanges();
+                const cellEl = document.getElementById(cellId) || e.currentTarget;
+                openManageGroupChanges(child, cellEl);
+              }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', cursor: 'pointer' }}
+              title={t('manageGroupChanges')}
             >
               <span>{groupInfo.startDate ? formatDisplayDate(groupInfo.startDate) : '-'}</span>
               <button

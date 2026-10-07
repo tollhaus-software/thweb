@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Check, X, Trash, Pencil } from 'lucide-react';
+import { Plus, Check, X, Trash, Pencil, Calendar } from 'lucide-react';
 import { t, CURRENT_LOCALE, formatDisplayDate, parseInputDate } from '../../utils/i18n';
 import { CellPopover } from './CellPopover';
 import EasyEdit, { Types } from '../InlineEdit';
+import { CalendarDropdown } from '../CalendarDropdown';
 
 const EasyEditComponent = EasyEdit;
 const EasyEditTypes = Types;
@@ -66,10 +67,13 @@ export const GroupChangesPopover: React.FC<GroupChangesPopoverProps> = ({
   };
 
   // Special case: opening when child has no group changes yet behaves as if '+' was pressed immediately
-  const [isAddingRow, setIsAddingRow] = useState(() => !child?.group_changes || child.group_changes.length === 0);
+  const isInitiallyEmpty = !child?.group_changes || child.group_changes.length === 0;
+  const [isAddingRow, setIsAddingRow] = useState(isInitiallyEmpty);
   const [newDate, setNewDate] = useState<string>(getInitialNewDate);
   const [newTargetGroup, setNewTargetGroup] = useState<number>(() => calculateNextGroup());
+  const [isCalendarOpen, setIsCalendarOpen] = useState(isInitiallyEmpty);
   const dateInputRef = useRef<HTMLInputElement>(null);
+  const dateContainerRef = useRef<HTMLDivElement>(null);
 
   // Focus date input when adding row
   useEffect(() => {
@@ -88,10 +92,12 @@ export const GroupChangesPopover: React.FC<GroupChangesPopoverProps> = ({
     setNewDate(getInitialNewDate());
     setNewTargetGroup(calculateNextGroup());
     setIsAddingRow(true);
+    setIsCalendarOpen(true);
   };
 
   const handleCancelAdd = () => {
     setIsAddingRow(false);
+    setIsCalendarOpen(false);
   };
 
   const handleSaveNewRow = async () => {
@@ -104,6 +110,7 @@ export const GroupChangesPopover: React.FC<GroupChangesPopoverProps> = ({
     try {
       await onAddGroupChange(child.id, `${parsedDate}T00:00:00Z`, newTargetGroup);
       setIsAddingRow(false);
+      setIsCalendarOpen(false);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to save group change';
       alert(message);
@@ -274,28 +281,81 @@ export const GroupChangesPopover: React.FC<GroupChangesPopoverProps> = ({
                 }}
               >
                 <td style={{ padding: '6px 8px' }}>
-                  <input
-                    ref={dateInputRef}
-                    type="text"
-                    value={newDate}
-                    onChange={(e) => setNewDate(e.target.value)}
-                    placeholder={CURRENT_LOCALE === 'de' ? 'TT.MM.JJJJ' : 'YYYY-MM-DD'}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleSaveNewRow();
-                      if (e.key === 'Escape') handleCancelAdd();
-                    }}
-                    style={{
-                      padding: '3px 6px',
-                      fontSize: '0.825rem',
-                      border: '1px solid var(--input-border)',
-                      borderRadius: '4px',
-                      background: 'var(--input-bg)',
-                      color: 'var(--input-text)',
-                      width: '100%',
-                      boxSizing: 'border-box',
-                    }}
-                    required
-                  />
+                  <div
+                    ref={dateContainerRef}
+                    style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%' }}
+                  >
+                    <input
+                      ref={dateInputRef}
+                      type="text"
+                      value={newDate}
+                      onChange={(e) => setNewDate(e.target.value)}
+                      onFocus={() => setIsCalendarOpen(true)}
+                      onClick={() => setIsCalendarOpen(true)}
+                      placeholder={CURRENT_LOCALE === 'de' ? 'TT.MM.JJJJ' : 'YYYY-MM-DD'}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          setIsCalendarOpen(false);
+                          handleSaveNewRow();
+                        }
+                        if (e.key === 'Escape') {
+                          if (isCalendarOpen) {
+                            setIsCalendarOpen(false);
+                          } else {
+                            handleCancelAdd();
+                          }
+                        }
+                        if (e.key === 'F4' || (e.altKey && e.key === 'ArrowDown')) {
+                          e.preventDefault();
+                          setIsCalendarOpen((prev) => !prev);
+                        }
+                      }}
+                      style={{
+                        padding: '3px 26px 3px 6px',
+                        fontSize: '0.825rem',
+                        border: '1px solid var(--input-border)',
+                        borderRadius: '4px',
+                        background: 'var(--input-bg)',
+                        color: 'var(--input-text)',
+                        width: '100%',
+                        boxSizing: 'border-box',
+                      }}
+                      required
+                    />
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      style={{
+                        position: 'absolute',
+                        right: '4px',
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '2px',
+                        color: isCalendarOpen ? 'var(--primary)' : '#64748b',
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsCalendarOpen((prev) => !prev);
+                      }}
+                      title={t('date')}
+                    >
+                      <Calendar size={15} />
+                    </button>
+                    <CalendarDropdown
+                      anchorRef={dateContainerRef}
+                      isOpen={isCalendarOpen}
+                      onClose={() => setIsCalendarOpen(false)}
+                      selectedDateStr={newDate}
+                      onSelectDate={(formatted) => {
+                        setNewDate(formatted);
+                        setIsCalendarOpen(false);
+                      }}
+                    />
+                  </div>
                 </td>
                 <td style={{ padding: '6px 8px' }}>
                   <select
