@@ -6,13 +6,14 @@ import './App.css';
 import { DataTable } from './components/Table/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import EasyEdit, { Types } from './components/InlineEdit';
-import { Pencil, Trash, Undo, Redo, Calendar, ClipboardList, Lock, Unlock } from 'lucide-react';
+import { Pencil, Trash, Undo, Redo, Calendar, ClipboardList, Lock, Unlock, ArrowLeft, X } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { MultiValueListEditor } from './components/Table/MultiValueListEditor';
 import { NotesEditor } from './components/Table/NotesEditor';
+import { GroupChangesPopover } from './components/Table/GroupChangesPopover';
 import { VaccinationStatusEditor, type VaccinationCheck } from './components/Table/VaccinationStatusEditor';
 import { ChildcareFeesCalculator } from './components/ChildcareFeesCalculator';
-import { t, CURRENT_LOCALE, formatDisplayDate, parseInputDate } from './utils/i18n';
+import { t, CURRENT_LOCALE, formatDisplayDate, parseInputDate, calculateYearsAndMonths } from './utils/i18n';
 
 const EasyEditComponent = EasyEdit;
 const EasyEditTypes = Types;
@@ -51,21 +52,204 @@ interface Parent {
   family_name?: string;
 }
 
+interface ChildGroupChange {
+  id: string;
+  child: string;
+  change_date: string;
+  target_group: number; // 0: exit, 1: Kleine Gruppe, 2: Grosse Gruppe, 3: Hort
+  created_at: string;
+  updated_at: string;
+}
+
 interface Child {
   id: string;
   family_id: string;
   first_name: string;
   last_name: string;
   birth_date: string;
-  start_date?: string | null;
-  exit_date?: string | null;
-  start_group?: number | null;
-  hort_start_date?: string | null;
-  group2_start_date?: string | null;
   notes?: string;
   vaccination_checks?: VaccinationCheck[];
   family_name?: string;
+  group_changes?: ChildGroupChange[];
 }
+
+const getChildGroupInfo = (changes: ChildGroupChange[] | undefined) => {
+  if (!changes || changes.length === 0) {
+    return {
+      currentGroup: null,
+      groupLabel: '-',
+      startDate: null,
+      exitDate: null,
+      isExited: false,
+      isFuture: false,
+    };
+  }
+
+  const sorted = [...changes].sort((a, b) => a.change_date.localeCompare(b.change_date));
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+  const firstEnroll = sorted.find((c) => c.target_group > 0);
+  const startDate = firstEnroll ? firstEnroll.change_date : null;
+
+  const groupLabels: Record<number, string> = {
+    0: t('exit'),
+    1: t('group1'),
+    2: t('group2'),
+    3: t('group3'),
+  };
+
+  // Case 1: If child has not started yet (the earliest group change with target group != 0 is in the future),
+  // it should say "will start in <group name>" (en) / "kommt in <group name>" (de).
+  if (firstEnroll && firstEnroll.change_date.split('T')[0] > todayStr) {
+    const groupName = groupLabels[firstEnroll.target_group] || String(firstEnroll.target_group);
+    return {
+      currentGroup: firstEnroll.target_group,
+      groupLabel: CURRENT_LOCALE === 'de' ? `kommt in ${groupName}` : `will start in ${groupName}`,
+      startDate,
+      exitDate: null,
+      isExited: false,
+      isFuture: true,
+    };
+  }
+
+  const effectiveSoFar = sorted.filter((c) => c.change_date.split('T')[0] <= todayStr);
+  if (effectiveSoFar.length === 0) {
+    return {
+      currentGroup: null,
+      groupLabel: '-',
+      startDate,
+      exitDate: null,
+      isExited: false,
+      isFuture: false,
+    };
+  }
+
+  const latest = effectiveSoFar[effectiveSoFar.length - 1];
+
+  // Case 2: If the child has left the group (the most recent group change, as of today, has target group = 0),
+  // it should say "left <last group name> on <end date>" (en) / "Betreeungsende <end date>, davor <last group name>" (de).
+  if (latest.target_group === 0) {
+    const prevEnroll = [...effectiveSoFar].reverse().find((c) => c.target_group > 0);
+    const lastGroupName = prevEnroll ? (groupLabels[prevEnroll.target_group] || String(prevEnroll.target_group)) : '-';
+    const endDateStr = formatDisplayDate(latest.change_date);
+    return {
+      currentGroup: 0,
+      groupLabel: CURRENT_LOCALE === 'de'
+        ? `Betreuungsende ${endDateStr}, davor ${lastGroupName}`
+        : `left ${lastGroupName} on ${endDateStr}`,
+      startDate,
+      exitDate: latest.change_date,
+      isExited: true,
+      isFuture: false,
+    };
+  }
+
+  // Case 3: Otherwise (the child is currently in a group), it should contain the group name,
+  // suffixed with " since <most recent group change date> (<a>y <b>m)" (en) / "seit <most recent group change date> (<a>J <b>M)" (de).
+  const groupName = groupLabels[latest.target_group] || String(latest.target_group);
+  const changeDateStr = formatDisplayDate(latest.change_date);
+  const { years, months } = calculateYearsAndMonths(latest.change_date, now);
+  const durationStr = CURRENT_LOCALE === 'de' ? `(${years}J ${months}M)` : `(${years}y ${months}m)`;
+  const sinceWord = CURRENT_LOCALE === 'de' ? 'seit' : 'since';
+
+  return {
+    currentGroup: latest.target_group,
+    groupLabel: `${groupName} ${sinceWord} ${changeDateStr} ${durationStr}`,
+    startDate,
+    exitDate: null,
+    isExited: false,
+    isFuture: false,
+  };
+};
+
+interface ChildGroupCellProps {
+  child: Child;
+  isActive: boolean;
+  onOpenManage: (child: Child, anchor: HTMLElement | string) => void;
+}
+
+const ChildGroupCell: React.FC<ChildGroupCellProps> = ({
+  child,
+  isActive,
+  onOpenManage,
+}) => {
+  const groupInfo = getChildGroupInfo(child.group_changes);
+  const cellId = `cell-group-${child.id}`;
+
+  return (
+    <div
+      id={cellId}
+      onClick={(e) => {
+        const cellEl = document.getElementById(cellId) || e.currentTarget;
+        onOpenManage(child, cellEl);
+      }}
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        width: '100%',
+        gap: '0.25rem',
+        cursor: 'pointer',
+        minHeight: '28px',
+        borderRadius: '4px',
+        padding: '2px 4px',
+        backgroundColor: isActive ? 'var(--accent-bg)' : 'transparent',
+        transition: 'background-color 0.15s ease-in-out',
+      }}
+      onMouseEnter={(e) => {
+        if (!isActive) {
+          e.currentTarget.style.backgroundColor = 'var(--accent-bg)';
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!isActive) {
+          e.currentTarget.style.backgroundColor = 'transparent';
+        }
+      }}
+      title={t('manageGroupChanges')}
+    >
+      <span
+        style={{
+          fontWeight: groupInfo.isExited ? 'normal' : 600,
+          color: groupInfo.isExited ? 'var(--text-muted)' : (groupInfo.isFuture ? '#0284c7' : 'inherit'),
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          flex: 1,
+        }}
+      >
+        {groupInfo.groupLabel}
+      </span>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          const cellEl = document.getElementById(cellId) || e.currentTarget;
+          onOpenManage(child, cellEl);
+        }}
+        style={{
+          background: 'transparent',
+          border: 'none',
+          color: 'var(--primary)',
+          cursor: 'pointer',
+          padding: '2px',
+          borderRadius: '4px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '24px',
+          height: '24px',
+          flexShrink: 0,
+          marginLeft: '4px',
+        }}
+        title={t('manageGroupChanges')}
+      >
+        <Pencil size={12} />
+      </button>
+    </div>
+  );
+};
 
 interface Family {
   id: string;
@@ -152,15 +336,19 @@ const formatSnapshotDetails = (log: AuditLog) => {
     if (data.birth_date) {
       parts.push(`${t('birthDate')}: ${formatDisplayDate(data.birth_date)}`);
     }
-    if (data.start_date) {
-      parts.push(`${t('startDate')}: ${formatDisplayDate(data.start_date)}`);
-    }
-    if (data.exit_date) {
-      parts.push(`${t('exitDate')}: ${formatDisplayDate(data.exit_date)}`);
-    }
-    if (data.start_group) {
-      const groupLabels: Record<number, string> = { 1: t('group1'), 2: t('group2'), 3: t('group3') };
-      parts.push(`${t('startGroup')}: ${groupLabels[data.start_group] || data.start_group}`);
+  }
+
+  if (log.entity_type === 'child_group_change') {
+    const groupLabels: Record<number, string> = {
+      0: t('exit'),
+      1: t('group1'),
+      2: t('group2'),
+      3: t('group3'),
+    };
+    const groupName = groupLabels[data.target_group] || `${t('targetGroup')}: ${data.target_group}`;
+    parts.push(`${t('groupChange')}: ${groupName}`);
+    if (data.change_date) {
+      parts.push(`${t('date')}: ${formatDisplayDate(data.change_date)}`);
     }
   }
 
@@ -858,7 +1046,8 @@ const Dashboard: React.FC = () => {
   const [families, setFamilies] = React.useState<Family[]>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [activeTab, setActiveTab] = React.useState<'parents' | 'children' | 'families' | 'childcareFees' | 'hygieneBelehrung' | 'audit' | 'admin'>(() => {
-    const hash = window.location.hash.replace('#', '');
+    const rawHash = window.location.hash.replace('#', '');
+    const hash = rawHash.split('?')[0];
     if (
       hash === 'parents' ||
       hash === 'children' ||
@@ -868,7 +1057,7 @@ const Dashboard: React.FC = () => {
       (hash === 'audit' && canReadAudit) ||
       (hash === 'admin' && canManageUsers)
     ) {
-      return hash;
+      return hash as any;
     }
     const saved = localStorage.getItem('thweb_active_tab');
     if (
@@ -880,10 +1069,74 @@ const Dashboard: React.FC = () => {
       (saved === 'audit' && canReadAudit) ||
       (saved === 'admin' && canManageUsers)
     ) {
-      return saved;
+      return saved as any;
     }
     return 'parents';
   });
+
+  // Navigation & Highlighting state (Patterns 2 & 3)
+  const [highlightTarget, setHighlightTarget] = React.useState<{ id: string; key: number } | null>(null);
+  const highlightedRowId = highlightTarget?.id ?? null;
+  const [returnNav, setReturnNav] = React.useState<{
+    familyId: string;
+    familyName: string;
+    type: 'parent' | 'child';
+  } | null>(null);
+
+  const handleJumpToParent = React.useCallback((parentId: string, familyId: string, familyName: string) => {
+    setGlobalFilter('');
+    setActiveTab('parents');
+    setHighlightTarget({ id: parentId, key: Date.now() });
+    setReturnNav({ familyId, familyName, type: 'parent' });
+    const params = new URLSearchParams({
+      fromFamily: familyId,
+      familyName,
+      highlight: parentId,
+      type: 'parent',
+    });
+    window.location.hash = `parents?${params.toString()}`;
+  }, []);
+
+  const handleJumpToChild = React.useCallback((childId: string, familyId: string, familyName: string) => {
+    setGlobalFilter('');
+    setActiveTab('children');
+    setHighlightTarget({ id: childId, key: Date.now() });
+    setReturnNav({ familyId, familyName, type: 'child' });
+    const params = new URLSearchParams({
+      fromFamily: familyId,
+      familyName,
+      highlight: childId,
+      type: 'child',
+    });
+    window.location.hash = `children?${params.toString()}`;
+  }, []);
+
+  const handleReturnToFamilies = React.useCallback(() => {
+    const famId = returnNav?.familyId;
+    setActiveTab('families');
+    if (famId) {
+      setHighlightTarget({ id: famId, key: Date.now() });
+      window.location.hash = `families?highlight=${famId}`;
+    } else {
+      window.location.hash = 'families';
+    }
+    setReturnNav(null);
+    setGlobalFilter('');
+  }, [returnNav]);
+
+  const handleDismissReturnNav = React.useCallback(() => {
+    setReturnNav(null);
+    setHighlightTarget(null);
+    const currentTab = window.location.hash.replace('#', '').split('?')[0] || activeTab;
+    window.history.replaceState(null, '', `#${currentTab}`);
+  }, [activeTab]);
+
+  const handleTabClick = React.useCallback((tab: typeof activeTab) => {
+    setGlobalFilter('');
+    setReturnNav(null);
+    setHighlightTarget(null);
+    window.location.hash = tab;
+  }, []);
 
   // Audit states
   const [auditLogs, setAuditLogs] = React.useState<AuditLog[]>([]);
@@ -920,6 +1173,10 @@ const Dashboard: React.FC = () => {
   const [newMembershipStartDate, setNewMembershipStartDate] = React.useState('');
   const [newMembershipEndDate, setNewMembershipEndDate] = React.useState('');
   const [newMembershipType, setNewMembershipType] = React.useState<'full_member' | 'supporting_member'>('full_member');
+
+  // Group Change popover state
+  const [targetChildGroupChanges, setTargetChildGroupChanges] = React.useState<Child | null>(null);
+  const [groupPopoverAnchor, setGroupPopoverAnchor] = React.useState<HTMLElement | string | null>(null);
 
   const [confirmDelete, setConfirmDelete] = React.useState<{
     isOpen: boolean;
@@ -1223,9 +1480,48 @@ const Dashboard: React.FC = () => {
     }
   }, [activeTab, fetchAuditLogs, canReadAudit]);
 
+  // Scroll to and highlight targeted row
+  React.useEffect(() => {
+    if (!highlightTarget) return;
+    const targetId = highlightTarget.id;
+
+    let attempts = 0;
+    const interval = setInterval(() => {
+      attempts++;
+      const el = document.getElementById(`row-${targetId}`);
+      if (el) {
+        clearInterval(interval);
+        el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+
+        // Force CSS animation replay in case the class was already applied
+        el.classList.remove('highlighted-row');
+        void el.offsetWidth;
+        el.classList.add('highlighted-row');
+      } else if (attempts >= 25) {
+        clearInterval(interval);
+      }
+    }, 40);
+
+    const clearTimer = setTimeout(() => {
+      setHighlightTarget(null);
+    }, 1800);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(clearTimer);
+    };
+  }, [activeTab, highlightTarget]);
+
   React.useEffect(() => {
     const handleHashChange = () => {
-      const hash = window.location.hash.replace('#', '');
+      const rawHash = window.location.hash.replace('#', '');
+      const [hash, queryString] = rawHash.split('?');
+      const searchParams = new URLSearchParams(queryString || '');
+      const highlight = searchParams.get('highlight');
+      const fromFamily = searchParams.get('fromFamily');
+      const familyName = searchParams.get('familyName');
+      const type = searchParams.get('type') as 'parent' | 'child' | null;
+
       if (
         hash === 'parents' ||
         hash === 'children' ||
@@ -1237,6 +1533,18 @@ const Dashboard: React.FC = () => {
       ) {
         setActiveTab(hash as any);
         localStorage.setItem('thweb_active_tab', hash);
+
+        if (highlight) {
+          setHighlightTarget({ id: highlight, key: Date.now() });
+        } else {
+          setHighlightTarget(null);
+        }
+
+        if (fromFamily && familyName && type) {
+          setReturnNav({ familyId: fromFamily, familyName, type });
+        } else {
+          setReturnNav(null);
+        }
       } else if (hash === 'audit' || hash === 'admin') {
         setActiveTab('parents');
         localStorage.setItem('thweb_active_tab', 'parents');
@@ -1246,9 +1554,11 @@ const Dashboard: React.FC = () => {
     window.addEventListener('hashchange', handleHashChange);
     if (!window.location.hash) {
       window.location.hash = activeTab;
+    } else if (window.location.hash.includes('?')) {
+      handleHashChange();
     }
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [activeTab, canReadAudit, canManageUsers]);
+  }, [canReadAudit, canManageUsers]);
 
   useRealtime(React.useCallback((message: any) => {
     if (
@@ -1356,13 +1666,12 @@ const Dashboard: React.FC = () => {
     }
 
     const newChildId = crypto.randomUUID();
-    const newChild = {
+    const newChild: any = {
       id: newChildId,
       family_id: targetFamily.id,
       first_name: newChildFirstName.trim(),
       last_name: newChildLastName.trim(),
       birth_date: `${parsedDate}T00:00:00Z`,
-      start_group: 1,
     };
 
     fetch(`/api/children/${newChildId}`, {
@@ -1524,6 +1833,99 @@ const Dashboard: React.FC = () => {
       .catch((err) => alert(err.message));
   };
 
+  const openManageGroupChanges = (child: Child, anchor: HTMLElement | string) => {
+    setTargetChildGroupChanges(child);
+    setGroupPopoverAnchor(anchor);
+  };
+
+  const closeManageGroupChanges = () => {
+    setGroupPopoverAnchor(null);
+    setTargetChildGroupChanges(null);
+  };
+
+  const handleAddGroupChange = async (childId: string, changeDate: string, targetGroup: number) => {
+    const payload = {
+      child_id: childId,
+      change_date: changeDate,
+      target_group: targetGroup,
+    };
+
+    const res = await fetch(`/api/children/${childId}/group_changes`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.text().catch(() => '');
+      throw new Error(`Failed to create group change: ${err || res.statusText}`);
+    }
+    const created = await res.json();
+    fetchFamilies();
+    if (targetChildGroupChanges && targetChildGroupChanges.id === childId) {
+      const existing = targetChildGroupChanges.group_changes || [];
+      const filtered = existing.filter((c) => c.change_date !== created.change_date);
+      const updatedChanges = [created, ...filtered].sort(
+        (a, b) => a.change_date.localeCompare(b.change_date)
+      );
+      setTargetChildGroupChanges({ ...targetChildGroupChanges, group_changes: updatedChanges });
+    }
+  };
+
+  const handleDeleteGroupChange = async (changeId: string) => {
+    const res = await fetch(`/api/children_group_changes/${changeId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      const err = await res.text().catch(() => '');
+      throw new Error(`Failed to delete group change: ${err || res.statusText}`);
+    }
+    fetchFamilies();
+    if (targetChildGroupChanges) {
+      const updatedChanges = (targetChildGroupChanges.group_changes || []).filter((c) => c.id !== changeId);
+      setTargetChildGroupChanges({ ...targetChildGroupChanges, group_changes: updatedChanges });
+    }
+  };
+
+  const handleUpdateGroupChange = async (changeId: string, changeDate: string, targetGroup: number) => {
+    const res = await fetch(`/api/children_group_changes/${changeId}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        change_date: changeDate,
+        target_group: targetGroup,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.text().catch(() => '');
+      throw new Error(`Failed to update group change: ${err || res.statusText}`);
+    }
+    const updated = await res.json();
+    fetchFamilies();
+    if (targetChildGroupChanges) {
+      const existing = targetChildGroupChanges.group_changes || [];
+      const updatedChanges = existing
+        .map((c) => (c.id === changeId ? updated : c))
+        .sort((a, b) => a.change_date.localeCompare(b.change_date));
+      setTargetChildGroupChanges({ ...targetChildGroupChanges, group_changes: updatedChanges });
+    }
+  };
+
+  const activeChildForGroupChanges = React.useMemo(() => {
+    if (!targetChildGroupChanges) return null;
+    for (const f of families) {
+      const found = (f.children || []).find((c) => c.id === targetChildGroupChanges.id);
+      if (found) return found;
+    }
+    return targetChildGroupChanges;
+  }, [families, targetChildGroupChanges]);
+
   const openAddFamily = () => {
     setP1FirstName('');
     setP1LastName('');
@@ -1620,7 +2022,7 @@ const Dashboard: React.FC = () => {
 
   const handleSaveChildField = (child: Child, fieldName: keyof Child, newValue: any) => {
     let formattedValue = newValue;
-    const isDateField = fieldName === 'birth_date' || fieldName === 'start_date' || fieldName === 'exit_date' || fieldName === 'hort_start_date' || fieldName === 'group2_start_date';
+    const isDateField = fieldName === 'birth_date';
     if (isDateField && newValue && typeof newValue === 'string' && !newValue.includes('T')) {
       formattedValue = `${newValue}T00:00:00Z`;
     }
@@ -1787,10 +2189,11 @@ const Dashboard: React.FC = () => {
         if (!query) return true;
         const fnMatch = (c.first_name || '').toLowerCase().includes(query);
         const lnMatch = (c.last_name || '').toLowerCase().includes(query);
-        const groupLabel = c.start_group === 1 ? t('group1') : c.start_group === 2 ? t('group2') : c.start_group === 3 ? t('group3') : '';
-        const groupMatch = groupLabel.toLowerCase().includes(query);
+        const groupInfo = getChildGroupInfo(c.group_changes);
+        const groupMatch = groupInfo.groupLabel.toLowerCase().includes(query);
+        const startMatch = groupInfo.startDate ? formatDisplayDate(groupInfo.startDate).toLowerCase().includes(query) : false;
         const familyLastNameMatch = lastNames.some(ln => ln.toLowerCase().includes(query));
-        return fnMatch || lnMatch || groupMatch || familyLastNameMatch;
+        return fnMatch || lnMatch || groupMatch || startMatch || familyLastNameMatch;
       });
 
       return {
@@ -1845,17 +2248,43 @@ const Dashboard: React.FC = () => {
         const bdFormatted = formatDisplayDate(c.birth_date).toLowerCase();
         const bdRaw = (c.birth_date || '').split('T')[0];
         const bdMatch = bdFormatted.includes(query) || bdRaw.includes(query);
+        const groupInfo = getChildGroupInfo(c.group_changes);
+        const groupMatch = groupInfo.groupLabel.toLowerCase().includes(query);
         const familyNameMatch = familyName.toLowerCase().includes(query);
         const parentMatch = parentNames.toLowerCase().includes(query);
-        return fnMatch || lnMatch || fullName.includes(query) || bdMatch || familyNameMatch || parentMatch;
+        return fnMatch || lnMatch || fullName.includes(query) || bdMatch || groupMatch || familyNameMatch || parentMatch;
       });
 
       const familyMatch = familyName.toLowerCase().includes(query) || parentNames.toLowerCase().includes(query);
 
+      const subHeader = (f.parents && f.parents.length > 0) ? (
+        <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: '0.25rem', alignItems: 'center' }}>
+          {f.parents.map((p, idx) => {
+            const pName = `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Parent';
+            return (
+              <React.Fragment key={p.id}>
+                {idx > 0 && <span style={{ color: 'var(--text-muted)' }}>,</span>}
+                <button
+                  type="button"
+                  className="family-parent-link"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleJumpToParent(p.id, f.id, familyName);
+                  }}
+                  title={t('jumpToParent')}
+                >
+                  {pName}
+                </button>
+              </React.Fragment>
+            );
+          })}
+        </span>
+      ) : null;
+
       return {
         id: f.id,
         family_name: familyName,
-        sub_header: parentNames,
+        sub_header: subHeader,
         children: filteredChildren,
         nameMatch: familyMatch,
       };
@@ -1877,7 +2306,7 @@ const Dashboard: React.FC = () => {
         }
         return f;
       });
-  }, [families, globalFilter]);
+  }, [families, globalFilter, handleJumpToParent]);
 
   const hygieneColumns = React.useMemo<ColumnDef<any>[]>(() => {
     return [
@@ -2142,6 +2571,26 @@ const Dashboard: React.FC = () => {
     [families, handleSaveParentField, handleDeleteParent, isVaccinationUnlocked, handleRequestKmsAuth, hasPermission, user?.email]
   );
 
+  const childGroupColumn = React.useMemo<ColumnDef<any>>(
+    () => ({
+      header: t('group'),
+      id: 'group',
+      size: 340,
+      cell: (info) => {
+        const child = info.row.original;
+        const isCurrentActive = Boolean(groupPopoverAnchor && targetChildGroupChanges?.id === child.id);
+        return (
+          <ChildGroupCell
+            child={child}
+            isActive={isCurrentActive}
+            onOpenManage={openManageGroupChanges}
+          />
+        );
+      },
+    }),
+    [groupPopoverAnchor, targetChildGroupChanges, openManageGroupChanges]
+  );
+
   const childColumns = React.useMemo<ColumnDef<any>[]>(
     () => [
       {
@@ -2217,165 +2666,57 @@ const Dashboard: React.FC = () => {
         }
       },
       {
-        header: t('startDate'),
-        accessorKey: 'start_date',
-        size: 150,
+        header: t('startdatum'),
+        id: 'start_date',
+        size: 130,
         cell: (info) => {
           const child = info.row.original;
-          const initialDate = child.start_date ? child.start_date.split('T')[0] : '';
-          const displayValue = CURRENT_LOCALE === 'de' ? formatDisplayDate(initialDate) : initialDate;
+          const groupInfo = getChildGroupInfo(child.group_changes);
+          const cellId = `cell-start_date-${child.id}`;
           return (
-            <EasyEditComponent
-              type={EasyEditTypes.DATE}
-              value={displayValue}
-              onSave={(val: string) => {
-                const parsed = val.trim() === '' ? null : parseInputDate(val);
-                handleSaveChildField(child, 'start_date', parsed);
-              }}
-              editButtonLabel={<Pencil size={14} />}
-              instructions={t('editStartDate')}
-              displayComponent={<span>{formatDisplayDate(child.start_date)}</span>}
-              viewAttributes={{}}
-              inputAttributes={{}}
-              onCancel={() => {}}
-              onValidate={(val: string) => {
-                if (val.trim() === '') return true;
-                const parsed = parseInputDate(val);
-                return /^\d{4}-\d{2}-\d{2}$/.test(parsed);
-              }}
-            />
+            <div
+              id={cellId}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
+            >
+              <span>{groupInfo.startDate ? formatDisplayDate(groupInfo.startDate) : '-'}</span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const cellEl = document.getElementById(cellId) || e.currentTarget;
+                  openManageGroupChanges(child, cellEl);
+                }}
+                className="easy-edit-button"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--primary)',
+                  cursor: 'pointer',
+                  padding: '2px',
+                  borderRadius: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '24px',
+                  height: '24px',
+                  flexShrink: 0,
+                  marginLeft: '4px',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--accent-bg)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                }}
+                title={t('manageGroupChanges')}
+              >
+                <Pencil size={12} />
+              </button>
+            </div>
           );
         }
       },
-      {
-        header: t('exitDate'),
-        accessorKey: 'exit_date',
-        size: 150,
-        cell: (info) => {
-          const child = info.row.original;
-          const initialDate = child.exit_date ? child.exit_date.split('T')[0] : '';
-          const displayValue = CURRENT_LOCALE === 'de' ? formatDisplayDate(initialDate) : initialDate;
-          return (
-            <EasyEditComponent
-              type={EasyEditTypes.DATE}
-              value={displayValue}
-              onSave={(val: string) => {
-                const parsed = val.trim() === '' ? null : parseInputDate(val);
-                handleSaveChildField(child, 'exit_date', parsed);
-              }}
-              editButtonLabel={<Pencil size={14} />}
-              instructions={t('editExitDate')}
-              displayComponent={<span>{formatDisplayDate(child.exit_date)}</span>}
-              viewAttributes={{}}
-              inputAttributes={{}}
-              onCancel={() => {}}
-              onValidate={(val: string) => {
-                if (val.trim() === '') return true;
-                const parsed = parseInputDate(val);
-                return /^\d{4}-\d{2}-\d{2}$/.test(parsed);
-              }}
-            />
-          );
-        }
-      },
-      {
-        header: t('startGroup'),
-        accessorKey: 'start_group',
-        size: 140,
-        cell: (info) => {
-          const child = info.row.original;
-          const initialVal = child.start_group ? String(child.start_group) : '1';
-          const label = child.start_group === 1 ? t('group1') : child.start_group === 2 ? t('group2') : child.start_group === 3 ? t('group3') : t('group1');
-          return (
-            <EasyEditComponent
-              type={EasyEditTypes.SELECT}
-              value={initialVal}
-              onSave={(val: string) => {
-                const num = val === '' ? 1 : parseInt(val, 10);
-                handleSaveChildField(child, 'start_group', num);
-              }}
-              editButtonLabel={<Pencil size={14} />}
-              instructions={t('editStartGroup')}
-              displayComponent={<span>{label}</span>}
-              options={[
-                { label: t('group1'), value: '1' },
-                { label: t('group2'), value: '2' },
-                { label: t('group3'), value: '3' },
-              ]}
-              viewAttributes={{}}
-              onCancel={() => {}}
-            />
-          );
-        }
-      },
-      {
-        header: t('group2StartDate'),
-        accessorKey: 'group2_start_date',
-        size: 140,
-        cell: (info) => {
-          const child = info.row.original;
-          const initialDate = child.group2_start_date ? child.group2_start_date.split('T')[0] : '';
-          const displayValue = CURRENT_LOCALE === 'de' ? formatDisplayDate(initialDate) : initialDate;
-          return (
-            <EasyEditComponent
-              type={EasyEditTypes.DATE}
-              value={displayValue}
-              onSave={(val: string) => {
-                const parsed = val.trim() === '' ? null : parseInputDate(val);
-                handleSaveChildField(child, 'group2_start_date', parsed);
-              }}
-              editButtonLabel={<Pencil size={14} />}
-              instructions={t('editGroup2StartDate')}
-              displayComponent={<span>{formatDisplayDate(child.group2_start_date)}</span>}
-              viewAttributes={{}}
-              inputAttributes={{}}
-              onCancel={() => {}}
-              onValidate={(val: string) => {
-                if (val.trim() === '') return true;
-                const parsed = parseInputDate(val);
-                return /^\d{4}-\d{2}-\d{2}$/.test(parsed);
-              }}
-            />
-          );
-        }
-      },
-      {
-        header: t('hortStartDate'),
-        accessorKey: 'hort_start_date',
-        size: 140,
-        cell: (info) => {
-          const child = info.row.original;
-          
-          // Hort start date, which is non-editable if the start group is Hort (3), and in that case equals start date.
-          if (child.start_group === 3) {
-            return <span>{formatDisplayDate(child.start_date)}</span>;
-          }
-
-          const initialDate = child.hort_start_date ? child.hort_start_date.split('T')[0] : '';
-          const displayValue = CURRENT_LOCALE === 'de' ? formatDisplayDate(initialDate) : initialDate;
-          return (
-            <EasyEditComponent
-              type={EasyEditTypes.DATE}
-              value={displayValue}
-              onSave={(val: string) => {
-                const parsed = val.trim() === '' ? null : parseInputDate(val);
-                handleSaveChildField(child, 'hort_start_date', parsed);
-              }}
-              editButtonLabel={<Pencil size={14} />}
-              instructions={t('editHortStartDate')}
-              displayComponent={<span>{formatDisplayDate(child.hort_start_date)}</span>}
-              viewAttributes={{}}
-              inputAttributes={{}}
-              onCancel={() => {}}
-              onValidate={(val: string) => {
-                if (val.trim() === '') return true;
-                const parsed = parseInputDate(val);
-                return /^\d{4}-\d{2}-\d{2}$/.test(parsed);
-              }}
-            />
-          );
-        }
-      },
+      childGroupColumn,
       {
         header: t('notes'),
         accessorKey: 'notes',
@@ -2454,7 +2795,7 @@ const Dashboard: React.FC = () => {
         }
       }
     ],
-    [families, handleSaveChildField, handleDeleteChild, isVaccinationUnlocked, handleRequestKmsAuth, hasPermission, user?.email]
+    [families, handleSaveChildField, handleDeleteChild, openManageGroupChanges, childGroupColumn, isVaccinationUnlocked, handleRequestKmsAuth, hasPermission, user?.email]
   );
 
   const familyChildColumns = React.useMemo<ColumnDef<any>[]>(
@@ -2467,7 +2808,22 @@ const Dashboard: React.FC = () => {
         cell: (info) => {
           const child = info.row.original;
           const fullName = `${child.first_name || ''} ${child.last_name || ''}`.trim() || '-';
-          return <span>{fullName}</span>;
+          if (!child.first_name && !child.last_name) {
+            return <span>-</span>;
+          }
+          return (
+            <button
+              type="button"
+              className="family-child-link"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleJumpToChild(child.id, child.family_id, child.family_name || '');
+              }}
+              title={t('jumpToChild')}
+            >
+              {fullName}
+            </button>
+          );
         }
       },
       {
@@ -2479,9 +2835,10 @@ const Dashboard: React.FC = () => {
           const child = info.row.original;
           return <span>{formatDisplayDate(child.birth_date) || '-'}</span>;
         }
-      }
+      },
+      childGroupColumn,
     ],
-    []
+    [childGroupColumn, handleJumpToChild]
   );
 
   const isTableTab = activeTab === 'parents' || activeTab === 'children' || activeTab === 'families' || activeTab === 'hygieneBelehrung';
@@ -2499,7 +2856,7 @@ const Dashboard: React.FC = () => {
         {/* Navigation Tabs */}
         <div className="tabs" style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid var(--border)', marginBottom: '1.5rem' }}>
           <button 
-            onClick={() => { window.location.hash = 'parents'; setGlobalFilter(''); }}
+            onClick={() => handleTabClick('parents')}
             style={{
               padding: '0.75rem 1rem',
               background: 'none',
@@ -2515,7 +2872,7 @@ const Dashboard: React.FC = () => {
             {t('parents')}
           </button>
           <button 
-            onClick={() => { window.location.hash = 'children'; setGlobalFilter(''); }}
+            onClick={() => handleTabClick('children')}
             style={{
               padding: '0.75rem 1rem',
               background: 'none',
@@ -2531,7 +2888,7 @@ const Dashboard: React.FC = () => {
             {t('children')}
           </button>
           <button 
-            onClick={() => { window.location.hash = 'families'; setGlobalFilter(''); }}
+            onClick={() => handleTabClick('families')}
             style={{
               padding: '0.75rem 1rem',
               background: 'none',
@@ -2547,7 +2904,7 @@ const Dashboard: React.FC = () => {
             {t('families')}
           </button>
           <button 
-            onClick={() => { window.location.hash = 'childcareFees'; setGlobalFilter(''); }}
+            onClick={() => handleTabClick('childcareFees')}
             style={{
               padding: '0.75rem 1rem',
               background: 'none',
@@ -2563,7 +2920,7 @@ const Dashboard: React.FC = () => {
             {t('childcareFees')}
           </button>
           <button 
-            onClick={() => { window.location.hash = 'hygieneBelehrung'; setGlobalFilter(''); }}
+            onClick={() => handleTabClick('hygieneBelehrung')}
             style={{
               padding: '0.75rem 1rem',
               background: 'none',
@@ -2580,7 +2937,7 @@ const Dashboard: React.FC = () => {
           </button>
           {canReadAudit && (
             <button 
-              onClick={() => { window.location.hash = 'audit'; setGlobalFilter(''); }}
+              onClick={() => handleTabClick('audit')}
               style={{
                 padding: '0.75rem 1rem',
                 background: 'none',
@@ -2598,7 +2955,7 @@ const Dashboard: React.FC = () => {
           )}
           {(hasPermission('users.all.manage') || hasPermission('*')) && (
             <button 
-              onClick={() => { window.location.hash = 'admin'; setGlobalFilter(''); }}
+              onClick={() => handleTabClick('admin')}
               style={{
                 padding: '0.75rem 1rem',
                 background: 'none',
@@ -2615,6 +2972,35 @@ const Dashboard: React.FC = () => {
             </button>
           )}
         </div>
+
+        {/* Navigation Context Banner (Pattern 2) */}
+        {returnNav && (activeTab === 'parents' || activeTab === 'children') && (
+          <div className="context-return-banner">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <span className="context-return-text">
+                {returnNav.type === 'parent'
+                  ? `${t('viewingParentFromFamily')} „${returnNav.familyName}“`
+                  : `${t('viewingChildFromFamily')} „${returnNav.familyName}“`}
+              </span>
+              <button
+                type="button"
+                className="context-return-button"
+                onClick={handleReturnToFamilies}
+              >
+                <ArrowLeft size={14} />
+                <span>{t('backToFamilies')}</span>
+              </button>
+            </div>
+            <button
+              type="button"
+              className="context-return-dismiss"
+              onClick={handleDismissReturnNav}
+              title={t('dismiss')}
+            >
+              <X size={15} />
+            </button>
+          </div>
+        )}
 
         {activeTab !== 'childcareFees' && activeTab !== 'audit' && activeTab !== 'admin' && (
           <div className="controls-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
@@ -2745,6 +3131,7 @@ const Dashboard: React.FC = () => {
             columns={parentColumns}
             getSubRows={(row: any) => row.parents}
             onAddRow={openAddParent}
+            highlightedRowId={highlightedRowId}
           />
         ) : activeTab === 'children' ? (
           <DataTable
@@ -2753,6 +3140,7 @@ const Dashboard: React.FC = () => {
             getSubRows={(row: any) => row.children}
             onAddRow={openAddChild}
             emptySubRowsText={t('noChildrenYet')}
+            highlightedRowId={highlightedRowId}
           />
         ) : activeTab === 'families' ? (
           <DataTable
@@ -2762,12 +3150,14 @@ const Dashboard: React.FC = () => {
             onAddRow={openAddChild}
             emptySubRowsText={t('noChildrenYet')}
             hideHeader={true}
+            highlightedRowId={highlightedRowId}
           />
         ) : activeTab === 'hygieneBelehrung' ? (
           <DataTable
             data={parentsFamilyData}
             columns={hygieneColumns}
             getSubRows={(row: any) => row.parents}
+            highlightedRowId={highlightedRowId}
           />
         ) : activeTab === 'audit' && canReadAudit ? (
           <AuditLogView logs={auditLogs} loading={auditLoading} />
@@ -2989,6 +3379,7 @@ const Dashboard: React.FC = () => {
                   />
                 </div>
               </div>
+
               <div className="modal-actions">
                 <button type="button" className="cancel-btn" onClick={() => setAddChildOpen(false)}>
                   {t('cancel')}
@@ -3395,6 +3786,18 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Manage Group Changes Popover */}
+        <GroupChangesPopover
+          key={activeChildForGroupChanges?.id || 'group-popover'}
+          isOpen={Boolean(groupPopoverAnchor && activeChildForGroupChanges)}
+          anchorEl={groupPopoverAnchor}
+          onClose={closeManageGroupChanges}
+          child={activeChildForGroupChanges}
+          onAddGroupChange={handleAddGroupChange}
+          onUpdateGroupChange={handleUpdateGroupChange}
+          onDeleteGroupChange={handleDeleteGroupChange}
+        />
     </div>
   );
 };

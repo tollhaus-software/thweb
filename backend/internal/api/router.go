@@ -60,6 +60,10 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		r.With(auth.RequirePermission("children.all.write")).Post("/api/families/{id}/children", server.HandleUpdateChild)
 		r.With(auth.RequirePermission("children.all.write")).Put("/api/children/{id}", server.HandleUpdateChild)
 		r.With(auth.RequirePermission("children.all.write")).Delete("/api/children/{id}", server.HandleDeleteChild)
+		r.With(auth.RequirePermission("children.all.write")).Post("/api/children/{id}/group_changes", server.HandleCreateChildGroupChange)
+		r.With(auth.RequirePermission("children.all.write")).Post("/api/children_group_changes", server.HandleCreateChildGroupChange)
+		r.With(auth.RequirePermission("children.all.write")).Put("/api/children_group_changes/{id}", server.HandleUpdateChildGroupChange)
+		r.With(auth.RequirePermission("children.all.write")).Delete("/api/children_group_changes/{id}", server.HandleDeleteChildGroupChange)
 
 		// Hygiene Belehrung
 		r.With(auth.RequirePermission("hygiene.all.write")).Post("/api/hygiene-events", server.HandleCreateHygieneEvent)

@@ -457,3 +457,148 @@ tr.family-group-row td {
   from { transform: translateY(16px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
+
+/* Navigation links for Parents and Children in Families Table */
+.family-parent-link,
+.family-child-link {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 3px;
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
+}
+
+.family-parent-link:hover,
+.family-child-link:hover {
+  color: var(--primary);
+  text-decoration-color: var(--primary);
+}
+
+/* Row Flash Highlight Animation */
+@keyframes rowFlashHighlight {
+  0% {
+    background-color: rgba(59, 130, 246, 0.35);
+    box-shadow: inset 0 0 0 9999px rgba(59, 130, 246, 0.35);
+  }
+  25% {
+    background-color: rgba(59, 130, 246, 0.3);
+    box-shadow: inset 0 0 0 9999px rgba(59, 130, 246, 0.3);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: inset 0 0 0 9999px transparent;
+  }
+}
+
+@keyframes stickyColFlashHighlight {
+  0% {
+    background-color: rgba(59, 130, 246, 0.35);
+    box-shadow: inset 4px 0 0 0 var(--primary), inset 0 0 0 9999px rgba(59, 130, 246, 0.35), inset -1px 0 0 0 var(--separator-border), 2px 0 4px var(--shadow-sticky);
+  }
+  25% {
+    background-color: rgba(59, 130, 246, 0.3);
+    box-shadow: inset 4px 0 0 0 var(--primary), inset 0 0 0 9999px rgba(59, 130, 246, 0.3), inset -1px 0 0 0 var(--separator-border), 2px 0 4px var(--shadow-sticky);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: inset 0 0 0 0 transparent, inset 0 0 0 9999px transparent, inset -1px 0 0 0 var(--separator-border), 2px 0 4px var(--shadow-sticky);
+  }
+}
+
+@keyframes familyGroupFirstColFlashHighlight {
+  0% {
+    background-color: rgba(59, 130, 246, 0.35);
+    box-shadow: inset 4px 0 0 0 var(--primary), inset 0 0 0 9999px rgba(59, 130, 246, 0.35);
+  }
+  25% {
+    background-color: rgba(59, 130, 246, 0.3);
+    box-shadow: inset 4px 0 0 0 var(--primary), inset 0 0 0 9999px rgba(59, 130, 246, 0.3);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: inset 0 0 0 0 transparent, inset 0 0 0 9999px transparent;
+  }
+}
+
+.data-table tr.highlighted-row:not(.family-group-row) td {
+  animation: rowFlashHighlight 1.8s ease-out forwards;
+}
+
+.data-table tr.highlighted-row:not(.family-group-row) td.sticky-col {
+  animation: stickyColFlashHighlight 1.8s ease-out forwards;
+}
+
+.data-table tr.highlighted-row:not(.family-group-row) td:first-child:not(.sticky-col) {
+  animation: familyGroupFirstColFlashHighlight 1.8s ease-out forwards;
+}
+
+.data-table tr.family-group-row.highlighted-row td {
+  animation: familyGroupFirstColFlashHighlight 1.8s ease-out forwards;
+}
+
+/* Context Navigation Return Banner (Pattern 2) */
+.context-return-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 0.85rem;
+  margin-bottom: 1rem;
+  background-color: var(--accent-bg);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--primary);
+  border-radius: 6px;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.context-return-text {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-h);
+}
+
+.context-return-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--primary);
+  font-size: 0.825rem;
+  font-weight: 600;
+  padding: 0.3rem 0.65rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.context-return-button:hover {
+  background-color: var(--primary);
+  border-color: var(--primary);
+  color: #ffffff;
+}
+
+.context-return-dismiss {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 4px;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.context-return-dismiss:hover {
+  color: var(--text);
+  background-color: var(--bg-hover);
+}
+

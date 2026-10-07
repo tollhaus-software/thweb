@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { CURRENT_LOCALE } from '../utils/i18n';
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const Types = {
   TEXT: 'text',
   DATE: 'date',
@@ -60,49 +62,67 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
   const [hovered, setHovered] = useState(false);
   const [tempValue, setTempValue] = useState(value);
   const inputRef = useRef<HTMLInputElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const isEditingRef = useRef(isEditing);
   const tempValueRef = useRef(tempValue);
+
+  // Sync state if external value changes
+  const [prevValue, setPrevValue] = useState(value);
+  if (prevValue !== value) {
+    setPrevValue(value);
+    setTempValue(value);
+  }
 
   // Calendar Picker state
   const [calMonth, setCalMonth] = useState(new Date().getMonth());
   const [calYear, setCalYear] = useState(new Date().getFullYear());
 
-  useEffect(() => {
-    isEditingRef.current = isEditing;
-    if (isEditing && type === Types.DATE) {
+  const startEditing = () => {
+    if (type === Types.DATE) {
       const d = tempValue ? parseDateStringToObj(tempValue) : new Date();
       setCalMonth(d.getMonth());
       setCalYear(d.getFullYear());
     }
-  }, [isEditing, tempValue, type]);
+    setIsEditing(true);
+  };
+
+  useEffect(() => {
+    isEditingRef.current = isEditing;
+  }, [isEditing]);
 
   useEffect(() => {
     tempValueRef.current = tempValue;
   }, [tempValue]);
 
-  // Sync state if external value changes
-  useEffect(() => {
-    setTempValue(value);
-  }, [value]);
+  // Dropdown portal coordinates
+  const [dropdownCoords, setDropdownCoords] = useState<{ top: number; left: number; width: number } | null>(null);
 
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
     const latestVal = tempValueRef.current;
     if (onValidate && !onValidate(latestVal)) {
-      handleCancel();
+      setTempValue(value);
+      setIsEditing(false);
+      setDropdownCoords(null);
+      if (onCancel) {
+        onCancel();
+      }
       return;
     }
     onSave(latestVal);
     setIsEditing(false);
-  };
+    setDropdownCoords(null);
+  }, [onSave, onValidate, value, onCancel]);
 
-  const handleCancel = () => {
+  const handleCancel = useCallback(() => {
     setTempValue(value);
     setIsEditing(false);
+    setDropdownCoords(null);
     if (onCancel) {
       onCancel();
     }
-  };
+  }, [value, onCancel]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
@@ -112,18 +132,94 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
     }
   };
 
-  const handleInputBlur = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleInputBlur = (e: React.FocusEvent<HTMLInputElement | HTMLDivElement>) => {
     const currentTarget = e.currentTarget;
     setTimeout(() => {
-      // Find out if the active element is still inside the current edit wrapper
+      // Find out if the active element is still inside the current edit wrapper or dropdown
       const wrapper = currentTarget.closest('.easy-edit-inline-wrapper');
-      if (!wrapper?.contains(document.activeElement)) {
+      const inWrapper = wrapper?.contains(document.activeElement);
+      const inDropdown = dropdownRef.current?.contains(document.activeElement);
+      if (!inWrapper && !inDropdown) {
         if (isEditingRef.current) {
           handleSave();
         }
       }
-    }, 100);
+    }, 150);
   };
+
+  // Outside click listener to dismiss floating portal dropdowns
+  useEffect(() => {
+    if (!isEditing || (type !== Types.SELECT && type !== Types.DATE)) return;
+
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        wrapperRef.current &&
+        !wrapperRef.current.contains(target) &&
+        dropdownRef.current &&
+        !dropdownRef.current.contains(target)
+      ) {
+        handleSave();
+      }
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [isEditing, type, handleSave]);
+
+  useLayoutEffect(() => {
+    if (!isEditing || (type !== Types.SELECT && type !== Types.DATE)) {
+      return;
+    }
+
+    const updateCoords = () => {
+      const el = wrapperRef.current || inputRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) return;
+
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      if (type === Types.SELECT) {
+        const dropdownWidth = Math.max(rect.width, 160);
+        const dropdownHeight = Math.min(options.length * 40 + 10, 240);
+        let top = rect.bottom + 2;
+        let left = rect.left;
+        if (top + dropdownHeight > viewportHeight - 8 && rect.top > dropdownHeight + 8) {
+          top = rect.top - dropdownHeight - 2;
+        }
+        if (left + dropdownWidth > viewportWidth - 8) {
+          left = viewportWidth - dropdownWidth - 8;
+        }
+        if (left < 8) left = 8;
+        setDropdownCoords({ top, left, width: dropdownWidth });
+      } else if (type === Types.DATE) {
+        const dropdownWidth = 240;
+        const dropdownHeight = 220;
+        let top = rect.bottom + 4;
+        let left = rect.left;
+        if (top + dropdownHeight > viewportHeight - 8 && rect.top > dropdownHeight + 8) {
+          top = rect.top - dropdownHeight - 4;
+        }
+        if (left + dropdownWidth > viewportWidth - 8) {
+          left = viewportWidth - dropdownWidth - 8;
+        }
+        if (left < 8) left = 8;
+        setDropdownCoords({ top, left, width: dropdownWidth });
+      }
+    };
+
+    updateCoords();
+    window.addEventListener('resize', updateCoords);
+    window.addEventListener('scroll', updateCoords, true);
+    return () => {
+      window.removeEventListener('resize', updateCoords);
+      window.removeEventListener('scroll', updateCoords, true);
+    };
+  }, [isEditing, type, options.length]);
 
   const handlePrevMonth = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -153,12 +249,7 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
     const d = String(day).padStart(2, '0');
     const m = String(calMonth + 1).padStart(2, '0');
     const y = calYear;
-    let formatted = '';
-    if (CURRENT_LOCALE === 'de') {
-      formatted = `${d}.${m}.${y}`;
-    } else {
-      formatted = `${y}-${m}-${d}`;
-    }
+    const formatted = CURRENT_LOCALE === 'de' ? `${d}.${m}.${y}` : `${y}-${m}-${d}`;
     setTempValue(formatted);
     // Trigger save immediately
     tempValueRef.current = formatted;
@@ -171,7 +262,7 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
         className={`easy-edit-wrapper ${hovered ? 'easy-edit-hover-on' : ''}`}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        onDoubleClick={() => setIsEditing(true)}
+        onDoubleClick={startEditing}
         {...viewAttributes}
       >
         {displayComponent ? (
@@ -185,7 +276,7 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
           <button
             type="button"
             className="easy-edit-button"
-            onClick={() => setIsEditing(true)}
+            onClick={startEditing}
             title={instructions}
           >
             {editButtonLabel}
@@ -199,61 +290,72 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
     const currentLabel = options.find(o => o.value === tempValue)?.label || tempValue;
     return (
       <div
+        ref={wrapperRef}
         className="easy-edit-inline-wrapper"
         style={{ position: 'relative', width: '100%', minHeight: '26px' }}
         onClick={(e) => e.stopPropagation()}
       >
         <div
           tabIndex={0}
-          onBlur={handleInputBlur as any}
+          onBlur={handleInputBlur}
           autoFocus
           style={{ flex: 1, padding: '2px 4px', textAlign: 'left', color: 'var(--text-h)', fontWeight: 500, outline: 'none', cursor: 'pointer' }}
         >
           {currentLabel}
         </div>
-        <div
-          className="easy-edit-select-dropdown"
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            zIndex: 1000,
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border)',
-            borderRadius: '4px',
-            boxShadow: 'var(--shadow)',
-            width: '100%',
-            boxSizing: 'border-box',
-            marginTop: '2px',
-          }}
-        >
-          {options.map((opt) => (
-            <div
-              key={opt.value}
-              onClick={() => {
-                onSave(opt.value);
-                setIsEditing(false);
-              }}
-              style={{
-                padding: '0.5rem 0.75rem',
-                cursor: 'pointer',
-                textAlign: 'left',
-                background: tempValue === opt.value ? 'var(--accent-bg)' : 'transparent',
-                color: 'var(--text-h)',
-                fontSize: '0.95rem',
-                borderBottom: '1px solid var(--border)',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'var(--accent-bg)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = tempValue === opt.value ? 'var(--accent-bg)' : 'transparent';
-              }}
-            >
-              {opt.label}
-            </div>
-          ))}
-        </div>
+        {dropdownCoords && createPortal(
+          <div
+            ref={dropdownRef}
+            className="easy-edit-select-dropdown"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            style={{
+              position: 'fixed',
+              top: `${dropdownCoords.top}px`,
+              left: `${dropdownCoords.left}px`,
+              width: `${dropdownCoords.width}px`,
+              zIndex: 10005,
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '4px',
+              boxShadow: 'var(--shadow)',
+              boxSizing: 'border-box',
+              maxHeight: '240px',
+              overflowY: 'auto',
+            }}
+          >
+            {options.map((opt) => (
+              <div
+                key={opt.value}
+                onClick={() => {
+                  onSave(opt.value);
+                  setIsEditing(false);
+                  setDropdownCoords(null);
+                }}
+                style={{
+                  padding: '0.5rem 0.75rem',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  background: tempValue === opt.value ? 'var(--accent-bg)' : 'transparent',
+                  color: 'var(--text-h)',
+                  fontSize: '0.95rem',
+                  borderBottom: '1px solid var(--border)',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'var(--accent-bg)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = tempValue === opt.value ? 'var(--accent-bg)' : 'transparent';
+                }}
+              >
+                {opt.label}
+              </div>
+            ))}
+          </div>,
+          document.body
+        )}
       </div>
     );
   }
@@ -276,6 +378,7 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
 
     return (
       <div
+        ref={wrapperRef}
         className="easy-edit-inline-wrapper"
         style={{ position: 'relative', width: '100%' }}
         onClick={(e) => e.stopPropagation()}
@@ -286,7 +389,7 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
           value={tempValue}
           onChange={(e) => setTempValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          onBlur={handleInputBlur as any}
+          onBlur={handleInputBlur}
           autoFocus
           placeholder={CURRENT_LOCALE === 'de' ? 'TT.MM.JJJJ' : 'YYYY-MM-DD'}
           style={{
@@ -301,58 +404,65 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
             boxSizing: 'border-box'
           }}
         />
-        <div
-          className="easy-edit-calendar-dropdown"
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            zIndex: 1000,
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border)',
-            borderRadius: '6px',
-            boxShadow: 'var(--shadow)',
-            width: '240px',
-            padding: '0.5rem',
-            marginTop: '4px',
-            boxSizing: 'border-box',
-            color: 'var(--text-h)',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-            <button type="button" onClick={handlePrevMonth} style={{ border: 'none', background: 'transparent', color: 'var(--text)', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem', padding: '2px 6px' }}>&lt;</button>
-            <span style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{monthNames[calMonth]} {calYear}</span>
-            <button type="button" onClick={handleNextMonth} style={{ border: 'none', background: 'transparent', color: 'var(--text)', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem', padding: '2px 6px' }}>&gt;</button>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px', textAlign: 'center', fontWeight: 'bold', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
-            {weekdays.map(d => <div key={d}>{d}</div>)}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px', textAlign: 'center' }}>
-            {calendarCells.map((day, idx) => {
-              if (day === null) {
-                return <div key={`empty-${idx}`} />;
-              }
-              return (
-                <div
-                  key={`day-${day}`}
-                  onClick={() => handleSelectDay(day)}
-                  style={{
-                    padding: '4px 0',
-                    fontSize: '0.8rem',
-                    cursor: 'pointer',
-                    borderRadius: '4px',
-                    backgroundColor: 'transparent',
-                    transition: 'background-color 0.1s'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                >
-                  {day}
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        {dropdownCoords && createPortal(
+          <div
+            ref={dropdownRef}
+            className="easy-edit-calendar-dropdown"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            style={{
+              position: 'fixed',
+              top: `${dropdownCoords.top}px`,
+              left: `${dropdownCoords.left}px`,
+              width: `${dropdownCoords.width}px`,
+              zIndex: 10005,
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border)',
+              borderRadius: '6px',
+              boxShadow: 'var(--shadow)',
+              padding: '0.5rem',
+              boxSizing: 'border-box',
+              color: 'var(--text-h)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+              <button type="button" onClick={handlePrevMonth} style={{ border: 'none', background: 'transparent', color: 'var(--text)', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem', padding: '2px 6px' }}>&lt;</button>
+              <span style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{monthNames[calMonth]} {calYear}</span>
+              <button type="button" onClick={handleNextMonth} style={{ border: 'none', background: 'transparent', color: 'var(--text)', cursor: 'pointer', fontWeight: 'bold', fontSize: '1rem', padding: '2px 6px' }}>&gt;</button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px', textAlign: 'center', fontWeight: 'bold', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
+              {weekdays.map(d => <div key={d}>{d}</div>)}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px', textAlign: 'center' }}>
+              {calendarCells.map((day, idx) => {
+                if (day === null) {
+                  return <div key={`empty-${idx}`} />;
+                }
+                return (
+                  <div
+                    key={`day-${day}`}
+                    onClick={() => handleSelectDay(day)}
+                    style={{
+                      padding: '4px 0',
+                      fontSize: '0.8rem',
+                      cursor: 'pointer',
+                      borderRadius: '4px',
+                      backgroundColor: 'transparent',
+                      transition: 'background-color 0.1s'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                  >
+                    {day}
+                  </div>
+                );
+              })}
+            </div>
+          </div>,
+          document.body
+        )}
       </div>
     );
   }
@@ -368,7 +478,7 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
         value={tempValue}
         onChange={(e) => setTempValue(e.target.value)}
         onKeyDown={handleKeyDown}
-        onBlur={handleInputBlur as any}
+        onBlur={handleInputBlur}
         autoFocus
         placeholder={placeholder}
         {...inputAttributes}
