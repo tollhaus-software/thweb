@@ -58,9 +58,9 @@ func parseFlexibleDate(dateStr string) (time.Time, error) {
 func (s *Server) HandleGetMe(w http.ResponseWriter, r *http.Request) {
 	user := auth.GetUser(r.Context())
 	jsonResponse(w, map[string]interface{}{
-		"email":                user.Email,
-		"roles":                user.Roles,
-		"permissions":          user.Permissions,
+		"email":                 user.Email,
+		"roles":                 user.Roles,
+		"permissions":           user.Permissions,
 		"effective_permissions": user.EffectivePermissions,
 	})
 }
@@ -318,11 +318,6 @@ func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 		FirstName         string                    `json:"first_name"`
 		LastName          string                    `json:"last_name"`
 		BirthDate         string                    `json:"birth_date"`
-		StartDate         *string                   `json:"start_date"`
-		Group2StartDate   *string                   `json:"group2_start_date"`
-		HortStartDate     *string                   `json:"hort_start_date"`
-		ExitDate          *string                   `json:"exit_date"`
-		StartGroup        *int                      `json:"start_group"`
 		Notes             string                    `json:"notes"`
 		VaccinationChecks []models.VaccinationCheck `json:"vaccination_checks"`
 	}
@@ -336,40 +331,6 @@ func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpErrorLog(w, r, fmt.Sprintf("Invalid birth_date format %q", req.BirthDate), http.StatusBadRequest, err)
 		return
-	}
-
-	var startDate, group2StartDate, hortStartDate, exitDate *time.Time
-	if req.StartDate != nil && *req.StartDate != "" {
-		t, err := parseFlexibleDate(*req.StartDate)
-		if err != nil {
-			httpErrorLog(w, r, fmt.Sprintf("Invalid start_date format %q", *req.StartDate), http.StatusBadRequest, err)
-			return
-		}
-		startDate = &t
-	}
-	if req.Group2StartDate != nil && *req.Group2StartDate != "" {
-		t, err := parseFlexibleDate(*req.Group2StartDate)
-		if err != nil {
-			httpErrorLog(w, r, fmt.Sprintf("Invalid group2_start_date format %q", *req.Group2StartDate), http.StatusBadRequest, err)
-			return
-		}
-		group2StartDate = &t
-	}
-	if req.HortStartDate != nil && *req.HortStartDate != "" {
-		t, err := parseFlexibleDate(*req.HortStartDate)
-		if err != nil {
-			httpErrorLog(w, r, fmt.Sprintf("Invalid hort_start_date format %q", *req.HortStartDate), http.StatusBadRequest, err)
-			return
-		}
-		hortStartDate = &t
-	}
-	if req.ExitDate != nil && *req.ExitDate != "" {
-		t, err := parseFlexibleDate(*req.ExitDate)
-		if err != nil {
-			httpErrorLog(w, r, fmt.Sprintf("Invalid exit_date format %q", *req.ExitDate), http.StatusBadRequest, err)
-			return
-		}
-		exitDate = &t
 	}
 
 	if req.ID != nil && *req.ID != uuid.Nil {
@@ -426,11 +387,6 @@ func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 		FirstName:                  req.FirstName,
 		LastName:                   req.LastName,
 		BirthDate:                  birthDate,
-		StartDate:                  startDate,
-		Group2StartDate:            group2StartDate,
-		HortStartDate:              hortStartDate,
-		ExitDate:                   exitDate,
-		StartGroup:                 req.StartGroup,
 		Notes:                      req.Notes,
 		VaccinationStatusProtected: encryptedBlob,
 		VaccinationChecks:          req.VaccinationChecks,
@@ -469,6 +425,124 @@ func (s *Server) HandleDeleteChild(w http.ResponseWriter, r *http.Request) {
 	})
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) HandleCreateChildGroupChange(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	idStr := chi.URLParam(r, "id")
+	var childID uuid.UUID
+	var err error
+
+	var req struct {
+		ChildID     *uuid.UUID `json:"child_id"`
+		Child       *uuid.UUID `json:"child"`
+		ChangeDate  string     `json:"change_date"`
+		TargetGroup int        `json:"target_group"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpErrorLog(w, r, "Invalid request body JSON", http.StatusBadRequest, err)
+		return
+	}
+
+	if idStr != "" {
+		childID, err = uuid.Parse(idStr)
+		if err != nil {
+			httpErrorLog(w, r, "Invalid child ID in URL", http.StatusBadRequest, err)
+			return
+		}
+	} else if req.Child != nil && *req.Child != uuid.Nil {
+		childID = *req.Child
+	} else if req.ChildID != nil && *req.ChildID != uuid.Nil {
+		childID = *req.ChildID
+	} else {
+		httpErrorLog(w, r, "Missing child ID", http.StatusBadRequest, nil)
+		return
+	}
+
+	changeDate, err := parseFlexibleDate(req.ChangeDate)
+	if err != nil {
+		httpErrorLog(w, r, fmt.Sprintf("Invalid change_date format %q", req.ChangeDate), http.StatusBadRequest, err)
+		return
+	}
+
+	gc := models.ChildGroupChange{
+		Child:       childID,
+		ChangeDate:  changeDate,
+		TargetGroup: req.TargetGroup,
+	}
+
+	created, err := s.Store.CreateChildGroupChange(r.Context(), user.ID, gc)
+	if err != nil {
+		httpErrorLog(w, r, "Failed to create child group change", http.StatusInternalServerError, err)
+		return
+	}
+
+	s.Hub.Broadcast(WSMessage{
+		Type:    "CHILD_UPDATED",
+		Payload: map[string]string{"id": childID.String()},
+	})
+
+	jsonResponse(w, created)
+}
+
+func (s *Server) HandleDeleteChildGroupChange(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	idStr := chi.URLParam(r, "id")
+	changeID, err := uuid.Parse(idStr)
+	if err != nil {
+		httpErrorLog(w, r, "Invalid group change ID", http.StatusBadRequest, err)
+		return
+	}
+
+	if err := s.Store.DeleteChildGroupChange(r.Context(), user.ID, changeID); err != nil {
+		httpErrorLog(w, r, "Failed to delete child group change", http.StatusInternalServerError, err)
+		return
+	}
+
+	s.Hub.Broadcast(WSMessage{
+		Type:    "CHILD_UPDATED",
+		Payload: map[string]string{},
+	})
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) HandleUpdateChildGroupChange(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	idStr := chi.URLParam(r, "id")
+	changeID, err := uuid.Parse(idStr)
+	if err != nil {
+		httpErrorLog(w, r, "Invalid group change ID", http.StatusBadRequest, err)
+		return
+	}
+
+	var req struct {
+		ChangeDate  string `json:"change_date"`
+		TargetGroup int    `json:"target_group"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpErrorLog(w, r, "Invalid request body JSON", http.StatusBadRequest, err)
+		return
+	}
+
+	changeDate, err := parseFlexibleDate(req.ChangeDate)
+	if err != nil {
+		httpErrorLog(w, r, fmt.Sprintf("Invalid change_date format %q", req.ChangeDate), http.StatusBadRequest, err)
+		return
+	}
+
+	updated, err := s.Store.UpdateChildGroupChange(r.Context(), user.ID, changeID, changeDate, req.TargetGroup)
+	if err != nil {
+		httpErrorLog(w, r, "Failed to update child group change", http.StatusInternalServerError, err)
+		return
+	}
+
+	s.Hub.Broadcast(WSMessage{
+		Type:    "CHILD_UPDATED",
+		Payload: map[string]string{"id": updated.Child.String()},
+	})
+
+	jsonResponse(w, updated)
 }
 
 func (s *Server) HandleDeleteParent(w http.ResponseWriter, r *http.Request) {

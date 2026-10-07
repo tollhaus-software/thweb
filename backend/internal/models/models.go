@@ -103,20 +103,25 @@ type VaccinationStatusProtected struct {
 	VaccinationChecks []VaccinationCheck `json:"vaccination_checks"`
 }
 
+type ChildGroupChange struct {
+	ID          uuid.UUID `json:"id"`
+	Child       uuid.UUID `json:"child"`
+	ChangeDate  time.Time `json:"change_date"`
+	TargetGroup int       `json:"target_group"` // 0: exit, 1: Kleine Gruppe, 2: Grosse Gruppe, 3: Hort
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
 type Child struct {
 	ID                         uuid.UUID          `json:"id"`
 	FamilyID                   uuid.UUID          `json:"family_id"`
 	FirstName                  string             `json:"first_name"`
 	LastName                   string             `json:"last_name"`
 	BirthDate                  time.Time          `json:"birth_date"`
-	StartDate                  *time.Time         `json:"start_date"`
-	ExitDate                   *time.Time         `json:"exit_date"`
-	StartGroup                 *int               `json:"start_group"`
-	HortStartDate              *time.Time         `json:"hort_start_date"`
-	Group2StartDate            *time.Time         `json:"group2_start_date"`
 	Notes                      string             `json:"notes"`
 	VaccinationStatusProtected []byte             `json:"vaccination_status_protected,omitempty"`
 	VaccinationChecks          []VaccinationCheck `json:"vaccination_checks,omitempty"`
+	GroupChanges               []ChildGroupChange `json:"group_changes"`
 	CreatedAt                  time.Time          `json:"created_at"`
 	UpdatedAt                  time.Time          `json:"updated_at"`
 }

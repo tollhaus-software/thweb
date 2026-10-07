@@ -68,13 +68,6 @@ CREATE TABLE IF NOT EXISTS children (
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
     birth_date DATE NOT NULL,
-    start_date DATE,
-    group2_start_date DATE,
-    hort_start_date DATE,
-    exit_date DATE,
-    -- TODO this may be redundant. We may want to merge this with the 
-    -- start_dates.
-    start_group INTEGER, -- 1: Kleine Gruppe, 2: Grosse Gruppe, 3: Hort
     notes TEXT NOT NULL DEFAULT '',
     vaccination_status_protected BYTEA,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -89,7 +82,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     transaction_id UUID NOT NULL,
     family_id UUID REFERENCES families(id) ON DELETE SET NULL,
-    entity_type TEXT NOT NULL, -- 'family', 'parent', 'child', 'hygiene_event', 'th_membership'
+    entity_type TEXT NOT NULL, -- 'family', 'parent', 'child', 'hygiene_event', 'th_membership', 'child_group_change'
     entity_id UUID NOT NULL,
     operation TEXT NOT NULL, -- 'INSERT', 'UPDATE', 'DELETE'
     -- JSON snapshot of the entity model:
@@ -156,6 +149,23 @@ CREATE TABLE IF NOT EXISTS th_memberships (
 
 DROP TRIGGER IF EXISTS update_th_memberships_updated_at ON th_memberships;
 CREATE TRIGGER update_th_memberships_updated_at BEFORE UPDATE ON th_memberships FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+
+-- Children group changes table
+-- Target group: 0 = exit, 1 = Kleine Gruppe, 2 = Grosse Gruppe, 3 = Hort
+CREATE TABLE IF NOT EXISTS children_group_changes (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    child UUID NOT NULL REFERENCES children(id) ON DELETE CASCADE,
+    change_date DATE NOT NULL,
+    target_group INTEGER NOT NULL, -- 0 = exit, 1 = Kleine Gruppe, 2 = Grosse Gruppe, 3 = Hort
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_children_group_changes_child_date UNIQUE (child, change_date)
+);
+
+DROP TRIGGER IF EXISTS update_children_group_changes_updated_at ON children_group_changes;
+CREATE TRIGGER update_children_group_changes_updated_at BEFORE UPDATE ON children_group_changes FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+
+CREATE INDEX IF NOT EXISTS idx_children_group_changes_child ON children_group_changes(child);
 
 -- Default roles
 INSERT INTO roles (id, name, description, permissions) VALUES

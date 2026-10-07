@@ -22,10 +22,10 @@ func main() {
 	}
 	defer conn.Close(ctx)
 
-	_, err = conn.Exec(ctx, "TRUNCATE TABLE children, parents, families, audit_log CASCADE;")
+	_, err = conn.Exec(ctx, "TRUNCATE TABLE children, parents, families, audit_log, children_group_changes CASCADE;")
 	if err != nil {
 		log.Fatalf("Truncate query failed: %v", err)
 	}
 
-	fmt.Println("Successfully truncated children, parents, families, and audit_log tables.")
+	fmt.Println("Successfully truncated children, parents, families, audit_log, and children_group_changes tables.")
 }

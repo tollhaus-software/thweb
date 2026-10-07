@@ -164,11 +164,17 @@ func (s *Store) ListFamilies(ctx context.Context) ([]models.Family, error) {
 					   'first_name', c.first_name,
 					   'last_name', c.last_name,
 					   'birth_date', c.birth_date::timestamptz,
-					   'start_date', c.start_date::timestamptz,
-					   'exit_date', c.exit_date::timestamptz,
-					   'start_group', c.start_group,
-					   'hort_start_date', c.hort_start_date::timestamptz,
-					   'group2_start_date', c.group2_start_date::timestamptz,
+					   'group_changes', COALESCE((
+						   SELECT json_agg(json_build_object(
+							   'id', gc.id,
+							   'child', gc.child,
+							   'change_date', gc.change_date::timestamptz,
+							   'target_group', gc.target_group,
+							   'created_at', gc.created_at,
+							   'updated_at', gc.updated_at
+						   ) ORDER BY gc.change_date ASC)
+						   FROM children_group_changes gc WHERE gc.child = c.id
+					   ), '[]'),
 					   'notes', c.notes,
 					   'vaccination_status_protected', encode(c.vaccination_status_protected, 'base64'),
 					   'created_at', c.created_at,
@@ -273,11 +279,6 @@ func (s *Store) UpdateFamilyParents(ctx context.Context, userID uuid.UUID, famil
 func (s *Store) UpdateChild(ctx context.Context, userID uuid.UUID, childID uuid.UUID, child models.Child) error {
 	transactionID := uuid.New()
 
-	// If start_group is Hort (3), hort_start_date equals start_date
-	if child.StartGroup != nil && *child.StartGroup == 3 {
-		child.HortStartDate = child.StartDate
-	}
-
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, "INSERT INTO families (id) VALUES ($1) ON CONFLICT (id) DO NOTHING", child.FamilyID)
 		if err != nil {
@@ -285,8 +286,8 @@ func (s *Store) UpdateChild(ctx context.Context, userID uuid.UUID, childID uuid.
 		}
 
 		var oldChild models.Child
-		err = tx.QueryRow(ctx, "SELECT id, family_id, first_name, last_name, birth_date, start_date, exit_date, start_group, hort_start_date, group2_start_date, notes, vaccination_status_protected FROM children WHERE id = $1", childID).Scan(
-			&oldChild.ID, &oldChild.FamilyID, &oldChild.FirstName, &oldChild.LastName, &oldChild.BirthDate, &oldChild.StartDate, &oldChild.ExitDate, &oldChild.StartGroup, &oldChild.HortStartDate, &oldChild.Group2StartDate, &oldChild.Notes, &oldChild.VaccinationStatusProtected,
+		err = tx.QueryRow(ctx, "SELECT id, family_id, first_name, last_name, birth_date, notes, vaccination_status_protected FROM children WHERE id = $1", childID).Scan(
+			&oldChild.ID, &oldChild.FamilyID, &oldChild.FirstName, &oldChild.LastName, &oldChild.BirthDate, &oldChild.Notes, &oldChild.VaccinationStatusProtected,
 		)
 		isNew := (err == pgx.ErrNoRows)
 
@@ -295,8 +296,8 @@ func (s *Store) UpdateChild(ctx context.Context, userID uuid.UUID, childID uuid.
 		}
 
 		res, err := tx.Exec(ctx,
-			"UPDATE children SET first_name = $1, last_name = $2, birth_date = $3, start_date = $4, exit_date = $5, start_group = $6, hort_start_date = $7, group2_start_date = $8, notes = $9, vaccination_status_protected = $10, updated_at = NOW() WHERE id = $11",
-			child.FirstName, child.LastName, child.BirthDate, child.StartDate, child.ExitDate, child.StartGroup, child.HortStartDate, child.Group2StartDate, child.Notes, child.VaccinationStatusProtected, childID)
+			"UPDATE children SET first_name = $1, last_name = $2, birth_date = $3, notes = $4, vaccination_status_protected = $5, updated_at = NOW() WHERE id = $6",
+			child.FirstName, child.LastName, child.BirthDate, child.Notes, child.VaccinationStatusProtected, childID)
 		if err != nil {
 			return err
 		}
@@ -306,10 +307,25 @@ func (s *Store) UpdateChild(ctx context.Context, userID uuid.UUID, childID uuid.
 				child.ID = childID
 			}
 			_, err = tx.Exec(ctx,
-				"INSERT INTO children (id, family_id, first_name, last_name, birth_date, start_date, exit_date, start_group, hort_start_date, group2_start_date, notes, vaccination_status_protected) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
-				child.ID, child.FamilyID, child.FirstName, child.LastName, child.BirthDate, child.StartDate, child.ExitDate, child.StartGroup, child.HortStartDate, child.Group2StartDate, child.Notes, child.VaccinationStatusProtected)
+				"INSERT INTO children (id, family_id, first_name, last_name, birth_date, notes, vaccination_status_protected) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+				child.ID, child.FamilyID, child.FirstName, child.LastName, child.BirthDate, child.Notes, child.VaccinationStatusProtected)
 			if err != nil {
 				return err
+			}
+			for _, gc := range child.GroupChanges {
+				if gc.ID == uuid.Nil {
+					gc.ID = uuid.New()
+				}
+				gc.Child = child.ID
+				_, err = tx.Exec(ctx,
+					"INSERT INTO children_group_changes (id, child, change_date, target_group) VALUES ($1, $2, $3, $4) ON CONFLICT (child, change_date) DO UPDATE SET target_group = EXCLUDED.target_group",
+					gc.ID, gc.Child, gc.ChangeDate, gc.TargetGroup)
+				if err != nil {
+					return err
+				}
+				if err := s.recordAudit(ctx, tx, transactionID, &child.FamilyID, "child_group_change", gc.ID, "INSERT", nil, gc, userID); err != nil {
+					return err
+				}
 			}
 			return s.recordAudit(ctx, tx, transactionID, &child.FamilyID, "child", child.ID, "INSERT", nil, child, userID)
 		} else {
@@ -335,8 +351,8 @@ func (s *Store) DeleteChild(ctx context.Context, userID uuid.UUID, childID uuid.
 	transactionID := uuid.New()
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
 		var oldChild models.Child
-		err := tx.QueryRow(ctx, "SELECT id, family_id, first_name, last_name, birth_date, start_date, exit_date, start_group, hort_start_date, group2_start_date, notes, vaccination_status_protected FROM children WHERE id = $1", childID).Scan(
-			&oldChild.ID, &oldChild.FamilyID, &oldChild.FirstName, &oldChild.LastName, &oldChild.BirthDate, &oldChild.StartDate, &oldChild.ExitDate, &oldChild.StartGroup, &oldChild.HortStartDate, &oldChild.Group2StartDate, &oldChild.Notes, &oldChild.VaccinationStatusProtected,
+		err := tx.QueryRow(ctx, "SELECT id, family_id, first_name, last_name, birth_date, notes, vaccination_status_protected FROM children WHERE id = $1", childID).Scan(
+			&oldChild.ID, &oldChild.FamilyID, &oldChild.FirstName, &oldChild.LastName, &oldChild.BirthDate, &oldChild.Notes, &oldChild.VaccinationStatusProtected,
 		)
 		if err != nil {
 			return err
@@ -541,6 +557,112 @@ func (s *Store) DeleteTHMembership(ctx context.Context, userID uuid.UUID, member
 		_, err = tx.Exec(ctx, "DELETE FROM th_memberships WHERE id = $1", membershipID)
 		return err
 	})
+}
+
+func (s *Store) CreateChildGroupChange(ctx context.Context, userID uuid.UUID, gc models.ChildGroupChange) (models.ChildGroupChange, error) {
+	transactionID := uuid.New()
+	var created models.ChildGroupChange
+	err := s.WithTx(ctx, func(tx pgx.Tx) error {
+		var familyID uuid.UUID
+		err := tx.QueryRow(ctx, "SELECT family_id FROM children WHERE id = $1", gc.Child).Scan(&familyID)
+		if err != nil {
+			return err
+		}
+
+		if gc.ID == uuid.Nil {
+			gc.ID = uuid.New()
+		}
+
+		err = tx.QueryRow(ctx, `
+			INSERT INTO children_group_changes (id, child, change_date, target_group)
+			VALUES ($1, $2, $3, $4)
+			ON CONFLICT (child, change_date) DO UPDATE SET target_group = EXCLUDED.target_group, updated_at = NOW()
+			RETURNING id, child, change_date, target_group, created_at, updated_at
+		`, gc.ID, gc.Child, gc.ChangeDate, gc.TargetGroup).Scan(
+			&created.ID, &created.Child, &created.ChangeDate, &created.TargetGroup, &created.CreatedAt, &created.UpdatedAt,
+		)
+		if err != nil {
+			return err
+		}
+
+		return s.recordAudit(ctx, tx, transactionID, &familyID, "child_group_change", created.ID, "INSERT", nil, created, userID)
+	})
+	return created, err
+}
+
+func (s *Store) DeleteChildGroupChange(ctx context.Context, userID uuid.UUID, changeID uuid.UUID) error {
+	transactionID := uuid.New()
+	return s.WithTx(ctx, func(tx pgx.Tx) error {
+		var childID uuid.UUID
+		var changeDate time.Time
+		var targetGroup int
+		err := tx.QueryRow(ctx, "SELECT child, change_date, target_group FROM children_group_changes WHERE id = $1", changeID).Scan(&childID, &changeDate, &targetGroup)
+		if err != nil {
+			return err
+		}
+
+		var familyID uuid.UUID
+		err = tx.QueryRow(ctx, "SELECT family_id FROM children WHERE id = $1", childID).Scan(&familyID)
+		if err != nil {
+			return err
+		}
+
+		oldChange := models.ChildGroupChange{
+			ID:          changeID,
+			Child:       childID,
+			ChangeDate:  changeDate,
+			TargetGroup: targetGroup,
+		}
+
+		if err := s.recordAudit(ctx, tx, transactionID, &familyID, "child_group_change", changeID, "DELETE", oldChange, nil, userID); err != nil {
+			return err
+		}
+
+		_, err = tx.Exec(ctx, "DELETE FROM children_group_changes WHERE id = $1", changeID)
+		return err
+	})
+}
+
+func (s *Store) UpdateChildGroupChange(ctx context.Context, userID uuid.UUID, changeID uuid.UUID, changeDate time.Time, targetGroup int) (models.ChildGroupChange, error) {
+	transactionID := uuid.New()
+	var updated models.ChildGroupChange
+	err := s.WithTx(ctx, func(tx pgx.Tx) error {
+		var childID uuid.UUID
+		var oldDate time.Time
+		var oldTargetGroup int
+		err := tx.QueryRow(ctx, "SELECT child, change_date, target_group FROM children_group_changes WHERE id = $1", changeID).Scan(&childID, &oldDate, &oldTargetGroup)
+		if err != nil {
+			return err
+		}
+
+		var familyID uuid.UUID
+		err = tx.QueryRow(ctx, "SELECT family_id FROM children WHERE id = $1", childID).Scan(&familyID)
+		if err != nil {
+			return err
+		}
+
+		oldChange := models.ChildGroupChange{
+			ID:          changeID,
+			Child:       childID,
+			ChangeDate:  oldDate,
+			TargetGroup: oldTargetGroup,
+		}
+
+		err = tx.QueryRow(ctx, `
+			UPDATE children_group_changes
+			SET change_date = $2, target_group = $3, updated_at = NOW()
+			WHERE id = $1
+			RETURNING id, child, change_date, target_group, created_at, updated_at
+		`, changeID, changeDate, targetGroup).Scan(
+			&updated.ID, &updated.Child, &updated.ChangeDate, &updated.TargetGroup, &updated.CreatedAt, &updated.UpdatedAt,
+		)
+		if err != nil {
+			return err
+		}
+
+		return s.recordAudit(ctx, tx, transactionID, &familyID, "child_group_change", changeID, "UPDATE", oldChange, updated, userID)
+	})
+	return updated, err
 }
 
 func (s *Store) ListAuditLogs(ctx context.Context) ([]models.AuditLog, error) {

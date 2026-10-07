@@ -18,6 +18,7 @@ interface DataTableProps<TData> {
   onAddRow?: (familyId: string, familyName: string) => void;
   emptySubRowsText?: string;
   hideHeader?: boolean;
+  highlightedRowId?: string | null;
 }
 
 export function DataTable<TData>({
@@ -27,6 +28,7 @@ export function DataTable<TData>({
   onAddRow,
   emptySubRowsText,
   hideHeader,
+  highlightedRowId,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
@@ -198,7 +200,7 @@ export function DataTable<TData>({
                 const hasSubRows = row.subRows && row.subRows.length > 0;
                 return (
                   <Fragment key={row.id}>
-                    <tr className="family-group-row" id={`row-${familyId}`}>
+                    <tr className={`family-group-row ${familyId === highlightedRowId ? 'highlighted-row' : ''}`} id={`row-${familyId}`}>
                       <td colSpan={table.getVisibleLeafColumns().length}>
                         <div
                           style={{
@@ -245,8 +247,9 @@ export function DataTable<TData>({
                 );
               }
 
+              const rowId = (row.original as any).id;
               return (
-                <tr key={row.id} id={`row-${(row.original as any).id}`}>
+                <tr key={row.id} id={`row-${rowId}`} className={rowId === highlightedRowId ? 'highlighted-row' : undefined}>
                   {row.getVisibleCells().map((cell) => {
                     const isFixed = cell.column.id === 'first_name';
                     return (

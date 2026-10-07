@@ -16,9 +16,9 @@ type FeeCalculationRequest struct {
 }
 
 type FeeCalculationResult struct {
-	FamilyID    uuid.UUID      `json:"family_id"`
-	FamilyName  string         `json:"family_name"`
-	MonthlyFees []MonthlyFee   `json:"monthly_fees"`
+	FamilyID    uuid.UUID    `json:"family_id"`
+	FamilyName  string       `json:"family_name"`
+	MonthlyFees []MonthlyFee `json:"monthly_fees"`
 }
 
 type MonthlyFee struct {
@@ -51,14 +51,6 @@ func firstDayOfMonth(d time.Time) time.Time {
 	return time.Date(d.Year(), d.Month(), 1, 0, 0, 0, 0, d.Location())
 }
 
-func maybeFirstDayOfMonth(d *time.Time) *time.Time {
-	if d == nil {
-		return nil
-	}
-	t := time.Date(d.Year(), d.Month(), 1, 0, 0, 0, 0, d.Location())
-	return &t
-}
-
 func DetermineFeeRelevantData(children []models.Child, month time.Time) FeeRelevantData {
 	res := FeeRelevantData{
 		childrenFeeTypes: make(map[string]FeeType),
@@ -71,62 +63,65 @@ func DetermineFeeRelevantData(children []models.Child, month time.Time) FeeRelev
 			res.childrenUnder18[child.FirstName] = struct{}{}
 		}
 
-		if child.ExitDate != nil && month.After(*child.ExitDate) {
+		// Ensure group changes are sorted chronologically (older come first)
+		changes := make([]models.ChildGroupChange, len(child.GroupChanges))
+		copy(changes, child.GroupChanges)
+		sort.Slice(changes, func(i, j int) bool {
+			return changes[i].ChangeDate.Before(changes[j].ChangeDate)
+		})
+
+		// Find the start date of the child
+		var startDate time.Time
+		for i := range changes {
+			if startDate.IsZero() && changes[i].TargetGroup > 0 {
+				startDate = changes[i].ChangeDate
+			} else if !startDate.IsZero() && changes[i].TargetGroup == 0 {
+				startDate = time.Time{}
+			}
+		}
+
+		// Changes that take effect on or before the end of this month
+		var activeChanges []models.ChildGroupChange
+		for _, c := range changes {
+			if c.ChangeDate.Before(firstDayOfNextMonth) {
+				activeChanges = append(activeChanges, c)
+			}
+		}
+
+		if len(activeChanges) == 0 {
+			// Not yet enrolled in or before this month
 			continue
 		}
 
-		startDate := child.StartDate
-		group2StartDate := child.Group2StartDate
-		hortStartDate := child.HortStartDate
-		startGroup := child.StartGroup
-
-		if startDate == nil && group2StartDate != nil {
-			startDate = group2StartDate
-			startGroupGroup2 := 2
-			startGroup = &startGroupGroup2
-		}
-
-		if startDate == nil && hortStartDate != nil {
-			startDate = hortStartDate
-			startGroupHort := 3
-			startGroup = &startGroupHort
-		}
-
-		if startDate != nil {
-			startMonth := firstDayOfMonth(*startDate)
-			hortStartMonth := maybeFirstDayOfMonth(hortStartDate)
-			group2StartMonth := maybeFirstDayOfMonth(group2StartDate)
-
+		lastChange := activeChanges[len(activeChanges)-1]
+		if lastChange.TargetGroup == 0 {
+			// Child exited
+			if lastChange.ChangeDate.Before(month) {
+				// Exited in a previous month
+				continue
+			}
+			// Exited during this month: find the group before exit
 			group := 1
-			if startGroup != nil {
-				group = *startGroup
-			}
-
-			if group2StartMonth != nil && (month.After(*group2StartMonth) || month.Equal(*group2StartMonth)) {
-				group = 2
-			}
-
-			if hortStartMonth != nil && (month.After(*hortStartMonth) || month.Equal(*hortStartMonth)) {
-				group = 3
-			}
-
-			if month.Equal(startMonth) {
-				if startDate.Day() >= 16 {
-					res.childrenFeeTypes[child.FirstName] = FeeType{
-						Group:  group,
-						IsHalf: true,
-					}
-				} else {
-					res.childrenFeeTypes[child.FirstName] = FeeType{
-						Group:  group,
-						IsHalf: false,
-					}
+			for i := len(activeChanges) - 2; i >= 0; i-- {
+				if activeChanges[i].TargetGroup > 0 {
+					group = activeChanges[i].TargetGroup
+					break
 				}
-			} else if month.After(startMonth) {
-				res.childrenFeeTypes[child.FirstName] = FeeType{
-					Group:  group,
-					IsHalf: false,
-				}
+			}
+			res.childrenFeeTypes[child.FirstName] = FeeType{
+				Group:  group,
+				IsHalf: false,
+			}
+		} else {
+			// Currently active
+			group := lastChange.TargetGroup
+			isHalf := false
+			if !startDate.IsZero() && firstDayOfMonth(startDate).Equal(month) && startDate.Day() >= 16 {
+				isHalf = true
+			}
+			res.childrenFeeTypes[child.FirstName] = FeeType{
+				Group:  group,
+				IsHalf: isHalf,
 			}
 		}
 	}
