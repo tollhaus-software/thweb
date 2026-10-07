@@ -176,5 +176,13 @@ INSERT INTO roles (id, name, description, permissions) VALUES
     ('mga', 'MGA', 'Masernschutzgesetz (Vaccination status management)', '["families.all.read", "families.all.write", "children.all.write", "vaccination.status.manage"]')
 ON CONFLICT (id) DO NOTHING;
 
+-- Yellow bag days table
+CREATE TABLE IF NOT EXISTS yellow_bag_days (
+    date DATE PRIMARY KEY
+);
+
+CREATE OR REPLACE VIEW yellow_bag_dates AS SELECT * FROM yellow_bag_days;
+
+
 
 
