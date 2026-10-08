@@ -53,13 +53,7 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 			idToken = ""
 		}
 
-		rawAccessToken := r.Header.Get("X-KMS-Access-Token")
-		if rawAccessToken == "" {
-			rawAccessToken = r.Header.Get("X-Forwarded-Access-Token")
-		}
-		if rawAccessToken == "" && a.AllowMockAuth && idToken != "" {
-			rawAccessToken = idToken
-		}
+		rawAccessToken := ExtractKmsAccessToken(r)
 
 		if a.AllowMockAuth {
 			// Local development mode (ALLOW_MOCK_AUTH=true)
@@ -123,6 +117,14 @@ func GetUser(ctx context.Context) *models.UserWithPermissions {
 		return nil
 	}
 	return user
+}
+
+func ExtractKmsAccessToken(r *http.Request) string {
+	raw := strings.TrimSpace(r.Header.Get("X-KMS-Access-Token"))
+	if raw == "null" || raw == "undefined" {
+		return ""
+	}
+	return raw
 }
 
 func GetAccessToken(ctx context.Context) string {
