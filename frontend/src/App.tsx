@@ -1150,13 +1150,13 @@ const Dashboard: React.FC = () => {
 
   const [families, setFamilies] = React.useState<Family[]>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
-  const [activeTab, setActiveTab] = React.useState<'parents' | 'children' | 'families' | 'childcareFees' | 'hygieneBelehrung' | 'audit' | 'admin'>(() => {
+  const [activeTab, setActiveTab] = React.useState<'families' | 'parents' | 'children' | 'childcareFees' | 'hygieneBelehrung' | 'audit' | 'admin'>(() => {
     const rawHash = window.location.hash.replace('#', '');
     const hash = rawHash.split('?')[0];
     if (
+      hash === 'families' ||
       hash === 'parents' ||
       hash === 'children' ||
-      hash === 'families' ||
       hash === 'childcareFees' ||
       hash === 'hygieneBelehrung' ||
       (hash === 'audit' && canReadAudit) ||
@@ -1166,9 +1166,9 @@ const Dashboard: React.FC = () => {
     }
     const saved = localStorage.getItem('thweb_active_tab');
     if (
+      saved === 'families' ||
       saved === 'parents' ||
       saved === 'children' ||
-      saved === 'families' ||
       saved === 'childcareFees' ||
       saved === 'hygieneBelehrung' ||
       (saved === 'audit' && canReadAudit) ||
@@ -1176,7 +1176,7 @@ const Dashboard: React.FC = () => {
     ) {
       return saved as any;
     }
-    return 'parents';
+    return 'families';
   });
 
   // Navigation & Highlighting state (Patterns 2 & 3)
@@ -2083,7 +2083,7 @@ const Dashboard: React.FC = () => {
         pushAction({
           type: 'ADD_FAMILY',
           payload: {
-            tab: 'parents',
+            tab: activeTab === 'children' ? 'children' : activeTab === 'families' ? 'families' : 'parents',
             familyId: createdFamily.id,
             parents: createdFamily.parents || [],
           }
@@ -2357,7 +2357,8 @@ const Dashboard: React.FC = () => {
         const groupMatch = groupInfo.groupLabel.toLowerCase().includes(query);
         const familyNameMatch = familyName.toLowerCase().includes(query);
         const parentMatch = parentNames.toLowerCase().includes(query);
-        return fnMatch || lnMatch || fullName.includes(query) || bdMatch || groupMatch || familyNameMatch || parentMatch;
+        const notesMatch = (c.notes || '').toLowerCase().includes(query);
+        return fnMatch || lnMatch || fullName.includes(query) || bdMatch || groupMatch || familyNameMatch || parentMatch || notesMatch;
       });
 
       const familyMatch = familyName.toLowerCase().includes(query) || parentNames.toLowerCase().includes(query);
@@ -2915,6 +2916,7 @@ const Dashboard: React.FC = () => {
     () => [
       {
         id: 'child_name',
+        accessorFn: (child: any) => `${child.first_name || ''} ${child.last_name || ''}`.trim(),
         header: t('firstNameEdit'),
         size: 260,
         minSize: 200,
@@ -2941,6 +2943,7 @@ const Dashboard: React.FC = () => {
       },
       {
         id: 'birth_date',
+        accessorKey: 'birth_date',
         header: t('birthDateEdit'),
         size: 160,
         minSize: 120,
@@ -2950,8 +2953,22 @@ const Dashboard: React.FC = () => {
         }
       },
       childGroupColumn,
+      {
+        header: t('notes'),
+        accessorKey: 'notes',
+        size: 260,
+        cell: (info) => {
+          const child = info.row.original;
+          return (
+            <NotesEditor
+              value={child.notes || ''}
+              onSave={(val: string) => handleSaveChildField(child, 'notes', val)}
+            />
+          );
+        }
+      },
     ],
-    [childGroupColumn, handleJumpToChild]
+    [childGroupColumn, handleJumpToChild, handleSaveChildField]
   );
 
   const isTableTab = activeTab === 'parents' || activeTab === 'children' || activeTab === 'families' || activeTab === 'hygieneBelehrung';
@@ -2968,6 +2985,22 @@ const Dashboard: React.FC = () => {
       <main className={isTableTab ? 'main-table-view' : ''}>
         {/* Navigation Tabs */}
         <div className="tabs" style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid var(--border)', marginBottom: '1.5rem' }}>
+          <button 
+            onClick={() => handleTabClick('families')}
+            style={{
+              padding: '0.75rem 1rem',
+              background: 'none',
+              border: 'none',
+              borderBottom: activeTab === 'families' ? '3px solid var(--primary)' : '3px solid transparent',
+              color: activeTab === 'families' ? 'var(--primary)' : 'var(--text)',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              fontSize: '1rem',
+              transition: 'all 0.2s'
+            }}
+          >
+            {t('families')}
+          </button>
           <button 
             onClick={() => handleTabClick('parents')}
             style={{
@@ -2999,22 +3032,6 @@ const Dashboard: React.FC = () => {
             }}
           >
             {t('children')}
-          </button>
-          <button 
-            onClick={() => handleTabClick('families')}
-            style={{
-              padding: '0.75rem 1rem',
-              background: 'none',
-              border: 'none',
-              borderBottom: activeTab === 'families' ? '3px solid var(--primary)' : '3px solid transparent',
-              color: activeTab === 'families' ? 'var(--primary)' : 'var(--text)',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              fontSize: '1rem',
-              transition: 'all 0.2s'
-            }}
-          >
-            {t('families')}
           </button>
           <button 
             onClick={() => handleTabClick('childcareFees')}
@@ -3122,7 +3139,7 @@ const Dashboard: React.FC = () => {
                 value={globalFilter ?? ''}
                 onChange={(e) => setGlobalFilter(e.target.value)}
                 className="search-input"
-                placeholder={activeTab === 'children' ? t('searchChildren') : activeTab === 'families' ? t('searchFamilies') : t('searchParents')}
+                placeholder={activeTab === 'families' ? t('searchFamilies') : activeTab === 'children' ? t('searchChildren') : t('searchParents')}
                 style={{ marginBottom: 0 }}
               />
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -3220,7 +3237,7 @@ const Dashboard: React.FC = () => {
                 )
               )}
             </div>
-            {activeTab === 'parents' && (
+            {(activeTab === 'parents' || activeTab === 'children' || activeTab === 'families') && (
               <button
                 onClick={openAddFamily}
                 className="primary-button"
@@ -3262,7 +3279,6 @@ const Dashboard: React.FC = () => {
             getSubRows={(row: any) => row.children}
             onAddRow={openAddChild}
             emptySubRowsText={t('noChildrenYet')}
-            hideHeader={true}
             highlightedRowId={highlightedRowId}
           />
         ) : activeTab === 'hygieneBelehrung' ? (

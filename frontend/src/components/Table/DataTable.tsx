@@ -163,7 +163,7 @@ export function DataTable<TData>({
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
                   {headerGroup.headers.map((header) => {
-                    const isFixed = header.column.id === 'first_name';
+                    const isFixed = header.column.id === 'first_name' || header.column.id === 'child_name';
                     return (
                       <th
                         key={header.id}
@@ -251,7 +251,7 @@ export function DataTable<TData>({
               return (
                 <tr key={row.id} id={`row-${rowId}`} className={rowId === highlightedRowId ? 'highlighted-row' : undefined}>
                   {row.getVisibleCells().map((cell) => {
-                    const isFixed = cell.column.id === 'first_name';
+                    const isFixed = cell.column.id === 'first_name' || cell.column.id === 'child_name';
                     return (
                       <td
                         key={cell.id}
