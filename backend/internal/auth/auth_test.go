@@ -134,3 +134,82 @@ func TestRequirePermission_AuditAllRead(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractKmsAccessToken(t *testing.T) {
+	tests := []struct {
+		name       string
+		headers    map[string]string
+		wantToken  string
+	}{
+		{
+			name:      "no KMS header",
+			headers:   map[string]string{},
+			wantToken: "",
+		},
+		{
+			name: "oauth2-proxy forwarded token must not be used as KMS token",
+			headers: map[string]string{
+				"X-Forwarded-Access-Token": "oauth2-proxy-main-token",
+			},
+			wantToken: "",
+		},
+		{
+			name: "authorization bearer must not be used as KMS token",
+			headers: map[string]string{
+				"Authorization": "Bearer some-bearer-token",
+			},
+			wantToken: "",
+		},
+		{
+			name: "valid X-KMS-Access-Token",
+			headers: map[string]string{
+				"X-KMS-Access-Token": "ya29.valid-kms-step-up-token",
+			},
+			wantToken: "ya29.valid-kms-step-up-token",
+		},
+		{
+			name: "whitespace padded X-KMS-Access-Token",
+			headers: map[string]string{
+				"X-KMS-Access-Token": "  ya29.trimmed-token  ",
+			},
+			wantToken: "ya29.trimmed-token",
+		},
+		{
+			name: "null or undefined strings in X-KMS-Access-Token",
+			headers: map[string]string{
+				"X-KMS-Access-Token": "null",
+			},
+			wantToken: "",
+		},
+		{
+			name: "undefined in X-KMS-Access-Token",
+			headers: map[string]string{
+				"X-KMS-Access-Token": "undefined",
+			},
+			wantToken: "",
+		},
+		{
+			name: "X-KMS-Access-Token takes precedence over other headers",
+			headers: map[string]string{
+				"Authorization":            "Bearer bearer-token",
+				"X-Forwarded-Access-Token": "forwarded-token",
+				"X-KMS-Access-Token":       "actual-kms-token",
+			},
+			wantToken: "actual-kms-token",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/api/families", nil)
+			for k, v := range tt.headers {
+				req.Header.Set(k, v)
+			}
+
+			got := ExtractKmsAccessToken(req)
+			if got != tt.wantToken {
+				t.Errorf("ExtractKmsAccessToken() = %q, want %q", got, tt.wantToken)
+			}
+		})
+	}
+}

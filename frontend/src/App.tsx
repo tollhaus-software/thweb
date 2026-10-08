@@ -1513,7 +1513,6 @@ const Dashboard: React.FC = () => {
             if (errData.error === 'kms_access_denied') {
               sessionStorage.removeItem('kms_access_token');
               setKmsAccessToken(null);
-              setKmsError(t('kmsAccessDenied'));
               // Fetch families in locked state
               return fetch('/api/families', {
                 headers: getAuthHeaders({}, ''),
@@ -1563,6 +1562,7 @@ const Dashboard: React.FC = () => {
       const errMsg = t('kmsAccessDenied');
       setKmsError(errMsg);
       alert(errMsg);
+      fetchFamilies('');
       return false;
     } catch (err) {
       console.error('Failed to apply KMS token:', err);
@@ -1571,9 +1571,10 @@ const Dashboard: React.FC = () => {
       const errMsg = t('kmsAccessDenied');
       setKmsError(errMsg);
       alert(errMsg);
+      fetchFamilies('');
       return false;
     }
-  }, [getAuthHeaders]);
+  }, [getAuthHeaders, fetchFamilies]);
 
   const googleLogin = useGoogleLogin({
     flow: 'implicit',
