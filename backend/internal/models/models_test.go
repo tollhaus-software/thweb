@@ -82,3 +82,46 @@ func TestParent_VaccinationJSON(t *testing.T) {
 		t.Errorf("Expected Masern, got %s", parsed.VaccinationChecks[0].VaccinationType)
 	}
 }
+
+func TestNormalizeEmail(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "mixed case with dots and spaces",
+			input: "  max.Mustermann@tollhaus-stuttgart.de \t\n",
+			want:  "max.mustermann@tollhaus-stuttgart.de",
+		},
+		{
+			name:  "all uppercase local and domain with dots",
+			input: "MAX.MUSTERMANN@TOLLHAUS-STUTTGART.DE",
+			want:  "max.mustermann@tollhaus-stuttgart.de",
+		},
+		{
+			name:  "dots preserved in local-part",
+			input: "john.doe.personal@gmail.com",
+			want:  "john.doe.personal@gmail.com",
+		},
+		{
+			name:  "already normalized",
+			input: "developer@example.com",
+			want:  "developer@example.com",
+		},
+		{
+			name:  "empty string",
+			input: "   ",
+			want:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NormalizeEmail(tt.input)
+			if got != tt.want {
+				t.Errorf("NormalizeEmail(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}

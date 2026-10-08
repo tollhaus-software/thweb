@@ -79,6 +79,7 @@ func (s *Server) HandleCreateUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	req.Email = models.NormalizeEmail(req.Email)
 	if req.Email == "" {
 		http.Error(w, "Email is required", http.StatusBadRequest)
 		return

@@ -92,6 +92,8 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 			email = emailClaim
 		}
 
+		email = models.NormalizeEmail(email)
+
 		user, err := a.Store.GetUserWithPermissionsByEmail(r.Context(), email)
 		if err != nil {
 			if err == pgx.ErrNoRows {

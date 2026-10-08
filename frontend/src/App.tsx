@@ -713,10 +713,11 @@ const AdminView: React.FC = () => {
         alert('Failed to update user');
       }
     } else {
+      const normalizedEmail = userEmail.trim().toLowerCase();
       const res = await fetch('/api/admin/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ email: userEmail, roles: selectedUserRoles, permissions: selectedUserPerms })
+        body: JSON.stringify({ email: normalizedEmail, roles: selectedUserRoles, permissions: selectedUserPerms })
       });
       if (res.ok) {
         setUserModalOpen(false);
