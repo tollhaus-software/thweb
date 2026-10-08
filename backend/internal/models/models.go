@@ -39,6 +39,12 @@ func (s *UserWithPermissions) HasPermission(perm string) bool {
 	return false
 }
 
+// NormalizeEmail trims surrounding whitespace and converts the email address to lowercase,
+// preserving dots in the username/local-part to support Google Workspace accounts.
+func NormalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
 type Role struct {
 	ID          string    `json:"id"`
 	Name        string    `json:"name"`

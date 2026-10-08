@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS roles (
 -- Users table (Allow-list for Google Auth)
 -- (users of the application)
 -- Currently the system is matching against e-mail.
+-- Emails are stored normalized in lowercase (preserving dots).
 -- For Google Auth it could be better to match against "sub"
 -- (subject id) to support user e-mail changes.
 CREATE TABLE IF NOT EXISTS users (

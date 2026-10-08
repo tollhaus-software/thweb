@@ -14,7 +14,7 @@ export const LoginButton: React.FC = () => {
         onSubmit={(e) => {
           e.preventDefault();
           if (email) {
-            login(email);
+            login(email.trim().toLowerCase());
           }
         }}
         style={{

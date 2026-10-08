@@ -755,6 +755,7 @@ func (s *Store) DeleteRole(ctx context.Context, id string) error {
 }
 
 func (s *Store) GetUserWithPermissionsByEmail(ctx context.Context, email string) (*models.UserWithPermissions, error) {
+	email = models.NormalizeEmail(email)
 	query := `
 		SELECT 
 			u.id, 
@@ -878,6 +879,7 @@ func (s *Store) ListUsers(ctx context.Context) ([]models.UserWithPermissions, er
 }
 
 func (s *Store) CreateUser(ctx context.Context, email string, roles []string, permissions []string) (*models.UserWithPermissions, error) {
+	email = models.NormalizeEmail(email)
 	if permissions == nil {
 		permissions = []string{}
 	}
