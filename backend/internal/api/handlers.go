@@ -78,6 +78,41 @@ func (s *Server) HandleListFamilies(w http.ResponseWriter, r *http.Request) {
 		reqCtx := crypto.NewRequestCipherContext(s.KMSProvider, user.Email, accessToken)
 		defer reqCtx.Close()
 
+		hasProtectedRecords := false
+		for fIdx := range families {
+			for cIdx := range families[fIdx].Children {
+				if len(families[fIdx].Children[cIdx].VaccinationStatusProtected) > 0 {
+					hasProtectedRecords = true
+					break
+				}
+			}
+			if hasProtectedRecords {
+				break
+			}
+			for pIdx := range families[fIdx].Parents {
+				if len(families[fIdx].Parents[pIdx].VaccinationStatusProtected) > 0 {
+					hasProtectedRecords = true
+					break
+				}
+			}
+			if hasProtectedRecords {
+				break
+			}
+		}
+
+		if !hasProtectedRecords {
+			if err := s.KMSProvider.ValidateAccess(r.Context(), user.Email, accessToken); err != nil {
+				log.Printf("[WARN] User %s has no access to KMS key: %v\n", user.Email, err)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				json.NewEncoder(w).Encode(map[string]string{
+					"error":   "kms_access_denied",
+					"message": "User has no access to the KMS key",
+				})
+				return
+			}
+		}
+
 		for fIdx := range families {
 			for cIdx := range families[fIdx].Children {
 				child := &families[fIdx].Children[cIdx]
@@ -85,6 +120,13 @@ func (s *Server) HandleListFamilies(w http.ResponseWriter, r *http.Request) {
 					plainJSON, err := reqCtx.Decrypt(r.Context(), child.VaccinationStatusProtected)
 					if err != nil {
 						log.Printf("[WARN] Failed to decrypt vaccination status for child %s: %v\n", child.ID, err)
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusForbidden)
+						json.NewEncoder(w).Encode(map[string]string{
+							"error":   "kms_access_denied",
+							"message": "User has no access to the KMS key",
+						})
+						return
 					} else if len(plainJSON) > 0 {
 						var status models.VaccinationStatusProtected
 						if err := json.Unmarshal(plainJSON, &status); err == nil {
@@ -102,6 +144,13 @@ func (s *Server) HandleListFamilies(w http.ResponseWriter, r *http.Request) {
 					plainJSON, err := reqCtx.Decrypt(r.Context(), parent.VaccinationStatusProtected)
 					if err != nil {
 						log.Printf("[WARN] Failed to decrypt vaccination status for parent %s: %v\n", parent.ID, err)
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusForbidden)
+						json.NewEncoder(w).Encode(map[string]string{
+							"error":   "kms_access_denied",
+							"message": "User has no access to the KMS key",
+						})
+						return
 					} else if len(plainJSON) > 0 {
 						var status models.VaccinationStatusProtected
 						if err := json.Unmarshal(plainJSON, &status); err == nil {
@@ -256,7 +305,13 @@ func (s *Server) HandleUpdateFamilyParents(w http.ResponseWriter, r *http.Reques
 				}
 				blob, err := reqCtx.Encrypt(r.Context(), rawJSON)
 				if err != nil {
-					httpErrorLog(w, r, "Failed to encrypt vaccination status", http.StatusInternalServerError, err)
+					log.Printf("[WARN] Failed to encrypt vaccination status for parent %s: %v\n", p.ID, err)
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusForbidden)
+					json.NewEncoder(w).Encode(map[string]string{
+						"error":   "kms_access_denied",
+						"message": "User has no access to the KMS key",
+					})
 					return
 				}
 				p.VaccinationStatusProtected = blob
@@ -375,7 +430,13 @@ func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 
 		blob, err := reqCtx.Encrypt(r.Context(), rawJSON)
 		if err != nil {
-			httpErrorLog(w, r, "Failed to encrypt vaccination status", http.StatusInternalServerError, err)
+			log.Printf("[WARN] Failed to encrypt vaccination status for child %s: %v\n", childID, err)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			json.NewEncoder(w).Encode(map[string]string{
+				"error":   "kms_access_denied",
+				"message": "User has no access to the KMS key",
+			})
 			return
 		}
 		encryptedBlob = blob

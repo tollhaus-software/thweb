@@ -93,3 +93,23 @@ func (g *GCPKMSProvider) GenerateDEK(ctx context.Context, userEmail string, acce
 
 	return dek, encryptedDEK, nil
 }
+
+func (g *GCPKMSProvider) ValidateAccess(ctx context.Context, userEmail string, accessToken string) error {
+	client, cleanup, err := g.getKMSClient(ctx, accessToken)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	dummyDEK := make([]byte, 32)
+	req := &kmspb.EncryptRequest{
+		Name:      g.keyPath,
+		Plaintext: dummyDEK,
+	}
+	_, err = client.Encrypt(ctx, req)
+	if err != nil {
+		return fmt.Errorf("GCP KMS access validation failed for user %s: %w", userEmail, err)
+	}
+	return nil
+}
+
