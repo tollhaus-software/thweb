@@ -22,6 +22,8 @@ type KMSProvider interface {
 	DecryptDEK(ctx context.Context, encryptedDEK []byte, userEmail string, accessToken string) (dek []byte, err error)
 	// GenerateDEK generates a new random 32-byte DEK and its KMS-encrypted counterpart
 	GenerateDEK(ctx context.Context, userEmail string, accessToken string) (plaintextDEK []byte, encryptedDEK []byte, err error)
+	// ValidateAccess checks whether the user with the given OAuth token has permission to use the KMS key
+	ValidateAccess(ctx context.Context, userEmail string, accessToken string) error
 }
 
 // RequestCipherContext manages ephemeral request-scoped DEK caching & zeroing

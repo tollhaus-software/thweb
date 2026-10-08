@@ -6,7 +6,7 @@ import './App.css';
 import { DataTable } from './components/Table/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import EasyEdit, { Types } from './components/InlineEdit';
-import { Pencil, Trash, Undo, Redo, Calendar, ClipboardList, Lock, Unlock, ArrowLeft, ArrowRight, X, Clock } from 'lucide-react';
+import { Pencil, Trash, Undo, Redo, Calendar, ClipboardList, Lock, Unlock, ArrowLeft, ArrowRight, X, Clock, AlertCircle } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { MultiValueListEditor } from './components/Table/MultiValueListEditor';
 import { NotesEditor } from './components/Table/NotesEditor';
@@ -1130,6 +1130,7 @@ const Dashboard: React.FC = () => {
   const [kmsAccessToken, setKmsAccessToken] = React.useState<string | null>(() => {
     return sessionStorage.getItem('kms_access_token');
   });
+  const [kmsError, setKmsError] = React.useState<string | null>(null);
 
   const isVaccinationUnlocked = Boolean(kmsAccessToken);
 
@@ -1505,9 +1506,33 @@ const Dashboard: React.FC = () => {
     return fetch('/api/families', {
       headers: getAuthHeaders({}, explicitKmsToken),
     })
-      .then((res) => res.json())
+      .then(async (res) => {
+        if (!res.ok) {
+          if (res.status === 403) {
+            const errData = await res.json().catch(() => ({}));
+            if (errData.error === 'kms_access_denied') {
+              sessionStorage.removeItem('kms_access_token');
+              setKmsAccessToken(null);
+              setKmsError(t('kmsAccessDenied'));
+              // Fetch families in locked state
+              return fetch('/api/families', {
+                headers: getAuthHeaders({}, ''),
+              })
+                .then((r) => r.json())
+                .then((data) => {
+                  if (Array.isArray(data)) setFamilies(data);
+                  return data;
+                });
+            }
+          }
+          throw new Error('Failed to fetch families');
+        }
+        return res.json();
+      })
       .then((data) => {
-        setFamilies(data);
+        if (Array.isArray(data)) {
+          setFamilies(data);
+        }
         return data;
       })
       .catch((err) => console.error(err));
@@ -1517,14 +1542,44 @@ const Dashboard: React.FC = () => {
     fetchFamilies();
   }, [fetchFamilies]);
 
+  const applyKmsToken = React.useCallback(async (tokenToApply: string) => {
+    try {
+      const res = await fetch('/api/families', {
+        headers: getAuthHeaders({}, tokenToApply),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          sessionStorage.setItem('kms_access_token', tokenToApply);
+          setKmsAccessToken(tokenToApply);
+          setKmsError(null);
+          setFamilies(data);
+          return true;
+        }
+      }
+      // KMS rejected (e.g. 403 Forbidden with kms_access_denied)
+      sessionStorage.removeItem('kms_access_token');
+      setKmsAccessToken(null);
+      const errMsg = t('kmsAccessDenied');
+      setKmsError(errMsg);
+      alert(errMsg);
+      return false;
+    } catch (err) {
+      console.error('Failed to apply KMS token:', err);
+      sessionStorage.removeItem('kms_access_token');
+      setKmsAccessToken(null);
+      const errMsg = t('kmsAccessDenied');
+      setKmsError(errMsg);
+      alert(errMsg);
+      return false;
+    }
+  }, [getAuthHeaders]);
+
   const googleLogin = useGoogleLogin({
     flow: 'implicit',
     scope: 'https://www.googleapis.com/auth/cloudkms',
     onSuccess: (tokenResponse) => {
-      const newToken = tokenResponse.access_token;
-      sessionStorage.setItem('kms_access_token', newToken);
-      setKmsAccessToken(newToken);
-      fetchFamilies(newToken);
+      applyKmsToken(tokenResponse.access_token);
     },
     onError: (error) => {
       console.error('Google KMS OAuth error:', error);
@@ -1536,24 +1591,23 @@ const Dashboard: React.FC = () => {
   });
 
   const handleRequestKmsAuth = React.useCallback(() => {
+    setKmsError(null);
     const protectedDataClientId =
       window.ENV?.GOOGLE_PROTECTED_DATA_CLIENT_ID ||
       import.meta.env.VITE_GOOGLE_PROTECTED_DATA_CLIENT_ID ||
       'mock-protected-data';
     const isMock = !protectedDataClientId || protectedDataClientId === 'mock-protected-data' || protectedDataClientId === 'mock';
     if (isMock) {
-      const mockToken = 'mock-kms-token';
-      sessionStorage.setItem('kms_access_token', mockToken);
-      setKmsAccessToken(mockToken);
-      fetchFamilies(mockToken);
+      applyKmsToken('mock-kms-token');
       return;
     }
     googleLogin();
-  }, [googleLogin, fetchFamilies]);
+  }, [googleLogin, applyKmsToken]);
 
   const handleLockKmsAuth = React.useCallback(() => {
     sessionStorage.removeItem('kms_access_token');
     setKmsAccessToken(null);
+    setKmsError(null);
     fetchFamilies('');
   }, [fetchFamilies]);
 
@@ -2108,8 +2162,20 @@ const Dashboard: React.FC = () => {
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ parents: updatedParents }),
     })
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to update parent');
+      .then(async (res) => {
+        if (!res.ok) {
+          if (res.status === 403) {
+            const errData = await res.json().catch(() => ({}));
+            if (errData.error === 'kms_access_denied') {
+              sessionStorage.removeItem('kms_access_token');
+              setKmsAccessToken(null);
+              const errMsg = t('kmsAccessDenied');
+              setKmsError(errMsg);
+              throw new Error(errMsg);
+            }
+          }
+          throw new Error('Failed to update parent');
+        }
         pushAction({
           type: 'UPDATE_PARENT',
           payload: {
@@ -2139,8 +2205,20 @@ const Dashboard: React.FC = () => {
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(updatedChild),
     })
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to update child');
+      .then(async (res) => {
+        if (!res.ok) {
+          if (res.status === 403) {
+            const errData = await res.json().catch(() => ({}));
+            if (errData.error === 'kms_access_denied') {
+              sessionStorage.removeItem('kms_access_token');
+              setKmsAccessToken(null);
+              const errMsg = t('kmsAccessDenied');
+              setKmsError(errMsg);
+              throw new Error(errMsg);
+            }
+          }
+          throw new Error('Failed to update child');
+        }
         pushAction({
           type: 'UPDATE_CHILD',
           payload: {
@@ -2918,7 +2996,7 @@ const Dashboard: React.FC = () => {
         id: 'child_name',
         accessorFn: (child: any) => `${child.first_name || ''} ${child.last_name || ''}`.trim(),
         header: t('firstNameEdit'),
-        size: 260,
+        size: 200,
         minSize: 200,
         cell: (info) => {
           const child = info.row.original;
@@ -3252,6 +3330,45 @@ const Dashboard: React.FC = () => {
                 {t('addFamily')}
               </button>
             )}
+          </div>
+        )}
+
+        {kmsError && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '0.75rem 1rem',
+              marginBottom: '1rem',
+              borderRadius: '6px',
+              backgroundColor: '#fef2f2',
+              border: '1px solid #fca5a5',
+              color: '#b91c1c',
+              fontSize: '0.875rem',
+              fontWeight: 500,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <AlertCircle size={18} color="#dc2626" />
+              <span>{kmsError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setKmsError(null)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                color: '#b91c1c',
+                display: 'flex',
+                alignItems: 'center',
+                padding: '0.2rem',
+              }}
+              title={t('dismiss')}
+            >
+              <X size={16} />
+            </button>
           </div>
         )}
 

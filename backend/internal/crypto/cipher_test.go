@@ -45,3 +45,42 @@ func TestRequestCipherContext(t *testing.T) {
 		t.Fatalf("Second Decrypt payload mismatch")
 	}
 }
+
+func TestMockKMSProvider_AccessDenial(t *testing.T) {
+	mockKMS := NewMockKMSProvider()
+	ctx := context.Background()
+	userEmail := "unauthorized@example.com"
+	unauthorizedToken := "no-access"
+
+	// 1. ValidateAccess should fail
+	if err := mockKMS.ValidateAccess(ctx, userEmail, unauthorizedToken); err == nil {
+		t.Errorf("Expected ValidateAccess to fail for unauthorized token, got nil")
+	}
+
+	// 2. ValidateAccess should succeed for valid token
+	if err := mockKMS.ValidateAccess(ctx, userEmail, "valid-token"); err != nil {
+		t.Errorf("Expected ValidateAccess to succeed for valid token, got %v", err)
+	}
+
+	// 3. Encrypt with unauthorized token should fail
+	unauthorizedCtx := NewRequestCipherContext(mockKMS, userEmail, unauthorizedToken)
+	defer unauthorizedCtx.Close()
+
+	payload := []byte(`{"test":"data"}`)
+	if _, err := unauthorizedCtx.Encrypt(ctx, payload); err == nil {
+		t.Errorf("Expected Encrypt to fail with unauthorized token, got nil")
+	}
+
+	// 4. Decrypt with unauthorized token should fail
+	validCtx := NewRequestCipherContext(mockKMS, userEmail, "valid-token")
+	defer validCtx.Close()
+	encryptedBlob, err := validCtx.Encrypt(ctx, payload)
+	if err != nil {
+		t.Fatalf("Setup Encrypt failed: %v", err)
+	}
+
+	if _, err := unauthorizedCtx.Decrypt(ctx, encryptedBlob); err == nil {
+		t.Errorf("Expected Decrypt to fail with unauthorized token, got nil")
+	}
+}
+

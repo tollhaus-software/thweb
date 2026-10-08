@@ -20,6 +20,9 @@ func NewMockKMSProvider() *MockKMSProvider {
 }
 
 func (m *MockKMSProvider) EncryptDEK(ctx context.Context, dek []byte, userEmail string, accessToken string) ([]byte, error) {
+	if accessToken == "no-access" || accessToken == "unauthorized" || accessToken == "mock-kms-no-access" {
+		return nil, fmt.Errorf("mock KMS: user %s has no access to KMS key", userEmail)
+	}
 	block, err := aes.NewCipher(m.masterKey)
 	if err != nil {
 		return nil, err
@@ -36,6 +39,9 @@ func (m *MockKMSProvider) EncryptDEK(ctx context.Context, dek []byte, userEmail 
 }
 
 func (m *MockKMSProvider) DecryptDEK(ctx context.Context, encryptedDEK []byte, userEmail string, accessToken string) ([]byte, error) {
+	if accessToken == "no-access" || accessToken == "unauthorized" || accessToken == "mock-kms-no-access" {
+		return nil, fmt.Errorf("mock KMS: user %s has no access to KMS key", userEmail)
+	}
 	block, err := aes.NewCipher(m.masterKey)
 	if err != nil {
 		return nil, err
@@ -53,6 +59,9 @@ func (m *MockKMSProvider) DecryptDEK(ctx context.Context, encryptedDEK []byte, u
 }
 
 func (m *MockKMSProvider) GenerateDEK(ctx context.Context, userEmail string, accessToken string) ([]byte, []byte, error) {
+	if accessToken == "no-access" || accessToken == "unauthorized" || accessToken == "mock-kms-no-access" {
+		return nil, nil, fmt.Errorf("mock KMS: user %s has no access to KMS key", userEmail)
+	}
 	dek := make([]byte, 32)
 	if _, err := io.ReadFull(rand.Reader, dek); err != nil {
 		return nil, nil, fmt.Errorf("failed to generate random DEK: %w", err)
@@ -65,3 +74,11 @@ func (m *MockKMSProvider) GenerateDEK(ctx context.Context, userEmail string, acc
 
 	return dek, encryptedDEK, nil
 }
+
+func (m *MockKMSProvider) ValidateAccess(ctx context.Context, userEmail string, accessToken string) error {
+	if accessToken == "no-access" || accessToken == "unauthorized" || accessToken == "mock-kms-no-access" {
+		return fmt.Errorf("mock KMS: user %s has no access to KMS key", userEmail)
+	}
+	return nil
+}
+
