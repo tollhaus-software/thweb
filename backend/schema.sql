@@ -192,9 +192,13 @@ CREATE OR REPLACE VIEW yellow_bag_dates AS SELECT * FROM yellow_bag_days;
 CREATE TABLE IF NOT EXISTS meal_plan_from_sheets (
     date DATE PRIMARY KEY,
     fetched_at TIMESTAMPTZ NOT NULL,
+    cook_name TEXT NOT NULL DEFAULT '',
     food_component_1 TEXT NOT NULL DEFAULT '',
     food_component_2 TEXT NOT NULL DEFAULT '',
     food_component_3 TEXT NOT NULL DEFAULT ''
 );
+
+-- Incremental column migrations for existing databases
+ALTER TABLE meal_plan_from_sheets ADD COLUMN IF NOT EXISTS cook_name TEXT NOT NULL DEFAULT '';
 
 CREATE INDEX IF NOT EXISTS idx_meal_plan_from_sheets_date ON meal_plan_from_sheets (date);
