@@ -77,6 +77,10 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 
 		// Childcare Fees Calculation
 		r.Post("/api/fees/calculate", server.HandleCalculateFees)
+
+		// Dashboard / Daily Brief
+		r.Get("/api/dashboard/daily-brief", server.HandleGetDailyBrief)
+		r.Get("/api/daily-brief", server.HandleGetDailyBrief)
 	})
 
 	return r

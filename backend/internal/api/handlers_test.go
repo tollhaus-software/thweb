@@ -50,3 +50,16 @@ func TestHandleListAuditLogs_Permission(t *testing.T) {
 		})
 	}
 }
+
+func TestHandleGetDailyBrief_InvalidDate(t *testing.T) {
+	s := &Server{}
+	req := httptest.NewRequest("GET", "/api/dashboard/daily-brief?date=invalid-date", nil)
+	rec := httptest.NewRecorder()
+
+	s.HandleGetDailyBrief(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("HandleGetDailyBrief with invalid date got status %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+

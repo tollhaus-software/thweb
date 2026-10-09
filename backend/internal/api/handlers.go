@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -775,3 +776,34 @@ func (s *Server) HandleDeleteTHMembership(w http.ResponseWriter, r *http.Request
 
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (s *Server) HandleGetDailyBrief(w http.ResponseWriter, r *http.Request) {
+	dateParam := strings.TrimSpace(r.URL.Query().Get("date"))
+	var targetDate time.Time
+	if dateParam == "" {
+		loc, err := time.LoadLocation("Europe/Berlin")
+		var now time.Time
+		if err == nil {
+			now = time.Now().In(loc)
+		} else {
+			now = time.Now()
+		}
+		targetDate = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	} else {
+		parsed, err := time.Parse("2006-01-02", dateParam)
+		if err != nil {
+			httpErrorLog(w, r, "Invalid date format, expected YYYY-MM-DD", http.StatusBadRequest, err)
+			return
+		}
+		targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 0, 0, 0, 0, time.UTC)
+	}
+
+	brief, err := s.Store.GetDailyBrief(r.Context(), targetDate)
+	if err != nil {
+		httpErrorLog(w, r, "Failed to get daily brief", http.StatusInternalServerError, err)
+		return
+	}
+
+	jsonResponse(w, brief)
+}
+

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -950,3 +951,71 @@ func (s *Store) DeleteUser(ctx context.Context, id uuid.UUID) error {
 	_, err := s.db.Exec(ctx, "DELETE FROM users WHERE id = $1", id)
 	return err
 }
+
+func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*models.DailyBriefResponse, error) {
+	dateStr := targetDate.Format("2006-01-02")
+	nextDateStr := targetDate.AddDate(0, 0, 1).Format("2006-01-02")
+
+	resp := &models.DailyBriefResponse{
+		Date:           dateStr,
+		WhoIsCooking:   "",
+		MealComponents: []string{},
+		TasksAndInfo:   []string{},
+	}
+
+	// 1. Fetch meal plan from meal_plan_from_sheets
+	var cookName, comp1, comp2, comp3 string
+	err := s.db.QueryRow(ctx, `
+		SELECT cook_name, food_component_1, food_component_2, food_component_3
+		FROM meal_plan_from_sheets
+		WHERE date = $1
+	`, dateStr).Scan(&cookName, &comp1, &comp2, &comp3)
+	if err != nil && err != pgx.ErrNoRows {
+		return nil, fmt.Errorf("failed to query meal_plan_from_sheets: %w", err)
+	}
+
+	if err == nil {
+		resp.WhoIsCooking = strings.TrimSpace(cookName)
+		for _, comp := range []string{comp1, comp2, comp3} {
+			trimmed := strings.TrimSpace(comp)
+			if trimmed != "" {
+				resp.MealComponents = append(resp.MealComponents, trimmed)
+			}
+		}
+	}
+
+	// 2. If the date that is being checked is present in the "yellow_bag_days" table:
+	// add "yellow_bin_retrieve" to tasks_and_info ("Gelbe Tonne reinholen")
+	var yellowBagToday bool
+	err = s.db.QueryRow(ctx, `
+		SELECT EXISTS(SELECT 1 FROM yellow_bag_days WHERE date = $1)
+	`, dateStr).Scan(&yellowBagToday)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check yellow_bag_days for date %s: %w", dateStr, err)
+	}
+	if yellowBagToday {
+		resp.TasksAndInfo = append(resp.TasksAndInfo, "yellow_bin_retrieve")
+	}
+
+	// 3. If the date + 1 day is present in the "yellow_bag_days" table:
+	// add "yellow_bin_put_out" to tasks_and_info ("Gelbe Tonne rausstellen")
+	var yellowBagTomorrow bool
+	err = s.db.QueryRow(ctx, `
+		SELECT EXISTS(SELECT 1 FROM yellow_bag_days WHERE date = $1)
+	`, nextDateStr).Scan(&yellowBagTomorrow)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check yellow_bag_days for date %s: %w", nextDateStr, err)
+	}
+	if yellowBagTomorrow {
+		resp.TasksAndInfo = append(resp.TasksAndInfo, "yellow_bin_put_out")
+	}
+
+	// 4. If the date is a friday:
+	// add "clean_coffe_machine" to tasks_and_info ("Kaffeemaschine reinigen")
+	if targetDate.Weekday() == time.Friday {
+		resp.TasksAndInfo = append(resp.TasksAndInfo, "clean_coffe_machine")
+	}
+
+	return resp, nil
+}
+
