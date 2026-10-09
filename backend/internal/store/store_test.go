@@ -90,9 +90,10 @@ func TestGetDailyBrief(t *testing.T) {
 		}
 	}
 
-	// Tasks for Friday: yellow_bin_retrieve and clean_coffe_machine
+	// Tasks for Friday: yellow_bin_retrieve, clean_coffe_machine, and clean_refrigerator
 	hasRetrieve := false
 	hasCoffee := false
+	hasRefrigerator := false
 	for _, task := range briefFriday.TasksAndInfo {
 		if task == "yellow_bin_retrieve" {
 			hasRetrieve = true
@@ -100,12 +101,18 @@ func TestGetDailyBrief(t *testing.T) {
 		if task == "clean_coffe_machine" {
 			hasCoffee = true
 		}
+		if task == "clean_refrigerator" {
+			hasRefrigerator = true
+		}
 	}
 	if !hasRetrieve {
 		t.Errorf("expected 'yellow_bin_retrieve' in tasks, got: %+v", briefFriday.TasksAndInfo)
 	}
 	if !hasCoffee {
 		t.Errorf("expected 'clean_coffe_machine' in tasks, got: %+v", briefFriday.TasksAndInfo)
+	}
+	if !hasRefrigerator {
+		t.Errorf("expected 'clean_refrigerator' in tasks, got: %+v", briefFriday.TasksAndInfo)
 	}
 
 	// Test 2: Thursday 2099-10-08
@@ -123,13 +130,13 @@ func TestGetDailyBrief(t *testing.T) {
 		t.Errorf("expected 0 meal components, got %d", len(briefThursday.MealComponents))
 	}
 
-	// Tasks for Thursday: yellow_bin_put_out, but NOT clean_coffe_machine or yellow_bin_retrieve
+	// Tasks for Thursday: yellow_bin_put_out, but NOT clean_coffe_machine, clean_refrigerator, or yellow_bin_retrieve
 	hasPutOut := false
 	for _, task := range briefThursday.TasksAndInfo {
 		if task == "yellow_bin_put_out" {
 			hasPutOut = true
 		}
-		if task == "clean_coffe_machine" || task == "yellow_bin_retrieve" {
+		if task == "clean_coffe_machine" || task == "clean_refrigerator" || task == "yellow_bin_retrieve" {
 			t.Errorf("unexpected task on Thursday: %s", task)
 		}
 	}

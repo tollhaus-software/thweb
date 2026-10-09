@@ -33,7 +33,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 1.75rem 1rem 1.5rem 1rem;
+  padding: 0.875rem 1rem 1.5rem 1rem;
   gap: 1.75rem;
   overflow-y: auto;
   box-sizing: border-box;
@@ -45,7 +45,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.5rem 0 0.5rem 0;
+  padding: 0.25rem 0 0.5rem 0;
   box-sizing: border-box;
 }
 
@@ -53,7 +53,7 @@
   flex: 1;
   text-align: center;
   margin: 0;
-  font-size: 3.2rem;
+  font-size: 2.4rem;
   font-weight: 800;
   color: #0f172a;
   line-height: 1.2;
@@ -219,7 +219,7 @@
   gap: 1.5rem;
   padding: 1.25rem 1.25rem;
   border-radius: 18px;
-  font-size: 1.9rem;
+  font-size: 1.8rem;
   font-weight: 700;
   line-height: 1.3;
 }
@@ -248,6 +248,18 @@
   flex-shrink: 0;
 }
 
+/* Task: Kühlschrank reinigen (Clean refrigerator) */
+.kiosk-todo-refrigerator {
+  background-color: #f0f9ff;
+  border: 2px solid #bae6fd;
+  color: #0369a1;
+}
+
+.kiosk-todo-refrigerator .kiosk-todo-icon {
+  color: #0284c7;
+  flex-shrink: 0;
+}
+
 /* Default task fallback */
 .kiosk-todo-default {
   background-color: #f8fafc;
@@ -259,14 +271,10 @@
   display: flex;
   align-items: center;
   gap: 1rem;
-  color: #64748b;
+  color: #94a3b8;
   font-size: 1.7rem;
   font-weight: 500;
   padding: 0.5rem 0;
-}
-
-.kiosk-todo-empty-icon {
-  color: #10b981;
 }
 
 .kiosk-empty-text {
@@ -366,11 +374,11 @@
 /* Media query for screens smaller than kiosk tablet */
 @media (max-height: 1000px) {
   .kiosk-content-area {
-    padding: 1.25rem 0.75rem 1rem 0.75rem;
+    padding: 0.625rem 0.75rem 1rem 0.75rem;
     gap: 1.25rem;
   }
   .kiosk-header-date {
-    font-size: 2.2rem;
+    font-size: 1.8rem;
   }
   .kiosk-header-nav-btn {
     width: 52px;
