@@ -42,16 +42,7 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var email string
 
-		// Extract OAuth / ID token from headers
-		var idToken string
-		authHeader := r.Header.Get("Authorization")
-		if strings.HasPrefix(authHeader, "Bearer ") {
-			idToken = strings.TrimPrefix(authHeader, "Bearer ")
-		}
-
-		if idToken == "null" || idToken == "undefined" {
-			idToken = ""
-		}
+		idToken := ExtractIDToken(r)
 
 		rawAccessToken := ExtractKmsAccessToken(r)
 
@@ -117,6 +108,32 @@ func GetUser(ctx context.Context) *models.UserWithPermissions {
 		return nil
 	}
 	return user
+}
+
+func ExtractIDToken(r *http.Request) string {
+	var idToken string
+	authHeader := r.Header.Get("Authorization")
+	if strings.HasPrefix(authHeader, "Bearer ") {
+		idToken = strings.TrimPrefix(authHeader, "Bearer ")
+	}
+
+	if idToken == "" {
+		idToken = r.Header.Get("X-Forwarded-ID-Token")
+	}
+
+	if idToken == "" {
+		if q := r.URL.Query().Get("token"); q != "" {
+			idToken = q
+		} else if q := r.URL.Query().Get("id_token"); q != "" {
+			idToken = q
+		}
+	}
+
+	idToken = strings.TrimSpace(idToken)
+	if idToken == "null" || idToken == "undefined" {
+		return ""
+	}
+	return idToken
 }
 
 func ExtractKmsAccessToken(r *http.Request) string {

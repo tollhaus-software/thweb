@@ -27,11 +27,13 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		w.Write([]byte("ok"))
 	})
 
-	r.Handle("/ws", hub)
-
 	// Protected routes
 	r.Group(func(r chi.Router) {
 		r.Use(authenticator.Middleware)
+
+		// WebSocket endpoint (authenticated & origin-checked)
+		r.Handle("/ws", hub)
+		r.Handle("/api/ws", hub)
 
 		r.Get("/api/me", server.HandleGetMe)
 		r.Get("/api/families", server.HandleListFamilies)

@@ -3,16 +3,77 @@ package api
 import (
 	"encoding/json"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
+	"os"
+	"strings"
 	"sync"
 
 	"github.com/gorilla/websocket"
 )
 
+// CheckOrigin validates whether the incoming WebSocket request Origin is allowed.
+// This prevents Cross-Site WebSocket Hijacking (CSWSH).
+func CheckOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		// Non-browser clients (such as curl, tests, or backend tools) might not set the Origin header.
+		return true
+	}
+
+	u, err := url.Parse(origin)
+	if err != nil {
+		log.Printf("[WS CHECK-ORIGIN] Rejected invalid origin URL %q: %v", origin, err)
+		return false
+	}
+
+	// 1. Same-origin host check (e.g. "example.com:8080" == "example.com:8080" or "example.com" == "example.com")
+	if strings.EqualFold(u.Host, r.Host) {
+		return true
+	}
+
+	// 2. Same host name ignoring port (e.g. reverse proxy or Vite dev server port differences)
+	uHost := u.Hostname()
+	rHost := r.Host
+	if h, _, err := net.SplitHostPort(rHost); err == nil {
+		rHost = h
+	}
+	if strings.EqualFold(uHost, rHost) {
+		return true
+	}
+
+	// 3. Localhost and loopback IPs are allowed for local development
+	if uHost == "localhost" || uHost == "127.0.0.1" || uHost == "::1" {
+		return true
+	}
+
+	// 4. ALLOWED_ORIGINS environment variable (comma-separated list of allowed origins or hosts)
+	if allowedOrigins := os.Getenv("ALLOWED_ORIGINS"); allowedOrigins != "" {
+		for _, allowed := range strings.Split(allowedOrigins, ",") {
+			allowed = strings.TrimSpace(allowed)
+			if allowed == "" {
+				continue
+			}
+			if strings.EqualFold(origin, allowed) || strings.EqualFold(u.Host, allowed) || strings.EqualFold(uHost, allowed) {
+				return true
+			}
+		}
+	}
+
+	// 5. DOMAIN_NAME environment variable
+	if domainName := os.Getenv("DOMAIN_NAME"); domainName != "" {
+		if strings.EqualFold(uHost, domainName) || strings.EqualFold(u.Host, domainName) {
+			return true
+		}
+	}
+
+	log.Printf("[WS CHECK-ORIGIN] Rejected unauthorized origin %q for host %q", origin, r.Host)
+	return false
+}
+
 var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true // In production, check origin
-	},
+	CheckOrigin: CheckOrigin,
 }
 
 type WSMessage struct {

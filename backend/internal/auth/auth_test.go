@@ -213,3 +213,99 @@ func TestExtractKmsAccessToken(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractIDToken(t *testing.T) {
+	tests := []struct {
+		name      string
+		url       string
+		headers   map[string]string
+		wantToken string
+	}{
+		{
+			name:      "no token provided",
+			url:       "/ws",
+			headers:   map[string]string{},
+			wantToken: "",
+		},
+		{
+			name: "bearer token in Authorization header",
+			url:  "/ws",
+			headers: map[string]string{
+				"Authorization": "Bearer my-id-token-123",
+			},
+			wantToken: "my-id-token-123",
+		},
+		{
+			name: "token in X-Forwarded-ID-Token header",
+			url:  "/ws",
+			headers: map[string]string{
+				"X-Forwarded-ID-Token": "forwarded-id-token-456",
+			},
+			wantToken: "forwarded-id-token-456",
+		},
+		{
+			name:      "token in query parameter ?token=",
+			url:       "/ws?token=query-token-789",
+			headers:   map[string]string{},
+			wantToken: "query-token-789",
+		},
+		{
+			name:      "token in query parameter ?id_token=",
+			url:       "/ws?id_token=query-id-token-abc",
+			headers:   map[string]string{},
+			wantToken: "query-id-token-abc",
+		},
+		{
+			name: "Authorization header takes precedence over X-Forwarded-ID-Token and query",
+			url:  "/ws?token=query-token",
+			headers: map[string]string{
+				"Authorization":        "Bearer auth-header-token",
+				"X-Forwarded-ID-Token": "forwarded-token",
+			},
+			wantToken: "auth-header-token",
+		},
+		{
+			name: "X-Forwarded-ID-Token takes precedence over query",
+			url:  "/ws?token=query-token",
+			headers: map[string]string{
+				"X-Forwarded-ID-Token": "forwarded-token",
+			},
+			wantToken: "forwarded-token",
+		},
+		{
+			name: "null string literal in header returns empty",
+			url:  "/ws",
+			headers: map[string]string{
+				"Authorization": "Bearer null",
+			},
+			wantToken: "",
+		},
+		{
+			name:      "undefined string literal in query returns empty",
+			url:       "/ws?token=undefined",
+			headers:   map[string]string{},
+			wantToken: "",
+		},
+		{
+			name:      "whitespace in token is trimmed",
+			url:       "/ws?token=%20%20trimmed-token%20%20",
+			headers:   map[string]string{},
+			wantToken: "trimmed-token",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", tt.url, nil)
+			for k, v := range tt.headers {
+				req.Header.Set(k, v)
+			}
+
+			got := ExtractIDToken(req)
+			if got != tt.wantToken {
+				t.Errorf("ExtractIDToken() = %q, want %q", got, tt.wantToken)
+			}
+		})
+	}
+}
+
