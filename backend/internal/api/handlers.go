@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,15 +14,17 @@ import (
 	"github.com/google/uuid"
 	"github.com/pavolmarko/thweb-backend/internal/auth"
 	"github.com/pavolmarko/thweb-backend/internal/crypto"
+	"github.com/pavolmarko/thweb-backend/internal/kioskcert"
 	"github.com/pavolmarko/thweb-backend/internal/models"
 	"github.com/pavolmarko/thweb-backend/internal/store"
 )
 
 type Server struct {
-	Store         *store.Store
-	Authenticator *auth.Authenticator
-	Hub           *Hub
-	KMSProvider   crypto.KMSProvider
+	Store          *store.Store
+	Authenticator  *auth.Authenticator
+	Hub            *Hub
+	KMSProvider    crypto.KMSProvider
+	KioskGenerator *kioskcert.Generator
 }
 
 func jsonResponse(w http.ResponseWriter, data interface{}) {
@@ -806,4 +809,60 @@ func (s *Server) HandleGetDailyBrief(w http.ResponseWriter, r *http.Request) {
 
 	jsonResponse(w, brief)
 }
+
+type IssueKioskCertRequest struct {
+	DeviceName string `json:"device_name"`
+	Password   string `json:"password"`
+	Days       int    `json:"days"`
+}
+
+func (s *Server) HandleGetKioskCertStatus(w http.ResponseWriter, r *http.Request) {
+	hasCA := s.KioskGenerator != nil && s.KioskGenerator.HasCA()
+	jsonResponse(w, map[string]interface{}{
+		"ca_initialized": hasCA,
+	})
+}
+
+func (s *Server) HandleIssueKioskCert(w http.ResponseWriter, r *http.Request) {
+	if s.KioskGenerator == nil || !s.KioskGenerator.HasCA() {
+		httpErrorLog(w, r, "Kiosk CA is not configured or certificates not found on server", http.StatusServiceUnavailable, nil)
+		return
+	}
+
+	var req IssueKioskCertRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpErrorLog(w, r, "Invalid request body", http.StatusBadRequest, err)
+		return
+	}
+
+	req.DeviceName = strings.TrimSpace(req.DeviceName)
+	if req.DeviceName == "" {
+		httpErrorLog(w, r, "device_name is required", http.StatusBadRequest, nil)
+		return
+	}
+	if req.Days <= 0 {
+		req.Days = 730
+	}
+
+	p12Bytes, err := s.KioskGenerator.IssueKioskCert(req.DeviceName, req.Password, req.Days)
+	if err != nil {
+		httpErrorLog(w, r, "Failed to issue kiosk certificate", http.StatusInternalServerError, err)
+		return
+	}
+
+	user := auth.GetUser(r.Context())
+	actorEmail := "unknown"
+	if user != nil {
+		actorEmail = user.Email
+	}
+	log.Printf("[AUDIT] Kiosk certificate issued for device %q by %q (validity: %d days)", req.DeviceName, actorEmail, req.Days)
+
+	filename := fmt.Sprintf("%s.p12", req.DeviceName)
+	w.Header().Set("Content-Type", "application/x-pkcs12")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	w.Header().Set("Content-Length", strconv.Itoa(len(p12Bytes)))
+	w.WriteHeader(http.StatusOK)
+	w.Write(p12Bytes)
+}
+
 

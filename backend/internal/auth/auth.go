@@ -38,13 +38,41 @@ func writeJSONError(w http.ResponseWriter, message string, statusCode int) {
 	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
 
+// IsAllowedKioskPath returns true if the request path is permitted for mTLS kiosk access.
+func IsAllowedKioskPath(path string) bool {
+	cleanPath := strings.TrimSuffix(path, "/")
+	return cleanPath == "/api/dashboard/daily-brief" ||
+		cleanPath == "/api/daily-brief" ||
+		cleanPath == "/ws" ||
+		cleanPath == "/api/ws"
+}
+
 func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rawAccessToken := ExtractKmsAccessToken(r)
+
+		// Check if request is authenticated via client certificate (mTLS) from edge gateway
+		if r.Header.Get("X-Client-Verified") == "SUCCESS" && IsAllowedKioskPath(r.URL.Path) {
+			dn := strings.TrimSpace(r.Header.Get("X-Client-DN"))
+			kioskEmail := "kiosk@internal"
+			if dn != "" {
+				kioskEmail = "kiosk+" + dn + "@internal"
+			}
+			kioskUser := &models.UserWithPermissions{
+				Email:                kioskEmail,
+				Roles:                []string{"kiosk"},
+				Permissions:          []string{"dashboard.read"},
+				EffectivePermissions: []string{"dashboard.read"},
+			}
+			ctx := context.WithValue(r.Context(), UserContextKey, kioskUser)
+			ctx = context.WithValue(ctx, AccessTokenContextKey, rawAccessToken)
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
+
 		var email string
 
 		idToken := ExtractIDToken(r)
-
-		rawAccessToken := ExtractKmsAccessToken(r)
 
 		if a.AllowMockAuth {
 			// Local development mode (ALLOW_MOCK_AUTH=true)
