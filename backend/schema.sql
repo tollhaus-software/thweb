@@ -179,11 +179,22 @@ ON CONFLICT (id) DO NOTHING;
 
 -- Yellow bag days table
 CREATE TABLE IF NOT EXISTS yellow_bag_days (
-    date DATE PRIMARY KEY
+    date DATE PRIMARY KEY,
+    fetched_at TIMESTAMPTZ NOT NULL
 );
+
+-- Incremental column migrations for existing databases
+ALTER TABLE yellow_bag_days ADD COLUMN IF NOT EXISTS fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
 CREATE OR REPLACE VIEW yellow_bag_dates AS SELECT * FROM yellow_bag_days;
 
+-- Meal plan from sheets table
+CREATE TABLE IF NOT EXISTS meal_plan_from_sheets (
+    date DATE PRIMARY KEY,
+    fetched_at TIMESTAMPTZ NOT NULL,
+    food_component_1 TEXT NOT NULL DEFAULT '',
+    food_component_2 TEXT NOT NULL DEFAULT '',
+    food_component_3 TEXT NOT NULL DEFAULT ''
+);
 
-
-
+CREATE INDEX IF NOT EXISTS idx_meal_plan_from_sheets_date ON meal_plan_from_sheets (date);
