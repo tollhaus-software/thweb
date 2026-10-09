@@ -6,10 +6,10 @@ import {
   UtensilsCrossed,
   Soup,
   Coffee,
+  Refrigerator,
   Trash2,
   ChevronLeft,
   ChevronRight,
-  CheckCircle2,
   AlertCircle,
   Home,
 } from 'lucide-react';
@@ -290,6 +290,14 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = () => {
                       </div>
                     );
                   }
+                  if (task === 'clean_refrigerator') {
+                    return (
+                      <div key={idx} className="kiosk-todo-item kiosk-todo-refrigerator">
+                        <Refrigerator size={36} className="kiosk-todo-icon" />
+                        <span>{t('cleanRefrigerator')}</span>
+                      </div>
+                    );
+                  }
                   // Fallback for any other custom task/info
                   return (
                     <div key={idx} className="kiosk-todo-item kiosk-todo-default">
@@ -300,7 +308,6 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = () => {
                 })
               ) : (
                 <div className="kiosk-todo-empty">
-                  <CheckCircle2 size={30} className="kiosk-todo-empty-icon" />
                   <span>{t('noTasks')}</span>
                 </div>
               )}

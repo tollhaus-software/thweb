@@ -1011,9 +1011,9 @@ func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*model
 	}
 
 	// 4. If the date is a friday:
-	// add "clean_coffe_machine" to tasks_and_info ("Kaffeemaschine reinigen")
+	// add "clean_coffe_machine" ("Kaffeemaschine reinigen") and "clean_refrigerator" ("Kühlschrank reinigen")
 	if targetDate.Weekday() == time.Friday {
-		resp.TasksAndInfo = append(resp.TasksAndInfo, "clean_coffe_machine")
+		resp.TasksAndInfo = append(resp.TasksAndInfo, "clean_coffe_machine", "clean_refrigerator")
 	}
 
 	return resp, nil
