@@ -1,0 +1,408 @@
+/* Kiosk Tablet Dashboard Styles (Optimized for 1200 x 1920) */
+
+.kiosk-tablet-page {
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: #f1f5f9;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-family: var(--sans, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+  color: #0f172a;
+  box-sizing: border-box;
+}
+
+.kiosk-tablet-container {
+  width: 100%;
+  max-width: 1200px;
+  height: 100%;
+  max-height: 1920px;
+  display: flex;
+  flex-direction: column;
+  background-color: #f8fafc;
+  position: relative;
+  box-shadow: 0 0 50px rgba(0, 0, 0, 0.08);
+  box-sizing: border-box;
+}
+
+/* Content Area: takes up most of the screen space */
+.kiosk-content-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 1.75rem 1rem 1.5rem 1rem;
+  gap: 1.75rem;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+/* Header: Just centered text with current date, left/right arrows at screen sides, no card/background */
+.kiosk-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0 0.5rem 0;
+  box-sizing: border-box;
+}
+
+.kiosk-header-date {
+  flex: 1;
+  text-align: center;
+  margin: 0;
+  font-size: 3.2rem;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.kiosk-header-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.kiosk-header-nav-btn:hover {
+  background-color: #e2e8f0;
+  color: #0f172a;
+}
+
+.kiosk-header-nav-btn:active {
+  background-color: #cbd5e1;
+  transform: scale(0.96);
+}
+
+/* Card Base Styles */
+.kiosk-card {
+  background: #ffffff;
+  border-radius: 24px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.06), 0 2px 6px -1px rgba(15, 23, 42, 0.04);
+  padding: 1.8rem 1.4rem;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+/* Card Headers (Small header on top left) */
+.kiosk-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.2rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 1.25rem;
+}
+
+.kiosk-card-header-icon {
+  flex-shrink: 0;
+}
+
+/* Card 2: Who is cooking */
+.kiosk-card-cook {
+  width: 100%;
+}
+
+.kiosk-card-cook .kiosk-card-header {
+  color: #3b82f6;
+}
+
+.kiosk-card-cook .kiosk-card-header-icon {
+  color: #3b82f6;
+}
+
+.kiosk-cook-content {
+  font-size: 2.6rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  text-align: left;
+}
+
+/* Card 3: The meal */
+.kiosk-card-meal {
+  width: 100%;
+}
+
+.kiosk-card-meal .kiosk-card-header {
+  color: #10b981;
+}
+
+.kiosk-card-meal .kiosk-card-header-icon {
+  color: #10b981;
+}
+
+.kiosk-meal-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  text-align: left;
+}
+
+.kiosk-meal-line {
+  display: flex;
+  align-items: baseline;
+  text-align: left;
+  line-height: 1.35;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px dashed #e2e8f0;
+}
+
+.kiosk-meal-line:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+/* 1st meal component uses the same larger font as cook */
+.kiosk-meal-line-primary .kiosk-meal-text {
+  font-size: 2.6rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+/* Remaining meal components use current font */
+.kiosk-meal-line-secondary .kiosk-meal-text {
+  font-size: 2.1rem;
+  font-weight: 600;
+  color: #1e293b;
+  line-height: 1.35;
+}
+
+.kiosk-meal-text {
+  flex: 1;
+  text-align: left;
+}
+
+/* Card 4: TODOs / Warnings - Vertically aligned at the bottom of the content area */
+.kiosk-card-todos {
+  margin-top: auto; /* Aligns card 4 vertically at the bottom of the content area! */
+  width: 100%;
+  background: #ffffff;
+}
+
+.kiosk-card-todos .kiosk-card-header {
+  color: #f59e0b;
+}
+
+.kiosk-card-todos .kiosk-card-header-icon {
+  color: #f59e0b;
+}
+
+.kiosk-todos-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.kiosk-todo-item {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1.25rem 1.25rem;
+  border-radius: 18px;
+  font-size: 1.9rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+/* Task: Gelbe Tonne (Yellow bin) */
+.kiosk-todo-yellow {
+  background-color: #fefce8;
+  border: 2px solid #fef08a;
+  color: #854d0e;
+}
+
+.kiosk-todo-yellow .kiosk-todo-icon {
+  color: #ca8a04;
+  flex-shrink: 0;
+}
+
+/* Task: Kaffeemaschine reinigen (Coffee machine) */
+.kiosk-todo-coffee {
+  background-color: #fff7ed;
+  border: 2px solid #ffedd5;
+  color: #9a3412;
+}
+
+.kiosk-todo-coffee .kiosk-todo-icon {
+  color: #c2410c;
+  flex-shrink: 0;
+}
+
+/* Default task fallback */
+.kiosk-todo-default {
+  background-color: #f8fafc;
+  border: 2px solid #e2e8f0;
+  color: #334155;
+}
+
+.kiosk-todo-empty {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  color: #64748b;
+  font-size: 1.7rem;
+  font-weight: 500;
+  padding: 0.5rem 0;
+}
+
+.kiosk-todo-empty-icon {
+  color: #10b981;
+}
+
+.kiosk-empty-text {
+  color: #94a3b8;
+  font-style: italic;
+  font-size: 1.8rem;
+  font-weight: 500;
+  text-align: left;
+}
+
+/* Navigation bar at the bottom: max width, fixed height */
+.kiosk-bottom-nav {
+  width: 100%;
+  height: 88px;
+  min-height: 88px;
+  max-height: 88px;
+  background-color: #ffffff;
+  border-top: 1px solid #cbd5e1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.25rem;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.04);
+  box-sizing: border-box;
+}
+
+.kiosk-nav-left {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.kiosk-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.8rem 1.6rem;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #1e293b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-height: 54px;
+}
+
+.kiosk-nav-btn:hover {
+  background-color: #e2e8f0;
+  border-color: #cbd5e1;
+}
+
+.kiosk-nav-btn:active {
+  transform: scale(0.97);
+}
+
+.kiosk-nav-btn.active {
+  background-color: #eff6ff;
+  color: #2563eb;
+  border-color: #bfdbfe;
+}
+
+.kiosk-nav-home-btn {
+  padding: 0.8rem 1.1rem;
+}
+
+.kiosk-nav-right {
+  display: flex;
+  align-items: center;
+}
+
+.kiosk-clock {
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  font-family: inherit;
+}
+
+/* Error banner */
+.kiosk-error-banner {
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  padding: 1rem 1.5rem;
+  border-radius: 12px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* Media query for screens smaller than kiosk tablet */
+@media (max-height: 1000px) {
+  .kiosk-content-area {
+    padding: 1.25rem 0.75rem 1rem 0.75rem;
+    gap: 1.25rem;
+  }
+  .kiosk-header-date {
+    font-size: 2.2rem;
+  }
+  .kiosk-header-nav-btn {
+    width: 52px;
+    height: 52px;
+  }
+  .kiosk-card {
+    padding: 1.2rem 1rem;
+    border-radius: 18px;
+  }
+  .kiosk-cook-content,
+  .kiosk-meal-line-primary .kiosk-meal-text {
+    font-size: 1.8rem;
+  }
+  .kiosk-meal-line-secondary .kiosk-meal-text {
+    font-size: 1.4rem;
+  }
+  .kiosk-todo-item {
+    font-size: 1.4rem;
+    padding: 0.9rem 1rem;
+  }
+  .kiosk-bottom-nav {
+    height: 72px;
+    min-height: 72px;
+    max-height: 72px;
+    padding: 0 0.75rem;
+  }
+  .kiosk-clock {
+    font-size: 1.7rem;
+  }
+  .kiosk-nav-btn {
+    font-size: 1.15rem;
+    min-height: 44px;
+    padding: 0.6rem 1.2rem;
+  }
+}

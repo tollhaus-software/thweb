@@ -156,6 +156,23 @@ const translations: Record<Locale, Record<string, string>> = {
     dismiss: 'Schließen',
     viewingParentFromFamily: 'Elternteil von Familie',
     viewingChildFromFamily: 'Kind von Familie',
+    dailyBrief: 'Tagesübersicht',
+    kioskDashboard: 'Dashboard',
+    whoIsCooking: 'Koch / Köchin',
+    mealTitle: 'Es gibt:',
+    tasksAndInfoTitle: 'Hinweise & Aufgaben',
+    cleanCoffeeMachine: 'Kaffeemaschine reinigen',
+    yellowBinPutOut: 'Gelbe Tonne rausstellen',
+    yellowBinRetrieve: 'Gelbe Tonne reinholen',
+    noCook: '–',
+    noMeal: 'Kein Speiseplan für heute vorhanden',
+    noTasks: 'Keine anstehenden Aufgaben',
+    today: 'Heute',
+    previousDay: 'Vorheriger Tag',
+    nextDay: 'Nächster Tag',
+    backToPortal: 'Zur Verwaltung',
+    anleitungen: 'Anleitungen',
+    home: 'Home',
   },
   en: {
     title: 'Kindergarten Directory',
@@ -310,6 +327,23 @@ const translations: Record<Locale, Record<string, string>> = {
     dismiss: 'Dismiss',
     viewingParentFromFamily: 'Parent from family',
     viewingChildFromFamily: 'Child from family',
+    dailyBrief: 'Daily Brief',
+    kioskDashboard: 'Dashboard',
+    whoIsCooking: 'Cook',
+    mealTitle: 'Menu:',
+    tasksAndInfoTitle: 'Tasks & Notices',
+    cleanCoffeeMachine: 'Clean coffee machine',
+    yellowBinPutOut: 'Put out yellow bin',
+    yellowBinRetrieve: 'Bring in yellow bin',
+    noCook: '–',
+    noMeal: 'No meal plan recorded',
+    noTasks: 'No pending tasks',
+    today: 'Today',
+    previousDay: 'Previous Day',
+    nextDay: 'Next Day',
+    backToPortal: 'Back to Management',
+    anleitungen: 'Anleitungen',
+    home: 'Home',
   },
 };
 
@@ -401,4 +435,36 @@ export const calculateYearsAndMonths = (
   }
   return { years, months };
 };
+
+/**
+ * Formats a date string (YYYY-MM-DD) into a translated long display format:
+ * e.g., "Freitag, 9. Oktober 2026" (de) or "Friday, October 9, 2026" (en).
+ */
+export const formatDashboardDate = (
+  dateOrStr: Date | string | null | undefined,
+  locale: Locale = CURRENT_LOCALE
+): string => {
+  if (!dateOrStr) return '';
+  let d: Date;
+  if (dateOrStr instanceof Date) {
+    d = dateOrStr;
+  } else {
+    const parts = dateOrStr.split('T')[0].split('-').map(Number);
+    if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+      d = new Date(parts[0], parts[1] - 1, parts[2]);
+    } else {
+      d = new Date(dateOrStr);
+    }
+  }
+  if (isNaN(d.getTime())) return String(dateOrStr);
+
+  const lang = locale === 'de' ? 'de-DE' : 'en-US';
+  return new Intl.DateTimeFormat(lang, {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(d);
+};
+
 

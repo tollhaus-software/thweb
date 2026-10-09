@@ -155,3 +155,11 @@ type THMembership struct {
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
 }
+
+type DailyBriefResponse struct {
+	Date           string   `json:"date"`
+	WhoIsCooking   string   `json:"who_is_cooking"`
+	MealComponents []string `json:"meal_components"`
+	TasksAndInfo   []string `json:"tasks_and_info"`
+}
+

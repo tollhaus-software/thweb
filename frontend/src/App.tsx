@@ -6,13 +6,14 @@ import './App.css';
 import { DataTable } from './components/Table/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import EasyEdit, { Types } from './components/InlineEdit';
-import { Pencil, Trash, Undo, Redo, Calendar, ClipboardList, Lock, Unlock, ArrowLeft, ArrowRight, X, Clock, AlertCircle } from 'lucide-react';
+import { Pencil, Trash, Undo, Redo, Calendar, ClipboardList, Lock, Unlock, ArrowLeft, ArrowRight, X, Clock, AlertCircle, LayoutDashboard } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { MultiValueListEditor } from './components/Table/MultiValueListEditor';
 import { NotesEditor } from './components/Table/NotesEditor';
 import { GroupChangesPopover } from './components/Table/GroupChangesPopover';
 import { VaccinationStatusEditor, type VaccinationCheck } from './components/Table/VaccinationStatusEditor';
 import { ChildcareFeesCalculator } from './components/ChildcareFeesCalculator';
+import { KioskDashboard } from './components/Dashboard/KioskDashboard';
 import { t, CURRENT_LOCALE, formatDisplayDate, parseInputDate, calculateYearsAndMonths } from './utils/i18n';
 
 const EasyEditComponent = EasyEdit;
@@ -3056,8 +3057,31 @@ const Dashboard: React.FC = () => {
     <div className={`dashboard-container ${isTableTab ? 'table-view-active' : ''}`}>
       <header>
         <h1>{t('title')}</h1>
-        <div className="user-info">
+        <div className="user-info" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <span>{user?.email}</span>
+          <button
+            onClick={() => {
+              window.history.pushState({}, '', '/dashboard');
+              window.dispatchEvent(new PopStateEvent('popstate'));
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              padding: '0.4rem 0.8rem',
+              borderRadius: '6px',
+              border: '1px solid var(--border)',
+              background: 'var(--bg-surface)',
+              color: 'var(--primary)',
+              fontWeight: 600,
+              fontSize: '0.9rem',
+              cursor: 'pointer',
+            }}
+            title={t('kioskDashboard')}
+          >
+            <LayoutDashboard size={16} />
+            <span>{t('kioskDashboard')}</span>
+          </button>
           <button onClick={logout}>{t('logout')}</button>
         </div>
       </header>
@@ -4051,12 +4075,51 @@ const Dashboard: React.FC = () => {
 
 const AppContent: React.FC = () => {
   const { user, loading } = useAuth();
+  const [currentPath, setCurrentPath] = React.useState<string>(() => window.location.pathname);
+  const [currentHash, setCurrentHash] = React.useState<string>(() => window.location.hash);
+
+  React.useEffect(() => {
+    const handleLocationChange = () => {
+      setCurrentPath(window.location.pathname);
+      setCurrentHash(window.location.hash);
+    };
+
+    window.addEventListener('popstate', handleLocationChange);
+    window.addEventListener('hashchange', handleLocationChange);
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+      window.removeEventListener('hashchange', handleLocationChange);
+    };
+  }, []);
 
   if (loading) {
     return <div>{t('loading')}</div>;
   }
 
-  return user ? <Dashboard /> : <LandingPage />;
+  if (!user) {
+    return <LandingPage />;
+  }
+
+  const normalizedPath = currentPath.replace(/\/+$/, '');
+  const normalizedHash = currentHash.replace('#', '').split('?')[0];
+  const isDashboard =
+    normalizedPath === '/dashboard' ||
+    normalizedHash === 'dashboard' ||
+    normalizedHash === '/dashboard';
+
+  if (isDashboard) {
+    return (
+      <KioskDashboard
+        onBackToPortal={() => {
+          window.history.pushState({}, '', '/');
+          setCurrentPath('/');
+          setCurrentHash('');
+        }}
+      />
+    );
+  }
+
+  return <Dashboard />;
 };
 
 function App() {
