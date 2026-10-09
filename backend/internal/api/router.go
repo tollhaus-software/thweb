@@ -7,15 +7,17 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/pavolmarko/thweb-backend/internal/auth"
 	"github.com/pavolmarko/thweb-backend/internal/crypto"
+	"github.com/pavolmarko/thweb-backend/internal/kioskcert"
 	"github.com/pavolmarko/thweb-backend/internal/store"
 )
 
 func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *Hub, kmsProvider crypto.KMSProvider) *chi.Mux {
 	server := &Server{
-		Store:         appStore,
-		Authenticator: authenticator,
-		Hub:           hub,
-		KMSProvider:   kmsProvider,
+		Store:          appStore,
+		Authenticator:  authenticator,
+		Hub:            hub,
+		KMSProvider:    kmsProvider,
+		KioskGenerator: kioskcert.NewGenerator(""),
 	}
 
 	r := chi.NewRouter()
@@ -50,6 +52,10 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		r.With(auth.RequirePermission("users.all.manage")).Post("/api/admin/users", server.HandleCreateUser)
 		r.With(auth.RequirePermission("users.all.manage")).Put("/api/admin/users/{id}", server.HandleUpdateUser)
 		r.With(auth.RequirePermission("users.all.manage")).Delete("/api/admin/users/{id}", server.HandleDeleteUser)
+
+		// Admin - Kiosk Client Certificate Provisioning
+		r.With(auth.RequirePermission("provision.kiosk.cert")).Get("/api/admin/kiosk-certs/status", server.HandleGetKioskCertStatus)
+		r.With(auth.RequirePermission("provision.kiosk.cert")).Post("/api/admin/kiosk-certs", server.HandleIssueKioskCert)
 
 		// Family & Child CRUD
 		r.With(auth.RequirePermission("families.all.write")).Post("/api/families", server.HandleCreateFamily)

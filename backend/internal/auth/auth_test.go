@@ -309,3 +309,129 @@ func TestExtractIDToken(t *testing.T) {
 	}
 }
 
+func TestIsAllowedKioskPath(t *testing.T) {
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{"/api/dashboard/daily-brief", true},
+		{"/api/dashboard/daily-brief/", true},
+		{"/api/daily-brief", true},
+		{"/api/daily-brief/", true},
+		{"/ws", true},
+		{"/ws/", true},
+		{"/api/ws", true},
+		{"/api/ws/", true},
+		{"/api/families", false},
+		{"/api/admin/users", false},
+		{"/api/me", false},
+		{"/", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			if got := IsAllowedKioskPath(tt.path); got != tt.want {
+				t.Errorf("IsAllowedKioskPath(%q) = %v, want %v", tt.path, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAuthenticator_Middleware_Kiosk(t *testing.T) {
+	auth := NewAuthenticator("mock-client-id", false, nil)
+
+	tests := []struct {
+		name        string
+		path        string
+		headers     map[string]string
+		wantStatus  int
+		wantKiosk   bool
+		wantKioskDN string
+	}{
+		{
+			name: "kiosk allowed on /api/dashboard/daily-brief with verified client cert",
+			path: "/api/dashboard/daily-brief",
+			headers: map[string]string{
+				"X-Client-Verified": "SUCCESS",
+				"X-Client-DN":       "CN=kiosk-tablet-1",
+			},
+			wantStatus:  http.StatusOK,
+			wantKiosk:   true,
+			wantKioskDN: "CN=kiosk-tablet-1",
+		},
+		{
+			name: "kiosk allowed on /ws without client DN",
+			path: "/ws",
+			headers: map[string]string{
+				"X-Client-Verified": "SUCCESS",
+			},
+			wantStatus: http.StatusOK,
+			wantKiosk:  true,
+		},
+		{
+			name: "kiosk rejected on sensitive path even if X-Client-Verified is SUCCESS",
+			path: "/api/families",
+			headers: map[string]string{
+				"X-Client-Verified": "SUCCESS",
+			},
+			wantStatus: http.StatusUnauthorized,
+			wantKiosk:  false,
+		},
+		{
+			name: "kiosk rejected on /api/dashboard/daily-brief when client verification failed",
+			path: "/api/dashboard/daily-brief",
+			headers: map[string]string{
+				"X-Client-Verified": "FAILED: certificate revoked",
+			},
+			wantStatus: http.StatusUnauthorized,
+			wantKiosk:  false,
+		},
+		{
+			name: "kiosk rejected when client verification is missing",
+			path: "/api/dashboard/daily-brief",
+			headers: map[string]string{},
+			wantStatus: http.StatusUnauthorized,
+			wantKiosk:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var recordedUser *models.UserWithPermissions
+			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				recordedUser = GetUser(r.Context())
+				w.WriteHeader(http.StatusOK)
+			})
+
+			handler := auth.Middleware(next)
+
+			req := httptest.NewRequest("GET", tt.path, nil)
+			for k, v := range tt.headers {
+				req.Header.Set(k, v)
+			}
+			rec := httptest.NewRecorder()
+
+			handler.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("Middleware() status = %d, want %d", rec.Code, tt.wantStatus)
+			}
+
+			if tt.wantKiosk {
+				if recordedUser == nil {
+					t.Fatal("expected recordedUser in context, got nil")
+				}
+				if !recordedUser.HasPermission("dashboard.read") {
+					t.Errorf("expected user to have 'dashboard.read' permission, got: %v", recordedUser.EffectivePermissions)
+				}
+				if tt.wantKioskDN != "" {
+					expectedEmail := "kiosk+" + tt.wantKioskDN + "@internal"
+					if recordedUser.Email != expectedEmail {
+						t.Errorf("expected user email %q, got %q", expectedEmail, recordedUser.Email)
+					}
+				}
+			}
+		})
+	}
+}
+

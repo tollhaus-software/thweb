@@ -4,9 +4,13 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/pavolmarko/thweb-backend/internal/auth"
+	"github.com/pavolmarko/thweb-backend/internal/kioskcert"
 	"github.com/pavolmarko/thweb-backend/internal/models"
 )
 
@@ -62,4 +66,59 @@ func TestHandleGetDailyBrief_InvalidDate(t *testing.T) {
 		t.Errorf("HandleGetDailyBrief with invalid date got status %d, want %d", rec.Code, http.StatusBadRequest)
 	}
 }
+
+func TestHandleGetKioskCertStatus_NoCA(t *testing.T) {
+	s := &Server{
+		KioskGenerator: nil,
+	}
+	req := httptest.NewRequest("GET", "/api/admin/kiosk-certs/status", nil)
+	rec := httptest.NewRecorder()
+
+	s.HandleGetKioskCertStatus(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if !strings.Contains(rec.Body.String(), `"ca_initialized":false`) {
+		t.Errorf("expected ca_initialized: false, got: %s", rec.Body.String())
+	}
+}
+
+func TestHandleIssueKioskCert_NoCA(t *testing.T) {
+	s := &Server{
+		KioskGenerator: nil,
+	}
+	req := httptest.NewRequest("POST", "/api/admin/kiosk-certs", strings.NewReader(`{"device_name":"tablet-1"}`))
+	rec := httptest.NewRecorder()
+
+	s.HandleIssueKioskCert(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusServiceUnavailable)
+	}
+}
+
+func TestHandleIssueKioskCert_MissingDeviceName(t *testing.T) {
+	tmpDir := t.TempDir()
+	caCertPath := filepath.Join(tmpDir, "kiosk-ca.crt")
+	caKeyPath := filepath.Join(tmpDir, "kiosk-ca.key")
+	_ = os.WriteFile(caCertPath, []byte("fake"), 0644)
+	_ = os.WriteFile(caKeyPath, []byte("fake"), 0600)
+
+	s := &Server{
+		KioskGenerator: &kioskcert.Generator{
+			CaCertPath: caCertPath,
+			CaKeyPath:  caKeyPath,
+		},
+	}
+	req := httptest.NewRequest("POST", "/api/admin/kiosk-certs", strings.NewReader(`{"device_name":""}`))
+	rec := httptest.NewRecorder()
+
+	s.HandleIssueKioskCert(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
 

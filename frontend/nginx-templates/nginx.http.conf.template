@@ -23,6 +23,9 @@ server {
         proxy_set_header X-Forwarded-ID-Token $http_x_forwarded_id_token;
         proxy_set_header X-Forwarded-Access-Token $http_x_forwarded_access_token;
         proxy_set_header X-KMS-Access-Token $http_x_kms_access_token;
+        proxy_set_header X-Client-Verified $http_x_client_verified;
+        proxy_set_header X-Client-DN $http_x_client_dn;
+        proxy_set_header X-Kiosk-Mode $http_x_kiosk_mode;
     }
 
     # Forward /ws websocket requests to backend go server
@@ -40,5 +43,8 @@ server {
         proxy_set_header X-Forwarded-ID-Token $http_x_forwarded_id_token;
         proxy_set_header X-Forwarded-Access-Token $http_x_forwarded_access_token;
         proxy_set_header X-KMS-Access-Token $http_x_kms_access_token;
+        proxy_set_header X-Client-Verified $http_x_client_verified;
+        proxy_set_header X-Client-DN $http_x_client_dn;
+        proxy_set_header X-Kiosk-Mode $http_x_kiosk_mode;
     }
 }

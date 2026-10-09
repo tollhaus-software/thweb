@@ -43,6 +43,8 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgres://thweb_app:thweb_app_dev_secret@db:5432/thweb?sslmode=require}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-mock}
       ALLOW_MOCK_AUTH: "true"
+    volumes:
+      - ${KIOSK_CERTS_DIR:-./testing/certs/kiosk}:/etc/kioskcerts:ro
     depends_on:
       db:
         condition: service_healthy

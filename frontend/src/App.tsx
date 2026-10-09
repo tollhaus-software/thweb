@@ -1,5 +1,5 @@
 import React from 'react';
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthProvider, useAuth, isKioskMode } from './context/AuthContext';
 import { LoginButton } from './components/Auth/LoginButton';
 import './App.css';
 
@@ -14,6 +14,7 @@ import { GroupChangesPopover } from './components/Table/GroupChangesPopover';
 import { VaccinationStatusEditor, type VaccinationCheck } from './components/Table/VaccinationStatusEditor';
 import { ChildcareFeesCalculator } from './components/ChildcareFeesCalculator';
 import { KioskDashboard } from './components/Dashboard/KioskDashboard';
+import { KioskProvisioning } from './components/Admin/KioskProvisioning';
 import { t, CURRENT_LOCALE, formatDisplayDate, parseInputDate, calculateYearsAndMonths } from './utils/i18n';
 
 const EasyEditComponent = EasyEdit;
@@ -1149,10 +1150,11 @@ const Dashboard: React.FC = () => {
 
   const canReadAudit = hasPermission('audit.all.read');
   const canManageUsers = hasPermission('users.all.manage') || hasPermission('*');
+  const canProvisionKiosk = hasPermission('provision.kiosk.cert') || hasPermission('*');
 
   const [families, setFamilies] = React.useState<Family[]>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
-  const [activeTab, setActiveTab] = React.useState<'families' | 'parents' | 'children' | 'childcareFees' | 'hygieneBelehrung' | 'audit' | 'admin'>(() => {
+  const [activeTab, setActiveTab] = React.useState<'families' | 'parents' | 'children' | 'childcareFees' | 'hygieneBelehrung' | 'audit' | 'admin' | 'kiosk'>(() => {
     const rawHash = window.location.hash.replace('#', '');
     const hash = rawHash.split('?')[0];
     if (
@@ -1162,7 +1164,8 @@ const Dashboard: React.FC = () => {
       hash === 'childcareFees' ||
       hash === 'hygieneBelehrung' ||
       (hash === 'audit' && canReadAudit) ||
-      (hash === 'admin' && canManageUsers)
+      (hash === 'admin' && canManageUsers) ||
+      (hash === 'kiosk' && canProvisionKiosk)
     ) {
       return hash as any;
     }
@@ -1174,7 +1177,8 @@ const Dashboard: React.FC = () => {
       saved === 'childcareFees' ||
       saved === 'hygieneBelehrung' ||
       (saved === 'audit' && canReadAudit) ||
-      (saved === 'admin' && canManageUsers)
+      (saved === 'admin' && canManageUsers) ||
+      (saved === 'kiosk' && canProvisionKiosk)
     ) {
       return saved as any;
     }
@@ -1690,7 +1694,8 @@ const Dashboard: React.FC = () => {
         hash === 'childcareFees' ||
         hash === 'hygieneBelehrung' ||
         (hash === 'audit' && canReadAudit) ||
-        (hash === 'admin' && canManageUsers)
+        (hash === 'admin' && canManageUsers) ||
+        (hash === 'kiosk' && canProvisionKiosk)
       ) {
         setActiveTab(hash as any);
         localStorage.setItem('thweb_active_tab', hash);
@@ -1706,7 +1711,7 @@ const Dashboard: React.FC = () => {
         } else {
           setReturnNav(null);
         }
-      } else if (hash === 'audit' || hash === 'admin') {
+      } else if (hash === 'audit' || hash === 'admin' || hash === 'kiosk') {
         setActiveTab('parents');
         localStorage.setItem('thweb_active_tab', 'parents');
         window.location.hash = 'parents';
@@ -3204,6 +3209,24 @@ const Dashboard: React.FC = () => {
               {t('admin')}
             </button>
           )}
+          {canProvisionKiosk && (
+            <button 
+              onClick={() => handleTabClick('kiosk')}
+              style={{
+                padding: '0.75rem 1rem',
+                background: 'none',
+                border: 'none',
+                borderBottom: activeTab === 'kiosk' ? '3px solid var(--primary)' : '3px solid transparent',
+                color: activeTab === 'kiosk' ? 'var(--primary)' : 'var(--text)',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                fontSize: '1rem',
+                transition: 'all 0.2s'
+              }}
+            >
+              {t('kioskCertificates')}
+            </button>
+          )}
         </div>
 
         {/* Navigation Context Banner (Pattern 2) */}
@@ -3235,7 +3258,7 @@ const Dashboard: React.FC = () => {
           </div>
         )}
 
-        {activeTab !== 'childcareFees' && activeTab !== 'audit' && activeTab !== 'admin' && (
+        {activeTab !== 'childcareFees' && activeTab !== 'audit' && activeTab !== 'admin' && activeTab !== 'kiosk' && (
           <div className="controls-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
               <input
@@ -3434,6 +3457,8 @@ const Dashboard: React.FC = () => {
           <AuditLogView logs={auditLogs} loading={auditLoading} />
         ) : activeTab === 'admin' && canManageUsers ? (
           <AdminView />
+        ) : activeTab === 'kiosk' && canProvisionKiosk ? (
+          <KioskProvisioning token={token} />
         ) : (
           <ChildcareFeesCalculator
             token={token}
@@ -4094,6 +4119,11 @@ const AppContent: React.FC = () => {
 
   if (loading) {
     return <div>{t('loading')}</div>;
+  }
+
+  // Kiosk endpoint (e.g. port 1443): serve KioskDashboard directly under / without login or portal navigation
+  if (isKioskMode()) {
+    return <KioskDashboard />;
   }
 
   if (!user) {
