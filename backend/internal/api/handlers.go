@@ -841,7 +841,7 @@ func (s *Server) HandleIssueKioskCert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Days <= 0 {
-		req.Days = 730
+		req.Days = 5475
 	}
 
 	p12Bytes, err := s.KioskGenerator.IssueKioskCert(req.DeviceName, req.Password, req.Days)

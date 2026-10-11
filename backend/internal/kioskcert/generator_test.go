@@ -130,3 +130,25 @@ func TestGenerator_MissingCA(t *testing.T) {
 		t.Fatal("expected error when CA files do not exist")
 	}
 }
+
+func TestGenerator_UnreadableCAKey(t *testing.T) {
+	tmpDir := t.TempDir()
+	caCertPath, caKeyPath := createTestCA(t, tmpDir)
+
+	if err := os.Chmod(caKeyPath, 0000); err != nil {
+		t.Skip("skipping chmod test on unsupported filesystem")
+	}
+	defer os.Chmod(caKeyPath, 0644)
+
+	// If running as unprivileged user, opening mode 0000 fails
+	if os.Getuid() != 0 {
+		gen := &Generator{
+			CaCertPath: caCertPath,
+			CaKeyPath:  caKeyPath,
+		}
+		if gen.HasCA() {
+			t.Errorf("expected HasCA() to return false when CA key is unreadable")
+		}
+	}
+}
+

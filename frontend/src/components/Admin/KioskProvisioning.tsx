@@ -12,7 +12,7 @@ export const KioskProvisioning: React.FC<KioskProvisioningProps> = ({ token }) =
 
   const [deviceName, setDeviceName] = useState('');
   const [password, setPassword] = useState('');
-  const [days, setDays] = useState(730);
+  const [days, setDays] = useState(5475);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +69,7 @@ export const KioskProvisioning: React.FC<KioskProvisioningProps> = ({ token }) =
         body: JSON.stringify({
           device_name: cleanName,
           password: password,
-          days: Number(days) || 730,
+          days: Number(days) || 5475,
         }),
       });
 
@@ -268,9 +268,9 @@ export const KioskProvisioning: React.FC<KioskProvisioningProps> = ({ token }) =
             id="kiosk-days"
             type="number"
             min={1}
-            max={3650}
+            max={7305}
             value={days}
-            onChange={(e) => setDays(Number(e.target.value) || 730)}
+            onChange={(e) => setDays(Number(e.target.value) || 5475)}
             style={{
               width: '100%',
               padding: '0.65rem 0.85rem',

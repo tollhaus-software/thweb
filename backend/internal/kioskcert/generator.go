@@ -8,6 +8,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"log"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -38,14 +39,26 @@ func NewGenerator(caDir string) *Generator {
 	}
 }
 
-// HasCA checks if both CA certificate and private key files exist.
+// HasCA checks if both CA certificate and private key files exist and can be read.
 func (g *Generator) HasCA() bool {
-	if _, err := os.Stat(g.CaCertPath); err != nil {
+	fCert, err := os.Open(g.CaCertPath)
+	if err != nil {
+		if _, statErr := os.Stat(g.CaCertPath); statErr == nil {
+			log.Printf("[WARN] Kiosk CA certificate exists at %s but cannot be opened: %v", g.CaCertPath, err)
+		}
 		return false
 	}
-	if _, err := os.Stat(g.CaKeyPath); err != nil {
+	_ = fCert.Close()
+
+	fKey, err := os.Open(g.CaKeyPath)
+	if err != nil {
+		if _, statErr := os.Stat(g.CaKeyPath); statErr == nil {
+			log.Printf("[WARN] Kiosk CA private key exists at %s but cannot be opened: %v", g.CaKeyPath, err)
+		}
 		return false
 	}
+	_ = fKey.Close()
+
 	return true
 }
 
@@ -57,7 +70,7 @@ func (g *Generator) IssueKioskCert(deviceName string, password string, days int)
 		return nil, errors.New("device_name cannot be empty")
 	}
 	if days <= 0 {
-		days = 730 // default 2 years
+		days = 5475 // default 15 years
 	}
 
 	caCertBytes, err := os.ReadFile(g.CaCertPath)
