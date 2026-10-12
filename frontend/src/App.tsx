@@ -1319,7 +1319,16 @@ const Dashboard: React.FC = () => {
     return saved ? JSON.parse(saved) : [];
   });
 
+  const undoStackRef = React.useRef(undoStack);
+  const redoStackRef = React.useRef(redoStack);
+  React.useEffect(() => {
+    undoStackRef.current = undoStack;
+    redoStackRef.current = redoStack;
+  }, [undoStack, redoStack]);
+
   const saveStacks = (undo: any[], redo: any[]) => {
+    undoStackRef.current = undo;
+    redoStackRef.current = redo;
     setUndoStack(undo);
     setRedoStack(redo);
     localStorage.setItem('thweb_undo_stack', JSON.stringify(undo));
@@ -1327,11 +1336,36 @@ const Dashboard: React.FC = () => {
   };
 
   const pushAction = (action: any) => {
-    const newUndo = [...undoStack, action];
+    const newUndo = [...undoStackRef.current, action];
     if (newUndo.length > 50) {
       newUndo.shift();
     }
     saveStacks(newUndo, []);
+  };
+
+  const purgeActionsForEntity = (entityId: string) => {
+    const isActionReferencing = (action: any) => {
+      const p = action?.payload || {};
+      return (
+        p.familyId === entityId ||
+        p.parentId === entityId ||
+        p.childId === entityId ||
+        p.membershipId === entityId ||
+        p.eventId === entityId ||
+        p.changeId === entityId ||
+        p.parent?.id === entityId ||
+        p.child?.id === entityId ||
+        p.membership?.id === entityId ||
+        p.event?.id === entityId ||
+        p.change?.id === entityId ||
+        (Array.isArray(p.beforeParents) && p.beforeParents.some((x: any) => x?.id === entityId)) ||
+        (Array.isArray(p.afterParents) && p.afterParents.some((x: any) => x?.id === entityId))
+      );
+    };
+
+    const newUndo = undoStackRef.current.filter((a) => !isActionReferencing(a));
+    const newRedo = redoStackRef.current.filter((a) => !isActionReferencing(a));
+    saveStacks(newUndo, newRedo);
   };
 
   const executeHistoryAction = async (action: any, isUndo: boolean) => {
@@ -1355,22 +1389,6 @@ const Dashboard: React.FC = () => {
         });
         if (!res.ok) throw new Error();
       } 
-      else if (type === 'DELETE_PARENT') {
-        if (isUndo) {
-          const res = await fetch(`/api/families/${payload.familyId}`, {
-            method: 'PUT',
-            headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-            body: JSON.stringify({ parents: payload.beforeParents }),
-          });
-          if (!res.ok) throw new Error();
-        } else {
-          const res = await fetch(`/api/parents/${payload.parentId}`, {
-            method: 'DELETE',
-            headers: getAuthHeaders(),
-          });
-          if (!res.ok) throw new Error();
-        }
-      }
       else if (type === 'UPDATE_CHILD') {
         const targetChild = isUndo ? payload.before : payload.after;
         const res = await fetch(`/api/children/${payload.childId}`, {
@@ -1379,22 +1397,6 @@ const Dashboard: React.FC = () => {
           body: JSON.stringify(targetChild),
         });
         if (!res.ok) throw new Error();
-      }
-      else if (type === 'DELETE_CHILD') {
-        if (isUndo) {
-          const res = await fetch(`/api/children/${payload.child.id}`, {
-            method: 'PUT',
-            headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-            body: JSON.stringify(payload.child),
-          });
-          if (!res.ok) throw new Error();
-        } else {
-          const res = await fetch(`/api/children/${payload.child.id}`, {
-            method: 'DELETE',
-            headers: getAuthHeaders(),
-          });
-          if (!res.ok) throw new Error();
-        }
       }
       else if (type === 'ADD_FAMILY') {
         if (isUndo) {
@@ -1444,6 +1446,89 @@ const Dashboard: React.FC = () => {
           if (!res.ok) throw new Error();
         }
       }
+      else if (type === 'ADD_MEMBERSHIP') {
+        if (isUndo) {
+          const res = await fetch(`/api/memberships/${payload.membershipId}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders(),
+          });
+          if (!res.ok) throw new Error();
+        } else {
+          const res = await fetch('/api/memberships', {
+            method: 'POST',
+            headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({
+              parent_id: payload.parentId,
+              start_date: payload.membership.start_date,
+              end_date: payload.membership.end_date,
+              membership_type: payload.membership.membership_type,
+            }),
+          });
+          if (!res.ok) throw new Error();
+          const created = await res.json();
+          payload.membershipId = created.id;
+          payload.membership = created;
+        }
+      }
+      else if (type === 'ADD_HYGIENE_EVENT') {
+        if (isUndo) {
+          const res = await fetch(`/api/hygiene-events/${payload.eventId}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders(),
+          });
+          if (!res.ok) throw new Error();
+        } else {
+          const res = await fetch('/api/hygiene-events', {
+            method: 'POST',
+            headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({
+              parent_id: payload.parentId,
+              event_date: payload.event.event_date,
+              event_type: payload.event.event_type,
+              documentation: payload.event.documentation,
+            }),
+          });
+          if (!res.ok) throw new Error();
+          const created = await res.json();
+          payload.eventId = created.id;
+          payload.event = created;
+        }
+      }
+      else if (type === 'ADD_GROUP_CHANGE') {
+        if (isUndo) {
+          const res = await fetch(`/api/children_group_changes/${payload.changeId}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders(),
+          });
+          if (!res.ok) throw new Error();
+        } else {
+          const res = await fetch(`/api/children/${payload.childId}/group_changes`, {
+            method: 'POST',
+            headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({
+              child_id: payload.childId,
+              change_date: payload.change.change_date,
+              target_group: payload.change.target_group,
+            }),
+          });
+          if (!res.ok) throw new Error();
+          const created = await res.json();
+          payload.changeId = created.id;
+          payload.change = created;
+        }
+      }
+      else if (type === 'UPDATE_GROUP_CHANGE') {
+        const target = isUndo ? payload.before : payload.after;
+        const res = await fetch(`/api/children_group_changes/${payload.changeId}`, {
+          method: 'PUT',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({
+            change_date: target.change_date,
+            target_group: target.target_group,
+          }),
+        });
+        if (!res.ok) throw new Error();
+      }
 
       await fetchFamilies();
 
@@ -1468,20 +1553,20 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleUndo = () => {
-    if (undoStack.length === 0) return;
-    const nextUndo = [...undoStack];
+  const handleUndo = async () => {
+    if (undoStackRef.current.length === 0) return;
+    const nextUndo = [...undoStackRef.current];
     const action = nextUndo.pop()!;
-    executeHistoryAction(action, true);
-    saveStacks(nextUndo, [action, ...redoStack]);
+    await executeHistoryAction(action, true);
+    saveStacks(nextUndo, [action, ...redoStackRef.current]);
   };
 
-  const handleRedo = () => {
-    if (redoStack.length === 0) return;
-    const nextRedo = [...redoStack];
+  const handleRedo = async () => {
+    if (redoStackRef.current.length === 0) return;
+    const nextRedo = [...redoStackRef.current];
     const action = nextRedo.shift()!;
-    executeHistoryAction(action, false);
-    saveStacks([...undoStack, action], nextRedo);
+    await executeHistoryAction(action, false);
+    saveStacks([...undoStackRef.current, action], nextRedo);
   };
 
   const undoRef = React.useRef(handleUndo);
@@ -1895,6 +1980,15 @@ const Dashboard: React.FC = () => {
         return res.json();
       })
       .then((created) => {
+        pushAction({
+          type: 'ADD_MEMBERSHIP',
+          payload: {
+            tab: 'parents',
+            parentId: targetParentMemberships.id,
+            membershipId: created.id,
+            membership: created,
+          }
+        });
         fetchFamilies();
         const updatedMemberships = [created, ...(targetParentMemberships.memberships || [])].sort(
           (a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
@@ -1915,6 +2009,7 @@ const Dashboard: React.FC = () => {
     })
       .then((res) => {
         if (!res.ok) throw new Error('Failed to delete membership');
+        purgeActionsForEntity(membershipId);
         fetchFamilies();
         const updatedMemberships = (targetParentMemberships.memberships || []).filter((m) => m.id !== membershipId);
         setTargetParentMemberships({ ...targetParentMemberships, memberships: updatedMemberships });
@@ -1956,6 +2051,15 @@ const Dashboard: React.FC = () => {
         return res.json();
       })
       .then((createdEvent) => {
+        pushAction({
+          type: 'ADD_HYGIENE_EVENT',
+          payload: {
+            tab: activeTab === 'hygieneBelehrung' ? 'hygieneBelehrung' : 'parents',
+            parentId: targetParent.id,
+            eventId: createdEvent.id,
+            event: createdEvent,
+          }
+        });
         fetchFamilies();
         const updatedEvents = [createdEvent, ...(targetParent.events || [])].sort(
           (a, b) => new Date(b.event_date).getTime() - new Date(a.event_date).getTime()
@@ -1979,6 +2083,7 @@ const Dashboard: React.FC = () => {
     })
       .then((res) => {
         if (!res.ok) throw new Error('Failed to delete hygiene event');
+        purgeActionsForEntity(eventId);
         fetchFamilies();
         const updatedEvents = (targetParent.events || []).filter((e) => e.id !== eventId);
         const updatedParent = { ...targetParent, events: updatedEvents };
@@ -2016,6 +2121,15 @@ const Dashboard: React.FC = () => {
       throw new Error(`Failed to create group change: ${err || res.statusText}`);
     }
     const created = await res.json();
+    pushAction({
+      type: 'ADD_GROUP_CHANGE',
+      payload: {
+        tab: 'children',
+        childId: childId,
+        changeId: created.id,
+        change: created,
+      }
+    });
     fetchFamilies();
     if (targetChildGroupChanges && targetChildGroupChanges.id === childId) {
       const existing = targetChildGroupChanges.group_changes || [];
@@ -2036,6 +2150,7 @@ const Dashboard: React.FC = () => {
       const err = await res.text().catch(() => '');
       throw new Error(`Failed to delete group change: ${err || res.statusText}`);
     }
+    purgeActionsForEntity(changeId);
     fetchFamilies();
     if (targetChildGroupChanges) {
       const updatedChanges = (targetChildGroupChanges.group_changes || []).filter((c) => c.id !== changeId);
@@ -2044,6 +2159,10 @@ const Dashboard: React.FC = () => {
   };
 
   const handleUpdateGroupChange = async (changeId: string, changeDate: string, targetGroup: number) => {
+    const existingChange = (targetChildGroupChanges?.group_changes || []).find((c) => c.id === changeId)
+      || families.flatMap((f) => f.children || []).flatMap((c) => c.group_changes || []).find((c) => c.id === changeId);
+    const childId = targetChildGroupChanges?.id || existingChange?.child;
+
     const res = await fetch(`/api/children_group_changes/${changeId}`, {
       method: 'PUT',
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
@@ -2057,6 +2176,24 @@ const Dashboard: React.FC = () => {
       throw new Error(`Failed to update group change: ${err || res.statusText}`);
     }
     const updated = await res.json();
+    if (existingChange && childId) {
+      pushAction({
+        type: 'UPDATE_GROUP_CHANGE',
+        payload: {
+          tab: 'children',
+          childId: childId,
+          changeId: changeId,
+          before: {
+            change_date: existingChange.change_date,
+            target_group: existingChange.target_group,
+          },
+          after: {
+            change_date: changeDate,
+            target_group: targetGroup,
+          },
+        },
+      });
+    }
     fetchFamilies();
     if (targetChildGroupChanges) {
       const existing = targetChildGroupChanges.group_changes || [];
@@ -2075,6 +2212,24 @@ const Dashboard: React.FC = () => {
     }
     return targetChildGroupChanges;
   }, [families, targetChildGroupChanges]);
+
+  const activeParentForHygiene = React.useMemo(() => {
+    if (!targetParent) return null;
+    for (const f of families) {
+      const found = (f.parents || []).find((p) => p.id === targetParent.id);
+      if (found) return found;
+    }
+    return targetParent;
+  }, [families, targetParent]);
+
+  const activeParentForMemberships = React.useMemo(() => {
+    if (!targetParentMemberships) return null;
+    for (const f of families) {
+      const found = (f.parents || []).find((p) => p.id === targetParentMemberships.id);
+      if (found) return found;
+    }
+    return targetParentMemberships;
+  }, [families, targetParentMemberships]);
 
   const openAddFamily = () => {
     setP1FirstName('');
@@ -2226,7 +2381,6 @@ const Dashboard: React.FC = () => {
     if (!parent) return;
     const family = families.find(f => f.id === parent.family_id);
     if (!family) return;
-    const originalParents = family.parents || [];
 
     setConfirmDelete({
       isOpen: true,
@@ -2238,15 +2392,7 @@ const Dashboard: React.FC = () => {
         })
           .then((res) => {
             if (!res.ok) throw new Error('Failed to delete parent');
-            pushAction({
-              type: 'DELETE_PARENT',
-              payload: {
-                tab: 'parents',
-                parentId: parentId,
-                familyId: parent.family_id,
-                beforeParents: originalParents,
-              }
-            });
+            purgeActionsForEntity(parentId);
             fetchFamilies();
             setConfirmDelete(prev => ({ ...prev, isOpen: false }));
           })
@@ -2272,14 +2418,7 @@ const Dashboard: React.FC = () => {
         })
           .then((res) => {
             if (!res.ok) throw new Error('Failed to delete child');
-            pushAction({
-              type: 'DELETE_CHILD',
-              payload: {
-                tab: 'children',
-                childId: child.id,
-                child: child,
-              }
-            });
+            purgeActionsForEntity(childId);
             fetchFamilies();
             setConfirmDelete(prev => ({ ...prev, isOpen: false }));
           })
@@ -3696,10 +3835,10 @@ const Dashboard: React.FC = () => {
       )}
 
         {/* Manage Hygiene Events Modal */}
-        {manageHygieneOpen && targetParent && (
+        {manageHygieneOpen && activeParentForHygiene && (
           <div className="modal-overlay">
             <div className="modal-container" style={{ maxWidth: '600px' }}>
-              <h2>{t('manageHygieneTitle')} {targetParent.first_name} {targetParent.last_name}</h2>
+              <h2>{t('manageHygieneTitle')} {activeParentForHygiene.first_name} {activeParentForHygiene.last_name}</h2>
               
               {/* List of existing events */}
               <div style={{ marginBottom: '1.5rem', maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '6px' }}>
@@ -3713,14 +3852,14 @@ const Dashboard: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {(targetParent.events || []).length === 0 ? (
+                    {(activeParentForHygiene.events || []).length === 0 ? (
                       <tr>
                         <td colSpan={4} style={{ padding: '1rem', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic' }}>
                           {t('noEventsRecorded')}
                         </td>
                       </tr>
                     ) : (
-                      (targetParent.events || []).map((ev) => (
+                      (activeParentForHygiene.events || []).map((ev) => (
                         <tr key={ev.id} style={{ borderBottom: '1px solid var(--border)' }}>
                           <td style={{ padding: '0.5rem' }}>{formatDisplayDate(ev.event_date)}</td>
                           <td style={{ padding: '0.5rem' }}>
@@ -3859,10 +3998,10 @@ const Dashboard: React.FC = () => {
         )}
 
         {/* Manage Memberships Modal */}
-        {manageMembershipsOpen && targetParentMemberships && (
+        {manageMembershipsOpen && activeParentForMemberships && (
           <div className="modal-overlay">
             <div className="modal-container" style={{ maxWidth: '600px' }}>
-              <h2>{t('manageMemberships')} - {targetParentMemberships.first_name} {targetParentMemberships.last_name}</h2>
+              <h2>{t('manageMemberships')} - {activeParentForMemberships.first_name} {activeParentForMemberships.last_name}</h2>
               
               {/* List of existing memberships */}
               <div style={{ marginBottom: '1.5rem', maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '6px' }}>
@@ -3876,14 +4015,14 @@ const Dashboard: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {(targetParentMemberships.memberships || []).length === 0 ? (
+                    {(activeParentForMemberships.memberships || []).length === 0 ? (
                       <tr>
                         <td colSpan={4} style={{ padding: '1rem', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic' }}>
                           {t('noMembershipsRecorded')}
                         </td>
                       </tr>
                     ) : (
-                      (targetParentMemberships.memberships || []).map((m) => (
+                      (activeParentForMemberships.memberships || []).map((m) => (
                         <tr key={m.id} style={{ borderBottom: '1px solid var(--border)' }}>
                           <td style={{ padding: '0.5rem', fontWeight: 600 }}>
                             {m.membership_type === 'full_member' ? t('full_member') : t('supporting_member')}
