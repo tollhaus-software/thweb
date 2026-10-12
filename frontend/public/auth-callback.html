@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TH Portal - Authentifizierung erfolgreich</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #0f172a;
+      color: #f8fafc;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      text-align: center;
+    }
+    .card {
+      background-color: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 32px;
+      max-width: 400px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    }
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid rgba(255, 255, 255, 0.15);
+      border-top-color: #38bdf8;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    h2 {
+      font-size: 1.25rem;
+      margin: 0 0 8px;
+      color: #38bdf8;
+    }
+    p {
+      color: #94a3b8;
+      font-size: 0.95rem;
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="spinner"></div>
+    <h2>Authentifizierung erfolgreich</h2>
+    <p id="status-msg">Dieses Fenster wird automatisch geschlossen...</p>
+    <button id="close-btn" style="margin-top: 16px; padding: 8px 16px; background-color: #38bdf8; color: #0f172a; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; display: none;" onclick="window.close()">Fenster schließen</button>
+  </div>
+  <script>
+    (function() {
+      // 1. BroadcastChannel (works cross-window/tab without window.opener)
+      try {
+        if (typeof BroadcastChannel !== 'undefined') {
+          var bc = new BroadcastChannel('thweb_auth_channel');
+          bc.postMessage({ type: 'THWEB_REAUTH_SUCCESS' });
+          bc.close();
+        }
+      } catch (e) {
+        console.error('BroadcastChannel failed:', e);
+      }
+
+      // 2. localStorage storage event (fallback across same-origin tabs/windows)
+      try {
+        localStorage.setItem('thweb_reauth_event', Date.now().toString());
+      } catch (e) {
+        console.error('localStorage failed:', e);
+      }
+
+      // 3. window.opener.postMessage (if window.opener was preserved)
+      if (window.opener) {
+        try {
+          window.opener.postMessage({ type: 'THWEB_REAUTH_SUCCESS' }, window.location.origin);
+        } catch (e) {
+          console.error('postMessage failed:', e);
+        }
+      }
+
+      // 4. Close the popup window
+      setTimeout(function() {
+        window.close();
+      }, 300);
+
+      // 5. If window cannot be closed automatically, show manual close button
+      setTimeout(function() {
+        var msg = document.getElementById('status-msg');
+        if (msg) msg.textContent = 'Sie können dieses Fenster nun schließen und im Hauptfenster fortfahren.';
+        var btn = document.getElementById('close-btn');
+        if (btn) btn.style.display = 'inline-block';
+      }, 1200);
+    })();
+  </script>
+</body>
+</html>

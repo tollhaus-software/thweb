@@ -59,6 +59,10 @@ func main() {
 
 	appStore := store.NewStore(pool)
 	authenticator := auth.NewAuthenticator(googleClientID, allowMockAuth, appStore)
+	if proxySecret := os.Getenv("PROXY_SHARED_SECRET"); proxySecret != "" {
+		authenticator.ProxySharedSecret = proxySecret
+		log.Println("[INFO] Proxy shared secret verification enabled.")
+	}
 
 	hub := api.NewHub()
 	go hub.Run()

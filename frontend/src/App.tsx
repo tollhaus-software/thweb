@@ -1,6 +1,7 @@
 import React from 'react';
 import { AuthProvider, useAuth, isKioskMode } from './context/AuthContext';
 import { LoginButton } from './components/Auth/LoginButton';
+import { ReauthModal } from './components/Auth/ReauthModal';
 import './App.css';
 
 import { DataTable } from './components/Table/DataTable';
@@ -642,6 +643,14 @@ const ALL_AVAILABLE_PERMISSIONS = [
 const AdminView: React.FC = () => {
   const { token, refreshUser } = useAuth();
   const [subTab, setSubTab] = React.useState<'users' | 'roles'>('users');
+
+  const getAdminHeaders = React.useCallback((extraHeaders: Record<string, string> = {}) => {
+    const h: Record<string, string> = { ...extraHeaders };
+    if (token && token !== 'null' && token !== 'undefined') {
+      h['Authorization'] = `Bearer ${token}`;
+    }
+    return h;
+  }, [token]);
   
   const [users, setUsers] = React.useState<AdminUser[]>([]);
   const [roles, setRoles] = React.useState<AdminRole[]>([]);
@@ -664,7 +673,7 @@ const AdminView: React.FC = () => {
 
   const fetchUsers = React.useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/users', { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch('/api/admin/users', { headers: getAdminHeaders() });
       if (res.ok) {
         const data = await res.json();
         setUsers(data || []);
@@ -672,11 +681,11 @@ const AdminView: React.FC = () => {
     } catch (e) {
       console.error(e);
     }
-  }, [token]);
+  }, [getAdminHeaders]);
 
   const fetchRoles = React.useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/roles', { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch('/api/admin/roles', { headers: getAdminHeaders() });
       if (res.ok) {
         const data = await res.json();
         setRoles(data || []);
@@ -684,7 +693,7 @@ const AdminView: React.FC = () => {
     } catch (e) {
       console.error(e);
     }
-  }, [token]);
+  }, [getAdminHeaders]);
 
   const refreshData = React.useCallback(async () => {
     setLoading(true);
@@ -704,7 +713,7 @@ const AdminView: React.FC = () => {
     if (editingUser) {
       const res = await fetch(`/api/admin/users/${editingUser.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ roles: selectedUserRoles, permissions: selectedUserPerms })
       });
       if (res.ok) {
@@ -718,7 +727,7 @@ const AdminView: React.FC = () => {
       const normalizedEmail = userEmail.trim().toLowerCase();
       const res = await fetch('/api/admin/users', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ email: normalizedEmail, roles: selectedUserRoles, permissions: selectedUserPerms })
       });
       if (res.ok) {
@@ -735,7 +744,7 @@ const AdminView: React.FC = () => {
     if (!window.confirm(t('deleteUserConfirm'))) return;
     const res = await fetch(`/api/admin/users/${id}`, {
       method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` }
+      headers: getAdminHeaders()
     });
     if (res.ok) {
       refreshData();
@@ -767,7 +776,7 @@ const AdminView: React.FC = () => {
     if (editingRole) {
       const res = await fetch(`/api/admin/roles/${editingRole.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ name: roleName, description: roleDesc, permissions: selectedRolePerms })
       });
       if (res.ok) {
@@ -780,7 +789,7 @@ const AdminView: React.FC = () => {
     } else {
       const res = await fetch('/api/admin/roles', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: getAdminHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ id: roleId.toLowerCase().trim(), name: roleName, description: roleDesc, permissions: selectedRolePerms })
       });
       if (res.ok) {
@@ -797,7 +806,7 @@ const AdminView: React.FC = () => {
     if (!window.confirm(t('deleteRoleConfirm'))) return;
     const res = await fetch(`/api/admin/roles/${id}`, {
       method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` }
+      headers: getAdminHeaders()
     });
     if (res.ok) {
       refreshData();
@@ -1138,9 +1147,11 @@ const Dashboard: React.FC = () => {
 
   const getAuthHeaders = React.useCallback((extraHeaders: Record<string, string> = {}, explicitKmsToken?: string) => {
     const h: Record<string, string> = {
-      Authorization: `Bearer ${token}`,
       ...extraHeaders,
     };
+    if (token && token !== 'null' && token !== 'undefined') {
+      h['Authorization'] = `Bearer ${token}`;
+    }
     const kToken = explicitKmsToken !== undefined ? explicitKmsToken : kmsAccessToken;
     if (kToken) {
       h['X-KMS-Access-Token'] = kToken;
@@ -1355,7 +1366,7 @@ const Dashboard: React.FC = () => {
         } else {
           const res = await fetch(`/api/parents/${payload.parentId}`, {
             method: 'DELETE',
-            headers: { Authorization: `Bearer ${token}` },
+            headers: getAuthHeaders(),
           });
           if (!res.ok) throw new Error();
         }
@@ -1380,7 +1391,7 @@ const Dashboard: React.FC = () => {
         } else {
           const res = await fetch(`/api/children/${payload.child.id}`, {
             method: 'DELETE',
-            headers: { Authorization: `Bearer ${token}` },
+            headers: getAuthHeaders(),
           });
           if (!res.ok) throw new Error();
         }
@@ -1389,16 +1400,13 @@ const Dashboard: React.FC = () => {
         if (isUndo) {
           const res = await fetch(`/api/families/${payload.familyId}`, {
             method: 'DELETE',
-            headers: { Authorization: `Bearer ${token}` },
+            headers: getAuthHeaders(),
           });
           if (!res.ok) throw new Error();
         } else {
           const res = await fetch(`/api/families/${payload.familyId}`, {
             method: 'PUT',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
+            headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ parents: payload.parents }),
           });
           if (!res.ok) throw new Error();
@@ -1408,16 +1416,13 @@ const Dashboard: React.FC = () => {
         if (isUndo) {
           const res = await fetch(`/api/parents/${payload.parent.id}`, {
             method: 'DELETE',
-            headers: { Authorization: `Bearer ${token}` },
+            headers: getAuthHeaders(),
           });
           if (!res.ok) throw new Error();
         } else {
           const res = await fetch(`/api/families/${payload.parent.family_id}`, {
             method: 'PUT',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
+            headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ parents: payload.beforeParents }),
           });
           if (!res.ok) throw new Error();
@@ -1427,16 +1432,13 @@ const Dashboard: React.FC = () => {
         if (isUndo) {
           const res = await fetch(`/api/children/${payload.child.id}`, {
             method: 'DELETE',
-            headers: { Authorization: `Bearer ${token}` },
+            headers: getAuthHeaders(),
           });
           if (!res.ok) throw new Error();
         } else {
           const res = await fetch(`/api/children/${payload.child.id}`, {
             method: 'PUT',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
+            headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify(payload.child),
           });
           if (!res.ok) throw new Error();
@@ -1620,7 +1622,7 @@ const Dashboard: React.FC = () => {
   const fetchAuditLogs = React.useCallback(() => {
     setAuditLoading(true);
     fetch('/api/audit-logs', {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: getAuthHeaders(),
     })
       .then((res) => {
         if (!res.ok) throw new Error('Failed to fetch audit logs');
@@ -1631,7 +1633,7 @@ const Dashboard: React.FC = () => {
       })
       .catch((err) => console.error(err))
       .finally(() => setAuditLoading(false));
-  }, [token]);
+  }, [getAuthHeaders]);
 
   React.useEffect(() => {
     if (activeTab === 'audit') {
@@ -1788,10 +1790,7 @@ const Dashboard: React.FC = () => {
 
     fetch(`/api/families/${family.id}`, {
       method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ parents: updatedParents }),
     })
       .then((res) => {
@@ -1842,10 +1841,7 @@ const Dashboard: React.FC = () => {
 
     fetch(`/api/children/${newChildId}`, {
       method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(newChild),
     })
       .then(async (res) => {
@@ -1891,10 +1887,7 @@ const Dashboard: React.FC = () => {
 
     fetch('/api/memberships', {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(payload),
     })
       .then((res) => {
@@ -1918,7 +1911,7 @@ const Dashboard: React.FC = () => {
 
     fetch(`/api/memberships/${membershipId}`, {
       method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
+      headers: getAuthHeaders(),
     })
       .then((res) => {
         if (!res.ok) throw new Error('Failed to delete membership');
@@ -1955,10 +1948,7 @@ const Dashboard: React.FC = () => {
 
     fetch('/api/hygiene-events', {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(payload),
     })
       .then((res) => {
@@ -1985,7 +1975,7 @@ const Dashboard: React.FC = () => {
 
     fetch(`/api/hygiene-events/${eventId}`, {
       method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
+      headers: getAuthHeaders(),
     })
       .then((res) => {
         if (!res.ok) throw new Error('Failed to delete hygiene event');
@@ -2018,10 +2008,7 @@ const Dashboard: React.FC = () => {
 
     const res = await fetch(`/api/children/${childId}/group_changes`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(payload),
     });
     if (!res.ok) {
@@ -2043,7 +2030,7 @@ const Dashboard: React.FC = () => {
   const handleDeleteGroupChange = async (changeId: string) => {
     const res = await fetch(`/api/children_group_changes/${changeId}`, {
       method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
+      headers: getAuthHeaders(),
     });
     if (!res.ok) {
       const err = await res.text().catch(() => '');
@@ -2059,10 +2046,7 @@ const Dashboard: React.FC = () => {
   const handleUpdateGroupChange = async (changeId: string, changeDate: string, targetGroup: number) => {
     const res = await fetch(`/api/children_group_changes/${changeId}`, {
       method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         change_date: changeDate,
         target_group: targetGroup,
@@ -2128,10 +2112,7 @@ const Dashboard: React.FC = () => {
 
     fetch('/api/families', {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         parents: parentsToCreate,
       }),
@@ -2253,9 +2234,7 @@ const Dashboard: React.FC = () => {
       onConfirm: () => {
         fetch(`/api/parents/${parentId}`, {
           method: 'DELETE',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: getAuthHeaders(),
         })
           .then((res) => {
             if (!res.ok) throw new Error('Failed to delete parent');
@@ -2289,9 +2268,7 @@ const Dashboard: React.FC = () => {
       onConfirm: () => {
         fetch(`/api/children/${childId}`, {
           method: 'DELETE',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: getAuthHeaders(),
         })
           .then((res) => {
             if (!res.ok) throw new Error('Failed to delete child');
@@ -4156,6 +4133,7 @@ function App() {
   return (
     <AuthProvider>
       <AppContent />
+      <ReauthModal />
     </AuthProvider>
   );
 }
