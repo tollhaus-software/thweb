@@ -191,7 +191,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
   }, [currentYear]);
 
   // Selected families state
-  const [selectedFamilyIds, setSelectedFamilyIds] = useState<string[]>(
+  const [selectedFamilyIds, setSelectedFamilyIds] = useState<string[]>(() =>
     families.map((f) => f.id)
   );
   const [familySearch, setFamilySearch] = useState('');
@@ -202,7 +202,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
   const [results, setResults] = useState<CalculationResponse | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
 
-  const hasInitializedRef = useRef(false);
+  const hasInitializedRef = useRef(Boolean(families && families.length > 0));
 
   useEffect(() => {
     if (families && families.length > 0 && !hasInitializedRef.current) {
@@ -324,8 +324,10 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
     };
+    if (token && token !== 'null' && token !== 'undefined') {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
 
     fetch('/api/fees/calculate', {
       method: 'POST',

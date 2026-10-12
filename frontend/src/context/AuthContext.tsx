@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { reauthManager } from '../utils/reauthManager';
 
 interface User {
   email: string;
@@ -54,6 +55,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
   const [loading, setLoading] = useState(!kiosk);
 
+  const userRef = useRef<User | null>(user);
+  const tokenRef = useRef<string | null>(token);
+
+  useEffect(() => {
+    userRef.current = user;
+    tokenRef.current = token;
+  }, [user, token]);
+
   const login = (newToken: string) => {
     if (kiosk) return;
     setToken(newToken);
@@ -65,6 +74,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       window.location.reload();
       return;
     }
+    reauthManager.handleCancel();
     setToken(null);
     setUser(null);
     setAuthError(null);
@@ -78,7 +88,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = {
+      'X-Skip-Reauth': 'true',
+    };
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
@@ -89,6 +101,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const data = await res.json();
         setUser(data);
         setAuthError(null);
+      } else if (res.status === 401 || (res.status === 403 && (res.headers.get('content-type') || '').includes('text/html'))) {
+        // If user was already authenticated, do NOT unmount Dashboard! Keep state and trigger re-auth.
+        if (userRef.current) {
+          reauthManager.promptReauth();
+        } else {
+          setUser(null);
+          setAuthError({
+            message: 'Session expired',
+          });
+        }
       } else {
         const errData = await res.json().catch(() => ({}));
         setUser(null);
@@ -97,13 +119,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           email: errData.email || undefined,
         });
       }
-    } catch (err: any) {
-      setUser(null);
-      setAuthError({ message: err.message || 'Unauthorized' });
+    } catch (err: unknown) {
+      if (!userRef.current) {
+        const errorMsg = err instanceof Error ? err.message : 'Unauthorized';
+        setUser(null);
+        setAuthError({ message: errorMsg });
+      }
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [kiosk, token]);
+
+  useEffect(() => {
+    reauthManager.configure({
+      getIsAuthenticated: () => Boolean(userRef.current),
+      getAuthToken: () => tokenRef.current,
+      refreshUser,
+    });
+  }, [refreshUser]);
 
   useEffect(() => {
     refreshUser();

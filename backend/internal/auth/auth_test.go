@@ -273,12 +273,39 @@ func TestExtractIDToken(t *testing.T) {
 			wantToken: "forwarded-token",
 		},
 		{
-			name: "null string literal in header returns empty",
+			name: "null string literal in header returns empty when no fallback",
 			url:  "/ws",
 			headers: map[string]string{
 				"Authorization": "Bearer null",
 			},
 			wantToken: "",
+		},
+		{
+			name: "Bearer null falls back to X-Forwarded-ID-Token",
+			url:  "/api/fees/calculate",
+			headers: map[string]string{
+				"Authorization":        "Bearer null",
+				"X-Forwarded-ID-Token": "forwarded-id-token-abc",
+			},
+			wantToken: "forwarded-id-token-abc",
+		},
+		{
+			name: "Bearer undefined falls back to X-Forwarded-ID-Token",
+			url:  "/api/fees/calculate",
+			headers: map[string]string{
+				"Authorization":        "Bearer undefined",
+				"X-Forwarded-ID-Token": "forwarded-id-token-abc",
+			},
+			wantToken: "forwarded-id-token-abc",
+		},
+		{
+			name: "Bearer null and X-Forwarded-ID-Token null falls back to query token",
+			url:  "/ws?token=query-token-value",
+			headers: map[string]string{
+				"Authorization":        "Bearer null",
+				"X-Forwarded-ID-Token": "null",
+			},
+			wantToken: "query-token-value",
 		},
 		{
 			name:      "undefined string literal in query returns empty",
@@ -429,6 +456,85 @@ func TestAuthenticator_Middleware_Kiosk(t *testing.T) {
 					if recordedUser.Email != expectedEmail {
 						t.Errorf("expected user email %q, got %q", expectedEmail, recordedUser.Email)
 					}
+				}
+			}
+		})
+	}
+}
+
+func TestAuthenticator_Middleware_ProxySharedSecret(t *testing.T) {
+	testSecret := "test-proxy-secret-12345"
+	auth := NewAuthenticator("mock-client-id", false, nil)
+	auth.ProxySharedSecret = testSecret
+
+	tests := []struct {
+		name       string
+		headers    map[string]string
+		wantStatus int
+		wantEmail  string
+	}{
+		{
+			name: "trusted proxy request with valid secret and email",
+			headers: map[string]string{
+				"X-Proxy-Secret":    testSecret,
+				"X-Forwarded-Email": "staff@tollhaus-stuttgart.de",
+			},
+			wantStatus: http.StatusOK,
+			wantEmail:  "staff@tollhaus-stuttgart.de",
+		},
+		{
+			name: "spoofed proxy request with incorrect secret rejected",
+			headers: map[string]string{
+				"X-Proxy-Secret":    "wrong-secret",
+				"X-Forwarded-Email": "attacker@example.com",
+			},
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name: "missing secret rejected even if X-Forwarded-Email is set",
+			headers: map[string]string{
+				"X-Forwarded-Email": "attacker@example.com",
+			},
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name: "valid secret but X-Forwarded-Email is null literal rejected",
+			headers: map[string]string{
+				"X-Proxy-Secret":    testSecret,
+				"X-Forwarded-Email": "null",
+			},
+			wantStatus: http.StatusUnauthorized,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var recordedUser *models.UserWithPermissions
+			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				recordedUser = GetUser(r.Context())
+				w.WriteHeader(http.StatusOK)
+			})
+
+			handler := auth.Middleware(next)
+
+			req := httptest.NewRequest("GET", "/api/families", nil)
+			for k, v := range tt.headers {
+				req.Header.Set(k, v)
+			}
+			rec := httptest.NewRecorder()
+
+			handler.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("Middleware() status = %d, want %d", rec.Code, tt.wantStatus)
+			}
+
+			if tt.wantEmail != "" {
+				if recordedUser == nil {
+					t.Fatal("expected recordedUser in context, got nil")
+				}
+				if recordedUser.Email != tt.wantEmail {
+					t.Errorf("expected email %q, got %q", tt.wantEmail, recordedUser.Email)
 				}
 			}
 		})

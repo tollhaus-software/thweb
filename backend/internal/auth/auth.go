@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -19,9 +20,10 @@ const UserContextKey contextKey = "user"
 const AccessTokenContextKey contextKey = "access_token"
 
 type Authenticator struct {
-	GoogleClientID string
-	AllowMockAuth  bool
-	Store          *store.Store
+	GoogleClientID    string
+	AllowMockAuth     bool
+	ProxySharedSecret string
+	Store             *store.Store
 }
 
 func NewAuthenticator(clientID string, allowMockAuth bool, store *store.Store) *Authenticator {
@@ -51,7 +53,7 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rawAccessToken := ExtractKmsAccessToken(r)
 
-		// Check if request is authenticated via client certificate (mTLS) from edge gateway
+		// 1. Check if request is authenticated via client certificate (mTLS) from edge gateway
 		if r.Header.Get("X-Client-Verified") == "SUCCESS" && IsAllowedKioskPath(r.URL.Path) {
 			dn := strings.TrimSpace(r.Header.Get("X-Client-DN"))
 			kioskEmail := "kiosk@internal"
@@ -72,61 +74,81 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 
 		var email string
 
-		idToken := ExtractIDToken(r)
-
-		if a.AllowMockAuth {
-			// Local development mode (ALLOW_MOCK_AUTH=true)
-			if headerEmail := r.Header.Get("X-Forwarded-Email"); headerEmail != "" && headerEmail != "null" && headerEmail != "undefined" {
+		// 2. Check if request is authenticated via trusted reverse proxy with shared secret
+		proxySecret := strings.TrimSpace(r.Header.Get("X-Proxy-Secret"))
+		if a.ProxySharedSecret != "" && proxySecret != "" && subtle.ConstantTimeCompare([]byte(proxySecret), []byte(a.ProxySharedSecret)) == 1 {
+			if headerEmail := strings.TrimSpace(r.Header.Get("X-Forwarded-Email")); headerEmail != "" && headerEmail != "null" && headerEmail != "undefined" {
 				email = headerEmail
-			} else if idToken != "" {
-				email = idToken
+			}
+		}
+
+		// 3. Fallback to Google ID token or mock auth if not authenticated via proxy secret
+		if email == "" {
+			idToken := ExtractIDToken(r)
+
+			if a.AllowMockAuth {
+				// Local development mode (ALLOW_MOCK_AUTH=true)
+				if headerEmail := r.Header.Get("X-Forwarded-Email"); headerEmail != "" && headerEmail != "null" && headerEmail != "undefined" {
+					email = headerEmail
+				} else if idToken != "" {
+					email = idToken
+				} else {
+					email = "developer@example.com"
+				}
 			} else {
-				email = "developer@example.com"
-			}
-		} else {
-			// Production zero-trust mode: Require valid Google ID token cryptographically verified against Google RSA keys
-			if idToken == "" {
-				writeJSONError(w, "Unauthorized: missing ID token", http.StatusUnauthorized)
-				return
-			}
+				// Standalone zero-trust mode: Require valid Google ID token cryptographically verified against Google RSA keys
+				if idToken == "" {
+					writeJSONError(w, "Unauthorized: missing ID token", http.StatusUnauthorized)
+					return
+				}
 
-			payload, err := idtoken.Validate(r.Context(), idToken, a.GoogleClientID)
-			if err != nil {
-				log.Printf("[AUTH ERROR] Google ID token validation failed: %v", err)
-				writeJSONError(w, "Invalid Google ID token", http.StatusUnauthorized)
-				return
-			}
+				payload, err := idtoken.Validate(r.Context(), idToken, a.GoogleClientID)
+				if err != nil {
+					log.Printf("[AUTH ERROR] Google ID token validation failed: %v", err)
+					writeJSONError(w, "Invalid Google ID token", http.StatusUnauthorized)
+					return
+				}
 
-			emailClaim, ok := payload.Claims["email"].(string)
-			if !ok || emailClaim == "" {
-				writeJSONError(w, "Token missing email claim", http.StatusUnauthorized)
-				return
+				emailClaim, ok := payload.Claims["email"].(string)
+				if !ok || emailClaim == "" {
+					writeJSONError(w, "Token missing email claim", http.StatusUnauthorized)
+					return
+				}
+				email = emailClaim
 			}
-			email = emailClaim
 		}
 
 		email = models.NormalizeEmail(email)
 
-		user, err := a.Store.GetUserWithPermissionsByEmail(r.Context(), email)
-		if err != nil {
-			if err == pgx.ErrNoRows {
-				log.Printf("[AUTH WARNING] User email %q not found in allow-list", email)
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusForbidden)
-				json.NewEncoder(w).Encode(map[string]string{
-					"error": "User not allowed",
-					"email": email,
-				})
+		var user *models.UserWithPermissions
+		if a.Store != nil {
+			var err error
+			user, err = a.Store.GetUserWithPermissionsByEmail(r.Context(), email)
+			if err != nil {
+				if err == pgx.ErrNoRows {
+					log.Printf("[AUTH WARNING] User email %q not found in allow-list", email)
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusForbidden)
+					json.NewEncoder(w).Encode(map[string]string{
+						"error": "User not allowed",
+						"email": email,
+					})
+					return
+				}
+				log.Printf("[AUTH ERROR] Failed to fetch user %q from database: %v", email, err)
+				writeJSONError(w, "Database error: "+err.Error(), http.StatusInternalServerError)
 				return
 			}
-			log.Printf("[AUTH ERROR] Failed to fetch user %q from database: %v", email, err)
-			writeJSONError(w, "Database error: "+err.Error(), http.StatusInternalServerError)
-			return
+		} else {
+			user = &models.UserWithPermissions{
+				Email: email,
+			}
 		}
 
 		ctx := context.WithValue(r.Context(), UserContextKey, user)
 		ctx = context.WithValue(ctx, AccessTokenContextKey, rawAccessToken)
 		next.ServeHTTP(w, r.WithContext(ctx))
+		return
 	})
 }
 
@@ -144,23 +166,29 @@ func ExtractIDToken(r *http.Request) string {
 	if strings.HasPrefix(authHeader, "Bearer ") {
 		idToken = strings.TrimPrefix(authHeader, "Bearer ")
 	}
+	idToken = strings.TrimSpace(idToken)
+	if idToken == "null" || idToken == "undefined" {
+		idToken = ""
+	}
 
 	if idToken == "" {
-		idToken = r.Header.Get("X-Forwarded-ID-Token")
+		idToken = strings.TrimSpace(r.Header.Get("X-Forwarded-ID-Token"))
+		if idToken == "null" || idToken == "undefined" {
+			idToken = ""
+		}
 	}
 
 	if idToken == "" {
 		if q := r.URL.Query().Get("token"); q != "" {
-			idToken = q
+			idToken = strings.TrimSpace(q)
 		} else if q := r.URL.Query().Get("id_token"); q != "" {
-			idToken = q
+			idToken = strings.TrimSpace(q)
+		}
+		if idToken == "null" || idToken == "undefined" {
+			idToken = ""
 		}
 	}
 
-	idToken = strings.TrimSpace(idToken)
-	if idToken == "null" || idToken == "undefined" {
-		return ""
-	}
 	return idToken
 }
 
