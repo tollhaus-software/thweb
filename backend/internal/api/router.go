@@ -29,6 +29,11 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		w.Write([]byte("ok"))
 	})
 
+	// Test-only endpoints (only enabled when mock auth is active)
+	if authenticator.AllowMockAuth {
+		r.Post("/api/test/reset", server.HandleTestReset)
+	}
+
 	// Protected routes
 	r.Group(func(r chi.Router) {
 		r.Use(authenticator.Middleware)
@@ -81,6 +86,7 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		// TH Membership
 		r.With(auth.RequirePermission("memberships.all.write")).Post("/api/memberships", server.HandleCreateTHMembership)
 		r.With(auth.RequirePermission("memberships.all.write")).Post("/api/parents/{id}/memberships", server.HandleCreateTHMembership)
+		r.With(auth.RequirePermission("memberships.all.write")).Put("/api/memberships/{id}", server.HandleUpdateTHMembership)
 		r.With(auth.RequirePermission("memberships.all.write")).Delete("/api/memberships/{id}", server.HandleDeleteTHMembership)
 
 		// Childcare Fees Calculation

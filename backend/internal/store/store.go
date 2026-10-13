@@ -500,6 +500,10 @@ func (s *Store) DeleteHygieneEvent(ctx context.Context, userID uuid.UUID, eventI
 }
 
 func (s *Store) CreateTHMembership(ctx context.Context, userID uuid.UUID, m models.THMembership) (models.THMembership, error) {
+	if m.EndDate != nil && m.EndDate.Format("2006-01-02") <= m.StartDate.Format("2006-01-02") {
+		return models.THMembership{}, fmt.Errorf("end date must be greater than start date")
+	}
+
 	transactionID := uuid.New()
 	var created models.THMembership
 	err := s.WithTx(ctx, func(tx pgx.Tx) error {
@@ -507,6 +511,22 @@ func (s *Store) CreateTHMembership(ctx context.Context, userID uuid.UUID, m mode
 		err := tx.QueryRow(ctx, "SELECT family_id FROM parents WHERE id = $1", m.ParentID).Scan(&familyID)
 		if err != nil {
 			return err
+		}
+
+		var hasOverlap bool
+		err = tx.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM th_memberships
+				WHERE parent_id = $1
+				  AND ($2::date IS NULL OR end_date IS NULL OR end_date >= $2::date)
+				  AND ($3::date IS NULL OR start_date <= $3::date)
+			)
+		`, m.ParentID, m.StartDate, m.EndDate).Scan(&hasOverlap)
+		if err != nil {
+			return err
+		}
+		if hasOverlap {
+			return fmt.Errorf("membership time spans may not overlap")
 		}
 
 		err = tx.QueryRow(ctx, `
@@ -558,6 +578,71 @@ func (s *Store) DeleteTHMembership(ctx context.Context, userID uuid.UUID, member
 		_, err = tx.Exec(ctx, "DELETE FROM th_memberships WHERE id = $1", membershipID)
 		return err
 	})
+}
+
+func (s *Store) UpdateTHMembership(ctx context.Context, userID uuid.UUID, membershipID uuid.UUID, startDate time.Time, endDate *time.Time, membershipType string) (models.THMembership, error) {
+	if endDate != nil && endDate.Format("2006-01-02") <= startDate.Format("2006-01-02") {
+		return models.THMembership{}, fmt.Errorf("end date must be greater than start date")
+	}
+
+	transactionID := uuid.New()
+	var updated models.THMembership
+	err := s.WithTx(ctx, func(tx pgx.Tx) error {
+		var parentID uuid.UUID
+		var oldStartDate time.Time
+		var oldEndDate *time.Time
+		var oldMembershipType string
+		err := tx.QueryRow(ctx, "SELECT parent_id, start_date, end_date, membership_type FROM th_memberships WHERE id = $1", membershipID).Scan(&parentID, &oldStartDate, &oldEndDate, &oldMembershipType)
+		if err != nil {
+			return err
+		}
+
+		var familyID uuid.UUID
+		err = tx.QueryRow(ctx, "SELECT family_id FROM parents WHERE id = $1", parentID).Scan(&familyID)
+		if err != nil {
+			return err
+		}
+
+		var hasOverlap bool
+		err = tx.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM th_memberships
+				WHERE parent_id = $1
+				  AND id != $2
+				  AND ($3::date IS NULL OR end_date IS NULL OR end_date >= $3::date)
+				  AND ($4::date IS NULL OR start_date <= $4::date)
+			)
+		`, parentID, membershipID, startDate, endDate).Scan(&hasOverlap)
+		if err != nil {
+			return err
+		}
+		if hasOverlap {
+			return fmt.Errorf("membership time spans may not overlap")
+		}
+
+		oldMembership := models.THMembership{
+			ID:             membershipID,
+			ParentID:       parentID,
+			StartDate:      oldStartDate,
+			EndDate:        oldEndDate,
+			MembershipType: oldMembershipType,
+		}
+
+		err = tx.QueryRow(ctx, `
+			UPDATE th_memberships
+			SET start_date = $2, end_date = $3, membership_type = $4, updated_at = NOW()
+			WHERE id = $1
+			RETURNING id, parent_id, start_date, end_date, membership_type, created_at, updated_at
+		`, membershipID, startDate, endDate, membershipType).Scan(
+			&updated.ID, &updated.ParentID, &updated.StartDate, &updated.EndDate, &updated.MembershipType, &updated.CreatedAt, &updated.UpdatedAt,
+		)
+		if err != nil {
+			return err
+		}
+
+		return s.recordAudit(ctx, tx, transactionID, &familyID, "th_membership", membershipID, "UPDATE", oldMembership, updated, userID)
+	})
+	return updated, err
 }
 
 func (s *Store) CreateChildGroupChange(ctx context.Context, userID uuid.UUID, gc models.ChildGroupChange) (models.ChildGroupChange, error) {
@@ -1017,5 +1102,20 @@ func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*model
 	}
 
 	return resp, nil
+}
+
+func (s *Store) ResetTestData(ctx context.Context) error {
+	_, err := s.db.Exec(ctx, `
+		TRUNCATE TABLE 
+			th_memberships, 
+			hygiene_belehrung_events, 
+			children_group_changes, 
+			children, 
+			parents, 
+			families, 
+			audit_log 
+		CASCADE;
+	`)
+	return err
 }
 

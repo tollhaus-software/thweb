@@ -12,6 +12,7 @@ import { useGoogleLogin } from '@react-oauth/google';
 import { MultiValueListEditor } from './components/Table/MultiValueListEditor';
 import { NotesEditor } from './components/Table/NotesEditor';
 import { GroupChangesPopover } from './components/Table/GroupChangesPopover';
+import { MembershipsModal } from './components/Table/MembershipsModal';
 import { VaccinationStatusEditor, type VaccinationCheck } from './components/Table/VaccinationStatusEditor';
 import { ChildcareFeesCalculator } from './components/ChildcareFeesCalculator';
 import { KioskDashboard } from './components/Dashboard/KioskDashboard';
@@ -1292,9 +1293,6 @@ const Dashboard: React.FC = () => {
   // Membership states
   const [manageMembershipsOpen, setManageMembershipsOpen] = React.useState(false);
   const [targetParentMemberships, setTargetParentMemberships] = React.useState<Parent | null>(null);
-  const [newMembershipStartDate, setNewMembershipStartDate] = React.useState('');
-  const [newMembershipEndDate, setNewMembershipEndDate] = React.useState('');
-  const [newMembershipType, setNewMembershipType] = React.useState<'full_member' | 'supporting_member'>('full_member');
 
   // Group Change popover state
   const [targetChildGroupChanges, setTargetChildGroupChanges] = React.useState<Child | null>(null);
@@ -1525,6 +1523,19 @@ const Dashboard: React.FC = () => {
           body: JSON.stringify({
             change_date: target.change_date,
             target_group: target.target_group,
+          }),
+        });
+        if (!res.ok) throw new Error();
+      }
+      else if (type === 'UPDATE_MEMBERSHIP') {
+        const target = isUndo ? payload.before : payload.after;
+        const res = await fetch(`/api/memberships/${payload.membershipId}`, {
+          method: 'PUT',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({
+            start_date: target.start_date,
+            end_date: target.end_date,
+            membership_type: target.membership_type,
           }),
         });
         if (!res.ok) throw new Error();
@@ -1949,72 +1960,127 @@ const Dashboard: React.FC = () => {
 
   const openManageMemberships = (parent: Parent) => {
     setTargetParentMemberships(parent);
-    setNewMembershipStartDate(new Date().toISOString().split('T')[0]);
-    setNewMembershipEndDate('');
-    setNewMembershipType('full_member');
     setManageMembershipsOpen(true);
   };
 
-  const handleAddMembership = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!targetParentMemberships) return;
-    if (!newMembershipStartDate) {
-      alert(t('invalidDate'));
-      return;
-    }
-
-    const payload = {
-      parent_id: targetParentMemberships.id,
-      start_date: `${newMembershipStartDate}T00:00:00Z`,
-      end_date: newMembershipEndDate ? `${newMembershipEndDate}T00:00:00Z` : null,
-      membership_type: newMembershipType,
-    };
-
-    fetch('/api/memberships', {
-      method: 'POST',
-      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(payload),
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to create membership');
-        return res.json();
-      })
-      .then((created) => {
-        pushAction({
-          type: 'ADD_MEMBERSHIP',
-          payload: {
-            tab: 'parents',
-            parentId: targetParentMemberships.id,
-            membershipId: created.id,
-            membership: created,
-          }
-        });
-        fetchFamilies();
-        const updatedMemberships = [created, ...(targetParentMemberships.memberships || [])].sort(
-          (a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime()
-        );
-        setTargetParentMemberships({ ...targetParentMemberships, memberships: updatedMemberships });
-        setNewMembershipEndDate('');
-      })
-      .catch((err) => alert(err.message));
+  const closeManageMemberships = () => {
+    setManageMembershipsOpen(false);
+    setTargetParentMemberships(null);
   };
 
-  const handleDeleteMembership = (membershipId: string) => {
-    if (!targetParentMemberships) return;
-    if (!window.confirm(t('membershipDeleteConfirm'))) return;
+  const handleAddMembership = async (
+    parentId: string,
+    startDate: string,
+    endDate: string | null,
+    membershipType: 'full_member' | 'supporting_member'
+  ) => {
+    const res = await fetch('/api/memberships', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        parent_id: parentId,
+        start_date: startDate,
+        end_date: endDate,
+        membership_type: membershipType,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.text().catch(() => '');
+      throw new Error(`Failed to create membership: ${err || res.statusText}`);
+    }
+    const created = await res.json();
+    pushAction({
+      type: 'ADD_MEMBERSHIP',
+      payload: {
+        tab: 'parents',
+        parentId: parentId,
+        membershipId: created.id,
+        membership: created,
+      },
+    });
+    fetchFamilies();
+    if (targetParentMemberships && targetParentMemberships.id === parentId) {
+      const existing = targetParentMemberships.memberships || [];
+      const updatedMemberships = [...existing, created].sort(
+        (a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
+      );
+      setTargetParentMemberships({ ...targetParentMemberships, memberships: updatedMemberships });
+    }
+  };
 
-    fetch(`/api/memberships/${membershipId}`, {
+  const handleUpdateMembership = async (
+    membershipId: string,
+    fields: {
+      start_date?: string;
+      end_date?: string | null;
+      membership_type?: 'full_member' | 'supporting_member';
+    }
+  ) => {
+    const existingMembership = (targetParentMemberships?.memberships || []).find((m) => m.id === membershipId);
+    if (!existingMembership) return;
+    const parentId = targetParentMemberships?.id || existingMembership.parent_id;
+
+    const payload = {
+      start_date: fields.start_date !== undefined ? fields.start_date : existingMembership.start_date,
+      end_date: fields.end_date !== undefined ? fields.end_date : existingMembership.end_date,
+      membership_type: fields.membership_type !== undefined ? fields.membership_type : existingMembership.membership_type,
+    };
+
+    const res = await fetch(`/api/memberships/${membershipId}`, {
+      method: 'PUT',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.text().catch(() => '');
+      throw new Error(`Failed to update membership: ${err || res.statusText}`);
+    }
+    const updated = await res.json();
+    if (existingMembership && parentId) {
+      pushAction({
+        type: 'UPDATE_MEMBERSHIP',
+        payload: {
+          tab: 'parents',
+          parentId: parentId,
+          membershipId: membershipId,
+          before: {
+            start_date: existingMembership.start_date,
+            end_date: existingMembership.end_date,
+            membership_type: existingMembership.membership_type,
+          },
+          after: {
+            start_date: payload.start_date,
+            end_date: payload.end_date,
+            membership_type: payload.membership_type,
+          },
+        },
+      });
+    }
+    fetchFamilies();
+    if (targetParentMemberships) {
+      const existing = targetParentMemberships.memberships || [];
+      const updatedMemberships = existing
+        .map((m) => (m.id === membershipId ? updated : m))
+        .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
+      setTargetParentMemberships({ ...targetParentMemberships, memberships: updatedMemberships });
+    }
+  };
+
+  const handleDeleteMembership = async (membershipId: string) => {
+    if (!targetParentMemberships) return;
+
+    const res = await fetch(`/api/memberships/${membershipId}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to delete membership');
-        purgeActionsForEntity(membershipId);
-        fetchFamilies();
-        const updatedMemberships = (targetParentMemberships.memberships || []).filter((m) => m.id !== membershipId);
-        setTargetParentMemberships({ ...targetParentMemberships, memberships: updatedMemberships });
-      })
-      .catch((err) => alert(err.message));
+    });
+    if (!res.ok) {
+      const err = await res.text().catch(() => '');
+      throw new Error(`Failed to delete membership: ${err || res.statusText}`);
+    }
+    purgeActionsForEntity(membershipId);
+    fetchFamilies();
+    const updatedMemberships = (targetParentMemberships.memberships || []).filter((m) => m.id !== membershipId);
+    setTargetParentMemberships({ ...targetParentMemberships, memberships: updatedMemberships });
   };
 
   const openManageHygiene = (parent: Parent) => {
@@ -2230,6 +2296,19 @@ const Dashboard: React.FC = () => {
     }
     return targetParentMemberships;
   }, [families, targetParentMemberships]);
+
+  const activeFamilyForMemberships = React.useMemo(() => {
+    if (!activeParentForMemberships) return null;
+    for (const f of families) {
+      if (
+        (activeParentForMemberships.family_id && f.id === activeParentForMemberships.family_id) ||
+        (f.parents || []).some((p) => p.id === activeParentForMemberships.id)
+      ) {
+        return f;
+      }
+    }
+    return null;
+  }, [families, activeParentForMemberships]);
 
   const openAddFamily = () => {
     setP1FirstName('');
@@ -3998,206 +4077,16 @@ const Dashboard: React.FC = () => {
         )}
 
         {/* Manage Memberships Modal */}
-        {manageMembershipsOpen && activeParentForMemberships && (
-          <div className="modal-overlay">
-            <div className="modal-container" style={{ maxWidth: '600px' }}>
-              <h2>{t('manageMemberships')} - {activeParentForMemberships.first_name} {activeParentForMemberships.last_name}</h2>
-              
-              {/* List of existing memberships */}
-              <div style={{ marginBottom: '1.5rem', maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '6px' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                  <thead>
-                    <tr style={{ background: 'var(--bg-subtle)', borderBottom: '1px solid var(--border)' }}>
-                      <th style={{ padding: '0.5rem', textAlign: 'left' }}>{t('membershipType')}</th>
-                      <th style={{ padding: '0.5rem', textAlign: 'left' }}>{t('startDateLabel')}</th>
-                      <th style={{ padding: '0.5rem', textAlign: 'left' }}>{t('endDateLabel')}</th>
-                      <th style={{ padding: '0.5rem', width: '50px' }}></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(activeParentForMemberships.memberships || []).length === 0 ? (
-                      <tr>
-                        <td colSpan={4} style={{ padding: '1rem', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic' }}>
-                          {t('noMembershipsRecorded')}
-                        </td>
-                      </tr>
-                    ) : (
-                      (activeParentForMemberships.memberships || []).map((m) => (
-                        <tr key={m.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                          <td style={{ padding: '0.5rem', fontWeight: 600 }}>
-                            {m.membership_type === 'full_member' ? t('full_member') : t('supporting_member')}
-                          </td>
-                          <td style={{ padding: '0.5rem' }}>{formatDisplayDate(m.start_date)}</td>
-                          <td style={{ padding: '0.5rem' }}>{m.end_date ? formatDisplayDate(m.end_date) : '-'}</td>
-                          <td style={{ padding: '0.5rem', textAlign: 'center' }}>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteMembership(m.id)}
-                              style={{
-                                background: 'none',
-                                border: 'none',
-                                color: '#ef4444',
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                              }}
-                              title={t('delete')}
-                            >
-                              <Trash size={14} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Add New Membership Form */}
-              <form onSubmit={handleAddMembership} style={{ borderTop: '2px dashed var(--border)', paddingTop: '1.25rem' }}>
-                <h3 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--text-h)' }}>
-                  {t('addMembership')}
-                </h3>
-                
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.25rem' }}>
-                  {/* Membership Type */}
-                  <div className="modal-form-group" style={{ marginBottom: 0 }}>
-                    <label>{t('membershipType')}</label>
-                    <select
-                      value={newMembershipType}
-                      onChange={(e) => setNewMembershipType(e.target.value as 'full_member' | 'supporting_member')}
-                      style={{ width: '100%', padding: '0.45rem', border: '1px solid var(--border)', borderRadius: '4px' }}
-                      required
-                    >
-                      <option value="full_member">{t('full_member')}</option>
-                      <option value="supporting_member">{t('supporting_member')}</option>
-                    </select>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '1rem' }}>
-                    {/* Start Date */}
-                    <div className="modal-form-group" style={{ flex: 1, marginBottom: 0 }}>
-                      <label>{t('startDateLabel')}</label>
-                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                        <input
-                          type="text"
-                          value={CURRENT_LOCALE === 'de' ? formatDisplayDate(newMembershipStartDate) : newMembershipStartDate}
-                          readOnly
-                          placeholder={CURRENT_LOCALE === 'de' ? 'TT.MM.JJJJ' : 'YYYY-MM-DD'}
-                          style={{ width: '100%', paddingRight: '2.5rem' }}
-                        />
-                        <button
-                          type="button"
-                          style={{
-                            position: 'absolute',
-                            right: '6px',
-                            background: 'transparent',
-                            border: 'none',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            padding: '4px',
-                            color: '#64748b',
-                          }}
-                          onClick={(e) => {
-                            const input = e.currentTarget.parentElement?.querySelector('input[type="date"]') as HTMLInputElement;
-                            if (input) {
-                              try {
-                                input.showPicker();
-                              } catch (err) {
-                                input.click();
-                              }
-                            }
-                          }}
-                        >
-                          <Calendar size={18} />
-                        </button>
-                        <input
-                          type="date"
-                          value={newMembershipStartDate}
-                          style={{
-                            position: 'absolute',
-                            right: '4px',
-                            width: '0px',
-                            height: '0px',
-                            opacity: 0,
-                            pointerEvents: 'none',
-                          }}
-                          onChange={(e) => setNewMembershipStartDate(e.target.value)}
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    {/* End Date */}
-                    <div className="modal-form-group" style={{ flex: 1, marginBottom: 0 }}>
-                      <label>{t('endDateLabel')} ({CURRENT_LOCALE === 'de' ? 'optional' : 'Optional'})</label>
-                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                        <input
-                          type="text"
-                          value={newMembershipEndDate ? (CURRENT_LOCALE === 'de' ? formatDisplayDate(newMembershipEndDate) : newMembershipEndDate) : ''}
-                          readOnly
-                          placeholder={CURRENT_LOCALE === 'de' ? 'TT.MM.JJJJ' : 'YYYY-MM-DD'}
-                          style={{ width: '100%', paddingRight: '2.5rem' }}
-                        />
-                        <button
-                          type="button"
-                          style={{
-                            position: 'absolute',
-                            right: '6px',
-                            background: 'transparent',
-                            border: 'none',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            padding: '4px',
-                            color: '#64748b',
-                          }}
-                          onClick={(e) => {
-                            const input = e.currentTarget.parentElement?.querySelector('input[type="date"]') as HTMLInputElement;
-                            if (input) {
-                              try {
-                                input.showPicker();
-                              } catch (err) {
-                                input.click();
-                              }
-                            }
-                          }}
-                        >
-                          <Calendar size={18} />
-                        </button>
-                        <input
-                          type="date"
-                          value={newMembershipEndDate}
-                          style={{
-                            position: 'absolute',
-                            right: '4px',
-                            width: '0px',
-                            height: '0px',
-                            opacity: 0,
-                            pointerEvents: 'none',
-                          }}
-                          onChange={(e) => setNewMembershipEndDate(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="modal-actions">
-                  <button type="button" className="cancel-btn" onClick={() => setManageMembershipsOpen(false)}>
-                    {t('cancel')}
-                  </button>
-                  <button type="submit" className="submit-btn">
-                    {t('addMembership')}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
+        <MembershipsModal
+          key={activeParentForMemberships?.id || 'memberships-modal'}
+          isOpen={Boolean(manageMembershipsOpen && activeParentForMemberships)}
+          onClose={closeManageMemberships}
+          parent={activeParentForMemberships}
+          family={activeFamilyForMemberships}
+          onAddMembership={handleAddMembership}
+          onUpdateMembership={handleUpdateMembership}
+          onDeleteMembership={handleDeleteMembership}
+        />
 
         {/* Manage Group Changes Popover */}
         <GroupChangesPopover
