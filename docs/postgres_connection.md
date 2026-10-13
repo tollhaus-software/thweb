@@ -19,7 +19,7 @@ All connections between the Go application and PostgreSQL are encrypted using **
 
 ### A. Local Testing Configuration
 For local development and testing:
-* **Certificates**: Self-signed testing certificates are located in [`testing/certs/postgres/`](file:///home/pmarko/thweb-root/thweb/testing/certs/postgres/):
+* **Certificates**: Self-signed testing certificates are located in [`testing/certs/postgres/`](../testing/certs/postgres/):
   - `server.crt` (Public TLS Certificate, CN=`db`)
   - `server.key` (Private TLS Key, `chmod 0600`)
   - `ca.crt` (Root CA Certificate)
@@ -46,6 +46,6 @@ In production (or when connecting to managed cloud databases like Exoscale DB or
 
 Database schema initialization and versioned migrations are managed using **`pressly/goose`** embedded directly into the Go backend executable via `//go:embed`.
 
-* **Embedded Migrations**: Migration files live in [`backend/internal/database/migrations/*.sql`](file:///home/pmarko/thweb-root/thweb/backend/internal/database/migrations/) (e.g. `00001_initial_schema.sql`). They are compiled directly into the binary at build time.
+* **Embedded Migrations**: Migration files live in [`backend/internal/database/migrations/*.sql`](../backend/internal/database/migrations/) (e.g. `00001_initial_schema.sql`). They are compiled directly into the binary at build time.
 * **Automatic Execution**: When the Go backend container starts, `database.ApplySchemaMigrations` runs `goose.UpContext`. Goose tracks applied migrations in a `goose_db_version` table in PostgreSQL and automatically executes any new `.sql` migrations.
 * **No Host File Mounts**: Docker Compose setup requires no host file mounts for SQL schemas.
