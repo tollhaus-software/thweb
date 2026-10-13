@@ -744,6 +744,10 @@ func (s *Server) HandleCreateTHMembership(w http.ResponseWriter, r *http.Request
 			httpErrorLog(w, r, fmt.Sprintf("Invalid end_date format %q", *req.EndDate), http.StatusBadRequest, err)
 			return
 		}
+		if t.Format("2006-01-02") <= startDate.Format("2006-01-02") {
+			httpErrorLog(w, r, "End date must be greater than start date", http.StatusBadRequest, nil)
+			return
+		}
 		endDate = &t
 	}
 
@@ -756,6 +760,10 @@ func (s *Server) HandleCreateTHMembership(w http.ResponseWriter, r *http.Request
 
 	created, err := s.Store.CreateTHMembership(r.Context(), user.ID, membership)
 	if err != nil {
+		if strings.Contains(err.Error(), "overlap") || strings.Contains(err.Error(), "greater than") {
+			httpErrorLog(w, r, err.Error(), http.StatusBadRequest, err)
+			return
+		}
 		httpErrorLog(w, r, "Failed to create TH membership", http.StatusInternalServerError, err)
 		return
 	}
@@ -778,6 +786,63 @@ func (s *Server) HandleDeleteTHMembership(w http.ResponseWriter, r *http.Request
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) HandleUpdateTHMembership(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	idStr := chi.URLParam(r, "id")
+	membershipID, err := uuid.Parse(idStr)
+	if err != nil {
+		httpErrorLog(w, r, "Invalid membership ID", http.StatusBadRequest, err)
+		return
+	}
+
+	var req struct {
+		StartDate      string  `json:"start_date"`
+		EndDate        *string `json:"end_date"`
+		MembershipType string  `json:"membership_type"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpErrorLog(w, r, "Invalid request body JSON", http.StatusBadRequest, err)
+		return
+	}
+
+	startDate, err := parseFlexibleDate(req.StartDate)
+	if err != nil {
+		httpErrorLog(w, r, fmt.Sprintf("Invalid start_date format %q", req.StartDate), http.StatusBadRequest, err)
+		return
+	}
+
+	var endDate *time.Time
+	if req.EndDate != nil && strings.TrimSpace(*req.EndDate) != "" {
+		t, err := parseFlexibleDate(*req.EndDate)
+		if err != nil {
+			httpErrorLog(w, r, fmt.Sprintf("Invalid end_date format %q", *req.EndDate), http.StatusBadRequest, err)
+			return
+		}
+		if t.Format("2006-01-02") <= startDate.Format("2006-01-02") {
+			httpErrorLog(w, r, "End date must be greater than start date", http.StatusBadRequest, nil)
+			return
+		}
+		endDate = &t
+	}
+
+	updated, err := s.Store.UpdateTHMembership(r.Context(), user.ID, membershipID, startDate, endDate, req.MembershipType)
+	if err != nil {
+		if strings.Contains(err.Error(), "overlap") || strings.Contains(err.Error(), "greater than") {
+			httpErrorLog(w, r, err.Error(), http.StatusBadRequest, err)
+			return
+		}
+		httpErrorLog(w, r, "Failed to update TH membership", http.StatusInternalServerError, err)
+		return
+	}
+
+	s.Hub.Broadcast(WSMessage{
+		Type:    "FAMILY_UPDATED",
+		Payload: map[string]string{"id": updated.ParentID.String()},
+	})
+
+	jsonResponse(w, updated)
 }
 
 func (s *Server) HandleGetDailyBrief(w http.ResponseWriter, r *http.Request) {
@@ -863,6 +928,24 @@ func (s *Server) HandleIssueKioskCert(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Length", strconv.Itoa(len(p12Bytes)))
 	w.WriteHeader(http.StatusOK)
 	w.Write(p12Bytes)
+}
+
+func (s *Server) HandleTestReset(w http.ResponseWriter, r *http.Request) {
+	if s.Authenticator == nil || !s.Authenticator.AllowMockAuth {
+		httpErrorLog(w, r, "Test reset is only available when mock auth is enabled", http.StatusForbidden, nil)
+		return
+	}
+	if err := s.Store.ResetTestData(r.Context()); err != nil {
+		httpErrorLog(w, r, "Failed to reset test data", http.StatusInternalServerError, err)
+		return
+	}
+	if s.Hub != nil {
+		s.Hub.Broadcast(WSMessage{
+			Type:    "DATA_REFRESH",
+			Payload: map[string]string{"action": "reset"},
+		})
+	}
+	jsonResponse(w, map[string]string{"status": "ok", "message": "Test data reset successfully"})
 }
 
 

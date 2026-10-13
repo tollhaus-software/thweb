@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/pavolmarko/thweb-backend/internal/auth"
 	"github.com/pavolmarko/thweb-backend/internal/kioskcert"
 	"github.com/pavolmarko/thweb-backend/internal/models"
@@ -120,5 +121,96 @@ func TestHandleIssueKioskCert_MissingDeviceName(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
 	}
 }
+
+func TestHandleUpdateTHMembership_Validation(t *testing.T) {
+	s := &Server{}
+	user := &models.UserWithPermissions{
+		ID:    [16]byte{1},
+		Email: "admin@example.com",
+	}
+
+	tests := []struct {
+		name       string
+		url        string
+		body       string
+		wantStatus int
+	}{
+		{
+			name:       "invalid membership ID",
+			url:        "/api/memberships/invalid-uuid",
+			body:       `{"start_date":"2026-01-01","membership_type":"full_member"}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "invalid JSON",
+			url:        "/api/memberships/11111111-1111-1111-1111-111111111111",
+			body:       `invalid-json`,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "invalid start_date format",
+			url:        "/api/memberships/11111111-1111-1111-1111-111111111111",
+			body:       `{"start_date":"not-a-date","membership_type":"full_member"}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "invalid end_date format",
+			url:        "/api/memberships/11111111-1111-1111-1111-111111111111",
+			body:       `{"start_date":"2026-01-01","end_date":"not-a-date","membership_type":"full_member"}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "end_date equal to start_date",
+			url:        "/api/memberships/11111111-1111-1111-1111-111111111111",
+			body:       `{"start_date":"2026-01-01","end_date":"2026-01-01","membership_type":"full_member"}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "end_date earlier than start_date",
+			url:        "/api/memberships/11111111-1111-1111-1111-111111111111",
+			body:       `{"start_date":"2026-01-05","end_date":"2026-01-04","membership_type":"full_member"}`,
+			wantStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("PUT", tt.url, strings.NewReader(tt.body))
+			ctx := context.WithValue(req.Context(), auth.UserContextKey, user)
+			req = req.WithContext(ctx)
+
+			// chi URL param mock if needed
+			rCtx := chi.NewRouteContext()
+			parts := strings.Split(tt.url, "/")
+			if len(parts) > 3 {
+				rCtx.URLParams.Add("id", parts[3])
+			}
+			req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rCtx))
+
+			rec := httptest.NewRecorder()
+			s.HandleUpdateTHMembership(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Errorf("%s status = %d, want %d", tt.name, rec.Code, tt.wantStatus)
+			}
+		})
+	}
+}
+
+func TestHandleTestReset_ForbiddenWithoutMockAuth(t *testing.T) {
+	s := &Server{
+		Authenticator: &auth.Authenticator{
+			AllowMockAuth: false,
+		},
+	}
+	req := httptest.NewRequest("POST", "/api/test/reset", nil)
+	rec := httptest.NewRecorder()
+	s.HandleTestReset(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("HandleTestReset without mock auth got %d, want %d", rec.Code, http.StatusForbidden)
+	}
+}
+
 
 

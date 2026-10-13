@@ -1,0 +1,9 @@
+name: thweb-e2e
+
+include:
+  - docker-compose.common.yml
+
+services:
+  oauth2-proxy:
+    ports:
+      - "${E2E_PORT:-8088}:4180"
