@@ -159,4 +159,20 @@ func TestMultiValueList_JSONAndSQL(t *testing.T) {
 	if len(list3) != 2 || list3[0].AddressList != false || list3[1].AddressList != true {
 		t.Errorf("unexpected list3 after Scan: %+v", list3)
 	}
+
+	// 4. Unmarshal IdentifierEmail with snake_case and camelCase
+	emailJSON := `[{"value": "admin@example.com", "identifier_email": true, "address_list": false}, {"value": "parent@example.com", "identifierEmail": true, "addressList": true}]`
+	var list4 MultiValueList
+	if err := json.Unmarshal([]byte(emailJSON), &list4); err != nil {
+		t.Fatalf("failed to unmarshal email JSON: %v", err)
+	}
+	if len(list4) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(list4))
+	}
+	if !list4[0].IdentifierEmail || list4[0].AddressList {
+		t.Errorf("unexpected list4[0]: %+v", list4[0])
+	}
+	if !list4[1].IdentifierEmail || !list4[1].AddressList {
+		t.Errorf("unexpected list4[1]: %+v", list4[1])
+	}
 }

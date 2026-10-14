@@ -64,9 +64,9 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 
 		// Family & Child CRUD
 		r.With(auth.RequirePermission("families.all.write")).Post("/api/families", server.HandleCreateFamily)
-		r.With(auth.RequirePermission("families.all.write")).Put("/api/families/{id}", server.HandleUpdateFamilyParents)
-		r.With(auth.RequirePermission("families.all.write")).Post("/api/families/{id}/parents", server.HandleUpdateFamilyParents)
-		r.With(auth.RequirePermission("families.all.write")).Put("/api/families/{id}/parents", server.HandleUpdateFamilyParents)
+		r.With(auth.RequirePermission("families.all.read")).Put("/api/families/{id}", server.HandleUpdateFamilyParents)
+		r.With(auth.RequirePermission("families.all.read")).Post("/api/families/{id}/parents", server.HandleUpdateFamilyParents)
+		r.With(auth.RequirePermission("families.all.read")).Put("/api/families/{id}/parents", server.HandleUpdateFamilyParents)
 		r.With(auth.RequirePermission("families.all.write")).Delete("/api/families/{id}", server.HandleDeleteFamily)
 		r.With(auth.RequirePermission("families.all.write")).Delete("/api/parents/{id}", server.HandleDeleteParent)
 

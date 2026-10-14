@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,9 +11,12 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pavolmarko/thweb-backend/internal/auth"
 	"github.com/pavolmarko/thweb-backend/internal/kioskcert"
 	"github.com/pavolmarko/thweb-backend/internal/models"
+	"github.com/pavolmarko/thweb-backend/internal/store"
 )
 
 func TestHandleListAuditLogs_Permission(t *testing.T) {
@@ -209,6 +213,132 @@ func TestHandleTestReset_ForbiddenWithoutMockAuth(t *testing.T) {
 
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("HandleTestReset without mock auth got %d, want %d", rec.Code, http.StatusForbidden)
+	}
+}
+
+func TestHandleUpdateFamilyParents_IdentifierEmailPermissions(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := store.NewStore(pool)
+	hub := NewHub()
+	go hub.Run()
+	s := &Server{
+		Store: appStore,
+		Hub:   hub,
+	}
+
+	// Create test family with one parent having an identifier email and a normal email
+	testUserID := uuid.New()
+	testUserEmail := "test-user-" + testUserID.String() + "@example.com"
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2)", testUserID, testUserEmail)
+	if err != nil {
+		t.Fatalf("failed to insert test user: %v", err)
+	}
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", testUserID)
+	}()
+
+	familyID := uuid.New()
+	parentID := uuid.New()
+
+	parent := models.Parent{
+		ID:        parentID,
+		FamilyID:  familyID,
+		FirstName: "Alice",
+		LastName:  "Test",
+		Emails: models.MultiValueList{
+			{Value: "alice.id@example.com", IdentifierEmail: true, AddressList: true},
+			{Value: "alice.normal@example.com", IdentifierEmail: false, AddressList: true},
+		},
+		Phones: models.MultiValueList{
+			{Value: "123456", AddressList: true},
+		},
+	}
+
+	if err := appStore.UpdateFamilyParents(ctx, testUserID, familyID, []models.Parent{parent}); err != nil {
+		t.Fatalf("failed to seed test family parents: %v", err)
+	}
+
+	defer func() {
+		_ = appStore.DeleteFamily(ctx, testUserID, familyID)
+	}()
+
+	userWithoutWrite := &models.UserWithPermissions{
+		ID:                   testUserID,
+		Email:                "caregiver@example.com",
+		EffectivePermissions: []string{"families.all.read"},
+	}
+
+	userWithWrite := &models.UserWithPermissions{
+		ID:                   testUserID,
+		Email:                "admin@example.com",
+		EffectivePermissions: []string{"families.all.read", "families.all.write"},
+	}
+
+	makeRequest := func(user *models.UserWithPermissions, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest("PUT", "/api/families/"+familyID.String(), strings.NewReader(body))
+		reqCtx := context.WithValue(req.Context(), auth.UserContextKey, user)
+		rCtx := chi.NewRouteContext()
+		rCtx.URLParams.Add("id", familyID.String())
+		reqCtx = context.WithValue(reqCtx, chi.RouteCtxKey, rCtx)
+		req = req.WithContext(reqCtx)
+
+		rec := httptest.NewRecorder()
+		s.HandleUpdateFamilyParents(rec, req)
+		return rec
+	}
+
+	// 1. Without families.all.write: attempt to remove identifier email -> should fail 403
+	bodyRemoveID := fmt.Sprintf(`{"parents":[{"id":"%s","family_id":"%s","first_name":"Alice","last_name":"Test","emails":[{"value":"alice.normal@example.com","identifier_email":false}],"phones":[]}]}`, parentID, familyID)
+	rec := makeRequest(userWithoutWrite, bodyRemoveID)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("expected 403 when removing identifier email without permission, got %d", rec.Code)
+	}
+
+	// 2. Without families.all.write: attempt to modify identifier email value -> should fail 403
+	bodyModifyID := fmt.Sprintf(`{"parents":[{"id":"%s","family_id":"%s","first_name":"Alice","last_name":"Test","emails":[{"value":"alice.modified@example.com","identifier_email":true},{"value":"alice.normal@example.com","identifier_email":false}],"phones":[]}]}`, parentID, familyID)
+	rec = makeRequest(userWithoutWrite, bodyModifyID)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("expected 403 when modifying identifier email value without permission, got %d", rec.Code)
+	}
+
+	// 3. Without families.all.write: attempt to set identifier_email = false on existing identifier email -> should fail 403
+	bodyUnflagID := fmt.Sprintf(`{"parents":[{"id":"%s","family_id":"%s","first_name":"Alice","last_name":"Test","emails":[{"value":"alice.id@example.com","identifier_email":false},{"value":"alice.normal@example.com","identifier_email":false}],"phones":[]}]}`, parentID, familyID)
+	rec = makeRequest(userWithoutWrite, bodyUnflagID)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("expected 403 when unflagging identifier email without permission, got %d", rec.Code)
+	}
+
+	// 4. Without families.all.write: attempt to add new identifier email -> should fail 403
+	bodyAddID := fmt.Sprintf(`{"parents":[{"id":"%s","family_id":"%s","first_name":"Alice","last_name":"Test","emails":[{"value":"alice.id@example.com","identifier_email":true},{"value":"new.id@example.com","identifier_email":true}],"phones":[]}]}`, parentID, familyID)
+	rec = makeRequest(userWithoutWrite, bodyAddID)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("expected 403 when adding identifier email without permission, got %d", rec.Code)
+	}
+
+	// 5. Without families.all.write: modify normal email and phones while preserving identifier email -> should SUCCEED 200
+	bodyValidNormalEdit := fmt.Sprintf(`{"parents":[{"id":"%s","family_id":"%s","first_name":"Alice","last_name":"Test","emails":[{"value":"alice.id@example.com","identifier_email":true,"address_list":false},{"value":"alice.changed_normal@example.com","identifier_email":false}],"phones":[{"value":"987654"}]}]}`, parentID, familyID)
+	rec = makeRequest(userWithoutWrite, bodyValidNormalEdit)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 when editing non-identifier email without families.all.write, got %d (%s)", rec.Code, rec.Body.String())
+	}
+
+	// 6. With families.all.write: user CAN modify identifier email -> should SUCCEED 200
+	bodyAdminModifyID := fmt.Sprintf(`{"parents":[{"id":"%s","family_id":"%s","first_name":"Alice","last_name":"Test","emails":[{"value":"alice.new_id@example.com","identifier_email":true}],"phones":[]}]}`, parentID, familyID)
+	rec = makeRequest(userWithWrite, bodyAdminModifyID)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 when editing identifier email with families.all.write, got %d (%s)", rec.Code, rec.Body.String())
 	}
 }
 

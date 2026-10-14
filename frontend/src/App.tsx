@@ -9,7 +9,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import EasyEdit, { Types } from './components/InlineEdit';
 import { Pencil, Trash, Undo, Redo, Calendar, ClipboardList, Lock, Unlock, ArrowLeft, ArrowRight, X, Clock, AlertCircle, LayoutDashboard } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
-import { MultiValueListEditor, type MultiValueFlagConfig, type MultiValueEntry, getEntryValue, isFlagActive } from './components/Table/MultiValueListEditor';
+import { MultiValueListEditor, type MultiValueFlagConfig, type MultiValueEntry, type MultiValueItem, getEntryValue, isFlagActive } from './components/Table/MultiValueListEditor';
 import { NotesEditor } from './components/Table/NotesEditor';
 import { GroupChangesPopover } from './components/Table/GroupChangesPopover';
 import { MembershipsModal } from './components/Table/MembershipsModal';
@@ -17,7 +17,7 @@ import { VaccinationStatusEditor, type VaccinationCheck } from './components/Tab
 import { ChildcareFeesCalculator } from './components/ChildcareFeesCalculator';
 import { KioskDashboard } from './components/Dashboard/KioskDashboard';
 import { KioskProvisioning } from './components/Admin/KioskProvisioning';
-import { t, CURRENT_LOCALE, formatDisplayDate, parseInputDate, calculateYearsAndMonths } from './utils/i18n';
+import { t, CURRENT_LOCALE, formatDisplayDate, parseInputDate, calculateYearsAndMonths, formatTollhausEmail } from './utils/i18n';
 
 const EasyEditComponent = EasyEdit;
 const EasyEditTypes = Types;
@@ -532,6 +532,7 @@ const ParentMultiValueCell: React.FC<ParentMultiValueCellProps> = ({
           values.map((v, i) => {
             const val = getEntryValue(v);
             const isAddressList = isFlagActive(v, 'address_list', true);
+            const isIdentifier = isFlagActive(v, 'identifier_email', false);
             return (
               <div
                 key={i}
@@ -556,20 +557,34 @@ const ParentMultiValueCell: React.FC<ParentMultiValueCellProps> = ({
                 >
                   {val}
                 </span>
-                <span
-                  className="address-list-indicator"
-                  style={{
-                    fontSize: '0.8rem',
-                    lineHeight: 1,
-                    opacity: isAddressList ? 1 : 0.25,
-                    filter: isAddressList ? 'none' : 'grayscale(100%)',
-                    flexShrink: 0,
-                    marginLeft: 'auto',
-                  }}
-                  title={isAddressList ? t('addressListIncluded') || 'In Adressliste aufnehmen' : t('addressListExcluded') || 'Nicht in Adressliste aufnehmen'}
-                >
-                  📋
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0, marginLeft: 'auto' }}>
+                  {field === 'emails' && (
+                    <span
+                      className="identifier-email-indicator"
+                      style={{
+                        fontSize: '0.8rem',
+                        lineHeight: 1,
+                        opacity: isIdentifier ? 1 : 0.25,
+                        filter: isIdentifier ? 'none' : 'grayscale(100%)',
+                      }}
+                      title={isIdentifier ? t('identifierEmailActive') || 'Als Identifikator-E-Mail festgelegt' : t('identifierEmailInactive') || 'Nicht als Identifikator-E-Mail festgelegt'}
+                    >
+                      🆔
+                    </span>
+                  )}
+                  <span
+                    className="address-list-indicator"
+                    style={{
+                      fontSize: '0.8rem',
+                      lineHeight: 1,
+                      opacity: isAddressList ? 1 : 0.25,
+                      filter: isAddressList ? 'none' : 'grayscale(100%)',
+                    }}
+                    title={isAddressList ? t('addressListIncluded') || 'In Adressliste aufnehmen' : t('addressListExcluded') || 'Nicht in Adressliste aufnehmen'}
+                  >
+                    📋
+                  </span>
+                </div>
               </div>
             );
           })
@@ -619,6 +634,128 @@ interface AuditLog {
   created_at: string;
 }
 
+const formatMultiValueItem = (item: any, field: 'emails' | 'phones'): string => {
+  const val = getEntryValue(item);
+  if (!val) return '';
+  const isAddressList = isFlagActive(item, 'address_list', true);
+  const isIdentifier = field === 'emails' ? isFlagActive(item, 'identifier_email', false) : false;
+
+  const flagParts: string[] = [];
+  if (isIdentifier) {
+    flagParts.push('🆔');
+  }
+  if (isAddressList) {
+    flagParts.push('📋');
+  } else {
+    flagParts.push(t('withoutAddressList'));
+  }
+
+  return `${val} [${flagParts.join(', ')}]`;
+};
+
+const diffParentSnapshots = (before: any, after: any): string[] => {
+  const changes: string[] = [];
+
+  // First name
+  if ((before.first_name || '') !== (after.first_name || '')) {
+    changes.push(`${t('firstName')}: "${before.first_name || ''}" → "${after.first_name || ''}"`);
+  }
+
+  // Last name
+  if ((before.last_name || '') !== (after.last_name || '')) {
+    changes.push(`${t('lastName')}: "${before.last_name || ''}" → "${after.last_name || ''}"`);
+  }
+
+  // Notes
+  if ((before.notes || '') !== (after.notes || '')) {
+    changes.push(`${t('notes')}: "${before.notes || ''}" → "${after.notes || ''}"`);
+  }
+
+  // Helper to diff multi-value lists (emails or phones)
+  const diffMultiValues = (
+    beforeList: any[],
+    afterList: any[],
+    field: 'emails' | 'phones'
+  ) => {
+    const bList = Array.isArray(beforeList) ? beforeList : [];
+    const aList = Array.isArray(afterList) ? afterList : [];
+
+    const norm = (item: any) => getEntryValue(item).toLowerCase().trim();
+
+    const beforeMap = new Map<string, any>();
+    bList.forEach((item) => {
+      const k = norm(item);
+      if (k) beforeMap.set(k, item);
+    });
+
+    const afterMap = new Map<string, any>();
+    aList.forEach((item) => {
+      const k = norm(item);
+      if (k) afterMap.set(k, item);
+    });
+
+    const addedUnmatched: any[] = [];
+    aList.forEach((aItem) => {
+      const k = norm(aItem);
+      if (!beforeMap.has(k)) {
+        addedUnmatched.push(aItem);
+      }
+    });
+
+    const removedUnmatched: any[] = [];
+    bList.forEach((bItem) => {
+      const k = norm(bItem);
+      if (!afterMap.has(k)) {
+        removedUnmatched.push(bItem);
+      }
+    });
+
+    if (bList.length === aList.length && addedUnmatched.length === 1 && removedUnmatched.length === 1) {
+      const bVal = getEntryValue(removedUnmatched[0]);
+      const aFormatted = formatMultiValueItem(addedUnmatched[0], field);
+      const label = field === 'emails' ? t('changedEmail') : t('changedPhone');
+      changes.push(`${label}: ${bVal} → ${aFormatted}`);
+    } else {
+      addedUnmatched.forEach((aItem) => {
+        const label = field === 'emails' ? t('addedEmail') : t('addedPhone');
+        changes.push(`${label}: ${formatMultiValueItem(aItem, field)}`);
+      });
+      removedUnmatched.forEach((bItem) => {
+        const label = field === 'emails' ? t('removedEmail') : t('removedPhone');
+        changes.push(`${label}: ${getEntryValue(bItem)}`);
+      });
+    }
+
+    // Check for flag changes on items existing in both
+    bList.forEach((bItem) => {
+      const k = norm(bItem);
+      if (afterMap.has(k)) {
+        const aItem = afterMap.get(k)!;
+        const val = getEntryValue(aItem);
+
+        const bAddr = isFlagActive(bItem, 'address_list', true);
+        const aAddr = isFlagActive(aItem, 'address_list', true);
+        if (bAddr !== aAddr) {
+          changes.push(`${val}: ${aAddr ? t('inAddressListAdded') : t('inAddressListRemoved')}`);
+        }
+
+        if (field === 'emails') {
+          const bId = isFlagActive(bItem, 'identifier_email', false);
+          const aId = isFlagActive(aItem, 'identifier_email', false);
+          if (bId !== aId) {
+            changes.push(`${val}: ${aId ? t('identifierEmailSet') : t('identifierEmailUnset')}`);
+          }
+        }
+      }
+    });
+  };
+
+  diffMultiValues(before.emails, after.emails, 'emails');
+  diffMultiValues(before.phones, after.phones, 'phones');
+
+  return changes;
+};
+
 const formatSnapshotDetails = (log: AuditLog) => {
   const data = log.after_snapshot || log.before_snapshot;
   if (!data) return '-';
@@ -635,12 +772,24 @@ const formatSnapshotDetails = (log: AuditLog) => {
   }
 
   if (log.entity_type === 'parent') {
-    parts.push(`${data.first_name || ''} ${data.last_name || ''}`);
+    const parentName = `${data.first_name || ''} ${data.last_name || ''}`.trim();
+    if (parentName) {
+      parts.push(parentName);
+    }
+
+    if (log.operation === 'UPDATE' && log.before_snapshot && log.after_snapshot) {
+      const changes = diffParentSnapshots(log.before_snapshot, log.after_snapshot);
+      if (changes.length > 0) {
+        parts.push(`${t('changes')}: ${changes.join(', ')}`);
+        return parts.join(' | ');
+      }
+    }
+
     if (data.emails && data.emails.length > 0) {
-      parts.push(`Emails: ${data.emails.map((e: any) => getEntryValue(e)).join(', ')}`);
+      parts.push(`Emails: ${data.emails.map((e: any) => formatMultiValueItem(e, 'emails')).join(', ')}`);
     }
     if (data.phones && data.phones.length > 0) {
-      parts.push(`Phones: ${data.phones.map((p: any) => getEntryValue(p)).join(', ')}`);
+      parts.push(`Phones: ${data.phones.map((p: any) => formatMultiValueItem(p, 'phones')).join(', ')}`);
     }
     if (data.notes) {
       parts.push(`Notes: ${data.notes}`);
@@ -648,7 +797,28 @@ const formatSnapshotDetails = (log: AuditLog) => {
   }
 
   if (log.entity_type === 'child') {
-    parts.push(`${data.first_name || ''} ${data.last_name || ''}`);
+    const childName = `${data.first_name || ''} ${data.last_name || ''}`.trim();
+    if (childName) {
+      parts.push(childName);
+    }
+
+    if (log.operation === 'UPDATE' && log.before_snapshot && log.after_snapshot) {
+      const changes: string[] = [];
+      if ((log.before_snapshot.first_name || '') !== (log.after_snapshot.first_name || '')) {
+        changes.push(`${t('firstName')}: "${log.before_snapshot.first_name || ''}" → "${log.after_snapshot.first_name || ''}"`);
+      }
+      if ((log.before_snapshot.last_name || '') !== (log.after_snapshot.last_name || '')) {
+        changes.push(`${t('lastName')}: "${log.before_snapshot.last_name || ''}" → "${log.after_snapshot.last_name || ''}"`);
+      }
+      if ((log.before_snapshot.birth_date || '') !== (log.after_snapshot.birth_date || '')) {
+        changes.push(`${t('birthDate')}: ${formatDisplayDate(log.before_snapshot.birth_date)} → ${formatDisplayDate(log.after_snapshot.birth_date)}`);
+      }
+      if (changes.length > 0) {
+        parts.push(`${t('changes')}: ${changes.join(', ')}`);
+        return parts.join(' | ');
+      }
+    }
+
     if (data.birth_date) {
       parts.push(`${t('birthDate')}: ${formatDisplayDate(data.birth_date)}`);
     }
@@ -1478,6 +1648,8 @@ const Dashboard: React.FC = () => {
   const [targetFamily, setTargetFamily] = React.useState<{ id: string; name: string } | null>(null);
   const [newParentFirstName, setNewParentFirstName] = React.useState('');
   const [newParentLastName, setNewParentLastName] = React.useState('');
+  const [newParentTollhausEmail, setNewParentTollhausEmail] = React.useState('');
+  const [isTollhausEmailDirty, setIsTollhausEmailDirty] = React.useState(false);
 
   const [addFamilyOpen, setAddFamilyOpen] = React.useState(false);
   const [p1FirstName, setP1FirstName] = React.useState('');
@@ -2070,6 +2242,8 @@ const Dashboard: React.FC = () => {
     const family = families.find(f => f.id === familyId);
     const firstParentLastName = family?.parents?.[0]?.last_name || '';
     setNewParentLastName(firstParentLastName);
+    setNewParentTollhausEmail('');
+    setIsTollhausEmailDirty(false);
     
     setAddParentOpen(true);
   };
@@ -2085,13 +2259,23 @@ const Dashboard: React.FC = () => {
     const family = families.find(f => f.id === targetFamily.id);
     if (!family) return;
 
+    const emailStr = newParentTollhausEmail.trim();
+    const initialEmails: MultiValueEntry[] = [];
+    if (emailStr !== '') {
+      initialEmails.push({
+        value: emailStr,
+        identifier_email: true,
+        address_list: true,
+      });
+    }
+
     const newParentId = crypto.randomUUID();
     const newParent = {
       id: newParentId,
       family_id: family.id,
       first_name: newParentFirstName.trim(),
       last_name: newParentLastName.trim(),
-      emails: [] as MultiValueEntry[],
+      emails: initialEmails,
       phones: [] as MultiValueEntry[],
     };
 
@@ -2114,6 +2298,8 @@ const Dashboard: React.FC = () => {
         });
         fetchFamilies();
         setAddParentOpen(false);
+        setNewParentTollhausEmail('');
+        setIsTollhausEmailDirty(false);
       })
       .catch((err) => alert(err.message));
   };
@@ -2552,7 +2738,15 @@ const Dashboard: React.FC = () => {
   const activeMultiValueTitle = activeMultiValueField === 'emails' ? t('emailsEdit') : t('phonesEdit');
   const activeMultiValuePlaceholder = activeMultiValueField === 'emails' ? t('addEmail') : t('addPhone');
 
-  const addressListFlagConfig: MultiValueFlagConfig[] = React.useMemo(() => [
+  const emailFlagsConfig: MultiValueFlagConfig[] = React.useMemo(() => [
+    {
+      key: 'identifier_email',
+      icon: '🆔',
+      label: t('identifierEmailFlag') || 'Identifikator-E-Mail',
+      titleActive: t('identifierEmailActive') || 'Als Identifikator-E-Mail festgelegt',
+      titleInactive: t('identifierEmailInactive') || 'Nicht als Identifikator-E-Mail festgelegt',
+      defaultValue: false,
+    },
     {
       key: 'address_list',
       icon: '📋',
@@ -2560,8 +2754,75 @@ const Dashboard: React.FC = () => {
       titleActive: t('addressListIncluded') || 'In Adressliste aufnehmen',
       titleInactive: t('addressListExcluded') || 'Nicht in Adressliste aufnehmen',
       defaultValue: true,
-    }
+    },
   ], []);
+
+  const phoneFlagsConfig: MultiValueFlagConfig[] = React.useMemo(() => [
+    {
+      key: 'address_list',
+      icon: '📋',
+      label: t('addressListFlag') || 'In Adressliste',
+      titleActive: t('addressListIncluded') || 'In Adressliste aufnehmen',
+      titleInactive: t('addressListExcluded') || 'Nicht in Adressliste aufnehmen',
+      defaultValue: true,
+    },
+  ], []);
+
+  const activeMultiValueFlags = activeMultiValueField === 'emails' ? emailFlagsConfig : phoneFlagsConfig;
+
+  const canEditMultiValueItem = React.useCallback(
+    (item: MultiValueItem) => {
+      if (activeMultiValueField === 'emails') {
+        if (isFlagActive(item, 'identifier_email', false) && !hasPermission('families.all.write')) {
+          return false;
+        }
+      }
+      return true;
+    },
+    [activeMultiValueField, hasPermission]
+  );
+
+  const canDeleteMultiValueItem = React.useCallback(
+    (item: MultiValueItem) => {
+      if (activeMultiValueField === 'emails') {
+        if (isFlagActive(item, 'identifier_email', false) && !hasPermission('families.all.write')) {
+          return false;
+        }
+      }
+      return true;
+    },
+    [activeMultiValueField, hasPermission]
+  );
+
+  const canToggleMultiValueFlag = React.useCallback(
+    (item: MultiValueItem | null, flagKey: string) => {
+      if (activeMultiValueField === 'emails' && flagKey === 'identifier_email') {
+        return hasPermission('families.all.write');
+      }
+      if (activeMultiValueField === 'emails' && item && isFlagActive(item, 'identifier_email', false)) {
+        if (!hasPermission('families.all.write')) {
+          return false;
+        }
+      }
+      return true;
+    },
+    [activeMultiValueField, hasPermission]
+  );
+
+  const getMultiValueDisabledReason = React.useCallback(
+    (item: MultiValueItem | null, _action: 'edit' | 'delete' | 'toggle', flagKey?: string) => {
+      if (activeMultiValueField === 'emails') {
+        if (flagKey === 'identifier_email' && !hasPermission('families.all.write')) {
+          return t('identifierEmailPermissionRequired') || 'families.all.write permission required';
+        }
+        if (item && isFlagActive(item, 'identifier_email', false) && !hasPermission('families.all.write')) {
+          return t('identifierEmailPermissionRequired') || 'families.all.write permission required';
+        }
+      }
+      return undefined;
+    },
+    [activeMultiValueField, hasPermission]
+  );
 
   const handleSaveActiveMultiValue = (newValues: (string | MultiValueEntry)[]) => {
     if (!activeParentForMultiValue || !activeMultiValueField) return;
@@ -2652,6 +2913,10 @@ const Dashboard: React.FC = () => {
               const errMsg = t('kmsAccessDenied');
               setKmsError(errMsg);
               throw new Error(errMsg);
+            }
+            if (errData.error) {
+              alert(errData.error);
+              throw new Error(errData.error);
             }
           }
           throw new Error('Failed to update parent');
@@ -3917,29 +4182,66 @@ const Dashboard: React.FC = () => {
           <div className="modal-container">
             <h2>{t('addParentTo')} {targetFamily.name}</h2>
             <form onSubmit={handleAddParentSubmit}>
-              <div className="modal-form-group">
-                <label htmlFor="p-first-name">{t('firstName')}</label>
-                <input
-                  id="p-first-name"
-                  type="text"
-                  value={newParentFirstName}
-                  onChange={(e) => setNewParentFirstName(e.target.value)}
-                  required
-                  autoFocus
-                />
+              <div style={{ display: 'flex', gap: '1rem' }}>
+                <div className="modal-form-group" style={{ flex: 1 }}>
+                  <label htmlFor="p-first-name">{t('firstName')}</label>
+                  <input
+                    id="p-first-name"
+                    name="givenName"
+                    type="text"
+                    value={newParentFirstName}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setNewParentFirstName(val);
+                      if (!isTollhausEmailDirty) {
+                        setNewParentTollhausEmail(formatTollhausEmail(val, newParentLastName));
+                      }
+                    }}
+                    required
+                    autoFocus
+                  />
+                </div>
+                <div className="modal-form-group" style={{ flex: 1 }}>
+                  <label htmlFor="p-last-name">{t('lastName')}</label>
+                  <input
+                    id="p-last-name"
+                    name="surname"
+                    type="text"
+                    value={newParentLastName}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setNewParentLastName(val);
+                      if (!isTollhausEmailDirty) {
+                        setNewParentTollhausEmail(formatTollhausEmail(newParentFirstName, val));
+                      }
+                    }}
+                    required
+                  />
+                </div>
               </div>
               <div className="modal-form-group">
-                <label htmlFor="p-last-name">{t('lastName')}</label>
+                <label htmlFor="p-tollhaus-email">{t('tollhausEmail')}</label>
                 <input
-                  id="p-last-name"
+                  id="p-tollhaus-email"
+                  name="tollhausEmail"
                   type="text"
-                  value={newParentLastName}
-                  onChange={(e) => setNewParentLastName(e.target.value)}
-                  required
+                  value={newParentTollhausEmail}
+                  onChange={(e) => {
+                    setNewParentTollhausEmail(e.target.value);
+                    setIsTollhausEmailDirty(true);
+                  }}
                 />
               </div>
               <div className="modal-actions">
-                <button type="button" className="cancel-btn" onClick={() => setAddParentOpen(false)}>
+                <button
+                  type="button"
+                  className="cancel-btn"
+                  onClick={() => {
+                    setAddParentOpen(false);
+                    setNewParentTollhausEmail('');
+                    setIsTollhausEmailDirty(false);
+                  }}
+                >
                   {t('cancel')}
                 </button>
                 <button type="submit" className="submit-btn">
@@ -4357,10 +4659,14 @@ const Dashboard: React.FC = () => {
           anchorEl={multiValuePopoverAnchor}
           onClose={closeManageMultiValue}
           values={activeMultiValueValues}
-          flags={addressListFlagConfig}
+          flags={activeMultiValueFlags}
           title={activeMultiValueTitle}
           placeholder={activeMultiValuePlaceholder}
           onSave={handleSaveActiveMultiValue}
+          canEditItem={canEditMultiValueItem}
+          canDeleteItem={canDeleteMultiValueItem}
+          canToggleFlag={canToggleMultiValueFlag}
+          disabledReason={getMultiValueDisabledReason}
         />
     </div>
   );

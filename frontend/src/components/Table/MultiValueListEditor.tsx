@@ -15,6 +15,7 @@ export interface MultiValueFlagConfig {
 export interface MultiValueEntry {
   value: string;
   address_list?: boolean;
+  identifier_email?: boolean;
   [key: string]: any;
 }
 
@@ -29,6 +30,10 @@ export interface MultiValueListEditorProps<T extends MultiValueItem = MultiValue
   flags?: MultiValueFlagConfig[];
   placeholder?: string;
   title?: string;
+  canEditItem?: (item: T, idx: number) => boolean;
+  canDeleteItem?: (item: T, idx: number) => boolean;
+  canToggleFlag?: (item: T | null, flagKey: string, idx: number) => boolean;
+  disabledReason?: (item: T | null, action: 'edit' | 'delete' | 'toggle', flagKey?: string) => string | undefined;
 }
 
 export const getEntryValue = (entry: MultiValueItem): string => {
@@ -52,6 +57,10 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
   flags,
   placeholder = '',
   title,
+  canEditItem,
+  canDeleteItem,
+  canToggleFlag,
+  disabledReason,
 }) => {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -72,6 +81,9 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
   const valuesRef = useRef(values);
   const onSaveRef = useRef(onSave);
   const flagsRef = useRef(flags);
+  const canEditItemRef = useRef(canEditItem);
+  const canDeleteItemRef = useRef(canDeleteItem);
+  const canToggleFlagRef = useRef(canToggleFlag);
 
   useEffect(() => {
     editValueRef.current = editValue;
@@ -104,6 +116,18 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
   useEffect(() => {
     flagsRef.current = flags;
   }, [flags]);
+
+  useEffect(() => {
+    canEditItemRef.current = canEditItem;
+  }, [canEditItem]);
+
+  useEffect(() => {
+    canDeleteItemRef.current = canDeleteItem;
+  }, [canDeleteItem]);
+
+  useEffect(() => {
+    canToggleFlagRef.current = canToggleFlag;
+  }, [canToggleFlag]);
 
   // When popover opens: if no values yet, behave as if '+' was already pressed
   useEffect(() => {
@@ -156,6 +180,11 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
 
   const handleDelete = useCallback((idx: number) => {
     const currentValues = valuesRef.current || [];
+    if (idx < 0 || idx >= currentValues.length) return;
+    const item = currentValues[idx];
+    if (canDeleteItemRef.current && !canDeleteItemRef.current(item, idx)) {
+      return;
+    }
     const newValues = currentValues.filter((_, i) => i !== idx);
     onSaveRef.current(newValues);
     if (editingIndexRef.current === idx) {
@@ -183,9 +212,18 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
       }
 
       const existingItem = currentValues[idx];
+      if (canEditItemRef.current && !canEditItemRef.current(existingItem, idx)) {
+        cancelEdit();
+        return;
+      }
+
       const currentVal = getEntryValue(existingItem).trim();
 
       if (trimmed === '') {
+        if (canDeleteItemRef.current && !canDeleteItemRef.current(existingItem, idx)) {
+          cancelEdit();
+          return;
+        }
         handleDelete(idx);
         return;
       }
@@ -257,6 +295,10 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
     if (idx < 0 || idx >= currentValues.length) return;
     const item = currentValues[idx];
 
+    if (canToggleFlagRef.current && !canToggleFlagRef.current(item, flagKey, idx)) {
+      return;
+    }
+
     const flagConfig = (flagsRef.current || []).find((f) => f.key === flagKey);
     const def = flagConfig?.defaultValue ?? true;
     const currentActive = isFlagActive(item, flagKey, def);
@@ -293,6 +335,13 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
   }, [commitAdd, commitEdit, onClose]);
 
   const startEdit = (idx: number, currentVal: string) => {
+    const currentValues = valuesRef.current || [];
+    if (idx >= 0 && idx < currentValues.length) {
+      const item = currentValues[idx];
+      if (canEditItemRef.current && !canEditItemRef.current(item, idx)) {
+        return;
+      }
+    }
     setIsAdding(false);
     isAddingRef.current = false;
     setEditingIndex(idx);
@@ -466,27 +515,34 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
                           >
                             {flags.map((flag) => {
                               const isActive = isFlagActive(item, flag.key, flag.defaultValue ?? true);
-                              const titleText = isActive
-                                ? flag.titleActive || `${flag.label || flag.key}: Ein`
-                                : flag.titleInactive || `${flag.label || flag.key}: Aus`;
+                              const canToggle = !canToggleFlag || canToggleFlag(item, flag.key, idx);
+                              const flagDisabledTitle = disabledReason?.(item, 'toggle', flag.key);
+                              const titleText = !canToggle && flagDisabledTitle
+                                ? flagDisabledTitle
+                                : (isActive
+                                    ? flag.titleActive || `${flag.label || flag.key}: Ein`
+                                    : flag.titleInactive || `${flag.label || flag.key}: Aus`);
                               return (
                                 <button
                                   key={flag.key}
                                   type="button"
                                   className={`multivalue-flag-btn flag-${flag.key}`}
+                                  disabled={!canToggle}
                                   onMouseDown={(e) => {
                                     e.preventDefault();
-                                    handleToggleFlag(idx, flag.key);
+                                    if (canToggle) {
+                                      handleToggleFlag(idx, flag.key);
+                                    }
                                   }}
                                   title={titleText}
                                   style={{
                                     background: 'transparent',
                                     border: 'none',
-                                    cursor: 'pointer',
+                                    cursor: canToggle ? 'pointer' : 'not-allowed',
                                     padding: '2px 4px',
                                     fontSize: '0.95rem',
                                     lineHeight: 1,
-                                    opacity: isActive ? 1 : 0.25,
+                                    opacity: canToggle ? (isActive ? 1 : 0.25) : (isActive ? 0.6 : 0.15),
                                     filter: isActive ? 'none' : 'grayscale(100%)',
                                     transition: 'opacity 0.15s ease, filter 0.15s ease, transform 0.1s ease',
                                     borderRadius: '4px',
@@ -495,10 +551,10 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
                                     justifyContent: 'center',
                                   }}
                                   onMouseEnter={(e) => {
-                                    e.currentTarget.style.transform = 'scale(1.15)';
+                                    if (canToggle) e.currentTarget.style.transform = 'scale(1.15)';
                                   }}
                                   onMouseLeave={(e) => {
-                                    e.currentTarget.style.transform = 'scale(1)';
+                                    if (canToggle) e.currentTarget.style.transform = 'scale(1)';
                                   }}
                                 >
                                   {flag.icon}
@@ -571,100 +627,131 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
                     e.currentTarget.style.backgroundColor = 'transparent';
                   }}
                 >
-                  <td
-                    style={{ padding: '6px 8px', cursor: 'pointer', wordBreak: 'break-all' }}
-                    onDoubleClick={() => startEdit(idx, val)}
-                    title={t('edit') || 'Doppelklick zum Bearbeiten'}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ color: 'var(--text-h)', flex: 1, minWidth: 0 }}>{val}</span>
-                      {flags && flags.length > 0 && (
-                        <div
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}
-                          onClick={(e) => e.stopPropagation()}
+                  {(() => {
+                    const canEdit = !canEditItem || canEditItem(item, idx);
+                    const canDelete = !canDeleteItem || canDeleteItem(item, idx);
+                    const editDisabledTitle = disabledReason?.(item, 'edit');
+                    const deleteDisabledTitle = disabledReason?.(item, 'delete');
+                    return (
+                      <>
+                        <td
+                          style={{
+                            padding: '6px 8px',
+                            cursor: canEdit ? 'pointer' : 'default',
+                            wordBreak: 'break-all',
+                          }}
+                          onDoubleClick={() => {
+                            if (canEdit) startEdit(idx, val);
+                          }}
+                          title={canEdit ? (t('edit') || 'Doppelklick zum Bearbeiten') : (editDisabledTitle || undefined)}
                         >
-                          {flags.map((flag) => {
-                            const isActive = isFlagActive(item, flag.key, flag.defaultValue ?? true);
-                            const titleText = isActive
-                              ? flag.titleActive || `${flag.label || flag.key}: Ein`
-                              : flag.titleInactive || `${flag.label || flag.key}: Aus`;
-                            return (
-                              <button
-                                key={flag.key}
-                                type="button"
-                                className={`multivalue-flag-btn flag-${flag.key}`}
-                                onClick={() => handleToggleFlag(idx, flag.key)}
-                                title={titleText}
-                                style={{
-                                  background: 'transparent',
-                                  border: 'none',
-                                  cursor: 'pointer',
-                                  padding: '2px 4px',
-                                  fontSize: '0.95rem',
-                                  lineHeight: 1,
-                                  opacity: isActive ? 1 : 0.25,
-                                  filter: isActive ? 'none' : 'grayscale(100%)',
-                                  transition: 'opacity 0.15s ease, filter 0.15s ease, transform 0.1s ease',
-                                  borderRadius: '4px',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.transform = 'scale(1.15)';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.transform = 'scale(1)';
-                                }}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ color: 'var(--text-h)', flex: 1, minWidth: 0 }}>{val}</span>
+                            {flags && flags.length > 0 && (
+                              <div
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}
+                                onClick={(e) => e.stopPropagation()}
                               >
-                                {flag.icon}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                  <td style={{ padding: '6px 8px', width: '56px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                      <button
-                        type="button"
-                        className="easy-edit-button edit-entry-btn"
-                        onClick={() => startEdit(idx, val)}
-                        title={t('edit') || 'Bearbeiten'}
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          cursor: 'pointer',
-                          padding: '3px',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          color: '#64748b',
-                          borderRadius: '4px',
-                        }}
-                      >
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        className="easy-edit-button delete-entry-btn"
-                        onClick={() => handleDelete(idx)}
-                        title={t('delete') || 'Löschen'}
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          cursor: 'pointer',
-                          padding: '3px',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          color: '#ef4444',
-                          borderRadius: '4px',
-                        }}
-                      >
-                        <Trash size={14} />
-                      </button>
-                    </div>
-                  </td>
+                                {flags.map((flag) => {
+                                  const isActive = isFlagActive(item, flag.key, flag.defaultValue ?? true);
+                                  const canToggle = !canToggleFlag || canToggleFlag(item, flag.key, idx);
+                                  const flagDisabledTitle = disabledReason?.(item, 'toggle', flag.key);
+                                  const titleText = !canToggle && flagDisabledTitle
+                                    ? flagDisabledTitle
+                                    : (isActive
+                                        ? flag.titleActive || `${flag.label || flag.key}: Ein`
+                                        : flag.titleInactive || `${flag.label || flag.key}: Aus`);
+                                  return (
+                                    <button
+                                      key={flag.key}
+                                      type="button"
+                                      className={`multivalue-flag-btn flag-${flag.key}`}
+                                      disabled={!canToggle}
+                                      onClick={() => {
+                                        if (canToggle) handleToggleFlag(idx, flag.key);
+                                      }}
+                                      title={titleText}
+                                      style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        cursor: canToggle ? 'pointer' : 'not-allowed',
+                                        padding: '2px 4px',
+                                        fontSize: '0.95rem',
+                                        lineHeight: 1,
+                                        opacity: canToggle ? (isActive ? 1 : 0.25) : (isActive ? 0.6 : 0.15),
+                                        filter: isActive ? 'none' : 'grayscale(100%)',
+                                        transition: 'opacity 0.15s ease, filter 0.15s ease, transform 0.1s ease',
+                                        borderRadius: '4px',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                      }}
+                                      onMouseEnter={(e) => {
+                                        if (canToggle) e.currentTarget.style.transform = 'scale(1.15)';
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        if (canToggle) e.currentTarget.style.transform = 'scale(1)';
+                                      }}
+                                    >
+                                      {flag.icon}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td style={{ padding: '6px 8px', width: '56px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <button
+                              type="button"
+                              className="easy-edit-button edit-entry-btn"
+                              disabled={!canEdit}
+                              onClick={() => {
+                                if (canEdit) startEdit(idx, val);
+                              }}
+                              title={canEdit ? (t('edit') || 'Bearbeiten') : (editDisabledTitle || t('edit') || 'Bearbeiten')}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                cursor: canEdit ? 'pointer' : 'not-allowed',
+                                padding: '3px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                color: canEdit ? '#64748b' : '#cbd5e1',
+                                borderRadius: '4px',
+                                opacity: canEdit ? 1 : 0.35,
+                              }}
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              className="easy-edit-button delete-entry-btn"
+                              disabled={!canDelete}
+                              onClick={() => {
+                                if (canDelete) handleDelete(idx);
+                              }}
+                              title={canDelete ? (t('delete') || 'Löschen') : (deleteDisabledTitle || t('delete') || 'Löschen')}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                cursor: canDelete ? 'pointer' : 'not-allowed',
+                                padding: '3px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                color: canDelete ? '#ef4444' : '#fca5a5',
+                                borderRadius: '4px',
+                                opacity: canDelete ? 1 : 0.35,
+                              }}
+                            >
+                              <Trash size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </>
+                    );
+                  })()}
                 </tr>
               );
             })}
@@ -711,30 +798,37 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
                       >
                         {flags.map((flag) => {
                           const isActive = addFlags[flag.key] ?? flag.defaultValue ?? true;
-                          const titleText = isActive
-                            ? flag.titleActive || `${flag.label || flag.key}: Ein`
-                            : flag.titleInactive || `${flag.label || flag.key}: Aus`;
+                          const canToggle = !canToggleFlag || canToggleFlag(null as any, flag.key, -1);
+                          const flagDisabledTitle = disabledReason?.(null as any, 'toggle', flag.key);
+                          const titleText = !canToggle && flagDisabledTitle
+                            ? flagDisabledTitle
+                            : (isActive
+                                ? flag.titleActive || `${flag.label || flag.key}: Ein`
+                                : flag.titleInactive || `${flag.label || flag.key}: Aus`);
                           return (
                             <button
                               key={flag.key}
                               type="button"
                               className={`multivalue-flag-btn flag-${flag.key}`}
+                              disabled={!canToggle}
                               onMouseDown={(e) => {
                                 e.preventDefault();
-                                setAddFlags((prev) => ({
-                                  ...prev,
-                                  [flag.key]: !(prev[flag.key] ?? flag.defaultValue ?? true),
-                                }));
+                                if (canToggle) {
+                                  setAddFlags((prev) => ({
+                                    ...prev,
+                                    [flag.key]: !(prev[flag.key] ?? flag.defaultValue ?? true),
+                                  }));
+                                }
                               }}
                               title={titleText}
                               style={{
                                 background: 'transparent',
                                 border: 'none',
-                                cursor: 'pointer',
+                                cursor: canToggle ? 'pointer' : 'not-allowed',
                                 padding: '2px 4px',
                                 fontSize: '0.95rem',
                                 lineHeight: 1,
-                                opacity: isActive ? 1 : 0.25,
+                                opacity: canToggle ? (isActive ? 1 : 0.25) : (isActive ? 0.6 : 0.15),
                                 filter: isActive ? 'none' : 'grayscale(100%)',
                                 transition: 'opacity 0.15s ease, filter 0.15s ease, transform 0.1s ease',
                                 borderRadius: '4px',
@@ -743,10 +837,10 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
                                 justifyContent: 'center',
                               }}
                               onMouseEnter={(e) => {
-                                e.currentTarget.style.transform = 'scale(1.15)';
+                                if (canToggle) e.currentTarget.style.transform = 'scale(1.15)';
                               }}
                               onMouseLeave={(e) => {
-                                e.currentTarget.style.transform = 'scale(1)';
+                                if (canToggle) e.currentTarget.style.transform = 'scale(1)';
                               }}
                             >
                               {flag.icon}

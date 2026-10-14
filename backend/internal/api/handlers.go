@@ -287,6 +287,93 @@ func (s *Server) HandleUpdateFamilyParents(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Permission check for identifier emails:
+	// Removing or editing an email with identifier_email = true requires families.all.write.
+	if user == nil || !user.HasPermission("families.all.write") {
+		existingParents, err := s.Store.GetParentsByFamilyID(r.Context(), familyID)
+		if err != nil {
+			httpErrorLog(w, r, "Failed to load existing parents", http.StatusInternalServerError, err)
+			return
+		}
+		existingParentsMap := make(map[uuid.UUID]models.Parent, len(existingParents))
+		for _, ep := range existingParents {
+			existingParentsMap[ep.ID] = ep
+		}
+
+		// 1. Verify that every existing identifier email is preserved in req.Parents without removal or value changes
+		for _, ep := range existingParents {
+			var matchingReqParent *models.Parent
+			for i := range req.Parents {
+				if req.Parents[i].ID == ep.ID {
+					matchingReqParent = &req.Parents[i]
+					break
+				}
+			}
+
+			for _, oldEmail := range ep.Emails {
+				if !oldEmail.IdentifierEmail {
+					continue
+				}
+				if matchingReqParent == nil {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusForbidden)
+					json.NewEncoder(w).Encode(map[string]string{
+						"error": "Forbidden: families.all.write permission required to remove or edit an identifier email",
+					})
+					return
+				}
+				found := false
+				for _, newEmail := range matchingReqParent.Emails {
+					if models.NormalizeEmail(newEmail.Value) == models.NormalizeEmail(oldEmail.Value) && newEmail.IdentifierEmail {
+						found = true
+						break
+					}
+				}
+				if !found {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusForbidden)
+					json.NewEncoder(w).Encode(map[string]string{
+						"error": "Forbidden: families.all.write permission required to remove or edit an identifier email",
+					})
+					return
+				}
+			}
+		}
+
+		// 2. Verify that no new or non-identifier email in req.Parents has been assigned IdentifierEmail = true
+		for _, reqParent := range req.Parents {
+			ep, exists := existingParentsMap[reqParent.ID]
+			for _, newEmail := range reqParent.Emails {
+				if !newEmail.IdentifierEmail {
+					continue
+				}
+				if !exists {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusForbidden)
+					json.NewEncoder(w).Encode(map[string]string{
+						"error": "Forbidden: families.all.write permission required to assign an identifier email",
+					})
+					return
+				}
+				alreadyIdentifier := false
+				for _, oldEmail := range ep.Emails {
+					if models.NormalizeEmail(oldEmail.Value) == models.NormalizeEmail(newEmail.Value) && oldEmail.IdentifierEmail {
+						alreadyIdentifier = true
+						break
+					}
+				}
+				if !alreadyIdentifier {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusForbidden)
+					json.NewEncoder(w).Encode(map[string]string{
+						"error": "Forbidden: families.all.write permission required to assign an identifier email",
+					})
+					return
+				}
+			}
+		}
+	}
+
 	if hasChecksToEncrypt && s.KMSProvider != nil && user != nil {
 		accessToken := auth.GetAccessToken(r.Context())
 		if accessToken == "" {
