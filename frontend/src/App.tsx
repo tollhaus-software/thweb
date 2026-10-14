@@ -2291,7 +2291,7 @@ const Dashboard: React.FC = () => {
         pushAction({
           type: 'ADD_PARENT',
           payload: {
-            tab: 'parents',
+            tab: activeTab === 'families' ? 'families' : 'parents',
             parent: newParent,
             beforeParents: updatedParents,
           }
@@ -4151,7 +4151,8 @@ const Dashboard: React.FC = () => {
             data={familiesTabData}
             columns={familyChildColumns}
             getSubRows={(row: any) => row.children}
-            onAddRow={openAddChild}
+            onAddChild={openAddChild}
+            onAddParent={openAddParent}
             emptySubRowsText={t('noChildrenYet')}
             highlightedRowId={highlightedRowId}
           />
