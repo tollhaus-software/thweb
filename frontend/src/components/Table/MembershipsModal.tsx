@@ -3,6 +3,7 @@ import { Plus, Check, X, Trash, Pencil, Calendar } from 'lucide-react';
 import { t, CURRENT_LOCALE, formatDisplayDate, parseInputDate } from '../../utils/i18n';
 import EasyEdit, { Types } from '../InlineEdit';
 import { CalendarDropdown } from '../CalendarDropdown';
+import { CellPopover } from './CellPopover';
 
 const EasyEditComponent = EasyEdit;
 const EasyEditTypes = Types;
@@ -39,6 +40,7 @@ export interface FamilyWithChildren {
 export interface MembershipsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  anchorEl: HTMLElement | React.RefObject<HTMLElement | null> | string | (() => HTMLElement | null) | null;
   parent: ParentWithMemberships | null;
   family?: FamilyWithChildren | null;
   defaultStartDate?: string | null;
@@ -73,6 +75,7 @@ const checkMembershipOverlap = (
 export const MembershipsModal: React.FC<MembershipsModalProps> = ({
   isOpen,
   onClose,
+  anchorEl = null,
   parent,
   family,
   defaultStartDate,
@@ -159,34 +162,15 @@ export const MembershipsModal: React.FC<MembershipsModalProps> = ({
     }
   }, [isOpen, isAddingRow]);
 
-  // Handle escape key
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (isStartCalendarOpen) {
-          setIsStartCalendarOpen(false);
-        } else if (isEndCalendarOpen) {
-          setIsEndCalendarOpen(false);
-        } else if (isAddingRow) {
-          setIsAddingRow(false);
-        } else {
-          onClose();
-        }
-      }
-    };
-    if (isOpen) {
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
-    }
-  }, [isOpen, isAddingRow, isStartCalendarOpen, isEndCalendarOpen, onClose]);
-
-  const handleClose = () => {
+  const handleClose = React.useCallback(() => {
     setIsAddingRow(false);
     setIsStartCalendarOpen(false);
     setIsEndCalendarOpen(false);
     setNewEndDate('');
     onClose();
-  };
+  }, [onClose]);
+
+
 
   const handleStartAdd = () => {
     if (isMostRecentMissingEndDate) return;
@@ -333,46 +317,27 @@ export const MembershipsModal: React.FC<MembershipsModalProps> = ({
   if (!isOpen || !parent) return null;
 
   return (
-    <div
-      className="modal-overlay"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) handleClose();
+    <CellPopover
+      isOpen={isOpen}
+      onClose={handleClose}
+      anchorEl={anchorEl}
+      className="glass-popup memberships-popover"
+      width={500}
+      minWidth={460}
+      style={{
+        padding: '12px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px',
       }}
     >
-      <div className="modal-container" style={{ maxWidth: '600px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-          <h2 style={{ margin: 0, fontSize: '1.25rem' }}>
-            {t('manageMemberships')} - {parent.first_name} {parent.last_name}
-          </h2>
-          <button
-            type="button"
-            onClick={handleClose}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              cursor: 'pointer',
-              color: 'var(--text-muted)',
-              display: 'flex',
-              alignItems: 'center',
-              padding: '4px',
-              borderRadius: '4px',
-            }}
-            title={t('close')}
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Existing Memberships Table */}
-        <div
-          style={{
-            marginBottom: '0.75rem',
-            border: '1px solid var(--border)',
-            borderRadius: '6px',
-            maxHeight: '320px',
-            overflowY: 'auto',
-          }}
-        >
+      {/* Existing Memberships Table */}
+      <div
+        style={{
+          border: '1px solid var(--border)',
+          borderRadius: '6px',
+        }}
+      >
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
             <thead>
               <tr style={{ background: 'var(--bg-subtle)', borderBottom: '1px solid var(--border)' }}>
@@ -511,7 +476,10 @@ export const MembershipsModal: React.FC<MembershipsModalProps> = ({
                       onChange={(e) => setNewMembershipType(e.target.value as 'full_member' | 'supporting_member')}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') handleSaveNewRow();
-                        if (e.key === 'Escape') handleCancelAdd();
+                        if (e.key === 'Escape') {
+                          e.stopPropagation();
+                          handleCancelAdd();
+                        }
                       }}
                       style={{
                         padding: '3px 6px',
@@ -549,6 +517,7 @@ export const MembershipsModal: React.FC<MembershipsModalProps> = ({
                             handleSaveNewRow();
                           }
                           if (e.key === 'Escape') {
+                            e.stopPropagation();
                             if (isStartCalendarOpen) {
                               setIsStartCalendarOpen(false);
                             } else {
@@ -628,6 +597,7 @@ export const MembershipsModal: React.FC<MembershipsModalProps> = ({
                             handleSaveNewRow();
                           }
                           if (e.key === 'Escape') {
+                            e.stopPropagation();
                             if (isEndCalendarOpen) {
                               setIsEndCalendarOpen(false);
                             } else {
@@ -800,17 +770,9 @@ export const MembershipsModal: React.FC<MembershipsModalProps> = ({
           </div>
         )}
 
-        {/* Modal Actions */}
-        <div className="modal-actions" style={{ marginTop: '1.25rem' }}>
-          <button
-            type="button"
-            className="cancel-btn"
-            onClick={handleClose}
-          >
-            {t('close')}
-          </button>
-        </div>
-      </div>
-    </div>
+    </CellPopover>
   );
 };
+
+export const MembershipsPopover = MembershipsModal;
+export default MembershipsModal;

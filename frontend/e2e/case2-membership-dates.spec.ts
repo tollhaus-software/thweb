@@ -80,22 +80,25 @@ test.describe('Test Case 2: Inferred Default Start Date from Oldest Group Change
     const parentRowAgain = page.locator('tr', { hasText: 'Maximilian' }).filter({ hasText: 'Bauer' });
     await expect(parentRowAgain).toBeVisible();
 
-    await parentRowAgain.getByTitle('Mitgliedschaften verwalten').click();
+    // Clicking membership cell opens the membership popover
+    await parentRowAgain.locator('[id^="cell-membership-"]').click();
 
-    const modal = page.locator('.modal-container');
-    await expect(modal).toBeVisible();
+    const membershipPopover = page.locator('.memberships-popover');
+    await expect(membershipPopover).toBeVisible();
 
     // --- Step 4: Verify the proposed "start date" matches the older group change date (15.03.2023) ---
-    const startDateInput = modal.locator('td').locator('input[type="text"]').first();
+    const startDateInput = membershipPopover.locator('td').locator('input[type="text"]').first();
     await expect(startDateInput).toBeVisible();
     await expect(startDateInput).toHaveValue('15.03.2023');
 
     // --- Step 5: Confirm / Save ---
-    await modal.locator('button:has(svg.lucide-check)').click();
+    const saveBtn = membershipPopover.locator('button:has(svg.lucide-check)');
+    await saveBtn.click();
+    await expect(saveBtn).toBeHidden();
 
-    // Close modal
-    await modal.getByTitle('Schließen').click();
-    await expect(modal).toBeHidden();
+    // Close popover via Escape
+    await page.keyboard.press('Escape');
+    await expect(membershipPopover).toBeHidden();
 
     // Verify parent row displays "Voll"
     await expect(parentRowAgain).toContainText('Voll');

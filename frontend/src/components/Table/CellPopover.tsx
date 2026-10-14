@@ -38,7 +38,8 @@ export const CellPopover: React.FC<CellPopoverProps> = ({
       return anchorEl();
     }
     if (typeof anchorEl === 'string') {
-      return document.querySelector(anchorEl);
+      const cleanId = anchorEl.startsWith('#') ? anchorEl.slice(1) : anchorEl;
+      return document.getElementById(cleanId) || document.querySelector(anchorEl);
     }
     if ('current' in anchorEl) {
       return anchorEl.current;

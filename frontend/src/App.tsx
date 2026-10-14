@@ -397,6 +397,184 @@ const getMembershipStatus = (memberships: THMembership[] | undefined) => {
   return { text: '', color: 'inherit' };
 };
 
+interface ParentMembershipCellProps {
+  parent: Parent;
+  isActive: boolean;
+  onOpenManage: (parent: Parent, anchor: HTMLElement | string) => void;
+}
+
+const ParentMembershipCell: React.FC<ParentMembershipCellProps> = ({
+  parent,
+  isActive,
+  onOpenManage,
+}) => {
+  const status = getMembershipStatus(parent.memberships);
+  const cellId = `cell-membership-${parent.id}`;
+
+  return (
+    <div
+      id={cellId}
+      onClick={(e) => {
+        const cellEl = document.getElementById(cellId) || e.currentTarget;
+        onOpenManage(parent, cellEl);
+      }}
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        width: '100%',
+        gap: '0.25rem',
+        cursor: 'pointer',
+        minHeight: '28px',
+        borderRadius: '4px',
+        padding: '2px 4px',
+        backgroundColor: isActive ? 'var(--accent-bg)' : 'transparent',
+        transition: 'background-color 0.15s ease-in-out',
+      }}
+      onMouseEnter={(e) => {
+        if (!isActive) {
+          e.currentTarget.style.backgroundColor = 'var(--accent-bg)';
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!isActive) {
+          e.currentTarget.style.backgroundColor = 'transparent';
+        }
+      }}
+      title={t('manageMemberships')}
+    >
+      <span
+        style={{
+          color: status.color,
+          fontWeight: (status as any).fontWeight || 'normal',
+          fontStyle: (status as any).fontStyle || 'normal',
+        }}
+      >
+        {status.text}
+      </span>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          const cellEl = document.getElementById(cellId) || e.currentTarget;
+          onOpenManage(parent, cellEl);
+        }}
+        className="easy-edit-button"
+        style={{
+          padding: '2px',
+          background: 'transparent',
+          border: 'none',
+          cursor: 'pointer',
+          display: 'inline-flex',
+          alignItems: 'center',
+          color: 'var(--primary)',
+        }}
+        title={t('manageMemberships')}
+      >
+        <Pencil size={14} />
+      </button>
+    </div>
+  );
+};
+
+interface ParentMultiValueCellProps {
+  parent: Parent;
+  field: 'emails' | 'phones';
+  placeholder: string;
+  isActive: boolean;
+  onOpenManage: (parent: Parent, field: 'emails' | 'phones', anchor: HTMLElement | string) => void;
+}
+
+const ParentMultiValueCell: React.FC<ParentMultiValueCellProps> = ({
+  parent,
+  field,
+  placeholder,
+  isActive,
+  onOpenManage,
+}) => {
+  const cellId = `cell-${field}-${parent.id}`;
+  const values = parent[field] || [];
+
+  return (
+    <div
+      id={cellId}
+      onClick={(e) => {
+        const cellEl = document.getElementById(cellId) || e.currentTarget;
+        onOpenManage(parent, field, cellEl);
+      }}
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        width: '100%',
+        minHeight: '28px',
+        borderRadius: '4px',
+        padding: '2px 4px',
+        cursor: 'pointer',
+        backgroundColor: isActive ? 'var(--accent-bg)' : 'transparent',
+        transition: 'background-color 0.15s ease-in-out',
+        gap: '0.25rem',
+      }}
+      onMouseEnter={(e) => {
+        if (!isActive) {
+          e.currentTarget.style.backgroundColor = 'var(--accent-bg)';
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!isActive) {
+          e.currentTarget.style.backgroundColor = 'transparent';
+        }
+      }}
+      title={placeholder}
+    >
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px', textAlign: 'left' }}>
+        {values.length > 0 ? (
+          values.map((v, i) => (
+            <span
+              key={i}
+              style={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                fontSize: '0.875rem',
+                color: 'var(--text-h)',
+              }}
+            >
+              {v}
+            </span>
+          ))
+        ) : (
+          <span style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.875rem' }}>
+            {placeholder}
+          </span>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          const cellEl = document.getElementById(cellId) || e.currentTarget;
+          onOpenManage(parent, field, cellEl);
+        }}
+        className="easy-edit-button"
+        style={{
+          padding: '2px',
+          background: 'transparent',
+          border: 'none',
+          cursor: 'pointer',
+          display: 'inline-flex',
+          alignItems: 'center',
+          color: 'var(--primary)',
+          opacity: isActive ? 1 : 0.6,
+        }}
+        title={placeholder}
+      >
+        <Pencil size={13} />
+      </button>
+    </div>
+  );
+};
+
 interface AuditLog {
   id: string;
   transaction_id: string;
@@ -1290,13 +1468,18 @@ const Dashboard: React.FC = () => {
   const [newEventType, setNewEventType] = React.useState<'initial' | 'recertify'>('recertify');
   const [newEventDocumentation, setNewEventDocumentation] = React.useState('');
 
-  // Membership states
-  const [manageMembershipsOpen, setManageMembershipsOpen] = React.useState(false);
+  // Membership popover state
   const [targetParentMemberships, setTargetParentMemberships] = React.useState<Parent | null>(null);
+  const [membershipPopoverAnchor, setMembershipPopoverAnchor] = React.useState<HTMLElement | string | null>(null);
 
   // Group Change popover state
   const [targetChildGroupChanges, setTargetChildGroupChanges] = React.useState<Child | null>(null);
   const [groupPopoverAnchor, setGroupPopoverAnchor] = React.useState<HTMLElement | string | null>(null);
+
+  // MultiValue (Emails/Phones) popover state
+  const [targetParentMultiValue, setTargetParentMultiValue] = React.useState<Parent | null>(null);
+  const [activeMultiValueField, setActiveMultiValueField] = React.useState<'emails' | 'phones' | null>(null);
+  const [multiValuePopoverAnchor, setMultiValuePopoverAnchor] = React.useState<HTMLElement | string | null>(null);
 
   const [confirmDelete, setConfirmDelete] = React.useState<{
     isOpen: boolean;
@@ -1842,13 +2025,13 @@ const Dashboard: React.FC = () => {
         setAddChildOpen(false);
       }
     };
-    if (addParentOpen || addFamilyOpen || addChildOpen || manageHygieneOpen || manageMembershipsOpen) {
+    if (addParentOpen || addFamilyOpen || addChildOpen || manageHygieneOpen) {
       window.addEventListener('keydown', handleKeyDown);
     }
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [addParentOpen, addFamilyOpen, addChildOpen, manageHygieneOpen, manageMembershipsOpen]);
+  }, [addParentOpen, addFamilyOpen, addChildOpen, manageHygieneOpen]);
 
   const openAddParent = (familyId: string, familyName: string) => {
     setTargetFamily({ id: familyId, name: familyName });
@@ -1958,14 +2141,26 @@ const Dashboard: React.FC = () => {
       .catch((err) => alert(err.message));
   };
 
-  const openManageMemberships = (parent: Parent) => {
+  const openManageMemberships = (parent: Parent, anchor?: HTMLElement | string | null) => {
     setTargetParentMemberships(parent);
-    setManageMembershipsOpen(true);
+    setMembershipPopoverAnchor(anchor || `cell-membership-${parent.id}`);
   };
 
   const closeManageMemberships = () => {
-    setManageMembershipsOpen(false);
+    setMembershipPopoverAnchor(null);
     setTargetParentMemberships(null);
+  };
+
+  const openManageMultiValue = (parent: Parent, field: 'emails' | 'phones', anchor?: HTMLElement | string | null) => {
+    setTargetParentMultiValue(parent);
+    setActiveMultiValueField(field);
+    setMultiValuePopoverAnchor(anchor || `cell-${field}-${parent.id}`);
+  };
+
+  const closeManageMultiValue = () => {
+    setMultiValuePopoverAnchor(null);
+    setTargetParentMultiValue(null);
+    setActiveMultiValueField(null);
   };
 
   const handleAddMembership = async (
@@ -2309,6 +2504,28 @@ const Dashboard: React.FC = () => {
     }
     return null;
   }, [families, activeParentForMemberships]);
+
+  const activeParentForMultiValue = React.useMemo(() => {
+    if (!targetParentMultiValue) return null;
+    for (const f of families) {
+      const found = (f.parents || []).find((p) => p.id === targetParentMultiValue.id);
+      if (found) return found;
+    }
+    return targetParentMultiValue;
+  }, [families, targetParentMultiValue]);
+
+  const activeMultiValueValues = React.useMemo(() => {
+    if (!activeParentForMultiValue || !activeMultiValueField) return [];
+    return activeParentForMultiValue[activeMultiValueField] || [];
+  }, [activeParentForMultiValue, activeMultiValueField]);
+
+  const activeMultiValueTitle = activeMultiValueField === 'emails' ? t('emailsEdit') : t('phonesEdit');
+  const activeMultiValuePlaceholder = activeMultiValueField === 'emails' ? t('addEmail') : t('addPhone');
+
+  const handleSaveActiveMultiValue = (newValues: string[]) => {
+    if (!activeParentForMultiValue || !activeMultiValueField) return;
+    handleSaveParentField(activeParentForMultiValue, activeMultiValueField, newValues);
+  };
 
   const openAddFamily = () => {
     setP1FirstName('');
@@ -2812,11 +3029,18 @@ const Dashboard: React.FC = () => {
         size: 300,
         cell: (info) => {
           const parent = info.row.original;
+          const isActive = Boolean(
+            multiValuePopoverAnchor &&
+            activeParentForMultiValue?.id === parent.id &&
+            activeMultiValueField === 'emails'
+          );
           return (
-            <MultiValueListEditor
-              values={parent.emails || []}
+            <ParentMultiValueCell
+              parent={parent}
+              field="emails"
               placeholder={t('addEmail')}
-              onSave={(newValues) => handleSaveParentField(parent, 'emails', newValues)}
+              isActive={isActive}
+              onOpenManage={openManageMultiValue}
             />
           );
         }
@@ -2827,11 +3051,18 @@ const Dashboard: React.FC = () => {
         size: 250,
         cell: (info) => {
           const parent = info.row.original;
+          const isActive = Boolean(
+            multiValuePopoverAnchor &&
+            activeParentForMultiValue?.id === parent.id &&
+            activeMultiValueField === 'phones'
+          );
           return (
-            <MultiValueListEditor
-              values={parent.phones || []}
+            <ParentMultiValueCell
+              parent={parent}
+              field="phones"
               placeholder={t('addPhone')}
-              onSave={(newValues) => handleSaveParentField(parent, 'phones', newValues)}
+              isActive={isActive}
+              onOpenManage={openManageMultiValue}
             />
           );
         }
@@ -2857,36 +3088,13 @@ const Dashboard: React.FC = () => {
         cell: (info) => {
           const parent = info.row.original;
           if (!parent || !parent.id) return null;
-          const status = getMembershipStatus(parent.memberships);
+          const isCurrentActive = Boolean(membershipPopoverAnchor && targetParentMemberships?.id === parent.id);
           return (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-              <span style={{
-                color: status.color,
-                fontWeight: (status as any).fontWeight || 'normal',
-                fontStyle: (status as any).fontStyle || 'normal',
-              }}>
-                {status.text}
-              </span>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openManageMemberships(parent);
-                }}
-                className="easy-edit-button"
-                style={{
-                  padding: '2px',
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  color: 'var(--primary)',
-                }}
-                title={t('manageMemberships')}
-              >
-                <Pencil size={14} />
-              </button>
-            </div>
+            <ParentMembershipCell
+              parent={parent}
+              isActive={isCurrentActive}
+              onOpenManage={openManageMemberships}
+            />
           );
         }
       },
@@ -2954,7 +3162,7 @@ const Dashboard: React.FC = () => {
         }
       }
     ],
-    [families, handleSaveParentField, handleDeleteParent, isVaccinationUnlocked, handleRequestKmsAuth, hasPermission, user?.email]
+    [families, handleSaveParentField, handleDeleteParent, isVaccinationUnlocked, handleRequestKmsAuth, hasPermission, user?.email, membershipPopoverAnchor, targetParentMemberships, openManageMemberships, multiValuePopoverAnchor, activeParentForMultiValue, activeMultiValueField, openManageMultiValue]
   );
 
   const childGroupColumn = React.useMemo<ColumnDef<any>>(
@@ -4076,10 +4284,11 @@ const Dashboard: React.FC = () => {
           </div>
         )}
 
-        {/* Manage Memberships Modal */}
+        {/* Manage Memberships Popover */}
         <MembershipsModal
           key={activeParentForMemberships?.id || 'memberships-modal'}
-          isOpen={Boolean(manageMembershipsOpen && activeParentForMemberships)}
+          isOpen={Boolean(membershipPopoverAnchor && activeParentForMemberships)}
+          anchorEl={membershipPopoverAnchor}
           onClose={closeManageMemberships}
           parent={activeParentForMemberships}
           family={activeFamilyForMemberships}
@@ -4098,6 +4307,18 @@ const Dashboard: React.FC = () => {
           onAddGroupChange={handleAddGroupChange}
           onUpdateGroupChange={handleUpdateGroupChange}
           onDeleteGroupChange={handleDeleteGroupChange}
+        />
+
+        {/* Manage Multi-Values (Emails / Phones) Popover */}
+        <MultiValueListEditor
+          key={`${activeParentForMultiValue?.id}-${activeMultiValueField}` || 'multivalue-popover'}
+          isOpen={Boolean(multiValuePopoverAnchor && activeParentForMultiValue && activeMultiValueField)}
+          anchorEl={multiValuePopoverAnchor}
+          onClose={closeManageMultiValue}
+          values={activeMultiValueValues}
+          title={activeMultiValueTitle}
+          placeholder={activeMultiValuePlaceholder}
+          onSave={handleSaveActiveMultiValue}
         />
     </div>
   );
