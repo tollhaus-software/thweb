@@ -203,15 +203,15 @@ func (s *Server) HandleListAuditLogs(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleCreateFamily(w http.ResponseWriter, r *http.Request) {
 	user := auth.GetUser(r.Context())
 	var req struct {
-		FirstName string   `json:"first_name"`
-		LastName  string   `json:"last_name"`
-		Emails    []string `json:"emails"`
-		Phones    []string `json:"phones"`
+		FirstName string                `json:"first_name"`
+		LastName  string                `json:"last_name"`
+		Emails    models.MultiValueList `json:"emails"`
+		Phones    models.MultiValueList `json:"phones"`
 		Parents   []struct {
-			FirstName string   `json:"first_name"`
-			LastName  string   `json:"last_name"`
-			Emails    []string `json:"emails"`
-			Phones    []string `json:"phones"`
+			FirstName string                `json:"first_name"`
+			LastName  string                `json:"last_name"`
+			Emails    models.MultiValueList `json:"emails"`
+			Phones    models.MultiValueList `json:"phones"`
 		} `json:"parents"`
 	}
 

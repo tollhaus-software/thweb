@@ -125,3 +125,38 @@ func TestNormalizeEmail(t *testing.T) {
 		})
 	}
 }
+
+func TestMultiValueList_JSONAndSQL(t *testing.T) {
+	// 1. Unmarshal string array (legacy format)
+	legacyJSON := `["user@example.com", "other@example.com"]`
+	var list1 MultiValueList
+	if err := json.Unmarshal([]byte(legacyJSON), &list1); err != nil {
+		t.Fatalf("failed to unmarshal legacy JSON: %v", err)
+	}
+	if len(list1) != 2 || list1[0].Value != "user@example.com" || !list1[0].AddressList {
+		t.Errorf("unexpected list1: %+v", list1)
+	}
+
+	// 2. Unmarshal object array (structured format)
+	structuredJSON := `[{"value": "phone1", "address_list": false}, {"value": "phone2", "address_list": true}]`
+	var list2 MultiValueList
+	if err := json.Unmarshal([]byte(structuredJSON), &list2); err != nil {
+		t.Fatalf("failed to unmarshal structured JSON: %v", err)
+	}
+	if len(list2) != 2 || list2[0].Value != "phone1" || list2[0].AddressList != false || list2[1].AddressList != true {
+		t.Errorf("unexpected list2: %+v", list2)
+	}
+
+	// 3. SQL driver.Valuer and sql.Scanner roundtrip
+	val, err := list2.Value()
+	if err != nil {
+		t.Fatalf("Value() error: %v", err)
+	}
+	var list3 MultiValueList
+	if err := list3.Scan(val); err != nil {
+		t.Fatalf("Scan() error: %v", err)
+	}
+	if len(list3) != 2 || list3[0].AddressList != false || list3[1].AddressList != true {
+		t.Errorf("unexpected list3 after Scan: %+v", list3)
+	}
+}

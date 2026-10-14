@@ -1,7 +1,9 @@
 package models
 
 import (
+	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -72,13 +74,70 @@ func (f Family) DisplayName() string {
 	return "Familie " + strings.Join(names, " & ")
 }
 
+type MultiValueEntry struct {
+	Value       string `json:"value"`
+	AddressList bool   `json:"address_list"`
+}
+
+func (m *MultiValueEntry) UnmarshalJSON(data []byte) error {
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		m.Value = str
+		m.AddressList = true
+		return nil
+	}
+	type Alias MultiValueEntry
+	var alias Alias
+	if err := json.Unmarshal(data, &alias); err != nil {
+		return err
+	}
+	*m = MultiValueEntry(alias)
+	return nil
+}
+
+type MultiValueList []MultiValueEntry
+
+func (l MultiValueList) Value() (driver.Value, error) {
+	if l == nil {
+		return "[]", nil
+	}
+	b, err := json.Marshal(l)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
+}
+
+func (l *MultiValueList) Scan(src interface{}) error {
+	if src == nil {
+		*l = MultiValueList{}
+		return nil
+	}
+	switch s := src.(type) {
+	case []byte:
+		if len(s) == 0 {
+			*l = MultiValueList{}
+			return nil
+		}
+		return json.Unmarshal(s, l)
+	case string:
+		if len(s) == 0 {
+			*l = MultiValueList{}
+			return nil
+		}
+		return json.Unmarshal([]byte(s), l)
+	default:
+		return fmt.Errorf("cannot scan %T into MultiValueList", src)
+	}
+}
+
 type Parent struct {
 	ID                         uuid.UUID               `json:"id"`
 	FamilyID                   uuid.UUID               `json:"family_id"`
 	FirstName                  string                  `json:"first_name"`
 	LastName                   string                  `json:"last_name"`
-	Emails                     []string                `json:"emails"`
-	Phones                     []string                `json:"phones"`
+	Emails                     MultiValueList          `json:"emails"`
+	Phones                     MultiValueList          `json:"phones"`
 	Notes                      string                  `json:"notes"`
 	VaccinationStatusProtected []byte                  `json:"vaccination_status_protected,omitempty"`
 	VaccinationChecks          []VaccinationCheck      `json:"vaccination_checks,omitempty"`
