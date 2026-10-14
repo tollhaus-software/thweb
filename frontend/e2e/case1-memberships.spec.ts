@@ -159,9 +159,27 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     await emailCell.click();
     await expect(emailPopover).toBeVisible();
 
-    // Verify existing email is listed as a row with pencil and trash buttons, and centered '+' at bottom
+    // Verify existing email is listed as a row with pencil, trash, and address list flag (📋)
     const existingRow = emailPopover.locator('tbody tr').first();
     await expect(existingRow).toContainText('persisted@example.com');
+    const flagBtn = existingRow.locator('.flag-address_list');
+    await expect(flagBtn).toBeVisible();
+    await expect(flagBtn).toContainText('📋');
+    await expect(flagBtn).toHaveCSS('opacity', '1');
+
+    // Test toggling flag off: clicking 📋 toggles it to greyed out (opacity 0.25)
+    await flagBtn.click();
+    await expect(flagBtn).toHaveCSS('opacity', '0.25');
+
+    // In table cell, the indicator is also greyed out
+    const cellIndicator = emailCell.locator('.address-list-indicator');
+    await expect(cellIndicator).toHaveCSS('opacity', '0.25');
+
+    // Toggle back on
+    await flagBtn.click();
+    await expect(flagBtn).toHaveCSS('opacity', '1');
+    await expect(cellIndicator).toHaveCSS('opacity', '1');
+
     const pencilBtn = existingRow.locator('.edit-entry-btn');
     const trashBtn = existingRow.locator('.delete-entry-btn');
     await expect(pencilBtn).toBeVisible();
@@ -169,26 +187,45 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     const emailPlusBtn = emailPopover.locator('.add-value-btn');
     await expect(emailPlusBtn).toBeVisible();
 
-    // 6C. Test inline edit via pencil icon: change value and press Enter to persist
+    // 6C. Test inline edit via pencil icon: toggle flag while editing, change value and press Enter to persist
     await pencilBtn.click();
     const editInput = existingRow.locator('input[type="text"]');
     await expect(editInput).toBeVisible();
+
+    // The flag toggle button should still be visible while editing
+    const editingFlagBtn = existingRow.locator('.flag-address_list');
+    await expect(editingFlagBtn).toBeVisible();
+    await expect(editingFlagBtn).toHaveCSS('opacity', '1');
+
+    // Toggle flag while in edit mode
+    await editingFlagBtn.click();
+    await expect(editingFlagBtn).toHaveCSS('opacity', '0.25');
+
     await editInput.fill('edited-via-enter@example.com');
     await editInput.press('Enter');
     await expect(editInput).toBeHidden();
     await expect(existingRow).toContainText('edited-via-enter@example.com');
     await expect(parentRow).toContainText('edited-via-enter@example.com');
+    await expect(existingRow.locator('.flag-address_list')).toHaveCSS('opacity', '0.25');
+    await expect(emailCell.locator('.address-list-indicator')).toHaveCSS('opacity', '0.25');
 
-    // 6D. Test inline edit via double click: change value and move focus out (blur) to persist
+    // 6D. Test inline edit via double click: toggle flag back on, change value and move focus out (blur) to persist
     const rowText = existingRow.locator('span', { hasText: 'edited-via-enter@example.com' });
     await rowText.dblclick();
     await expect(editInput).toBeVisible();
+
+    // Toggle flag back on while in edit mode
+    await editingFlagBtn.click();
+    await expect(editingFlagBtn).toHaveCSS('opacity', '1');
+
     await editInput.fill('final@example.com');
     // Click outside input on popover header to blur
     await emailPopover.locator('div').first().click();
     await expect(editInput).toBeHidden();
     await expect(existingRow).toContainText('final@example.com');
     await expect(parentRow).toContainText('final@example.com');
+    await expect(existingRow.locator('.flag-address_list')).toHaveCSS('opacity', '1');
+    await expect(emailCell.locator('.address-list-indicator')).toHaveCSS('opacity', '1');
 
     // 6E. Test adding a second value via '+' button at the bottom
     await emailPlusBtn.click();

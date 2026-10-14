@@ -3,15 +3,45 @@ import { Pencil, Trash, Plus, Check, X } from 'lucide-react';
 import { t } from '../../utils/i18n';
 import { CellPopover } from './CellPopover';
 
-export interface MultiValueListEditorProps {
+export interface MultiValueFlagConfig {
+  key: string;              // e.g. 'address_list'
+  icon: React.ReactNode;    // e.g. '📋'
+  label?: string;           // e.g. 'In Adressliste verwenden'
+  titleActive?: string;
+  titleInactive?: string;
+  defaultValue?: boolean;   // default for newly added items (defaults to true)
+}
+
+export interface MultiValueEntry {
+  value: string;
+  address_list?: boolean;
+  [key: string]: any;
+}
+
+export type MultiValueItem = string | MultiValueEntry;
+
+export interface MultiValueListEditorProps<T extends MultiValueItem = MultiValueItem> {
   isOpen: boolean;
   onClose: () => void;
   anchorEl: HTMLElement | React.RefObject<HTMLElement | null> | string | (() => HTMLElement | null) | null;
-  values: string[];
-  onSave: (newValues: string[]) => void;
+  values: T[];
+  onSave: (newValues: T[]) => void;
+  flags?: MultiValueFlagConfig[];
   placeholder?: string;
   title?: string;
 }
+
+export const getEntryValue = (entry: MultiValueItem): string => {
+  if (typeof entry === 'string') return entry;
+  return entry?.value || '';
+};
+
+export const isFlagActive = (entry: MultiValueItem, flagKey: string, defaultValue = true): boolean => {
+  if (typeof entry === 'string') return defaultValue;
+  if (entry[flagKey] !== undefined) return Boolean(entry[flagKey]);
+  if (entry.flags && entry.flags[flagKey] !== undefined) return Boolean(entry.flags[flagKey]);
+  return defaultValue;
+};
 
 export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
   isOpen,
@@ -19,6 +49,7 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
   anchorEl,
   values = [],
   onSave,
+  flags,
   placeholder = '',
   title,
 }) => {
@@ -26,6 +57,7 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
   const [editValue, setEditValue] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [addValue, setAddValue] = useState('');
+  const [addFlags, setAddFlags] = useState<Record<string, boolean>>({});
 
   const editInputRef = useRef<HTMLInputElement>(null);
   const editWrapperRef = useRef<HTMLDivElement>(null);
@@ -34,10 +66,12 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
 
   const editValueRef = useRef(editValue);
   const addValueRef = useRef(addValue);
+  const addFlagsRef = useRef(addFlags);
   const isAddingRef = useRef(isAdding);
   const editingIndexRef = useRef(editingIndex);
   const valuesRef = useRef(values);
   const onSaveRef = useRef(onSave);
+  const flagsRef = useRef(flags);
 
   useEffect(() => {
     editValueRef.current = editValue;
@@ -46,6 +80,10 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
   useEffect(() => {
     addValueRef.current = addValue;
   }, [addValue]);
+
+  useEffect(() => {
+    addFlagsRef.current = addFlags;
+  }, [addFlags]);
 
   useEffect(() => {
     isAddingRef.current = isAdding;
@@ -63,6 +101,10 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
     onSaveRef.current = onSave;
   }, [onSave]);
 
+  useEffect(() => {
+    flagsRef.current = flags;
+  }, [flags]);
+
   // When popover opens: if no values yet, behave as if '+' was already pressed
   useEffect(() => {
     if (isOpen) {
@@ -71,6 +113,11 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
         isAddingRef.current = true;
         setAddValue('');
         addValueRef.current = '';
+        const initialFlags: Record<string, boolean> = {};
+        for (const f of flagsRef.current || []) {
+          initialFlags[f.key] = f.defaultValue ?? true;
+        }
+        setAddFlags(initialFlags);
       } else {
         setIsAdding(false);
         isAddingRef.current = false;
@@ -107,35 +154,129 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
     }
   }, [isOpen, editingIndex]);
 
-  const commitEdit = useCallback((idx: number, val: string) => {
-    const trimmed = val.trim();
+  const handleDelete = useCallback((idx: number) => {
     const currentValues = valuesRef.current || [];
-    const currentVal = (currentValues[idx] || '').trim();
-    if (trimmed === '') {
-      // Remove item if saved empty
-      const newValues = currentValues.filter((_, i) => i !== idx);
-      onSaveRef.current(newValues);
-    } else if (trimmed !== currentVal) {
-      const newValues = [...currentValues];
-      newValues[idx] = trimmed;
-      onSaveRef.current(newValues);
+    const newValues = currentValues.filter((_, i) => i !== idx);
+    onSaveRef.current(newValues);
+    if (editingIndexRef.current === idx) {
+      setEditingIndex(null);
+      setEditValue('');
+      editValueRef.current = '';
+      editingIndexRef.current = null;
     }
-    setEditingIndex(null);
-    setEditValue('');
-    editValueRef.current = '';
-    editingIndexRef.current = null;
   }, []);
 
-  const commitAdd = useCallback((val: string) => {
-    const trimmed = val.trim();
-    if (trimmed) {
+  const cancelEdit = useCallback(() => {
+    setEditingIndex(null);
+    editingIndexRef.current = null;
+    setEditValue('');
+    editValueRef.current = '';
+  }, []);
+
+  const commitEdit = useCallback(
+    (idx: number, val: string) => {
+      const trimmed = val.trim();
       const currentValues = valuesRef.current || [];
-      onSaveRef.current([...currentValues, trimmed]);
-    }
+      if (idx < 0 || idx >= currentValues.length) {
+        cancelEdit();
+        return;
+      }
+
+      const existingItem = currentValues[idx];
+      const currentVal = getEntryValue(existingItem).trim();
+
+      if (trimmed === '') {
+        handleDelete(idx);
+        return;
+      }
+
+      if (trimmed !== currentVal) {
+        let updatedItem: MultiValueItem;
+        if (typeof existingItem === 'object' && existingItem !== null) {
+          updatedItem = { ...existingItem, value: trimmed };
+        } else if (flagsRef.current && flagsRef.current.length > 0) {
+          const itemObj: Record<string, any> = { value: trimmed };
+          for (const f of flagsRef.current) {
+            itemObj[f.key] = f.defaultValue ?? true;
+          }
+          updatedItem = itemObj as MultiValueEntry;
+        } else {
+          updatedItem = trimmed;
+        }
+
+        const newValues = [...currentValues];
+        newValues[idx] = updatedItem as any;
+        onSaveRef.current(newValues);
+      }
+
+      cancelEdit();
+    },
+    [cancelEdit, handleDelete]
+  );
+
+  const cancelAdd = useCallback(() => {
     setIsAdding(false);
+    isAddingRef.current = false;
     setAddValue('');
     addValueRef.current = '';
-    isAddingRef.current = false;
+  }, []);
+
+  const commitAdd = useCallback(
+    (val: string) => {
+      const trimmed = val.trim();
+      if (!trimmed) {
+        cancelAdd();
+        return;
+      }
+      const currentValues = valuesRef.current || [];
+
+      let newItem: MultiValueItem;
+      if (flagsRef.current && flagsRef.current.length > 0) {
+        const itemObj: Record<string, any> = { value: trimmed };
+        for (const f of flagsRef.current) {
+          itemObj[f.key] = addFlagsRef.current[f.key] ?? f.defaultValue ?? true;
+        }
+        newItem = itemObj as MultiValueEntry;
+      } else {
+        if (currentValues.length > 0 && typeof currentValues[0] === 'object' && currentValues[0] !== null) {
+          newItem = { value: trimmed };
+        } else {
+          newItem = trimmed;
+        }
+      }
+
+      const newValues = [...currentValues, newItem as any];
+      onSaveRef.current(newValues);
+      cancelAdd();
+    },
+    [cancelAdd]
+  );
+
+  const handleToggleFlag = useCallback((idx: number, flagKey: string) => {
+    const currentValues = valuesRef.current || [];
+    if (idx < 0 || idx >= currentValues.length) return;
+    const item = currentValues[idx];
+
+    const flagConfig = (flagsRef.current || []).find((f) => f.key === flagKey);
+    const def = flagConfig?.defaultValue ?? true;
+    const currentActive = isFlagActive(item, flagKey, def);
+    const nextActive = !currentActive;
+
+    // If currently editing this row, preserve what the user has currently typed
+    const currentValueText = editingIndexRef.current === idx && editValueRef.current.trim()
+      ? editValueRef.current.trim()
+      : getEntryValue(item);
+
+    let updatedItem: MultiValueItem;
+    if (typeof item === 'object' && item !== null) {
+      updatedItem = { ...item, value: currentValueText, [flagKey]: nextActive };
+    } else {
+      updatedItem = { value: currentValueText, [flagKey]: nextActive };
+    }
+
+    const newValues = [...currentValues];
+    newValues[idx] = updatedItem as any;
+    onSaveRef.current(newValues);
   }, []);
 
   const handleClosePopover = useCallback(() => {
@@ -158,13 +299,6 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
     editingIndexRef.current = idx;
     setEditValue(currentVal);
     editValueRef.current = currentVal;
-  };
-
-  const cancelEdit = () => {
-    setEditingIndex(null);
-    editingIndexRef.current = null;
-    setEditValue('');
-    editValueRef.current = '';
   };
 
   const handleEditKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, idx: number) => {
@@ -191,13 +325,11 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
     isAddingRef.current = true;
     setAddValue('');
     addValueRef.current = '';
-  };
-
-  const cancelAdd = () => {
-    setIsAdding(false);
-    isAddingRef.current = false;
-    setAddValue('');
-    addValueRef.current = '';
+    const initialFlags: Record<string, boolean> = {};
+    for (const f of flagsRef.current || []) {
+      initialFlags[f.key] = f.defaultValue ?? true;
+    }
+    setAddFlags(initialFlags);
   };
 
   const handleAddKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -215,15 +347,6 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
       return;
     }
     commitAdd(addValueRef.current);
-  };
-
-  const handleDelete = (idx: number) => {
-    const currentValues = valuesRef.current || [];
-    const newValues = currentValues.filter((_, i) => i !== idx);
-    onSaveRef.current(newValues);
-    if (editingIndex === idx) {
-      cancelEdit();
-    }
   };
 
   if (!isOpen) return null;
@@ -246,14 +369,45 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
       {/* Subtle popover header */}
       <div
         style={{
-          fontSize: '0.85rem',
-          fontWeight: 600,
-          color: 'var(--text-h)',
-          padding: '2px 4px 4px 4px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
           borderBottom: '1px solid var(--border)',
+          padding: '2px 4px 6px 4px',
         }}
       >
-        {title || placeholder}
+        <span
+          style={{
+            fontSize: '0.875rem',
+            fontWeight: 600,
+            color: 'var(--text-h)',
+          }}
+        >
+          {title || placeholder}
+        </span>
+        <button
+          type="button"
+          onClick={handleClosePopover}
+          title={t('close') || 'Schließen'}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            padding: '2px',
+            color: 'var(--text-secondary, #94a3b8)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            borderRadius: '4px',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = 'var(--text-h)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = 'var(--text-secondary, #94a3b8)';
+          }}
+        >
+          <X size={15} />
+        </button>
       </div>
 
       {/* Rows container */}
@@ -268,10 +422,12 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
       >
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
           <tbody>
-            {values.map((val, idx) => {
+            {values.map((item, idx) => {
+              const val = getEntryValue(item);
+
               if (editingIndex === idx) {
                 return (
-                  <tr key={idx} style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-subtle)' }}>
+                  <tr key={idx} style={{ background: 'var(--bg-subtle)' }}>
                     <td style={{ padding: '6px 8px' }} colSpan={2}>
                       <div
                         ref={editWrapperRef}
@@ -303,6 +459,54 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
                             boxSizing: 'border-box',
                           }}
                         />
+                        {flags && flags.length > 0 && (
+                          <div
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {flags.map((flag) => {
+                              const isActive = isFlagActive(item, flag.key, flag.defaultValue ?? true);
+                              const titleText = isActive
+                                ? flag.titleActive || `${flag.label || flag.key}: Ein`
+                                : flag.titleInactive || `${flag.label || flag.key}: Aus`;
+                              return (
+                                <button
+                                  key={flag.key}
+                                  type="button"
+                                  className={`multivalue-flag-btn flag-${flag.key}`}
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    handleToggleFlag(idx, flag.key);
+                                  }}
+                                  title={titleText}
+                                  style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    padding: '2px 4px',
+                                    fontSize: '0.95rem',
+                                    lineHeight: 1,
+                                    opacity: isActive ? 1 : 0.25,
+                                    filter: isActive ? 'none' : 'grayscale(100%)',
+                                    transition: 'opacity 0.15s ease, filter 0.15s ease, transform 0.1s ease',
+                                    borderRadius: '4px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.transform = 'scale(1.15)';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.transform = 'scale(1)';
+                                  }}
+                                >
+                                  {flag.icon}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
                           <button
                             type="button"
@@ -372,7 +576,54 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
                     onDoubleClick={() => startEdit(idx, val)}
                     title={t('edit') || 'Doppelklick zum Bearbeiten'}
                   >
-                    <span style={{ color: 'var(--text-h)' }}>{val}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ color: 'var(--text-h)', flex: 1, minWidth: 0 }}>{val}</span>
+                      {flags && flags.length > 0 && (
+                        <div
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {flags.map((flag) => {
+                            const isActive = isFlagActive(item, flag.key, flag.defaultValue ?? true);
+                            const titleText = isActive
+                              ? flag.titleActive || `${flag.label || flag.key}: Ein`
+                              : flag.titleInactive || `${flag.label || flag.key}: Aus`;
+                            return (
+                              <button
+                                key={flag.key}
+                                type="button"
+                                className={`multivalue-flag-btn flag-${flag.key}`}
+                                onClick={() => handleToggleFlag(idx, flag.key)}
+                                title={titleText}
+                                style={{
+                                  background: 'transparent',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  padding: '2px 4px',
+                                  fontSize: '0.95rem',
+                                  lineHeight: 1,
+                                  opacity: isActive ? 1 : 0.25,
+                                  filter: isActive ? 'none' : 'grayscale(100%)',
+                                  transition: 'opacity 0.15s ease, filter 0.15s ease, transform 0.1s ease',
+                                  borderRadius: '4px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.transform = 'scale(1.15)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.transform = 'scale(1)';
+                                }}
+                              >
+                                {flag.icon}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </td>
                   <td style={{ padding: '6px 8px', width: '56px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
@@ -388,11 +639,11 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
                           padding: '3px',
                           display: 'inline-flex',
                           alignItems: 'center',
-                          color: 'var(--text-muted)',
+                          color: '#64748b',
                           borderRadius: '4px',
                         }}
                       >
-                        <Pencil size={13} />
+                        <Pencil size={14} />
                       </button>
                       <button
                         type="button"
@@ -453,6 +704,57 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
                         boxSizing: 'border-box',
                       }}
                     />
+                    {flags && flags.length > 0 && (
+                      <div
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {flags.map((flag) => {
+                          const isActive = addFlags[flag.key] ?? flag.defaultValue ?? true;
+                          const titleText = isActive
+                            ? flag.titleActive || `${flag.label || flag.key}: Ein`
+                            : flag.titleInactive || `${flag.label || flag.key}: Aus`;
+                          return (
+                            <button
+                              key={flag.key}
+                              type="button"
+                              className={`multivalue-flag-btn flag-${flag.key}`}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setAddFlags((prev) => ({
+                                  ...prev,
+                                  [flag.key]: !(prev[flag.key] ?? flag.defaultValue ?? true),
+                                }));
+                              }}
+                              title={titleText}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: '2px 4px',
+                                fontSize: '0.95rem',
+                                lineHeight: 1,
+                                opacity: isActive ? 1 : 0.25,
+                                filter: isActive ? 'none' : 'grayscale(100%)',
+                                transition: 'opacity 0.15s ease, filter 0.15s ease, transform 0.1s ease',
+                                borderRadius: '4px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'scale(1.15)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'scale(1)';
+                              }}
+                            >
+                              {flag.icon}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
                       <button
                         type="button"

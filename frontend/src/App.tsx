@@ -9,7 +9,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import EasyEdit, { Types } from './components/InlineEdit';
 import { Pencil, Trash, Undo, Redo, Calendar, ClipboardList, Lock, Unlock, ArrowLeft, ArrowRight, X, Clock, AlertCircle, LayoutDashboard } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
-import { MultiValueListEditor } from './components/Table/MultiValueListEditor';
+import { MultiValueListEditor, type MultiValueFlagConfig, type MultiValueEntry, getEntryValue, isFlagActive } from './components/Table/MultiValueListEditor';
 import { NotesEditor } from './components/Table/NotesEditor';
 import { GroupChangesPopover } from './components/Table/GroupChangesPopover';
 import { MembershipsModal } from './components/Table/MembershipsModal';
@@ -47,8 +47,8 @@ interface Parent {
   family_id: string;
   first_name: string;
   last_name: string;
-  emails?: string[];
-  phones?: string[];
+  emails?: MultiValueEntry[];
+  phones?: MultiValueEntry[];
   notes?: string;
   vaccination_checks?: VaccinationCheck[];
   events?: HygieneBelehrungEvent[];
@@ -529,20 +529,50 @@ const ParentMultiValueCell: React.FC<ParentMultiValueCellProps> = ({
     >
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px', textAlign: 'left' }}>
         {values.length > 0 ? (
-          values.map((v, i) => (
-            <span
-              key={i}
-              style={{
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                fontSize: '0.875rem',
-                color: 'var(--text-h)',
-              }}
-            >
-              {v}
-            </span>
-          ))
+          values.map((v, i) => {
+            const val = getEntryValue(v);
+            const isAddressList = isFlagActive(v, 'address_list', true);
+            return (
+              <div
+                key={i}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '8px',
+                  width: '100%',
+                  fontSize: '0.875rem',
+                  color: 'var(--text-h)',
+                }}
+              >
+                <span
+                  style={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    flex: 1,
+                    minWidth: 0,
+                  }}
+                >
+                  {val}
+                </span>
+                <span
+                  className="address-list-indicator"
+                  style={{
+                    fontSize: '0.8rem',
+                    lineHeight: 1,
+                    opacity: isAddressList ? 1 : 0.25,
+                    filter: isAddressList ? 'none' : 'grayscale(100%)',
+                    flexShrink: 0,
+                    marginLeft: 'auto',
+                  }}
+                  title={isAddressList ? t('addressListIncluded') || 'In Adressliste aufnehmen' : t('addressListExcluded') || 'Nicht in Adressliste aufnehmen'}
+                >
+                  📋
+                </span>
+              </div>
+            );
+          })
         ) : (
           <span style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.875rem' }}>
             {placeholder}
@@ -607,10 +637,10 @@ const formatSnapshotDetails = (log: AuditLog) => {
   if (log.entity_type === 'parent') {
     parts.push(`${data.first_name || ''} ${data.last_name || ''}`);
     if (data.emails && data.emails.length > 0) {
-      parts.push(`Emails: ${data.emails.join(', ')}`);
+      parts.push(`Emails: ${data.emails.map((e: any) => getEntryValue(e)).join(', ')}`);
     }
     if (data.phones && data.phones.length > 0) {
-      parts.push(`Phones: ${data.phones.join(', ')}`);
+      parts.push(`Phones: ${data.phones.map((p: any) => getEntryValue(p)).join(', ')}`);
     }
     if (data.notes) {
       parts.push(`Notes: ${data.notes}`);
@@ -2061,8 +2091,8 @@ const Dashboard: React.FC = () => {
       family_id: family.id,
       first_name: newParentFirstName.trim(),
       last_name: newParentLastName.trim(),
-      emails: [] as string[],
-      phones: [] as string[],
+      emails: [] as MultiValueEntry[],
+      phones: [] as MultiValueEntry[],
     };
 
     const updatedParents = [...(family.parents || []), newParent];
@@ -2522,7 +2552,18 @@ const Dashboard: React.FC = () => {
   const activeMultiValueTitle = activeMultiValueField === 'emails' ? t('emailsEdit') : t('phonesEdit');
   const activeMultiValuePlaceholder = activeMultiValueField === 'emails' ? t('addEmail') : t('addPhone');
 
-  const handleSaveActiveMultiValue = (newValues: string[]) => {
+  const addressListFlagConfig: MultiValueFlagConfig[] = React.useMemo(() => [
+    {
+      key: 'address_list',
+      icon: '📋',
+      label: t('addressListFlag') || 'In Adressliste',
+      titleActive: t('addressListIncluded') || 'In Adressliste aufnehmen',
+      titleInactive: t('addressListExcluded') || 'Nicht in Adressliste aufnehmen',
+      defaultValue: true,
+    }
+  ], []);
+
+  const handleSaveActiveMultiValue = (newValues: (string | MultiValueEntry)[]) => {
     if (!activeParentForMultiValue || !activeMultiValueField) return;
     handleSaveParentField(activeParentForMultiValue, activeMultiValueField, newValues);
   };
@@ -2547,8 +2588,8 @@ const Dashboard: React.FC = () => {
       {
         first_name: p1FirstName.trim(),
         last_name: p1LastName.trim(),
-        emails: [] as string[],
-        phones: [] as string[],
+        emails: [] as MultiValueEntry[],
+        phones: [] as MultiValueEntry[],
       },
     ];
 
@@ -2556,8 +2597,8 @@ const Dashboard: React.FC = () => {
       parentsToCreate.push({
         first_name: p2FirstName.trim(),
         last_name: p2LastName.trim(),
-        emails: [] as string[],
-        phones: [] as string[],
+        emails: [] as MultiValueEntry[],
+        phones: [] as MultiValueEntry[],
       });
     }
 
@@ -2743,8 +2784,8 @@ const Dashboard: React.FC = () => {
         if (!query) return true;
         const fnMatch = (p.first_name || '').toLowerCase().includes(query);
         const lnMatch = (p.last_name || '').toLowerCase().includes(query);
-        const emailMatch = (p.emails || []).some(e => e.toLowerCase().includes(query));
-        const phoneMatch = (p.phones || []).some(ph => ph.toLowerCase().includes(query));
+        const emailMatch = (p.emails || []).some(e => getEntryValue(e).toLowerCase().includes(query));
+        const phoneMatch = (p.phones || []).some(ph => getEntryValue(ph).toLowerCase().includes(query));
         return fnMatch || lnMatch || emailMatch || phoneMatch;
       });
 
@@ -4316,6 +4357,7 @@ const Dashboard: React.FC = () => {
           anchorEl={multiValuePopoverAnchor}
           onClose={closeManageMultiValue}
           values={activeMultiValueValues}
+          flags={addressListFlagConfig}
           title={activeMultiValueTitle}
           placeholder={activeMultiValuePlaceholder}
           onSave={handleSaveActiveMultiValue}

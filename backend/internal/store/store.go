@@ -21,9 +21,9 @@ func NewStore(db *pgxpool.Pool) *Store {
 	return &Store{db: db}
 }
 
-func sanitizeSlice(s []string) []string {
+func sanitizeSlice(s models.MultiValueList) models.MultiValueList {
 	if s == nil {
-		return []string{}
+		return models.MultiValueList{}
 	}
 	return s
 }
