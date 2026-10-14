@@ -36,45 +36,48 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     await expect(parentRow).toBeVisible();
 
     // --- Step 2: Add a "full" membership starting on 20.10.2025 ---
-    // Click the membership edit pencil button in the parent's row
-    const editMembershipBtn = parentRow.getByTitle('Mitgliedschaften verwalten');
-    await expect(editMembershipBtn).toBeVisible();
-    await editMembershipBtn.click();
+    // Clicking the membership cell directly should open the memberships popover
+    const membershipCell = parentRow.locator('[id^="cell-membership-"]');
+    await expect(membershipCell).toBeVisible();
+    await membershipCell.click();
 
-    // The membership modal should open
-    const modal = page.locator('.modal-container');
-    await expect(modal).toBeVisible();
+    // The membership popover should open (like group changes editor)
+    const popover = page.locator('.memberships-popover');
+    await expect(popover).toBeVisible();
 
     // Since there were no existing memberships, it automatically enters editing mode
-    const startDateInput = modal.locator('td').locator('input[type="text"]').first();
+    const startDateInput = popover.locator('td').locator('input[type="text"]').first();
     await expect(startDateInput).toBeVisible();
 
     // Enter start date 20.10.2025
     await startDateInput.fill('20.10.2025');
 
     // Save the new membership (Check button)
-    const saveNewRowBtn = modal.locator('button:has(svg.lucide-check)');
+    const saveNewRowBtn = popover.locator('button:has(svg.lucide-check)');
     await saveNewRowBtn.click();
+    await expect(saveNewRowBtn).toBeHidden();
 
-    // Close the membership dialog
-    await modal.getByTitle('Schließen').click();
-    await expect(modal).toBeHidden();
+    // Close the membership popover (via Escape key or click outside)
+    await page.keyboard.press('Escape');
+    await expect(popover).toBeHidden();
 
     // --- Step 3: Check membership display in the table ---
     await expect(parentRow).toContainText('Voll');
 
     // --- Step 4: Try to add another membership that collides -> expect collision prevention ---
-    // Reopen the modal
+    // Reopen the popover via pencil button to verify both trigger opening
+    const editMembershipBtn = parentRow.getByRole('button', { name: 'Mitgliedschaften verwalten' });
+    await expect(editMembershipBtn).toBeVisible();
     await editMembershipBtn.click();
-    await expect(modal).toBeVisible();
+    await expect(popover).toBeVisible();
 
     // Check 4A: The ongoing membership has no end date, so '+' button MUST be disabled
-    const plusBtn = modal.locator('button:has(svg.lucide-plus)');
+    const plusBtn = popover.locator('button:has(svg.lucide-plus)');
     await expect(plusBtn).toBeDisabled();
     await expect(plusBtn).toHaveAttribute('title', 'Die letzte Mitgliedschaft hat noch kein Enddatum');
 
     // Now edit the ongoing membership to have an end date: 25.10.2025
-    const membershipRow = modal.locator('tbody tr').first();
+    const membershipRow = popover.locator('tbody tr').first();
     const endDateCell = membershipRow.locator('td').nth(2);
     // Click button "Ende" to trigger inline edit
     await membershipRow.getByRole('button', { name: 'Ende' }).click();
@@ -93,7 +96,7 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     await plusBtn.click();
 
     // An add row is now visible
-    const newStartDateInput = modal.locator('tbody tr').last().locator('input[type="text"]').first();
+    const newStartDateInput = popover.locator('tbody tr').last().locator('input[type="text"]').first();
     await expect(newStartDateInput).toBeVisible();
 
     // Attempt to enter a colliding start date (22.10.2025 which lies inside [20.10.2025, 25.10.2025])
@@ -107,13 +110,13 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     });
 
     // Try to save the colliding row
-    await modal.locator('tbody tr').last().locator('button:has(svg.lucide-check)').click();
+    await popover.locator('tbody tr').last().locator('button:has(svg.lucide-check)').click();
 
     // Verify alert message was shown preventing the collision
     expect(alertMessage).toContain('überschneiden');
 
     // Cancel the add row
-    await modal.locator('tbody tr').last().locator('button:has(svg.lucide-x)').click();
+    await popover.locator('tbody tr').last().locator('button:has(svg.lucide-x)').click();
 
     // --- Step 5: Remove membership ---
     // Set up dialog handler to confirm deletion
@@ -125,13 +128,104 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     await membershipRow.locator('button:has(svg.lucide-trash)').click();
 
     // Wait for row to be removed and empty state message to appear
-    await expect(modal).toContainText('Keine Vereinsmitgliedschaft für diese Person erfasst');
+    await expect(popover).toContainText('Keine Vereinsmitgliedschaft für diese Person erfasst');
 
-    // Close the modal
-    await modal.getByTitle('Schließen').click();
-    await expect(modal).toBeHidden();
+    // Close the popover via Escape
+    await page.keyboard.press('Escape');
+    await expect(popover).toBeHidden();
 
     // Verify parent row no longer displays "Voll"
     await expect(parentRow).not.toContainText('Voll');
+
+    // --- Step 6: Test multi-value editor popover (e-mails) ---
+    // 6A. Clicking the email cell opens the popover. Since no emails exist yet, it automatically behaves as if '+' was clicked
+    const emailCell = parentRow.locator('td').nth(2);
+    await emailCell.click();
+
+    const emailPopover = page.locator('.multivalue-popover');
+    await expect(emailPopover).toBeVisible();
+
+    // The add input should already be visible and active
+    const addInput = emailPopover.locator('input[type="text"]');
+    await expect(addInput).toBeVisible();
+    await addInput.fill('persisted@example.com');
+
+    // Moving focus out (e.g. clicking outside on parent row) should persist the change and close popover
+    await parentRow.getByText('Schmidt').click();
+    await expect(emailPopover).toBeHidden();
+    await expect(parentRow).toContainText('persisted@example.com');
+
+    // 6B. Reopen popover by clicking the email cell
+    await emailCell.click();
+    await expect(emailPopover).toBeVisible();
+
+    // Verify existing email is listed as a row with pencil and trash buttons, and centered '+' at bottom
+    const existingRow = emailPopover.locator('tbody tr').first();
+    await expect(existingRow).toContainText('persisted@example.com');
+    const pencilBtn = existingRow.locator('.edit-entry-btn');
+    const trashBtn = existingRow.locator('.delete-entry-btn');
+    await expect(pencilBtn).toBeVisible();
+    await expect(trashBtn).toBeVisible();
+    const emailPlusBtn = emailPopover.locator('.add-value-btn');
+    await expect(emailPlusBtn).toBeVisible();
+
+    // 6C. Test inline edit via pencil icon: change value and press Enter to persist
+    await pencilBtn.click();
+    const editInput = existingRow.locator('input[type="text"]');
+    await expect(editInput).toBeVisible();
+    await editInput.fill('edited-via-enter@example.com');
+    await editInput.press('Enter');
+    await expect(editInput).toBeHidden();
+    await expect(existingRow).toContainText('edited-via-enter@example.com');
+    await expect(parentRow).toContainText('edited-via-enter@example.com');
+
+    // 6D. Test inline edit via double click: change value and move focus out (blur) to persist
+    const rowText = existingRow.locator('span', { hasText: 'edited-via-enter@example.com' });
+    await rowText.dblclick();
+    await expect(editInput).toBeVisible();
+    await editInput.fill('final@example.com');
+    // Click outside input on popover header to blur
+    await emailPopover.locator('div').first().click();
+    await expect(editInput).toBeHidden();
+    await expect(existingRow).toContainText('final@example.com');
+    await expect(parentRow).toContainText('final@example.com');
+
+    // 6E. Test adding a second value via '+' button at the bottom
+    await emailPlusBtn.click();
+    const secondAddInput = emailPopover.locator('input[type="text"]');
+    await expect(secondAddInput).toBeVisible();
+    await secondAddInput.fill('second@example.com');
+    await secondAddInput.press('Enter');
+    await expect(emailPopover.locator('tbody tr')).toHaveCount(2);
+    await expect(parentRow).toContainText('final@example.com');
+    await expect(parentRow).toContainText('second@example.com');
+
+    // 6F. Test deleting an entry using the trash bin icon
+    const secondRow = emailPopover.locator('tbody tr').nth(1);
+    await secondRow.locator('.delete-entry-btn').click();
+    await expect(emailPopover.locator('tbody tr')).toHaveCount(1);
+    await expect(parentRow).not.toContainText('second@example.com');
+
+    // 6G. Test deleting all entries, then clicking the placeholder text to start adding again
+    const firstRowTrash = emailPopover.locator('tbody tr').first().locator('.delete-entry-btn');
+    await firstRowTrash.click();
+    await expect(parentRow).not.toContainText('final@example.com');
+
+    // Placeholder row should now be displayed
+    const placeholderRow = emailPopover.locator('.multivalue-empty-placeholder-row');
+    await expect(placeholderRow).toBeVisible();
+
+    // Clicking the placeholder row behaves like the '+' button
+    await placeholderRow.click();
+    const afterDeleteAddInput = emailPopover.locator('input[type="text"]');
+    await expect(afterDeleteAddInput).toBeVisible();
+    await afterDeleteAddInput.fill('re-added@example.com');
+    await afterDeleteAddInput.press('Enter');
+    await expect(emailPopover.locator('tbody tr')).toHaveCount(1);
+    await expect(parentRow).toContainText('re-added@example.com');
+
+    // Close the popover via Escape
+    await page.keyboard.press('Escape');
+    await expect(emailPopover).toBeHidden();
   });
 });

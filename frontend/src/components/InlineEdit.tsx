@@ -102,6 +102,7 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
     if (e.key === 'Enter') {
       handleSave();
     } else if (e.key === 'Escape') {
+      e.stopPropagation();
       handleCancel();
     }
   };
