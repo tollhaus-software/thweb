@@ -75,8 +75,9 @@ func (f Family) DisplayName() string {
 }
 
 type MultiValueEntry struct {
-	Value       string `json:"value"`
-	AddressList bool   `json:"address_list"`
+	Value           string `json:"value"`
+	AddressList     bool   `json:"address_list"`
+	IdentifierEmail bool   `json:"identifier_email"`
 }
 
 func (m *MultiValueEntry) UnmarshalJSON(data []byte) error {
@@ -84,14 +85,25 @@ func (m *MultiValueEntry) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &str); err == nil {
 		m.Value = str
 		m.AddressList = true
+		m.IdentifierEmail = false
 		return nil
 	}
 	type Alias MultiValueEntry
-	var alias Alias
+	var alias struct {
+		Alias
+		AddressListCamel     *bool `json:"addressList"`
+		IdentifierEmailCamel *bool `json:"identifierEmail"`
+	}
 	if err := json.Unmarshal(data, &alias); err != nil {
 		return err
 	}
-	*m = MultiValueEntry(alias)
+	*m = MultiValueEntry(alias.Alias)
+	if alias.AddressListCamel != nil {
+		m.AddressList = *alias.AddressListCamel
+	}
+	if alias.IdentifierEmailCamel != nil {
+		m.IdentifierEmail = *alias.IdentifierEmailCamel
+	}
 	return nil
 }
 

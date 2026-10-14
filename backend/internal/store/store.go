@@ -226,6 +226,27 @@ func (s *Store) GetHistory(ctx context.Context, entityID uuid.UUID) ([]models.Au
 	return logs, nil
 }
 
+func (s *Store) GetParentsByFamilyID(ctx context.Context, familyID uuid.UUID) ([]models.Parent, error) {
+	rows, err := s.db.Query(ctx,
+		"SELECT id, family_id, first_name, last_name, emails, phones, notes, vaccination_status_protected, created_at, updated_at FROM parents WHERE family_id = $1",
+		familyID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var parents []models.Parent
+	for rows.Next() {
+		var p models.Parent
+		if err := rows.Scan(&p.ID, &p.FamilyID, &p.FirstName, &p.LastName, &p.Emails, &p.Phones, &p.Notes, &p.VaccinationStatusProtected, &p.CreatedAt, &p.UpdatedAt); err != nil {
+			return nil, err
+		}
+		parents = append(parents, p)
+	}
+	return parents, rows.Err()
+}
+
 func (s *Store) UpdateFamilyParents(ctx context.Context, userID uuid.UUID, familyID uuid.UUID, parents []models.Parent) error {
 	transactionID := uuid.New()
 	return s.WithTx(ctx, func(tx pgx.Tx) error {

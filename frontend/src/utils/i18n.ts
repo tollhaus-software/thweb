@@ -24,6 +24,22 @@ const translations: Record<Locale, Record<string, string>> = {
     addressListIncluded: 'In Adressliste aufnehmen',
     addressListExcluded: 'Nicht in Adressliste aufnehmen',
     addressListFlag: 'In Adressliste',
+    identifierEmailFlag: 'Identifikator-E-Mail',
+    identifierEmailActive: 'Als Identifikator-E-Mail festgelegt',
+    identifierEmailInactive: 'Nicht als Identifikator-E-Mail festgelegt',
+    identifierEmailPermissionRequired: 'Berechtigung families.all.write erforderlich, um diese Identifikator-E-Mail zu bearbeiten oder zu löschen',
+    changes: 'Änderungen',
+    addedEmail: 'E-Mail hinzugefügt',
+    removedEmail: 'E-Mail entfernt',
+    changedEmail: 'E-Mail geändert',
+    addedPhone: 'Telefonnummer hinzugefügt',
+    removedPhone: 'Telefonnummer entfernt',
+    changedPhone: 'Telefonnummer geändert',
+    inAddressListAdded: 'In Adressliste aufgenommen (📋)',
+    inAddressListRemoved: 'Aus Adressliste entfernt (ohne 📋)',
+    identifierEmailSet: 'Als Identifikator-E-Mail festgelegt (🆔)',
+    identifierEmailUnset: 'Identifikator-E-Mail entfernt (ohne 🆔)',
+    withoutAddressList: 'ohne 📋',
     birthDateEdit: 'Geburtsdatum',
     startDate: 'Betreuungsbeginn',
     startdatum: 'Startdatum',
@@ -45,6 +61,7 @@ const translations: Record<Locale, Record<string, string>> = {
     exited: 'Ausgetreten',
     futureEnrollmentPrefix: 'ab',
     addEmail: 'E-Mail hinzufügen',
+    tollhausEmail: 'Tollhaus E-Mail',
     addPhone: 'Telefonnummer hinzufügen',
     addParentTo: 'Elternteil hinzufügen zu',
     addChildTo: 'Kind hinzufügen zu',
@@ -228,6 +245,22 @@ const translations: Record<Locale, Record<string, string>> = {
     addressListIncluded: 'Include in address list',
     addressListExcluded: 'Do not include in address list',
     addressListFlag: 'In address list',
+    identifierEmailFlag: 'Identifier email',
+    identifierEmailActive: 'Designated as identifier email',
+    identifierEmailInactive: 'Not designated as identifier email',
+    identifierEmailPermissionRequired: 'families.all.write permission required to edit or delete this identifier email',
+    changes: 'Changes',
+    addedEmail: 'Added email',
+    removedEmail: 'Removed email',
+    changedEmail: 'Changed email',
+    addedPhone: 'Added phone',
+    removedPhone: 'Removed phone',
+    changedPhone: 'Changed phone',
+    inAddressListAdded: 'Added to address list (📋)',
+    inAddressListRemoved: 'Removed from address list (without 📋)',
+    identifierEmailSet: 'Designated as identifier email (🆔)',
+    identifierEmailUnset: 'Removed as identifier email (without 🆔)',
+    withoutAddressList: 'without 📋',
     birthDateEdit: 'Birth Date',
     startDate: 'Start Date',
     startdatum: 'Start Date',
@@ -249,6 +282,7 @@ const translations: Record<Locale, Record<string, string>> = {
     exited: 'Exited',
     futureEnrollmentPrefix: 'from',
     addEmail: 'Add email',
+    tollhausEmail: 'Tollhaus Email',
     addPhone: 'Add phone',
     addParentTo: 'Add Parent to',
     addChildTo: 'Add Child to',
@@ -531,4 +565,24 @@ export const formatDashboardDate = (
   }).format(d);
 };
 
-
+/**
+ * Formats given name and surname into a Tollhaus email address:
+ * <given name>.<surname>@tollhaus-stuttgart.de
+ * Converts to lowercase and replaces German umlauts (ä->ae, ö->oe, ü->ue, ß->ss).
+ */
+export const formatTollhausEmail = (firstName: string, lastName: string): string => {
+  const replaceUmlauts = (str: string): string => {
+    return str
+      .toLowerCase()
+      .replace(/ä/g, 'ae')
+      .replace(/ö/g, 'oe')
+      .replace(/ü/g, 'ue')
+      .replace(/ß/g, 'ss')
+      .replace(/ẞ/g, 'ss')
+      .trim();
+  };
+  const fn = replaceUmlauts(firstName);
+  const ln = replaceUmlauts(lastName);
+  if (!fn && !ln) return '';
+  return `${fn}.${ln}@tollhaus-stuttgart.de`;
+};

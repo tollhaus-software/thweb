@@ -159,13 +159,29 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     await emailCell.click();
     await expect(emailPopover).toBeVisible();
 
-    // Verify existing email is listed as a row with pencil, trash, and address list flag (📋)
+    // Verify existing email is listed as a row with pencil, trash, identifier flag (🆔), and address list flag (📋)
     const existingRow = emailPopover.locator('tbody tr').first();
     await expect(existingRow).toContainText('persisted@example.com');
     const flagBtn = existingRow.locator('.flag-address_list');
     await expect(flagBtn).toBeVisible();
     await expect(flagBtn).toContainText('📋');
     await expect(flagBtn).toHaveCSS('opacity', '1');
+
+    const idFlagBtn = existingRow.locator('.flag-identifier_email');
+    await expect(idFlagBtn).toBeVisible();
+    await expect(idFlagBtn).toContainText('🆔');
+    await expect(idFlagBtn).toHaveCSS('opacity', '0.25');
+
+    // Test toggling identifier flag on: clicking 🆔 toggles it to opacity 1
+    await idFlagBtn.click();
+    await expect(idFlagBtn).toHaveCSS('opacity', '1');
+    const cellIdIndicator = emailCell.locator('.identifier-email-indicator');
+    await expect(cellIdIndicator).toHaveCSS('opacity', '1');
+
+    // Toggle identifier flag back off
+    await idFlagBtn.click();
+    await expect(idFlagBtn).toHaveCSS('opacity', '0.25');
+    await expect(cellIdIndicator).toHaveCSS('opacity', '0.25');
 
     // Test toggling flag off: clicking 📋 toggles it to greyed out (opacity 0.25)
     await flagBtn.click();
@@ -265,4 +281,330 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     await page.keyboard.press('Escape');
     await expect(emailPopover).toBeHidden();
   });
+
+  test('identifierEmail enforces permission: caregiver without families.all.write cannot remove or edit identifier emails', async ({ page, request }) => {
+    // 1. Create a family with a parent having one identifier email and one normal email via API
+    const createFamRes = await request.post('/api/families', {
+      headers: {
+        Authorization: 'Bearer developer@example.com',
+        'Content-Type': 'application/json',
+      },
+      data: {
+        parents: [
+          {
+            first_name: 'Bernd',
+            last_name: 'Bauer',
+            emails: [
+              { value: 'bernd.id@example.com', identifier_email: true, address_list: true },
+              { value: 'bernd.normal@example.com', identifier_email: false, address_list: true },
+            ],
+            phones: [{ value: '111222', address_list: true }],
+          },
+        ],
+      },
+    });
+    expect(createFamRes.ok()).toBeTruthy();
+    const createdFamily = await createFamRes.json();
+    const familyId = createdFamily.id;
+    const parentId = createdFamily.parents[0].id;
+
+    // 2. Log in as caregiver (lacks families.all.write)
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'caregiver@example.com');
+    });
+    await page.goto('/');
+
+    // Switch to Eltern (Parents) tab
+    await page.getByRole('button', { name: 'Eltern' }).click();
+    const parentRow = page.locator('tr', { hasText: 'Bernd' }).filter({ hasText: 'Bauer' });
+    await expect(parentRow).toBeVisible();
+
+    const emailCell = parentRow.locator('td').nth(2);
+    // The identifier email row displays 🆔 with opacity 1
+    const cellIdIndicator = emailCell.locator('.identifier-email-indicator').first();
+    await expect(cellIdIndicator).toBeVisible();
+    await expect(cellIdIndicator).toHaveCSS('opacity', '1');
+
+    // 3. Open popover as caregiver
+    await emailCell.click();
+    const emailPopover = page.locator('.multivalue-popover');
+    await expect(emailPopover).toBeVisible();
+
+    // Verify row 0 (identifier email)
+    const row0 = emailPopover.locator('tbody tr').nth(0);
+    await expect(row0).toContainText('bernd.id@example.com');
+
+    // Pencil and trash buttons must be disabled
+    const row0Pencil = row0.locator('.edit-entry-btn');
+    const row0Trash = row0.locator('.delete-entry-btn');
+    await expect(row0Pencil).toBeDisabled();
+    await expect(row0Trash).toBeDisabled();
+
+    // Flag buttons on row 0 must be disabled
+    const row0IdFlag = row0.locator('.flag-identifier_email');
+    await expect(row0IdFlag).toBeDisabled();
+
+    // Double clicking row 0 must NOT open inline edit input
+    await row0.getByText('bernd.id@example.com').dblclick();
+    await expect(row0.locator('input[type="text"]')).toHaveCount(0);
+
+    // Verify row 1 (normal email)
+    const row1 = emailPopover.locator('tbody tr').nth(1);
+    await expect(row1).toContainText('bernd.normal@example.com');
+
+    // Pencil and trash buttons must be enabled for non-identifier email
+    const row1Pencil = row1.locator('.edit-entry-btn');
+    const row1Trash = row1.locator('.delete-entry-btn');
+    await expect(row1Pencil).toBeEnabled();
+    await expect(row1Trash).toBeEnabled();
+
+    // In edit mode for row 1, 🆔 flag must remain disabled while 📋 flag is enabled
+    await row1Pencil.click();
+    const row1EditInput = row1.locator('input[type="text"]');
+    await expect(row1EditInput).toBeVisible();
+    await expect(row1.locator('.flag-identifier_email')).toBeDisabled();
+    const row1AddressFlag = row1.locator('.flag-address_list');
+    await expect(row1AddressFlag).toBeEnabled();
+
+    // Caregiver can edit the non-identifier email
+    await row1EditInput.fill('bernd.normal_updated@example.com');
+    await row1EditInput.press('Enter');
+    await expect(row1EditInput).toBeHidden();
+    await expect(row1).toContainText('bernd.normal_updated@example.com');
+    await expect(parentRow).toContainText('bernd.normal_updated@example.com');
+
+    // 4. Test adding an email: 🆔 toggle must be disabled for caregiver
+    const addPlusBtn = emailPopover.locator('.add-value-btn');
+    await addPlusBtn.click();
+    const addRowInput = emailPopover.locator('input[type="text"]');
+    await expect(addRowInput).toBeVisible();
+    await expect(emailPopover.locator('.flag-identifier_email').last()).toBeDisabled();
+    await addRowInput.fill('bernd.added_by_caregiver@example.com');
+    await addRowInput.press('Enter');
+    await expect(emailPopover.locator('tbody tr')).toHaveCount(3);
+    await expect(parentRow).toContainText('bernd.added_by_caregiver@example.com');
+
+    // Close popover
+    await page.keyboard.press('Escape');
+    await expect(emailPopover).toBeHidden();
+
+    // 5. Direct API validation: verify backend blocks caregiver from removing or altering identifier email
+    const unauthorizedRemoveRes = await request.put(`/api/families/${familyId}`, {
+      headers: {
+        Authorization: 'Bearer caregiver@example.com',
+        'Content-Type': 'application/json',
+      },
+      data: {
+        parents: [
+          {
+            id: parentId,
+            family_id: familyId,
+            first_name: 'Bernd',
+            last_name: 'Bauer',
+            emails: [
+              { value: 'bernd.normal_updated@example.com', identifier_email: false },
+            ],
+            phones: [],
+          },
+        ],
+      },
+    });
+    expect(unauthorizedRemoveRes.status()).toBe(403);
+
+    const unauthorizedModifyRes = await request.put(`/api/families/${familyId}`, {
+      headers: {
+        Authorization: 'Bearer caregiver@example.com',
+        'Content-Type': 'application/json',
+      },
+      data: {
+        parents: [
+          {
+            id: parentId,
+            family_id: familyId,
+            first_name: 'Bernd',
+            last_name: 'Bauer',
+            emails: [
+              { value: 'bernd.hacked_id@example.com', identifier_email: true },
+            ],
+            phones: [],
+          },
+        ],
+      },
+    });
+    expect(unauthorizedModifyRes.status()).toBe(403);
+  });
+
+  test('Add Parent dialog: horizontal name layout, Tollhaus email auto-fill with umlauts, dirty tracking, and identifier email persistence', async ({ page }) => {
+    // 1. Add a Family first
+    await page.getByRole('button', { name: 'Familie hinzufügen' }).click();
+    await page.locator('#f-p1-first').fill('Elke');
+    await page.locator('#f-p1-last').fill('Müller');
+    await page.locator('form').getByRole('button', { name: 'Familie hinzufügen' }).click();
+
+    // 2. Switch to Parents tab
+    await page.getByRole('button', { name: 'Eltern' }).click();
+
+    // Find the family header row and click the + button to add a parent
+    const familyRow = page.locator('tr.family-group-row', { hasText: 'Müller' });
+    await expect(familyRow).toBeVisible();
+    const addParentBtn = familyRow.locator('.family-add-button');
+    await addParentBtn.click();
+
+    // 3. Verify modal appears
+    const modal = page.locator('.modal-container');
+    await expect(modal).toBeVisible();
+
+    // Check horizontal layout of given name and surname
+    const firstNameInput = modal.locator('#p-first-name');
+    const lastNameInput = modal.locator('#p-last-name');
+    const tollhausEmailInput = modal.locator('#p-tollhaus-email');
+
+    await expect(firstNameInput).toBeVisible();
+    await expect(lastNameInput).toBeVisible();
+    await expect(tollhausEmailInput).toBeVisible();
+
+    const firstNameBox = await firstNameInput.boundingBox();
+    const lastNameBox = await lastNameInput.boundingBox();
+    expect(firstNameBox).toBeTruthy();
+    expect(lastNameBox).toBeTruthy();
+    // Horizontally aligned: roughly same y position, firstName left of lastName
+    expect(Math.abs(firstNameBox!.y - lastNameBox!.y)).toBeLessThan(15);
+    expect(firstNameBox!.x + firstNameBox!.width).toBeLessThan(lastNameBox!.x);
+
+    // Default surname is pre-filled from first parent: 'Müller'
+    await expect(lastNameInput).toHaveValue('Müller');
+    await expect(tollhausEmailInput).toHaveValue('');
+
+    // 4. Typing first name "Jörg" -> tollhausEmail should auto-update to joerg.mueller@tollhaus-stuttgart.de
+    await firstNameInput.fill('Jörg');
+    await expect(tollhausEmailInput).toHaveValue('joerg.mueller@tollhaus-stuttgart.de');
+
+    // Updating last name with another umlaut "Böhm"
+    await lastNameInput.fill('Böhm');
+    await expect(tollhausEmailInput).toHaveValue('joerg.boehm@tollhaus-stuttgart.de');
+
+    // 5. Manually edit tollhausEmail -> subsequent name edits should NOT overwrite it
+    await tollhausEmailInput.fill('   custom.joerg@tollhaus-stuttgart.de   ');
+    await firstNameInput.fill('Hans-Jürgen');
+    // tollhausEmail remains the custom value
+    await expect(tollhausEmailInput).toHaveValue('   custom.joerg@tollhaus-stuttgart.de   ');
+
+    // 6. Submit the dialog
+    await modal.getByRole('button', { name: 'Elternteil hinzufügen' }).click();
+    await expect(modal).toBeHidden();
+
+    // 7. Verify new parent is added and contains the identifier email with the 🆔 indicator
+    const newParentRow = page.locator('tr', { hasText: 'Hans-Jürgen' }).filter({ hasText: 'Böhm' });
+    await expect(newParentRow).toBeVisible();
+    // Stripped whitespace: custom.joerg@tollhaus-stuttgart.de
+    await expect(newParentRow).toContainText('custom.joerg@tollhaus-stuttgart.de');
+    // Check for 🆔 indicator
+    await expect(newParentRow).toContainText('🆔');
+
+    // 8. Test adding another parent with pure auto-generated email with umlauts (e.g. Käthe Weiß)
+    await addParentBtn.click();
+    await expect(modal).toBeVisible();
+    await modal.locator('#p-first-name').fill('Käthe');
+    await modal.locator('#p-last-name').fill('Weiß');
+    await expect(modal.locator('#p-tollhaus-email')).toHaveValue('kaethe.weiss@tollhaus-stuttgart.de');
+    await modal.getByRole('button', { name: 'Elternteil hinzufügen' }).click();
+    await expect(modal).toBeHidden();
+
+    const secondNewParentRow = page.locator('tr', { hasText: 'Käthe' }).filter({ hasText: 'Weiß' });
+    await expect(secondNewParentRow).toBeVisible();
+    await expect(secondNewParentRow).toContainText('kaethe.weiss@tollhaus-stuttgart.de');
+    await expect(secondNewParentRow).toContainText('🆔');
+
+    // 9. Test adding a third parent with empty email (cleared by user)
+    await addParentBtn.click();
+    await expect(modal).toBeVisible();
+    await modal.locator('#p-first-name').fill('Peter');
+    await modal.locator('#p-last-name').fill('Müller');
+    await modal.locator('#p-tollhaus-email').fill('   ');
+    await modal.getByRole('button', { name: 'Elternteil hinzufügen' }).click();
+    await expect(modal).toBeHidden();
+
+    const thirdParentRow = page.locator('tr', { hasText: 'Peter' }).filter({ hasText: 'Müller' });
+    await expect(thirdParentRow).toBeVisible();
+    const emailCell = thirdParentRow.locator('[id^="cell-emails-"]');
+    await expect(emailCell).toContainText('E-Mail hinzufügen');
+    await expect(emailCell).not.toContainText('@');
+  });
+
+  test('Flag changes (identifier email, address list) are visible in audit log', async ({ page, request }) => {
+    // 1. Create family with a parent who has an email
+    const createRes = await request.post('/api/families', {
+      headers: {
+        Authorization: 'Bearer developer@example.com',
+        'Content-Type': 'application/json',
+      },
+      data: {
+        parents: [
+          {
+            first_name: 'Sabine',
+            last_name: 'Schneider',
+            emails: [
+              { value: 'sabine@tollhaus-stuttgart.de', address_list: true, identifier_email: false },
+            ],
+            phones: [
+              { value: '+49170111222', address_list: true },
+            ],
+          },
+        ],
+      },
+    });
+    expect(createRes.ok()).toBeTruthy();
+    const createdFamily = await createRes.json();
+    const parentId = createdFamily.parents[0].id;
+
+    await page.goto('/');
+
+    // 2. Switch to Parents tab and verify parent is displayed
+    await page.getByRole('button', { name: 'Eltern' }).click();
+    const parentRow = page.locator('tr', { hasText: 'Sabine' }).filter({ hasText: 'Schneider' });
+    await expect(parentRow).toBeVisible();
+
+    // 3. Open email popover on Sabine's email cell
+    const emailCell = parentRow.locator('[id^="cell-emails-"]');
+    await emailCell.click();
+    const emailPopover = page.locator('.multivalue-popover');
+    await expect(emailPopover).toBeVisible();
+
+    // Toggle identifier email (turn ON)
+    const idBtn = emailPopover.locator('.flag-identifier_email').first();
+    await idBtn.click();
+
+    // Close popover to save
+    await page.keyboard.press('Escape');
+    await expect(emailPopover).toBeHidden();
+    await expect(parentRow).toContainText('🆔');
+
+    // 4. Open email popover again and toggle address list (turn OFF)
+    await emailCell.click();
+    await expect(emailPopover).toBeVisible();
+    const addrBtn = emailPopover.locator('.flag-address_list').first();
+    await addrBtn.click();
+    await page.keyboard.press('Escape');
+    await expect(emailPopover).toBeHidden();
+
+    // 5. Switch to Audit tab
+    await page.getByRole('button', { name: 'Audit' }).click();
+    const auditTable = page.locator('.data-table');
+    await expect(auditTable).toBeVisible();
+
+    // Verify audit log has UPDATE entries for Sabine Schneider showing the flag changes
+    const auditRows = auditTable.locator('tbody tr');
+    await expect(auditRows.first()).toBeVisible();
+
+    // Find the rows related to Sabine Schneider
+    const sabineLogs = auditTable.locator('tbody tr', { hasText: 'Sabine Schneider' });
+    await expect(sabineLogs.first()).toBeVisible();
+
+    // Verify identifier email activation is visible in audit log
+    await expect(sabineLogs.filter({ hasText: 'Als Identifikator-E-Mail festgelegt (🆔)' })).toBeVisible();
+
+    // Verify address list removal is visible in audit log
+    await expect(sabineLogs.filter({ hasText: 'Aus Adressliste entfernt (ohne 📋)' })).toBeVisible();
+  });
 });
+
