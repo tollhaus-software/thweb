@@ -16,6 +16,8 @@ interface DataTableProps<TData> {
   columns: ColumnDef<TData, any>[];
   getSubRows?: (row: TData) => any[] | undefined;
   onAddRow?: (familyId: string, familyName: string) => void;
+  onAddChild?: (familyId: string, familyName: string) => void;
+  onAddParent?: (familyId: string, familyName: string) => void;
   emptySubRowsText?: string;
   hideHeader?: boolean;
   highlightedRowId?: string | null;
@@ -26,6 +28,8 @@ export function DataTable<TData>({
   columns,
   getSubRows,
   onAddRow,
+  onAddChild,
+  onAddParent,
   emptySubRowsText,
   hideHeader,
   highlightedRowId,
@@ -202,35 +206,85 @@ export function DataTable<TData>({
                   <Fragment key={row.id}>
                     <tr className={`family-group-row ${familyId === highlightedRowId ? 'highlighted-row' : ''}`} id={`row-${familyId}`}>
                       <td colSpan={table.getVisibleLeafColumns().length}>
-                        <div
-                          style={{
-                            display: 'inline-flex',
-                            flexDirection: subHeader ? 'column' : 'row',
-                            alignItems: subHeader ? 'flex-start' : 'center',
-                            gap: subHeader ? '0.2rem' : '0.75rem',
-                            position: 'sticky',
-                            left: '0.6rem',
-                          }}
-                        >
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem' }}>
-                            <span>{familyName}</span>
-                            {onAddRow && (
-                              <button
-                                type="button"
-                                className="family-add-button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onAddRow(familyId, familyName);
-                                }}
-                                title="Add"
-                              >
-                                <Plus size={14} />
-                              </button>
+                        <div className="family-group-row-container">
+                          <div
+                            className="family-group-row-left"
+                            style={{
+                              display: 'inline-flex',
+                              flexDirection: subHeader ? 'column' : 'row',
+                              alignItems: subHeader ? 'flex-start' : 'center',
+                              gap: subHeader ? '0.2rem' : '0.75rem',
+                              position: 'sticky',
+                              left: '0.6rem',
+                              flexShrink: 0,
+                            }}
+                          >
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem' }}>
+                              <span>{familyName}</span>
+                              {onAddRow && !onAddChild && !onAddParent && (
+                                <button
+                                  type="button"
+                                  className="family-add-button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onAddRow(familyId, familyName);
+                                  }}
+                                  title="Add"
+                                >
+                                  <Plus size={14} />
+                                </button>
+                              )}
+                            </div>
+                            {subHeader && (
+                              <div className="family-sub-header-parents">
+                                {subHeader}
+                              </div>
                             )}
                           </div>
-                          {subHeader && (
-                            <div className="family-sub-header-parents">
-                              {subHeader}
+
+                          {(onAddChild || onAddParent) && (
+                            <div
+                              className="family-group-actions"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                                position: 'sticky',
+                                right: '0.6rem',
+                                marginLeft: 'auto',
+                                flexShrink: 0,
+                              }}
+                            >
+                              {onAddChild && (
+                                <button
+                                  type="button"
+                                  className="family-action-button family-add-button family-add-child-button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onAddChild(familyId, familyName);
+                                  }}
+                                  aria-label={`+ ${t('addChildShort')}`}
+                                  title={`${t('addChildTo')} ${familyName}`}
+                                >
+                                  <Plus size={13} />
+                                  <span>{t('addChildShort')}</span>
+                                </button>
+                              )}
+                              {onAddParent && (
+                                <button
+                                  type="button"
+                                  className="family-action-button family-add-parent-button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onAddParent(familyId, familyName);
+                                  }}
+                                  aria-label={`+ ${t('addParentShort')}`}
+                                  title={`${t('addParentTo')} ${familyName}`}
+                                >
+                                  <Plus size={13} />
+                                  <span>{t('addParentShort')}</span>
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>

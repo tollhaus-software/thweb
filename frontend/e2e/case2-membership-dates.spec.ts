@@ -24,7 +24,7 @@ test.describe('Test Case 2: Inferred Default Start Date from Oldest Group Change
     await page.locator('form').getByRole('button', { name: 'Familie hinzufügen' }).click();
 
     // Switch to Eltern (Parents) tab and verify parent row is rendered
-    await page.getByRole('button', { name: 'Eltern' }).click();
+    await page.getByRole('button', { name: 'Eltern', exact: true }).click();
     const parentRow = page.locator('tr', { hasText: 'Maximilian' }).filter({ hasText: 'Bauer' });
     await expect(parentRow).toBeVisible();
 
@@ -76,7 +76,7 @@ test.describe('Test Case 2: Inferred Default Start Date from Oldest Group Change
     await page.keyboard.press('Escape');
 
     // --- Step 3: Switch back to Parents tab & open membership dialog ---
-    await page.getByRole('button', { name: 'Eltern' }).click();
+    await page.getByRole('button', { name: 'Eltern', exact: true }).click();
     const parentRowAgain = page.locator('tr', { hasText: 'Maximilian' }).filter({ hasText: 'Bauer' });
     await expect(parentRowAgain).toBeVisible();
 
