@@ -29,7 +29,7 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     await page.locator('form').getByRole('button', { name: 'Familie hinzufügen' }).click();
 
     // Switch to Eltern (Parents) tab to see the parents table
-    await page.getByRole('button', { name: 'Eltern' }).click();
+    await page.getByRole('button', { name: 'Eltern(MGA)' }).click();
 
     // Verify parent is displayed in the parents table
     const parentRow = page.locator('tr', { hasText: 'Anna' }).filter({ hasText: 'Schmidt' });
@@ -315,7 +315,7 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     await page.goto('/');
 
     // Switch to Eltern (Parents) tab
-    await page.getByRole('button', { name: 'Eltern' }).click();
+    await page.getByRole('button', { name: 'Eltern(MGA)' }).click();
     const parentRow = page.locator('tr', { hasText: 'Bernd' }).filter({ hasText: 'Bauer' });
     await expect(parentRow).toBeVisible();
 
@@ -442,7 +442,7 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     await page.locator('form').getByRole('button', { name: 'Familie hinzufügen' }).click();
 
     // 2. Switch to Parents tab
-    await page.getByRole('button', { name: 'Eltern' }).click();
+    await page.getByRole('button', { name: 'Eltern(MGA)' }).click();
 
     // Find the family header row and click the + button to add a parent
     const familyRow = page.locator('tr.family-group-row', { hasText: 'Müller' });
@@ -560,7 +560,7 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     await page.goto('/');
 
     // 2. Switch to Parents tab and verify parent is displayed
-    await page.getByRole('button', { name: 'Eltern' }).click();
+    await page.getByRole('button', { name: 'Eltern(MGA)' }).click();
     const parentRow = page.locator('tr', { hasText: 'Sabine' }).filter({ hasText: 'Schneider' });
     await expect(parentRow).toBeVisible();
 

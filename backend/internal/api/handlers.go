@@ -61,12 +61,105 @@ func parseFlexibleDate(dateStr string) (time.Time, error) {
 
 func (s *Server) HandleGetMe(w http.ResponseWriter, r *http.Request) {
 	user := auth.GetUser(r.Context())
-	jsonResponse(w, map[string]interface{}{
+	resp := map[string]interface{}{
 		"email":                 user.Email,
 		"roles":                 user.Roles,
 		"permissions":           user.Permissions,
 		"effective_permissions": user.EffectivePermissions,
-	})
+	}
+	if user.FamilyID != nil {
+		resp["family_id"] = user.FamilyID.String()
+	}
+	jsonResponse(w, resp)
+}
+
+type OverviewChild struct {
+	ID           uuid.UUID                 `json:"id"`
+	FirstName    string                    `json:"first_name"`
+	LastName     string                    `json:"last_name"`
+	GroupChanges []models.ChildGroupChange `json:"group_changes,omitempty"`
+}
+
+type OverviewParent struct {
+	ID        uuid.UUID             `json:"id"`
+	FirstName string                `json:"first_name"`
+	LastName  string                `json:"last_name"`
+	Emails    models.MultiValueList `json:"emails"`
+	Phones    models.MultiValueList `json:"phones"`
+}
+
+type OverviewFamily struct {
+	ID       uuid.UUID        `json:"id"`
+	Parents  []OverviewParent `json:"parents"`
+	Children []OverviewChild  `json:"children"`
+}
+
+func (s *Server) HandleListFamiliesOverview(w http.ResponseWriter, r *http.Request) {
+	families, err := s.Store.ListFamilies(r.Context())
+	if err != nil {
+		httpErrorLog(w, r, "Failed to list families overview", http.StatusInternalServerError, err)
+		return
+	}
+
+	user := auth.GetUser(r.Context())
+	hasSelfService := user != nil && user.HasPermission("families.self.selfservice")
+	hasFamiliesAll := user != nil && user.HasPermission("families.all.read")
+
+	overview := make([]OverviewFamily, 0, len(families))
+	for _, fam := range families {
+		isOwnFamily := user != nil && user.IsSelfFamily(fam.ID)
+		canViewGroupChanges := (isOwnFamily && hasSelfService) || hasFamiliesAll
+
+		ovParents := make([]OverviewParent, 0, len(fam.Parents))
+		for _, p := range fam.Parents {
+			var filteredEmails models.MultiValueList
+			for _, em := range p.Emails {
+				if em.AddressList {
+					filteredEmails = append(filteredEmails, em)
+				}
+			}
+			if filteredEmails == nil {
+				filteredEmails = models.MultiValueList{}
+			}
+			var filteredPhones models.MultiValueList
+			for _, ph := range p.Phones {
+				if ph.AddressList {
+					filteredPhones = append(filteredPhones, ph)
+				}
+			}
+			if filteredPhones == nil {
+				filteredPhones = models.MultiValueList{}
+			}
+			ovParents = append(ovParents, OverviewParent{
+				ID:        p.ID,
+				FirstName: p.FirstName,
+				LastName:  p.LastName,
+				Emails:    filteredEmails,
+				Phones:    filteredPhones,
+			})
+		}
+
+		ovChildren := make([]OverviewChild, 0, len(fam.Children))
+		for _, c := range fam.Children {
+			ovc := OverviewChild{
+				ID:        c.ID,
+				FirstName: c.FirstName,
+				LastName:  c.LastName,
+			}
+			if canViewGroupChanges {
+				ovc.GroupChanges = c.GroupChanges
+			}
+			ovChildren = append(ovChildren, ovc)
+		}
+
+		overview = append(overview, OverviewFamily{
+			ID:       fam.ID,
+			Parents:  ovParents,
+			Children: ovChildren,
+		})
+	}
+
+	jsonResponse(w, overview)
 }
 
 func (s *Server) HandleListFamilies(w http.ResponseWriter, r *http.Request) {

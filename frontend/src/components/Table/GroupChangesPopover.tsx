@@ -32,6 +32,7 @@ interface GroupChangesPopoverProps {
   onAddGroupChange: (childId: string, changeDate: string, targetGroup: number) => Promise<void>;
   onUpdateGroupChange?: (changeId: string, changeDate: string, targetGroup: number) => Promise<void>;
   onDeleteGroupChange: (changeId: string) => Promise<void>;
+  readOnly?: boolean;
 }
 
 export const GroupChangesPopover: React.FC<GroupChangesPopoverProps> = ({
@@ -42,6 +43,7 @@ export const GroupChangesPopover: React.FC<GroupChangesPopoverProps> = ({
   onAddGroupChange,
   onUpdateGroupChange,
   onDeleteGroupChange,
+  readOnly = false,
 }) => {
   // Sort changes chronologically: oldest at the top
   const sortedChanges = React.useMemo(() => {
@@ -66,8 +68,8 @@ export const GroupChangesPopover: React.FC<GroupChangesPopoverProps> = ({
     return CURRENT_LOCALE === 'de' ? formatDisplayDate(today) : today.toISOString().split('T')[0];
   };
 
-  // Special case: opening when child has no group changes yet behaves as if '+' was pressed immediately
-  const isInitiallyEmpty = !child?.group_changes || child.group_changes.length === 0;
+  // Special case: opening when child has no group changes yet behaves as if '+' was pressed immediately (only in editable mode)
+  const isInitiallyEmpty = !readOnly && (!child?.group_changes || child.group_changes.length === 0);
   const [isAddingRow, setIsAddingRow] = useState(isInitiallyEmpty);
   const [newDate, setNewDate] = useState<string>(getInitialNewDate);
   const [newTargetGroup, setNewTargetGroup] = useState<number>(() => calculateNextGroup());
@@ -189,9 +191,9 @@ export const GroupChangesPopover: React.FC<GroupChangesPopoverProps> = ({
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
           <thead>
             <tr style={{ background: 'var(--bg-subtle)', borderBottom: '1px solid var(--border)' }}>
-              <th style={{ padding: '6px 8px', textAlign: 'left', width: '150px' }}>{t('date')}</th>
+              <th style={{ padding: '6px 8px', textAlign: 'left', width: readOnly ? 'auto' : '150px' }}>{t('date')}</th>
               <th style={{ padding: '6px 8px', textAlign: 'left' }}>{t('group')}</th>
-              <th style={{ padding: '6px 8px', width: '36px', textAlign: 'center' }}></th>
+              {!readOnly && <th style={{ padding: '6px 8px', width: '36px', textAlign: 'center' }}></th>}
             </tr>
           </thead>
           <tbody>
@@ -202,72 +204,89 @@ export const GroupChangesPopover: React.FC<GroupChangesPopoverProps> = ({
               return (
                 <tr key={gc.id} style={{ borderBottom: '1px solid var(--border)' }}>
                   <td style={{ padding: '6px 8px' }}>
-                    <EasyEditComponent
-                      type={EasyEditTypes.DATE}
-                      value={dateDisplayValue}
-                      onSave={(val: string) => {
-                        const isoDate = parseInputDate(val);
-                        if (isoDate) {
-                          handleSaveDate(gc, isoDate);
-                        }
-                      }}
-                      editButtonLabel={<Pencil size={13} />}
-                      instructions={t('date')}
-                      displayComponent={<span>{formatDisplayDate(gc.change_date)}</span>}
-                      viewAttributes={{}}
-                      inputAttributes={{}}
-                      onCancel={() => {}}
-                      onValidate={(val: string) => {
-                        const parsed = parseInputDate(val);
-                        return /^\d{4}-\d{2}-\d{2}$/.test(parsed);
-                      }}
-                    />
+                    {readOnly ? (
+                      <span>{formatDisplayDate(gc.change_date)}</span>
+                    ) : (
+                      <EasyEditComponent
+                        type={EasyEditTypes.DATE}
+                        value={dateDisplayValue}
+                        onSave={(val: string) => {
+                          const isoDate = parseInputDate(val);
+                          if (isoDate) {
+                            handleSaveDate(gc, isoDate);
+                          }
+                        }}
+                        editButtonLabel={<Pencil size={13} />}
+                        instructions={t('date')}
+                        displayComponent={<span>{formatDisplayDate(gc.change_date)}</span>}
+                        viewAttributes={{}}
+                        inputAttributes={{}}
+                        onCancel={() => {}}
+                        onValidate={(val: string) => {
+                          const parsed = parseInputDate(val);
+                          return /^\d{4}-\d{2}-\d{2}$/.test(parsed);
+                        }}
+                      />
+                    )}
                   </td>
                   <td style={{ padding: '6px 8px' }}>
-                    <EasyEditComponent
-                      type={EasyEditTypes.SELECT}
-                      value={String(gc.target_group)}
-                      options={groupOptions}
-                      onSave={(val: string) => {
-                        handleSaveTargetGroup(gc, parseInt(val, 10));
-                      }}
-                      editButtonLabel={<Pencil size={13} />}
-                      instructions={t('group')}
-                      displayComponent={
-                        <span
-                          style={{
-                            fontWeight: gc.target_group === 0 ? 'normal' : 600,
-                            color: gc.target_group === 0 ? 'var(--text-muted)' : 'inherit',
-                          }}
-                        >
-                          {groupLabels[gc.target_group] || `${t('targetGroup')}: ${gc.target_group}`}
-                        </span>
-                      }
-                      viewAttributes={{}}
-                      inputAttributes={{}}
-                      onCancel={() => {}}
-                      onValidate={() => true}
-                    />
+                    {readOnly ? (
+                      <span
+                        style={{
+                          fontWeight: gc.target_group === 0 ? 'normal' : 600,
+                          color: gc.target_group === 0 ? 'var(--text-muted)' : 'inherit',
+                        }}
+                      >
+                        {groupLabels[gc.target_group] || `${t('targetGroup')}: ${gc.target_group}`}
+                      </span>
+                    ) : (
+                      <EasyEditComponent
+                        type={EasyEditTypes.SELECT}
+                        value={String(gc.target_group)}
+                        options={groupOptions}
+                        onSave={(val: string) => {
+                          handleSaveTargetGroup(gc, parseInt(val, 10));
+                        }}
+                        editButtonLabel={<Pencil size={13} />}
+                        instructions={t('group')}
+                        displayComponent={
+                          <span
+                            style={{
+                              fontWeight: gc.target_group === 0 ? 'normal' : 600,
+                              color: gc.target_group === 0 ? 'var(--text-muted)' : 'inherit',
+                            }}
+                          >
+                            {groupLabels[gc.target_group] || `${t('targetGroup')}: ${gc.target_group}`}
+                          </span>
+                        }
+                        viewAttributes={{}}
+                        inputAttributes={{}}
+                        onCancel={() => {}}
+                        onValidate={() => true}
+                      />
+                    )}
                   </td>
-                  <td style={{ padding: '6px 8px', textAlign: 'center' }}>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(gc.id)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: '#ef4444',
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        padding: '2px',
-                        borderRadius: '4px',
-                      }}
-                      title={t('delete')}
-                    >
-                      <Trash size={14} />
-                    </button>
-                  </td>
+                  {!readOnly && (
+                    <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(gc.id)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#ef4444',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          padding: '2px',
+                          borderRadius: '4px',
+                        }}
+                        title={t('delete')}
+                      >
+                        <Trash size={14} />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               );
             })}
@@ -428,7 +447,7 @@ export const GroupChangesPopover: React.FC<GroupChangesPopoverProps> = ({
             {!isAddingRow && sortedChanges.length === 0 && (
               <tr>
                 <td
-                  colSpan={3}
+                  colSpan={readOnly ? 2 : 3}
                   style={{
                     padding: '1rem',
                     textAlign: 'center',
@@ -445,7 +464,7 @@ export const GroupChangesPopover: React.FC<GroupChangesPopoverProps> = ({
       </div>
 
       {/* Centered neutral '+' button under the existing rows */}
-      {!isAddingRow && (
+      {!readOnly && !isAddingRow && (
         <div
           style={{
             display: 'flex',

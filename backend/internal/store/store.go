@@ -247,6 +247,29 @@ func (s *Store) GetParentsByFamilyID(ctx context.Context, familyID uuid.UUID) ([
 	return parents, rows.Err()
 }
 
+func (s *Store) GetFamilyIDByIdentifierEmail(ctx context.Context, email string) (*uuid.UUID, error) {
+	norm := models.NormalizeEmail(email)
+	if norm == "" {
+		return nil, nil
+	}
+	query := `
+		SELECT p.family_id
+		FROM parents p, jsonb_array_elements(p.emails) AS elem
+		WHERE elem->>'identifier_email' = 'true'
+		  AND lower(trim(elem->>'value')) = $1
+		LIMIT 1
+	`
+	var familyID uuid.UUID
+	err := s.db.QueryRow(ctx, query, norm).Scan(&familyID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &familyID, nil
+}
+
 func (s *Store) UpdateFamilyParents(ctx context.Context, userID uuid.UUID, familyID uuid.UUID, parents []models.Parent) error {
 	transactionID := uuid.New()
 	return s.WithTx(ctx, func(tx pgx.Tx) error {

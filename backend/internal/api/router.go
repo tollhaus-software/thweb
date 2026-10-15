@@ -43,7 +43,8 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		r.Handle("/api/ws", hub)
 
 		r.Get("/api/me", server.HandleGetMe)
-		r.Get("/api/families", server.HandleListFamilies)
+		r.With(auth.RequirePermission("families.all.restrictedread")).Get("/api/families/overview", server.HandleListFamiliesOverview)
+		r.With(auth.RequirePermission("families.all.read")).Get("/api/families", server.HandleListFamilies)
 		r.With(auth.RequirePermission("audit.all.read")).Get("/api/audit-logs", server.HandleListAuditLogs)
 
 		// Admin - Role Management
@@ -90,7 +91,7 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		r.With(auth.RequirePermission("memberships.all.write")).Delete("/api/memberships/{id}", server.HandleDeleteTHMembership)
 
 		// Childcare Fees Calculation
-		r.Post("/api/fees/calculate", server.HandleCalculateFees)
+		r.With(auth.RequirePermission("fees.self.read")).Post("/api/fees/calculate", server.HandleCalculateFees)
 
 		// Dashboard / Daily Brief
 		r.Get("/api/dashboard/daily-brief", server.HandleGetDailyBrief)

@@ -6,6 +6,7 @@ interface User {
   roles: string[];
   permissions: string[];
   effective_permissions: string[];
+  family_id?: string;
 }
 
 export interface AuthError {
@@ -144,7 +145,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const hasPermission = (perm: string): boolean => {
     if (!user || !user.effective_permissions) return false;
-    return user.effective_permissions.includes('*') || user.effective_permissions.includes(perm);
+    if (user.effective_permissions.includes('*') || user.effective_permissions.includes(perm)) {
+      return true;
+    }
+    if (perm === 'families.all.restrictedread' && user.effective_permissions.includes('families.all.read')) {
+      return true;
+    }
+    if (perm === 'fees.self.read' && user.effective_permissions.includes('fees.all.read')) {
+      return true;
+    }
+    return false;
   };
 
   return (

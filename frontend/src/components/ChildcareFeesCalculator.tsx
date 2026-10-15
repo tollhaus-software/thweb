@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMe
 import { createPortal } from 'react-dom';
 import { CheckSquare, Square, Info, ChevronDown, ChevronRight } from 'lucide-react';
 import { t, CURRENT_LOCALE } from '../utils/i18n';
+import { useAuth } from '../context/AuthContext';
 
 interface Parent {
   id: string;
@@ -306,6 +307,8 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
   token,
   families,
 }) => {
+  const { hasPermission } = useAuth();
+  const canSelectFamilies = hasPermission('fees.all.read');
   const currentYear = new Date().getFullYear();
 
   // Month range state (persisted in browser localStorage)
@@ -372,7 +375,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
 
   // Derived validation error
   const validationError = useMemo(() => {
-    if (families.length > 0 && selectedFamilyIds.length === 0) {
+    if (canSelectFamilies && families.length > 0 && selectedFamilyIds.length === 0) {
       return t('selectAtLeastOneFamily') || 'Please select at least one family.';
     }
     const startMonthStr = `${startYear}-${startMonth}`;
@@ -381,13 +384,16 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
       return t('startMonthAfterEndMonth') || 'Start month cannot be after end month.';
     }
     return null;
-  }, [families.length, selectedFamilyIds.length, startYear, startMonth, endYear, endMonth]);
+  }, [canSelectFamilies, families.length, selectedFamilyIds.length, startYear, startMonth, endYear, endMonth]);
 
   const error = validationError || apiError;
 
   // Sort family fees results to match the order of the families prop, filtered by selected families
   const sortedFamilyFees = useMemo(() => {
     if (!results || !results.family_fees) return [];
+    if (!canSelectFamilies) {
+      return results.family_fees;
+    }
     return results.family_fees
       .filter((res) => selectedFamilyIds.includes(res.family_id))
       .sort((a, b) => {
@@ -395,11 +401,14 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
         const indexB = families.findIndex((f) => f.id === b.family_id);
         return indexA - indexB;
       });
-  }, [results, families, selectedFamilyIds]);
+  }, [results, families, selectedFamilyIds, canSelectFamilies]);
 
   // Sort fee changes primarily by "Wirksamer Monat" (month string), then secondary by family name, filtered by selected families
   const sortedFeeChanges = useMemo(() => {
     if (!results || !results.fee_changes) return [];
+    if (!canSelectFamilies) {
+      return results.fee_changes;
+    }
     return results.fee_changes
       .filter((chg) => selectedFamilyIds.includes(chg.family_id))
       .sort((a, b) => {
@@ -408,7 +417,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
         }
         return (a.family_name || '').localeCompare(b.family_name || '');
       });
-  }, [results, selectedFamilyIds]);
+  }, [results, selectedFamilyIds, canSelectFamilies]);
 
   // Helper to format family names
   const getFamilyName = (f: Family) => {
@@ -440,7 +449,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
   };
 
   useEffect(() => {
-    if (validationError || selectedFamilyIds.length === 0) {
+    if (validationError || (canSelectFamilies && selectedFamilyIds.length === 0)) {
       prevSelectedFamilyIdsRef.current = selectedFamilyIds;
       return;
     }
@@ -453,7 +462,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
     const tokenChanged = prevTokenRef.current !== token;
     const rangeChanged = prevRangeRef.current !== currentRange;
     const prevSelected = prevSelectedFamilyIdsRef.current || [];
-    const hasAddedFamilies = selectedFamilyIds.some((id) => !prevSelected.includes(id));
+    const hasAddedFamilies = canSelectFamilies ? selectedFamilyIds.some((id) => !prevSelected.includes(id)) : false;
 
     prevSelectedFamilyIdsRef.current = selectedFamilyIds;
     prevRangeRef.current = currentRange;
@@ -487,7 +496,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
       body: JSON.stringify({
         start_month: startMonthStr,
         end_month: endMonthStr,
-        family_ids: selectedFamilyIds,
+        ...(canSelectFamilies ? { family_ids: selectedFamilyIds } : {}),
       }),
       signal: controller.signal,
     })
@@ -520,7 +529,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
       isSubscribed = false;
       controller.abort();
     };
-  }, [token, validationError, startYear, startMonth, endYear, endMonth, selectedFamilyIds]);
+  }, [token, validationError, startYear, startMonth, endYear, endMonth, selectedFamilyIds, canSelectFamilies]);
 
   const monthsColumns = useMemo(() => {
     if (!results) return [];
@@ -648,7 +657,8 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
         </div>
 
         {/* Families Checklist (Expandable) */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.25rem' }}>
+        {canSelectFamilies && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.25rem' }}>
           <div>
             <button
               type="button"
@@ -790,7 +800,8 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
               </div>
             </div>
           )}
-        </div>
+          </div>
+        )}
 
         {error && (
           <div
@@ -829,7 +840,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
             }}
           >
             <h4 style={{ margin: '0 0 1rem 0', color: 'var(--text-h)', fontSize: '1rem', fontWeight: 600 }}>
-              {t('familyFeesGrid')}
+              {canSelectFamilies ? t('familyFeesGrid') : (t('monthlyFeesSelf') || 'Monatliche Betreuungsgebühren')}
             </h4>
             <div style={{ overflowX: 'auto' }}>
               <table className="data-table" style={{ width: 'max-content', minWidth: '100%', borderCollapse: 'collapse' }}>

@@ -27,6 +27,7 @@ type UserWithPermissions struct {
 	Roles                []string   `json:"roles"`
 	Permissions          []string   `json:"permissions"`
 	EffectivePermissions []string   `json:"effective_permissions"`
+	FamilyID             *uuid.UUID `json:"family_id,omitempty"`
 	LastLogin            *time.Time `json:"last_login,omitempty"`
 	CreatedAt            time.Time  `json:"created_at"`
 	UpdatedAt            time.Time  `json:"updated_at"`
@@ -37,8 +38,43 @@ func (s *UserWithPermissions) HasPermission(perm string) bool {
 		if p == "*" || p == perm {
 			return true
 		}
+		if perm == "families.all.restrictedread" && (p == "families.all.read" || p == "*") {
+			return true
+		}
+		if perm == "fees.self.read" && (p == "fees.all.read" || p == "*") {
+			return true
+		}
 	}
 	return false
+}
+
+func (s *UserWithPermissions) IsSelfFamily(familyID uuid.UUID) bool {
+	return s.FamilyID != nil && *s.FamilyID == familyID
+}
+
+func (s *UserWithPermissions) EnsureImpliedPermissions() {
+	hasFamiliesAll := false
+	hasFeesAll := false
+	permSet := make(map[string]bool)
+	for _, p := range s.EffectivePermissions {
+		permSet[p] = true
+		if p == "*" || p == "families.all.read" {
+			hasFamiliesAll = true
+		}
+		if p == "*" || p == "fees.all.read" {
+			hasFeesAll = true
+		}
+	}
+	if hasFamiliesAll {
+		permSet["families.all.restrictedread"] = true
+	}
+	if hasFeesAll {
+		permSet["fees.self.read"] = true
+	}
+	s.EffectivePermissions = make([]string, 0, len(permSet))
+	for p := range permSet {
+		s.EffectivePermissions = append(s.EffectivePermissions, p)
+	}
 }
 
 // NormalizeEmail trims surrounding whitespace and converts the email address to lowercase,

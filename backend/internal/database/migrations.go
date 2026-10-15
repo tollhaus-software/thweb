@@ -36,11 +36,16 @@ func ApplySchemaMigrations(ctx context.Context, dbURL string, allowMockAuth bool
 	log.Printf("[MIGRATION SUCCESS] Database schema is up to date.")
 
 	if allowMockAuth {
-		log.Println("[MIGRATION] Seeding mock developer user (developer@example.com) for local testing...")
+		log.Println("[MIGRATION] Seeding mock users for local testing...")
 		_, err := db.ExecContext(ctx, `
 			INSERT INTO users (email) VALUES ('developer@example.com') ON CONFLICT (email) DO NOTHING;
 			INSERT INTO user_roles (user_id, role_id)
 			SELECT id, 'admin' FROM users WHERE email = 'developer@example.com'
+			ON CONFLICT (user_id, role_id) DO NOTHING;
+
+			INSERT INTO users (email) VALUES ('caregiver@example.com') ON CONFLICT (email) DO NOTHING;
+			INSERT INTO user_roles (user_id, role_id)
+			SELECT id, 'caregiver' FROM users WHERE email = 'caregiver@example.com'
 			ON CONFLICT (user_id, role_id) DO NOTHING;
 		`)
 		if err != nil {
