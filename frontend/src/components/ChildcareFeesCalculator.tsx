@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { CheckSquare, Square, Info, ChevronDown, ChevronRight } from 'lucide-react';
 import { t, CURRENT_LOCALE } from '../utils/i18n';
 
@@ -55,18 +56,115 @@ const renderWithLineBreaks = (text: string) => {
   ));
 };
 
-const FeeTooltip: React.FC<{ description: string; change?: FeeChangeResult }> = ({
+const FeeTooltipContent: React.FC<{ description: string; change?: FeeChangeResult }> = ({
   description,
   change,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
+  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const applyPosition = useCallback(() => {
+    if (!containerRef.current || !popupRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    if (
+      rect.bottom < 0 ||
+      rect.top > window.innerHeight ||
+      rect.right < 0 ||
+      rect.left > window.innerWidth
+    ) {
+      setIsPinned(false);
+      setIsHovered(false);
+      return;
+    }
+
+    const GAP = 8;
+    const PADDING = 12;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const tooltipWidth = Math.min(480, viewportWidth - 2 * PADDING);
+
+    const iconCenterX = rect.left + rect.width / 2;
+    let left = iconCenterX - tooltipWidth / 2;
+    if (left < PADDING) {
+      left = PADDING;
+    } else if (left + tooltipWidth > viewportWidth - PADDING) {
+      left = viewportWidth - tooltipWidth - PADDING;
+    }
+
+    const spaceAbove = rect.top - GAP - PADDING;
+    const spaceBelow = viewportHeight - rect.bottom - GAP - PADDING;
+    const actualHeight = popupRef.current.offsetHeight || 160;
+
+    const openBelow = spaceAbove < actualHeight && spaceBelow >= spaceAbove;
+    const maxHeight = Math.max(120, openBelow ? spaceBelow : spaceAbove);
+
+    popupRef.current.style.left = `${left}px`;
+    popupRef.current.style.width = `${tooltipWidth}px`;
+    popupRef.current.style.maxHeight = `${maxHeight}px`;
+    if (openBelow) {
+      popupRef.current.style.top = `${rect.bottom + GAP}px`;
+      popupRef.current.style.bottom = 'auto';
+    } else {
+      popupRef.current.style.bottom = `${viewportHeight - rect.top + GAP}px`;
+      popupRef.current.style.top = 'auto';
+    }
+    popupRef.current.style.visibility = 'visible';
+  }, []);
+
+  const handleMouseEnter = () => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+    setIsHovered(true);
+  };
+
+  const handleMouseLeave = () => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+    }
+    hoverTimeoutRef.current = setTimeout(() => {
+      setIsHovered(false);
+    }, 120);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const visible = isHovered || isPinned;
+
+  useLayoutEffect(() => {
+    if (!visible) return;
+
+    applyPosition();
+
+    window.addEventListener('scroll', applyPosition, true);
+    window.addEventListener('resize', applyPosition);
+
+    return () => {
+      window.removeEventListener('scroll', applyPosition, true);
+      window.removeEventListener('resize', applyPosition);
+    };
+  }, [visible, applyPosition]);
 
   useEffect(() => {
     if (!isPinned) return;
     const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(target) &&
+        popupRef.current &&
+        !popupRef.current.contains(target)
+      ) {
         setIsPinned(false);
       }
     };
@@ -76,78 +174,132 @@ const FeeTooltip: React.FC<{ description: string; change?: FeeChangeResult }> = 
     };
   }, [isPinned]);
 
-  const visible = isHovered || isPinned;
+  useEffect(() => {
+    if (!isPinned && !isHovered) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsPinned(false);
+        setIsHovered(false);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isPinned, isHovered]);
+
+  const hasDesc = Boolean(description && description.trim().length > 0);
 
   return (
-    <div
-      ref={containerRef}
-      style={{
-        position: 'relative',
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginLeft: '6px',
-        cursor: 'pointer',
-        verticalAlign: 'middle',
-      }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      onClick={(e) => {
-        e.stopPropagation();
-        setIsPinned((prev) => !prev);
-      }}
-    >
-      <Info
-        size={13}
-        strokeWidth={change ? 3 : 2}
-        style={{ color: change ? 'var(--primary)' : 'var(--text-muted)' }}
-      />
-      {visible && (
-        <div
-          style={{
-            position: 'absolute',
-            bottom: '100%',
-            right: '50%',
-            transform: 'translateX(50%)',
-            marginBottom: '8px',
-            background: 'var(--bg-surface)',
-            color: 'var(--text)',
-            border: '1px solid var(--border)',
-            padding: '12px 16px',
-            borderRadius: '8px',
-            fontSize: '0.75rem',
-            lineHeight: '1.5',
-            width: '480px',
-            textAlign: 'left',
-            boxShadow: 'var(--shadow)',
-            zIndex: 100,
-            pointerEvents: 'auto',
-            cursor: 'default',
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-          }}
-        >
-          {change && (
-            <div style={{ marginBottom: '8px', borderBottom: '1px solid var(--border)', paddingBottom: '6px' }}>
-              <div style={{ fontWeight: 'bold', color: 'var(--primary)', marginBottom: '2px' }}>{t('changeHeader')}</div>
-              <div style={{ fontWeight: 'bold', color: 'var(--text-h)' }}>
-                {change.previous_fee.toFixed(2)} EUR → {change.new_fee.toFixed(2)} EUR
-              </div>
-              {change.reason && (
-                <div style={{ fontStyle: 'italic', fontSize: '0.7rem', marginTop: '2px', color: 'var(--text-muted)' }}>
-                  {renderWithLineBreaks(change.reason)}
+    <>
+      <div
+        ref={containerRef}
+        style={{
+          position: 'relative',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginLeft: '6px',
+          cursor: 'pointer',
+          verticalAlign: 'middle',
+        }}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsPinned((prev) => !prev);
+        }}
+      >
+        <Info
+          size={13}
+          strokeWidth={change ? 3 : 2}
+          style={{ color: change ? 'var(--primary)' : 'var(--text-muted)' }}
+        />
+      </div>
+
+      {visible &&
+        createPortal(
+          <div
+            ref={popupRef}
+            style={{
+              position: 'fixed',
+              visibility: 'hidden',
+              background: 'var(--bg-surface)',
+              color: 'var(--text)',
+              border: '1px solid var(--border)',
+              padding: '12px 16px',
+              borderRadius: '8px',
+              fontSize: '0.75rem',
+              lineHeight: '1.5',
+              textAlign: 'left',
+              boxShadow: 'var(--shadow)',
+              zIndex: 9999,
+              pointerEvents: 'auto',
+              cursor: 'default',
+              boxSizing: 'border-box',
+              overflowY: 'auto',
+            }}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+            onClick={(e) => {
+              e.stopPropagation();
+            }}
+          >
+            {change && (
+              <div
+                style={{
+                  marginBottom: hasDesc ? '8px' : 0,
+                  borderBottom: hasDesc ? '1px solid var(--border)' : 'none',
+                  paddingBottom: hasDesc ? '6px' : 0,
+                }}
+              >
+                <div style={{ fontWeight: 'bold', color: 'var(--primary)', marginBottom: '2px' }}>
+                  {t('changeHeader')}
                 </div>
-              )}
-            </div>
-          )}
-          <div>
-            {renderWithLineBreaks(description) || t('noDetails')}
-          </div>
-        </div>
-      )}
-    </div>
+                <div style={{ fontWeight: 'bold', color: 'var(--text-h)' }}>
+                  {change.previous_fee.toFixed(2)} EUR → {change.new_fee.toFixed(2)} EUR
+                </div>
+                {change.reason && (
+                  <div style={{ fontStyle: 'italic', fontSize: '0.7rem', marginTop: '2px', color: 'var(--text-muted)' }}>
+                    {renderWithLineBreaks(change.reason)}
+                  </div>
+                )}
+              </div>
+            )}
+            {hasDesc && <div>{renderWithLineBreaks(description)}</div>}
+          </div>,
+          document.body
+        )}
+    </>
   );
+};
+
+const FeeTooltip: React.FC<{ description: string; change?: FeeChangeResult }> = ({
+  description,
+  change,
+}) => {
+  const hasInfo = Boolean(change || (description && description.trim().length > 0));
+
+  if (!hasInfo) {
+    return (
+      <div
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginLeft: '6px',
+          verticalAlign: 'middle',
+          visibility: 'hidden',
+          pointerEvents: 'none',
+        }}
+        aria-hidden="true"
+      >
+        <Info size={13} strokeWidth={2} />
+      </div>
+    );
+  }
+
+  return <FeeTooltipContent description={description} change={change} />;
 };
 
 export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = ({
