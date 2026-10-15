@@ -7,7 +7,7 @@ import './App.css';
 import { DataTable } from './components/Table/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import EasyEdit, { Types } from './components/InlineEdit';
-import { Pencil, Trash, Undo, Redo, Calendar, ClipboardList, Lock, Unlock, ArrowLeft, ArrowRight, X, Clock, AlertCircle, LayoutDashboard } from 'lucide-react';
+import { Pencil, Trash, Undo, Redo, Calendar, ClipboardList, Lock, Unlock, ArrowLeft, ArrowRight, X, Clock, AlertCircle, LayoutDashboard, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { MultiValueListEditor, type MultiValueFlagConfig, type MultiValueEntry, type MultiValueItem, getEntryValue, isFlagActive } from './components/Table/MultiValueListEditor';
 import { NotesEditor } from './components/Table/NotesEditor';
@@ -1717,6 +1717,77 @@ const Dashboard: React.FC = () => {
     setHighlightTarget(null);
     window.location.hash = tab;
   }, []);
+
+  // Horizontal scrollable tabs management
+  const tabsNavRef = React.useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = React.useState(false);
+  const [canScrollRight, setCanScrollRight] = React.useState(false);
+
+  const updateScrollButtons = React.useCallback(() => {
+    const el = tabsNavRef.current;
+    if (!el) return;
+    const hasOverflow = el.scrollWidth > el.clientWidth + 2;
+    setCanScrollLeft(hasOverflow && el.scrollLeft > 2);
+    setCanScrollRight(hasOverflow && el.scrollWidth - el.scrollLeft - el.clientWidth > 2);
+  }, []);
+
+  const handleTabScroll = (direction: 'left' | 'right') => {
+    const el = tabsNavRef.current;
+    if (!el) return;
+    const scrollAmount = Math.max(160, el.clientWidth * 0.6);
+    el.scrollBy({
+      left: direction === 'left' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth',
+    });
+  };
+
+  React.useEffect(() => {
+    const el = tabsNavRef.current;
+    if (!el) return;
+
+    updateScrollButtons();
+
+    const ro = new ResizeObserver(() => {
+      updateScrollButtons();
+    });
+    ro.observe(el);
+
+    window.addEventListener('resize', updateScrollButtons);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', updateScrollButtons);
+    };
+  }, [updateScrollButtons]);
+
+  React.useEffect(() => {
+    const el = tabsNavRef.current;
+    if (!el) return;
+    const activeEl = el.querySelector('[data-active="true"]') as HTMLElement | null;
+    if (activeEl) {
+      activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    }
+    const timer = setTimeout(updateScrollButtons, 300);
+    return () => clearTimeout(timer);
+  }, [activeTab, updateScrollButtons]);
+
+  React.useEffect(() => {
+    const el = tabsNavRef.current;
+    if (!el) return;
+
+    const onWheel = (e: WheelEvent) => {
+      if (el.scrollWidth <= el.clientWidth) return;
+      if (e.deltaY !== 0 && Math.abs(e.deltaX) < Math.abs(e.deltaY)) {
+        e.preventDefault();
+        el.scrollLeft += e.deltaY;
+        updateScrollButtons();
+      }
+    };
+
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+    };
+  }, [updateScrollButtons]);
 
   // Audit states
   const [auditLogs, setAuditLogs] = React.useState<AuditLog[]>([]);
@@ -4056,166 +4127,117 @@ const Dashboard: React.FC = () => {
       </header>
       <main className={isTableTab ? 'main-table-view' : ''}>
         {/* Navigation Tabs */}
-        <div className="tabs" style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid var(--border)', marginBottom: '1.5rem' }}>
-          {canReadOverview && (
-            <button 
-              onClick={() => handleTabClick('familiesOverview')}
-              style={{
-                padding: '0.75rem 1rem',
-                background: 'none',
-                border: 'none',
-                borderBottom: activeTab === 'familiesOverview' ? '3px solid var(--primary)' : '3px solid transparent',
-                color: activeTab === 'familiesOverview' ? 'var(--primary)' : 'var(--text)',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                fontSize: '1rem',
-                transition: 'all 0.2s'
-              }}
-            >
-              {t('familiesOverview')}
-            </button>
-          )}
-          {canReadFamiliesAll && (
-            <>
-              <button 
-                onClick={() => handleTabClick('families')}
-                style={{
-                  padding: '0.75rem 1rem',
-                  background: 'none',
-                  border: 'none',
-                  borderBottom: activeTab === 'families' ? '3px solid var(--primary)' : '3px solid transparent',
-                  color: activeTab === 'families' ? 'var(--primary)' : 'var(--text)',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  fontSize: '1rem',
-                  transition: 'all 0.2s'
-                }}
+        <div className="tabs-wrapper">
+          {canScrollLeft && (
+            <div className="tabs-scroll-indicator left">
+              <button
+                type="button"
+                className="tab-scroll-btn"
+                onClick={() => handleTabScroll('left')}
+                aria-label="Scroll left"
               >
-                {t('families')}
+                <ChevronLeft size={16} />
               </button>
+            </div>
+          )}
+
+          <div
+            className="tabs"
+            ref={tabsNavRef}
+            onScroll={updateScrollButtons}
+          >
+            {canReadOverview && (
               <button 
-                onClick={() => handleTabClick('parents')}
-                style={{
-                  padding: '0.75rem 1rem',
-                  background: 'none',
-                  border: 'none',
-                  borderBottom: activeTab === 'parents' ? '3px solid var(--primary)' : '3px solid transparent',
-                  color: activeTab === 'parents' ? 'var(--primary)' : 'var(--text)',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  fontSize: '1rem',
-                  transition: 'all 0.2s'
-                }}
+                onClick={() => handleTabClick('familiesOverview')}
+                className={`tab-btn ${activeTab === 'familiesOverview' ? 'active' : ''}`}
+                data-active={activeTab === 'familiesOverview'}
               >
-                {t('parents')}
+                {t('familiesOverview')}
               </button>
+            )}
+            {canReadFamiliesAll && (
+              <>
+                <button 
+                  onClick={() => handleTabClick('families')}
+                  className={`tab-btn ${activeTab === 'families' ? 'active' : ''}`}
+                  data-active={activeTab === 'families'}
+                >
+                  {t('families')}
+                </button>
+                <button 
+                  onClick={() => handleTabClick('parents')}
+                  className={`tab-btn ${activeTab === 'parents' ? 'active' : ''}`}
+                  data-active={activeTab === 'parents'}
+                >
+                  {t('parents')}
+                </button>
+                <button 
+                  onClick={() => handleTabClick('children')}
+                  className={`tab-btn ${activeTab === 'children' ? 'active' : ''}`}
+                  data-active={activeTab === 'children'}
+                >
+                  {t('children')}
+                </button>
+              </>
+            )}
+            {canReadFees && (
               <button 
-                onClick={() => handleTabClick('children')}
-                style={{
-                  padding: '0.75rem 1rem',
-                  background: 'none',
-                  border: 'none',
-                  borderBottom: activeTab === 'children' ? '3px solid var(--primary)' : '3px solid transparent',
-                  color: activeTab === 'children' ? 'var(--primary)' : 'var(--text)',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  fontSize: '1rem',
-                  transition: 'all 0.2s'
-                }}
+                onClick={() => handleTabClick('childcareFees')}
+                className={`tab-btn ${activeTab === 'childcareFees' ? 'active' : ''}`}
+                data-active={activeTab === 'childcareFees'}
               >
-                {t('children')}
+                {t('childcareFees')}
               </button>
-            </>
-          )}
-          {canReadFees && (
-            <button 
-              onClick={() => handleTabClick('childcareFees')}
-              style={{
-                padding: '0.75rem 1rem',
-                background: 'none',
-                border: 'none',
-                borderBottom: activeTab === 'childcareFees' ? '3px solid var(--primary)' : '3px solid transparent',
-                color: activeTab === 'childcareFees' ? 'var(--primary)' : 'var(--text)',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                fontSize: '1rem',
-                transition: 'all 0.2s'
-              }}
-            >
-              {t('childcareFees')}
-            </button>
-          )}
-          {(canReadFamiliesAll || hasPermission('hygiene.all.write')) && (
-            <button 
-              onClick={() => handleTabClick('hygieneBelehrung')}
-              style={{
-                padding: '0.75rem 1rem',
-                background: 'none',
-                border: 'none',
-                borderBottom: activeTab === 'hygieneBelehrung' ? '3px solid var(--primary)' : '3px solid transparent',
-                color: activeTab === 'hygieneBelehrung' ? 'var(--primary)' : 'var(--text)',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                fontSize: '1rem',
-                transition: 'all 0.2s'
-              }}
-            >
-              {t('hygieneBelehrung')}
-            </button>
-          )}
-          {canReadAudit && (
-            <button 
-              onClick={() => handleTabClick('audit')}
-              style={{
-                padding: '0.75rem 1rem',
-                background: 'none',
-                border: 'none',
-                borderBottom: activeTab === 'audit' ? '3px solid var(--primary)' : '3px solid transparent',
-                color: activeTab === 'audit' ? 'var(--primary)' : 'var(--text)',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                fontSize: '1rem',
-                transition: 'all 0.2s'
-              }}
-            >
-              {t('audit')}
-            </button>
-          )}
-          {(hasPermission('users.all.manage') || hasPermission('*')) && (
-            <button 
-              onClick={() => handleTabClick('admin')}
-              style={{
-                padding: '0.75rem 1rem',
-                background: 'none',
-                border: 'none',
-                borderBottom: activeTab === 'admin' ? '3px solid var(--primary)' : '3px solid transparent',
-                color: activeTab === 'admin' ? 'var(--primary)' : 'var(--text)',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                fontSize: '1rem',
-                transition: 'all 0.2s'
-              }}
-            >
-              {t('admin')}
-            </button>
-          )}
-          {canProvisionKiosk && (
-            <button 
-              onClick={() => handleTabClick('kiosk')}
-              style={{
-                padding: '0.75rem 1rem',
-                background: 'none',
-                border: 'none',
-                borderBottom: activeTab === 'kiosk' ? '3px solid var(--primary)' : '3px solid transparent',
-                color: activeTab === 'kiosk' ? 'var(--primary)' : 'var(--text)',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                fontSize: '1rem',
-                transition: 'all 0.2s'
-              }}
-            >
-              {t('kioskCertificates')}
-            </button>
+            )}
+            {(canReadFamiliesAll || hasPermission('hygiene.all.write')) && (
+              <button 
+                onClick={() => handleTabClick('hygieneBelehrung')}
+                className={`tab-btn ${activeTab === 'hygieneBelehrung' ? 'active' : ''}`}
+                data-active={activeTab === 'hygieneBelehrung'}
+              >
+                {t('hygieneBelehrung')}
+              </button>
+            )}
+            {canReadAudit && (
+              <button 
+                onClick={() => handleTabClick('audit')}
+                className={`tab-btn ${activeTab === 'audit' ? 'active' : ''}`}
+                data-active={activeTab === 'audit'}
+              >
+                {t('audit')}
+              </button>
+            )}
+            {(hasPermission('users.all.manage') || hasPermission('*')) && (
+              <button 
+                onClick={() => handleTabClick('admin')}
+                className={`tab-btn ${activeTab === 'admin' ? 'active' : ''}`}
+                data-active={activeTab === 'admin'}
+              >
+                {t('admin')}
+              </button>
+            )}
+            {canProvisionKiosk && (
+              <button 
+                onClick={() => handleTabClick('kiosk')}
+                className={`tab-btn ${activeTab === 'kiosk' ? 'active' : ''}`}
+                data-active={activeTab === 'kiosk'}
+              >
+                {t('kioskCertificates')}
+              </button>
+            )}
+          </div>
+
+          {canScrollRight && (
+            <div className="tabs-scroll-indicator right">
+              <button
+                type="button"
+                className="tab-scroll-btn"
+                onClick={() => handleTabScroll('right')}
+                aria-label="Scroll right"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
           )}
         </div>
 

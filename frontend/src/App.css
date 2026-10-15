@@ -155,9 +155,110 @@ header {
   overflow: hidden;
 }
 
+.tabs-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1.5rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.dashboard-container.table-view-active .tabs-wrapper,
 .dashboard-container.table-view-active .tabs {
   flex-shrink: 0;
   margin-bottom: 0.75rem !important;
+}
+
+.tabs {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+  scroll-behavior: smooth;
+  flex: 1;
+  min-width: 0;
+  margin-bottom: -1px;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+.tab-btn {
+  padding: 0.75rem 1rem;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: var(--text);
+  font-weight: bold;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.tab-btn:hover {
+  color: var(--primary);
+}
+
+.tab-btn.active {
+  border-bottom: 3px solid var(--primary);
+  color: var(--primary);
+}
+
+.tabs-scroll-indicator {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  z-index: 2;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.tabs-scroll-indicator.left {
+  left: 0;
+  padding-right: 32px;
+  background: linear-gradient(to right, var(--bg) 60%, transparent);
+}
+
+.tabs-scroll-indicator.right {
+  right: 0;
+  padding-left: 32px;
+  background: linear-gradient(to left, var(--bg) 60%, transparent);
+}
+
+.tab-scroll-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-surface);
+  color: var(--text);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: all 0.15s ease;
+  padding: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.tab-scroll-btn:hover {
+  background: var(--bg-subtle);
+  border-color: var(--primary);
+  color: var(--primary);
+  transform: scale(1.05);
+}
+
+.tab-scroll-btn:active {
+  transform: scale(0.95);
 }
 
 .dashboard-container.table-view-active .controls-row {
