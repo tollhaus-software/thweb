@@ -5,10 +5,17 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/pavolmarko/thweb-backend/internal/auth"
 	"github.com/pavolmarko/thweb-backend/internal/fees"
 )
 
 func (s *Server) HandleCalculateFees(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	if user == nil || (!user.HasPermission("fees.all.read") && !user.HasPermission("fees.self.read")) {
+		http.Error(w, "Forbidden: fees permission required", http.StatusForbidden)
+		return
+	}
+
 	var req fees.FeeCalculationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
@@ -47,10 +54,17 @@ func (s *Server) HandleCalculateFees(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var familyResults []fees.FeeCalculationResult
-	var allChanges []fees.FeeChangeResult
+	hasFeesAll := user.HasPermission("fees.all.read")
+
+	familyResults := make([]fees.FeeCalculationResult, 0)
+	allChanges := make([]fees.FeeChangeResult, 0)
 
 	for _, fam := range familiesList {
+		if !hasFeesAll {
+			if user.FamilyID == nil || fam.ID != *user.FamilyID {
+				continue
+			}
+		}
 		familyName := fam.DisplayName()
 		mFees, changes := fees.CalculateFamilyFeesForRange(fam.ID, familyName, fam.Children, months)
 

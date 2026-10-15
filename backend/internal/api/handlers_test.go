@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -339,6 +340,232 @@ func TestHandleUpdateFamilyParents_IdentifierEmailPermissions(t *testing.T) {
 	rec = makeRequest(userWithWrite, bodyAdminModifyID)
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200 when editing identifier email with families.all.write, got %d (%s)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleListFamiliesOverview_ProjectionAndScoping(t *testing.T) {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := store.NewStore(pool)
+	s := &Server{Store: appStore}
+
+	testUserID := uuid.New()
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2)", testUserID, "test-user-"+testUserID.String()+"@example.com")
+	if err != nil {
+		t.Fatalf("failed to insert test user: %v", err)
+	}
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", testUserID)
+	}()
+
+	familyID1 := uuid.New()
+	familyID2 := uuid.New()
+
+	parentID1 := uuid.New()
+	parentID2 := uuid.New()
+
+	parents1 := []models.Parent{
+		{
+			ID:        parentID1,
+			FamilyID:  familyID1,
+			FirstName: "Alice",
+			LastName:  "FamilyOne",
+			Emails: models.MultiValueList{
+				{Value: "alice.public@example.com", AddressList: true, IdentifierEmail: true},
+				{Value: "alice.secret@example.com", AddressList: false, IdentifierEmail: false},
+			},
+			Phones: models.MultiValueList{
+				{Value: "111-public", AddressList: true},
+				{Value: "111-private", AddressList: false},
+			},
+			Notes: "Sensitive parent notes that should NOT be in overview",
+		},
+	}
+	if err := appStore.UpdateFamilyParents(ctx, testUserID, familyID1, parents1); err != nil {
+		t.Fatalf("failed to seed family 1: %v", err)
+	}
+	defer func() {
+		_ = appStore.DeleteFamily(ctx, testUserID, familyID1)
+	}()
+
+	parents2 := []models.Parent{
+		{
+			ID:        parentID2,
+			FamilyID:  familyID2,
+			FirstName: "Bob",
+			LastName:  "FamilyTwo",
+			Emails: models.MultiValueList{
+				{Value: "bob.public@example.com", AddressList: true, IdentifierEmail: true},
+			},
+			Phones: models.MultiValueList{
+				{Value: "222-public", AddressList: true},
+			},
+		},
+	}
+	if err := appStore.UpdateFamilyParents(ctx, testUserID, familyID2, parents2); err != nil {
+		t.Fatalf("failed to seed family 2: %v", err)
+	}
+	defer func() {
+		_ = appStore.DeleteFamily(ctx, testUserID, familyID2)
+	}()
+
+	// Add child to family 1 with group change
+	childID1 := uuid.New()
+	child1 := models.Child{
+		ID:        childID1,
+		FamilyID:  familyID1,
+		FirstName: "Charlie",
+		LastName:  "FamilyOne",
+		Notes:     "Secret child notes",
+	}
+	if err := appStore.UpdateChild(ctx, testUserID, childID1, child1); err != nil {
+		t.Fatalf("failed to seed child: %v", err)
+	}
+	changeDate := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	_, _ = appStore.CreateChildGroupChange(ctx, testUserID, models.ChildGroupChange{
+		Child:       childID1,
+		ChangeDate:  changeDate,
+		TargetGroup: 1,
+	})
+
+	// User representing Family 1 with self-service
+	restrictedUser := &models.UserWithPermissions{
+		Email:                "alice.public@example.com",
+		Roles:                []string{"restricted"},
+		EffectivePermissions: []string{"families.all.restrictedread", "fees.self.read", "families.self.selfservice"},
+		FamilyID:             &familyID1,
+	}
+
+	req := httptest.NewRequest("GET", "/api/families/overview", nil)
+	reqCtx := context.WithValue(req.Context(), auth.UserContextKey, restrictedUser)
+	req = req.WithContext(reqCtx)
+	rec := httptest.NewRecorder()
+
+	s.HandleListFamiliesOverview(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK from HandleListFamiliesOverview, got %d (%s)", rec.Code, rec.Body.String())
+	}
+
+	bodyStr := rec.Body.String()
+	// Must NOT contain sensitive notes
+	if strings.Contains(bodyStr, "Sensitive parent notes") {
+		t.Errorf("HandleListFamiliesOverview leaked parent notes: %s", bodyStr)
+	}
+	if strings.Contains(bodyStr, "Secret child notes") {
+		t.Errorf("HandleListFamiliesOverview leaked child notes: %s", bodyStr)
+	}
+	// Must NOT contain unlisted emails/phones
+	if strings.Contains(bodyStr, "alice.secret@example.com") {
+		t.Errorf("HandleListFamiliesOverview leaked non-address-list email: %s", bodyStr)
+	}
+	if strings.Contains(bodyStr, "111-private") {
+		t.Errorf("HandleListFamiliesOverview leaked non-address-list phone: %s", bodyStr)
+	}
+	// MUST contain public email and phone
+	if !strings.Contains(bodyStr, "alice.public@example.com") {
+		t.Errorf("expected alice.public@example.com in overview, got: %s", bodyStr)
+	}
+	if !strings.Contains(bodyStr, "111-public") {
+		t.Errorf("expected 111-public in overview, got: %s", bodyStr)
+	}
+	// Family 1 child Charlie should have group changes
+	if !strings.Contains(bodyStr, "Charlie") {
+		t.Errorf("expected child Charlie in overview, got: %s", bodyStr)
+	}
+}
+
+func TestHandleCalculateFees_RestrictedUser(t *testing.T) {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := store.NewStore(pool)
+	s := &Server{Store: appStore}
+
+	testUserID := uuid.New()
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2)", testUserID, "test-user-"+testUserID.String()+"@example.com")
+	if err != nil {
+		t.Fatalf("failed to insert test user: %v", err)
+	}
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", testUserID)
+	}()
+
+	familyID1 := uuid.New()
+	familyID2 := uuid.New()
+
+	if err := appStore.UpdateFamilyParents(ctx, testUserID, familyID1, []models.Parent{
+		{ID: uuid.New(), FamilyID: familyID1, FirstName: "F1", LastName: "Parent"},
+	}); err != nil {
+		t.Fatalf("failed to update family 1: %v", err)
+	}
+	if err := appStore.UpdateFamilyParents(ctx, testUserID, familyID2, []models.Parent{
+		{ID: uuid.New(), FamilyID: familyID2, FirstName: "F2", LastName: "Parent"},
+	}); err != nil {
+		t.Fatalf("failed to update family 2: %v", err)
+	}
+	defer func() {
+		_ = appStore.DeleteFamily(ctx, testUserID, familyID1)
+		_ = appStore.DeleteFamily(ctx, testUserID, familyID2)
+	}()
+
+	calcBody := `{"start_month":"2026-09","end_month":"2026-09"}`
+
+	// 1. Restricted user with fees.self.read: only returns familyID1
+	userSelf := &models.UserWithPermissions{
+		Email:                "f1@example.com",
+		EffectivePermissions: []string{"families.all.restrictedread", "fees.self.read"},
+		FamilyID:             &familyID1,
+	}
+	req := httptest.NewRequest("POST", "/api/fees/calculate", strings.NewReader(calcBody))
+	req = req.WithContext(context.WithValue(req.Context(), auth.UserContextKey, userSelf))
+	rec := httptest.NewRecorder()
+	s.HandleCalculateFees(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	bodyStr := rec.Body.String()
+	if !strings.Contains(bodyStr, familyID1.String()) {
+		t.Errorf("expected result to contain familyID1 (%s), got: %s", familyID1.String(), bodyStr)
+	}
+	if strings.Contains(bodyStr, familyID2.String()) {
+		t.Errorf("restricted user result must NOT contain familyID2 (%s), got: %s", familyID2.String(), bodyStr)
+	}
+
+	// 2. User without fees permissions -> 403 Forbidden
+	userNoFees := &models.UserWithPermissions{
+		Email:                "nofees@example.com",
+		EffectivePermissions: []string{"families.all.restrictedread"},
+	}
+	reqNoFees := httptest.NewRequest("POST", "/api/fees/calculate", strings.NewReader(calcBody))
+	reqNoFees = reqNoFees.WithContext(context.WithValue(reqNoFees.Context(), auth.UserContextKey, userNoFees))
+	recNoFees := httptest.NewRecorder()
+	s.HandleCalculateFees(recNoFees, reqNoFees)
+	if recNoFees.Code != http.StatusForbidden {
+		t.Errorf("expected 403 Forbidden without fees permission, got %d", recNoFees.Code)
 	}
 }
 

@@ -36,6 +36,30 @@ func TestUserWithPermissions_HasPermission(t *testing.T) {
 			permToCheck: "vaccination.status.manage",
 			want:        false,
 		},
+		{
+			name:        "families.all.read implies families.all.restrictedread",
+			effective:   []string{"families.all.read"},
+			permToCheck: "families.all.restrictedread",
+			want:        true,
+		},
+		{
+			name:        "fees.all.read implies fees.self.read",
+			effective:   []string{"fees.all.read"},
+			permToCheck: "fees.self.read",
+			want:        true,
+		},
+		{
+			name:        "restricted read does not imply families.all.read",
+			effective:   []string{"families.all.restrictedread"},
+			permToCheck: "families.all.read",
+			want:        false,
+		},
+		{
+			name:        "fees.self.read does not imply fees.all.read",
+			effective:   []string{"fees.self.read"},
+			permToCheck: "fees.all.read",
+			want:        false,
+		},
 	}
 
 	for _, tt := range tests {

@@ -126,24 +126,67 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 			user, err = a.Store.GetUserWithPermissionsByEmail(r.Context(), email)
 			if err != nil {
 				if err == pgx.ErrNoRows {
-					log.Printf("[AUTH WARNING] User email %q not found in allow-list", email)
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusForbidden)
-					json.NewEncoder(w).Encode(map[string]string{
-						"error": "User not allowed",
-						"email": email,
-					})
+					familyID, pErr := a.Store.GetFamilyIDByIdentifierEmail(r.Context(), email)
+					if pErr != nil {
+						log.Printf("[AUTH ERROR] Failed to check identifier email %q: %v", email, pErr)
+						writeJSONError(w, "Database error: "+pErr.Error(), http.StatusInternalServerError)
+						return
+					}
+					if familyID == nil {
+						log.Printf("[AUTH WARNING] User email %q not found in allow-list or identifier emails", email)
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusForbidden)
+						json.NewEncoder(w).Encode(map[string]string{
+							"error": "User not allowed",
+							"email": email,
+						})
+						return
+					}
+					user = &models.UserWithPermissions{
+						Email:                email,
+						Roles:                []string{"restricted"},
+						Permissions:          []string{},
+						EffectivePermissions: []string{
+							"families.all.restrictedread",
+							"fees.self.read",
+							"families.self.selfservice",
+						},
+						FamilyID: familyID,
+					}
+				} else {
+					log.Printf("[AUTH ERROR] Failed to fetch user %q from database: %v", email, err)
+					writeJSONError(w, "Database error: "+err.Error(), http.StatusInternalServerError)
 					return
 				}
-				log.Printf("[AUTH ERROR] Failed to fetch user %q from database: %v", email, err)
-				writeJSONError(w, "Database error: "+err.Error(), http.StatusInternalServerError)
-				return
+			} else {
+				familyID, pErr := a.Store.GetFamilyIDByIdentifierEmail(r.Context(), email)
+				if pErr == nil && familyID != nil {
+					user.FamilyID = familyID
+					implicitPerms := []string{
+						"families.all.restrictedread",
+						"fees.self.read",
+						"families.self.selfservice",
+					}
+					permSet := make(map[string]bool)
+					for _, p := range user.EffectivePermissions {
+						permSet[p] = true
+					}
+					for _, p := range implicitPerms {
+						permSet[p] = true
+					}
+					user.EffectivePermissions = make([]string, 0, len(permSet))
+					for p := range permSet {
+						user.EffectivePermissions = append(user.EffectivePermissions, p)
+					}
+				}
 			}
 		} else {
 			user = &models.UserWithPermissions{
 				Email: email,
 			}
 		}
+
+		user.EnsureImpliedPermissions()
 
 		ctx := context.WithValue(r.Context(), UserContextKey, user)
 		ctx = context.WithValue(ctx, AccessTokenContextKey, rawAccessToken)

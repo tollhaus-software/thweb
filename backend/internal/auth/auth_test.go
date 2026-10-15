@@ -6,7 +6,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pavolmarko/thweb-backend/internal/models"
+	"github.com/pavolmarko/thweb-backend/internal/store"
 )
 
 func TestRequirePermission_VaccinationStatusManage(t *testing.T) {
@@ -538,6 +541,98 @@ func TestAuthenticator_Middleware_ProxySharedSecret(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestAuthenticator_Middleware_RestrictedUser(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := store.NewStore(pool)
+	authenticator := NewAuthenticator("test-client-id", false, appStore)
+	authenticator.ProxySharedSecret = "secret123"
+
+	testUserID := uuid.New()
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2)", testUserID, "test-user-"+testUserID.String()+"@example.com")
+	if err != nil {
+		t.Fatalf("failed to insert test user: %v", err)
+	}
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", testUserID)
+	}()
+
+	familyID := uuid.New()
+	parentID := uuid.New()
+	identEmail := "parent.ident." + uuid.New().String() + "@example.com"
+
+	parent := models.Parent{
+		ID:        parentID,
+		FamilyID:  familyID,
+		FirstName: "Restricted",
+		LastName:  "Parent",
+		Emails: models.MultiValueList{
+			{Value: identEmail, IdentifierEmail: true, AddressList: true},
+		},
+		Phones: models.MultiValueList{},
+	}
+	if err := appStore.UpdateFamilyParents(ctx, testUserID, familyID, []models.Parent{parent}); err != nil {
+		t.Fatalf("failed to seed parent: %v", err)
+	}
+	defer func() {
+		_ = appStore.DeleteFamily(ctx, testUserID, familyID)
+	}()
+
+	var recordedUser *models.UserWithPermissions
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recordedUser = GetUser(r.Context())
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := authenticator.Middleware(next)
+
+	// 1. Request as identifier email (not in users table) -> 200 OK, restricted role & permissions
+	req := httptest.NewRequest("GET", "/api/families/overview", nil)
+	req.Header.Set("X-Proxy-Secret", "secret123")
+	req.Header.Set("X-Forwarded-Email", identEmail)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for restricted user, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	if recordedUser == nil {
+		t.Fatal("expected recordedUser in context, got nil")
+	}
+	if recordedUser.FamilyID == nil || *recordedUser.FamilyID != familyID {
+		t.Errorf("expected FamilyID %s, got %v", familyID, recordedUser.FamilyID)
+	}
+	if !recordedUser.HasPermission("families.all.restrictedread") {
+		t.Error("expected user to have families.all.restrictedread")
+	}
+	if !recordedUser.HasPermission("fees.self.read") {
+		t.Error("expected user to have fees.self.read")
+	}
+	if !recordedUser.HasPermission("families.self.selfservice") {
+		t.Error("expected user to have families.self.selfservice")
+	}
+
+	// 2. Request as unknown email (neither in users nor parents identifier email) -> 403 Forbidden
+	reqUnknown := httptest.NewRequest("GET", "/api/families/overview", nil)
+	reqUnknown.Header.Set("X-Proxy-Secret", "secret123")
+	reqUnknown.Header.Set("X-Forwarded-Email", "stranger@example.com")
+	recUnknown := httptest.NewRecorder()
+
+	handler.ServeHTTP(recUnknown, reqUnknown)
+	if recUnknown.Code != http.StatusForbidden {
+		t.Errorf("expected 403 Forbidden for unknown user, got %d", recUnknown.Code)
 	}
 }
 
