@@ -84,10 +84,12 @@ test.describe('Test Case 3: Families View Add Buttons (+ Kind and + Elternteil)'
     await expect(familyRow.locator('.family-sub-header-parents')).toContainText('Markus Mustermann');
     await expect(familyRow.locator('.family-sub-header-parents')).toContainText('Erika Mustermann');
 
-    // --- Step 5: Verify Parents tab has + Elternteil button on the right side with matching style ---
+    // --- Step 5: Verify Parents tab has + Elternteil button on the right side with matching style and →Kinder jump link ---
     await page.getByRole('button', { name: 'Eltern(MGA)', exact: true }).click();
     const parentsFamilyRow = page.locator('tr.family-group-row', { hasText: 'Mustermann' });
     await expect(parentsFamilyRow).toBeVisible();
+    const jumpToChildrenLink = parentsFamilyRow.locator('.family-header-link', { hasText: '→Kinder' });
+    await expect(jumpToChildrenLink).toBeVisible();
     const parentsActionsContainer = parentsFamilyRow.locator('.family-group-actions');
     await expect(parentsActionsContainer).toBeVisible();
     const parentsAddParentBtn = parentsFamilyRow.getByRole('button', { name: '+ Elternteil' });
@@ -95,10 +97,12 @@ test.describe('Test Case 3: Families View Add Buttons (+ Kind and + Elternteil)'
     await expect(parentsAddParentBtn).toHaveClass(/family-action-button/);
     await expect(parentsAddParentBtn).toHaveClass(/family-add-parent-button/);
 
-    // --- Step 6: Verify Children tab has + Kind button on the right side with matching style ---
-    await page.getByRole('button', { name: 'Kinder(MGA)', exact: true }).click();
+    // --- Step 6: Click →Kinder to jump to Children tab and verify + Kind button and →Eltern jump link ---
+    await jumpToChildrenLink.click();
     const childrenFamilyRow = page.locator('tr.family-group-row', { hasText: 'Mustermann' });
     await expect(childrenFamilyRow).toBeVisible();
+    const jumpToParentsLink = childrenFamilyRow.locator('.family-header-link', { hasText: '→Eltern' });
+    await expect(jumpToParentsLink).toBeVisible();
     const childrenActionsContainer = childrenFamilyRow.locator('.family-group-actions');
     await expect(childrenActionsContainer).toBeVisible();
     const childrenAddChildBtn = childrenFamilyRow.getByRole('button', { name: '+ Kind' });
