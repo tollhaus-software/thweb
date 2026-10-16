@@ -14,7 +14,7 @@ import { NotesEditor } from './components/Table/NotesEditor';
 import { AddressEditor } from './components/Table/AddressEditor';
 import { GroupChangesPopover } from './components/Table/GroupChangesPopover';
 import { MembershipsModal } from './components/Table/MembershipsModal';
-import { VaccinationStatusEditor, type VaccinationCheck } from './components/Table/VaccinationStatusEditor';
+import { VaccinationStatusPopover, VaccinationStatusCell, type VaccinationCheck } from './components/Table/VaccinationStatusEditor';
 import { ChildcareFeesCalculator } from './components/ChildcareFeesCalculator';
 import { KioskDashboard } from './components/Dashboard/KioskDashboard';
 import { KioskProvisioning } from './components/Admin/KioskProvisioning';
@@ -1907,6 +1907,10 @@ const Dashboard: React.FC = () => {
   const [activeMultiValueField, setActiveMultiValueField] = React.useState<'emails' | 'phones' | null>(null);
   const [multiValuePopoverAnchor, setMultiValuePopoverAnchor] = React.useState<HTMLElement | string | null>(null);
 
+  // Vaccination Status popover state
+  const [targetVaccinationPerson, setTargetVaccinationPerson] = React.useState<{ id: string; type: 'parent' | 'child' } | null>(null);
+  const [vaccinationPopoverAnchor, setVaccinationPopoverAnchor] = React.useState<HTMLElement | string | null>(null);
+
   const [confirmDelete, setConfirmDelete] = React.useState<{
     isOpen: boolean;
     message: string;
@@ -3166,14 +3170,14 @@ const Dashboard: React.FC = () => {
 
   const handleSaveParentField = (parent: Parent, fieldName: keyof Parent, newValue: any) => {
     const family = families.find(f => f.id === parent.family_id);
-    if (!family) return;
+    if (!family) return Promise.resolve();
 
     const originalParents = family.parents || [];
     const updatedParents = originalParents.map(p => 
       p.id === parent.id ? { ...p, [fieldName]: newValue } : p
     );
 
-    fetch(`/api/families/${family.id}`, {
+    return fetch(`/api/families/${family.id}`, {
       method: 'PUT',
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ parents: updatedParents }),
@@ -3206,7 +3210,7 @@ const Dashboard: React.FC = () => {
             afterParents: updatedParents,
           }
         });
-        fetchFamilies();
+        return fetchFamilies();
       })
       .catch((err) => alert(err.message));
   };
@@ -3263,7 +3267,7 @@ const Dashboard: React.FC = () => {
 
     const updatedChild = { ...child, [fieldName]: formattedValue };
     
-    fetch(`/api/children/${child.id}`, {
+    return fetch(`/api/children/${child.id}`, {
       method: 'PUT',
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(updatedChild),
@@ -3291,7 +3295,7 @@ const Dashboard: React.FC = () => {
             after: updatedChild,
           }
         });
-        fetchFamilies();
+        return fetchFamilies();
       })
       .catch((err) => alert(err.message));
   };
@@ -3349,6 +3353,39 @@ const Dashboard: React.FC = () => {
       }
     });
   };
+
+  const openManageVaccination = React.useCallback((personId: string, type: 'parent' | 'child', anchor: HTMLElement | string) => {
+    setTargetVaccinationPerson({ id: personId, type });
+    setVaccinationPopoverAnchor(anchor);
+  }, []);
+
+  const closeManageVaccination = React.useCallback(() => {
+    setVaccinationPopoverAnchor(null);
+    setTargetVaccinationPerson(null);
+  }, []);
+
+  const activeVaccinationData = React.useMemo(() => {
+    if (!targetVaccinationPerson) return null;
+    if (targetVaccinationPerson.type === 'parent') {
+      const parent = families.flatMap((f) => f.parents || []).find((p) => p.id === targetVaccinationPerson.id);
+      if (!parent) return null;
+      return {
+        id: parent.id,
+        type: 'parent' as const,
+        checks: parent.vaccination_checks || [],
+        save: (newChecks: VaccinationCheck[]) => handleSaveParentField(parent, 'vaccination_checks', newChecks),
+      };
+    } else {
+      const child = families.flatMap((f) => f.children || []).find((c) => c.id === targetVaccinationPerson.id);
+      if (!child) return null;
+      return {
+        id: child.id,
+        type: 'child' as const,
+        checks: child.vaccination_checks || [],
+        save: (newChecks: VaccinationCheck[]) => handleSaveChildField(child, 'vaccination_checks', newChecks),
+      };
+    }
+  }, [families, targetVaccinationPerson, handleSaveParentField, handleSaveChildField]);
 
   // Structure families with their parent sub-rows for two-layer rendering
   const parentsFamilyData = React.useMemo(() => {
@@ -3962,11 +3999,17 @@ const Dashboard: React.FC = () => {
           size: 180,
           cell: (info: any) => {
             const parent = info.row.original;
+            const isCurrentActive = Boolean(
+              vaccinationPopoverAnchor &&
+              targetVaccinationPerson?.type === 'parent' &&
+              targetVaccinationPerson?.id === parent.id
+            );
             return (
-              <VaccinationStatusEditor
+              <VaccinationStatusCell
+                id={`cell-vaccination-parent-${parent.id}`}
                 checks={parent.vaccination_checks}
-                currentUserEmail={user?.email || ''}
-                onSave={(newChecks) => handleSaveParentField(parent, 'vaccination_checks', newChecks)}
+                isActive={isCurrentActive}
+                onOpenManage={(anchor) => openManageVaccination(parent.id, 'parent', anchor)}
                 isUnlocked={isVaccinationUnlocked}
                 onUnlock={handleRequestKmsAuth}
               />
@@ -4018,7 +4061,7 @@ const Dashboard: React.FC = () => {
         }
       }
     ],
-    [families, handleSaveParentField, handleSaveFamilyParents, handleDeleteParent, isVaccinationUnlocked, handleRequestKmsAuth, hasPermission, user?.email, membershipPopoverAnchor, targetParentMemberships, openManageMemberships, multiValuePopoverAnchor, activeParentForMultiValue, activeMultiValueField, openManageMultiValue]
+    [families, handleSaveParentField, handleSaveFamilyParents, handleDeleteParent, isVaccinationUnlocked, handleRequestKmsAuth, hasPermission, user?.email, membershipPopoverAnchor, targetParentMemberships, openManageMemberships, multiValuePopoverAnchor, activeParentForMultiValue, activeMultiValueField, openManageMultiValue, vaccinationPopoverAnchor, targetVaccinationPerson, openManageVaccination]
   );
 
   const childGroupColumn = React.useMemo<ColumnDef<any>>(
@@ -4197,11 +4240,17 @@ const Dashboard: React.FC = () => {
           size: 180,
           cell: (info: any) => {
             const child = info.row.original;
+            const isCurrentActive = Boolean(
+              vaccinationPopoverAnchor &&
+              targetVaccinationPerson?.type === 'child' &&
+              targetVaccinationPerson?.id === child.id
+            );
             return (
-              <VaccinationStatusEditor
+              <VaccinationStatusCell
+                id={`cell-vaccination-child-${child.id}`}
                 checks={child.vaccination_checks}
-                currentUserEmail={user?.email || ''}
-                onSave={(newChecks) => handleSaveChildField(child, 'vaccination_checks', newChecks)}
+                isActive={isCurrentActive}
+                onOpenManage={(anchor) => openManageVaccination(child.id, 'child', anchor)}
                 isUnlocked={isVaccinationUnlocked}
                 onUnlock={handleRequestKmsAuth}
               />
@@ -4253,7 +4302,7 @@ const Dashboard: React.FC = () => {
         }
       }
     ],
-    [families, handleSaveChildField, handleDeleteChild, openManageGroupChanges, childGroupColumn, isVaccinationUnlocked, handleRequestKmsAuth, hasPermission, user?.email]
+    [families, handleSaveChildField, handleDeleteChild, openManageGroupChanges, childGroupColumn, isVaccinationUnlocked, handleRequestKmsAuth, hasPermission, user?.email, vaccinationPopoverAnchor, targetVaccinationPerson, openManageVaccination]
   );
 
   const familyChildColumns = React.useMemo<ColumnDef<any>[]>(
@@ -5439,6 +5488,19 @@ const Dashboard: React.FC = () => {
           canDeleteItem={canDeleteMultiValueItem}
           canToggleFlag={canToggleMultiValueFlag}
           disabledReason={getMultiValueDisabledReason}
+        />
+
+        {/* Manage Vaccination Status Popover */}
+        <VaccinationStatusPopover
+          key={activeVaccinationData ? `${activeVaccinationData.type}-${activeVaccinationData.id}` : 'vaccination-popover'}
+          isOpen={Boolean(vaccinationPopoverAnchor && activeVaccinationData)}
+          anchorEl={vaccinationPopoverAnchor}
+          onClose={closeManageVaccination}
+          checks={activeVaccinationData?.checks || []}
+          currentUserEmail={user?.email || ''}
+          onSave={activeVaccinationData ? activeVaccinationData.save : () => {}}
+          readOnly={activeVaccinationData?.type === 'child' ? !canWriteChildren : false}
+          personType={activeVaccinationData?.type}
         />
     </div>
   );

@@ -207,10 +207,12 @@ type HygieneBelehrungEvent struct {
 }
 
 type VaccinationCheck struct {
-	VaccinationType string `json:"vaccination_type"`
-	CheckedBy       string `json:"checked_by"`
-	CheckedOn       string `json:"checked_on"`
-	ProofSeen       string `json:"proof_seen"`
+	VaccinationType   string `json:"vaccination_type"`
+	VaccinationStatus string `json:"vaccination_status,omitempty"`
+	CheckedBy         string `json:"checked_by"`
+	CheckedOn         string `json:"checked_on"`
+	ProofSeen         string `json:"proof_seen"`
+	EntryCreatedBy    string `json:"entry_created_by,omitempty"`
 }
 
 type VaccinationStatusProtected struct {
