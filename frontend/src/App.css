@@ -646,6 +646,12 @@ tr.family-group-row td {
   transition: color 0.15s ease, text-decoration-color 0.15s ease;
 }
 
+.family-header-link {
+  font-size: 0.78rem;
+  font-weight: normal;
+  color: var(--text-secondary);
+}
+
 .family-parent-link:hover,
 .family-child-link:hover,
 .family-header-link:hover {

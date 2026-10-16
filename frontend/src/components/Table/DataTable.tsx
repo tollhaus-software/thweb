@@ -19,6 +19,7 @@ interface DataTableProps<TData> {
   onAddChild?: (familyId: string, familyName: string) => void;
   onAddParent?: (familyId: string, familyName: string) => void;
   onJumpToFamily?: (familyId: string, familyName: string) => void;
+  jumpToFamilyLabel?: string;
   jumpToFamilyTitle?: string;
   emptySubRowsText?: string;
   hideHeader?: boolean;
@@ -33,6 +34,7 @@ export function DataTable<TData>({
   onAddChild,
   onAddParent,
   onJumpToFamily,
+  jumpToFamilyLabel,
   jumpToFamilyTitle,
   emptySubRowsText,
   hideHeader,
@@ -224,7 +226,8 @@ export function DataTable<TData>({
                             }}
                           >
                             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem' }}>
-                              {onJumpToFamily ? (
+                              <span>{familyName}</span>
+                              {onJumpToFamily && jumpToFamilyLabel && (
                                 <button
                                   type="button"
                                   className="family-header-link"
@@ -234,10 +237,8 @@ export function DataTable<TData>({
                                   }}
                                   title={jumpToFamilyTitle}
                                 >
-                                  {familyName}
+                                  {jumpToFamilyLabel}
                                 </button>
-                              ) : (
-                                <span>{familyName}</span>
                               )}
                               {onAddRow && !onAddChild && !onAddParent && (
                                 <button
