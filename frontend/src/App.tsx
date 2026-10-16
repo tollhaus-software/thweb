@@ -1663,14 +1663,15 @@ const Dashboard: React.FC = () => {
   const [returnNav, setReturnNav] = React.useState<{
     familyId: string;
     familyName: string;
-    type: 'parent' | 'child';
+    type: 'parent' | 'child' | 'family';
+    fromTab?: 'families' | 'parents' | 'children';
   } | null>(null);
 
   const handleJumpToParent = React.useCallback((parentId: string, familyId: string, familyName: string) => {
     setGlobalFilter('');
     setActiveTab('parents');
     setHighlightTarget({ id: parentId, key: Date.now() });
-    setReturnNav({ familyId, familyName, type: 'parent' });
+    setReturnNav({ familyId, familyName, type: 'parent', fromTab: 'families' });
     const params = new URLSearchParams({
       fromFamily: familyId,
       familyName,
@@ -1684,7 +1685,7 @@ const Dashboard: React.FC = () => {
     setGlobalFilter('');
     setActiveTab('children');
     setHighlightTarget({ id: childId, key: Date.now() });
-    setReturnNav({ familyId, familyName, type: 'child' });
+    setReturnNav({ familyId, familyName, type: 'child', fromTab: 'families' });
     const params = new URLSearchParams({
       fromFamily: familyId,
       familyName,
@@ -1694,14 +1695,45 @@ const Dashboard: React.FC = () => {
     window.location.hash = `children?${params.toString()}`;
   }, []);
 
+  const handleJumpFromParentsToChildren = React.useCallback((familyId: string, familyName: string) => {
+    setGlobalFilter('');
+    setActiveTab('children');
+    setHighlightTarget({ id: familyId, key: Date.now() });
+    setReturnNav({ familyId, familyName, type: 'family', fromTab: 'parents' });
+    const params = new URLSearchParams({
+      fromFamily: familyId,
+      familyName,
+      highlight: familyId,
+      type: 'family',
+      fromTab: 'parents',
+    });
+    window.location.hash = `children?${params.toString()}`;
+  }, []);
+
+  const handleJumpFromChildrenToParents = React.useCallback((familyId: string, familyName: string) => {
+    setGlobalFilter('');
+    setActiveTab('parents');
+    setHighlightTarget({ id: familyId, key: Date.now() });
+    setReturnNav({ familyId, familyName, type: 'family', fromTab: 'children' });
+    const params = new URLSearchParams({
+      fromFamily: familyId,
+      familyName,
+      highlight: familyId,
+      type: 'family',
+      fromTab: 'children',
+    });
+    window.location.hash = `parents?${params.toString()}`;
+  }, []);
+
   const handleReturnToFamilies = React.useCallback(() => {
     const famId = returnNav?.familyId;
-    setActiveTab('families');
+    const targetTab = returnNav?.fromTab || 'families';
+    setActiveTab(targetTab);
     if (famId) {
       setHighlightTarget({ id: famId, key: Date.now() });
-      window.location.hash = `families?highlight=${famId}`;
+      window.location.hash = `${targetTab}?highlight=${famId}`;
     } else {
-      window.location.hash = 'families';
+      window.location.hash = targetTab;
     }
     setReturnNav(null);
     setGlobalFilter('');
@@ -2343,7 +2375,8 @@ const Dashboard: React.FC = () => {
       const highlight = searchParams.get('highlight');
       const fromFamily = searchParams.get('fromFamily');
       const familyName = searchParams.get('familyName');
-      const type = searchParams.get('type') as 'parent' | 'child' | null;
+      const type = searchParams.get('type') as 'parent' | 'child' | 'family' | null;
+      const fromTab = searchParams.get('fromTab') as 'families' | 'parents' | 'children' | null;
 
       if (
         (hash === 'familiesOverview' && canReadOverview) ||
@@ -2366,7 +2399,12 @@ const Dashboard: React.FC = () => {
         }
 
         if (fromFamily && familyName && type) {
-          setReturnNav({ familyId: fromFamily, familyName, type });
+          setReturnNav({
+            familyId: fromFamily,
+            familyName,
+            type,
+            fromTab: fromTab || 'families',
+          });
         } else {
           setReturnNav(null);
         }
@@ -4412,7 +4450,9 @@ const Dashboard: React.FC = () => {
               <span className="context-return-text">
                 {returnNav.type === 'parent'
                   ? `${t('viewingParentFromFamily')} „${returnNav.familyName}“`
-                  : `${t('viewingChildFromFamily')} „${returnNav.familyName}“`}
+                  : returnNav.type === 'child'
+                  ? `${t('viewingChildFromFamily')} „${returnNav.familyName}“`
+                  : `${t('viewingFamily')} „${returnNav.familyName}“`}
               </span>
               <button
                 type="button"
@@ -4420,7 +4460,13 @@ const Dashboard: React.FC = () => {
                 onClick={handleReturnToFamilies}
               >
                 <ArrowLeft size={14} />
-                <span>{t('backToFamilies')}</span>
+                <span>
+                  {returnNav.fromTab === 'parents'
+                    ? t('backToParents')
+                    : returnNav.fromTab === 'children'
+                    ? t('backToChildren')
+                    : t('backToFamilies')}
+                </span>
               </button>
             </div>
             <button
@@ -4610,6 +4656,8 @@ const Dashboard: React.FC = () => {
             columns={parentColumns}
             getSubRows={(row: any) => row.parents}
             onAddRow={openAddParent}
+            onJumpToFamily={handleJumpFromParentsToChildren}
+            jumpToFamilyTitle={t('jumpToFamilyInChildren')}
             highlightedRowId={highlightedRowId}
           />
         ) : activeTab === 'children' ? (
@@ -4618,6 +4666,8 @@ const Dashboard: React.FC = () => {
             columns={childColumns}
             getSubRows={(row: any) => row.children}
             onAddRow={openAddChild}
+            onJumpToFamily={handleJumpFromChildrenToParents}
+            jumpToFamilyTitle={t('jumpToFamilyInParents')}
             emptySubRowsText={t('noChildrenYet')}
             highlightedRowId={highlightedRowId}
           />
