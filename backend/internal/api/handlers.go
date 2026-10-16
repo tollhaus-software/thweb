@@ -525,6 +525,11 @@ func (s *Server) HandleUpdateFamilyParents(w http.ResponseWriter, r *http.Reques
 		for i := range req.Parents {
 			p := &req.Parents[i]
 			if len(p.VaccinationChecks) > 0 {
+				for cIdx := range p.VaccinationChecks {
+					if p.VaccinationChecks[cIdx].EntryCreatedBy == "" {
+						p.VaccinationChecks[cIdx].EntryCreatedBy = user.Email
+					}
+				}
 				statusPayload := models.VaccinationStatusProtected{
 					VaccinationChecks: p.VaccinationChecks,
 				}
@@ -648,6 +653,12 @@ func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 		}
 		reqCtx := crypto.NewRequestCipherContext(s.KMSProvider, user.Email, accessToken)
 		defer reqCtx.Close()
+
+		for cIdx := range req.VaccinationChecks {
+			if req.VaccinationChecks[cIdx].EntryCreatedBy == "" {
+				req.VaccinationChecks[cIdx].EntryCreatedBy = user.Email
+			}
+		}
 
 		statusPayload := models.VaccinationStatusProtected{
 			VaccinationChecks: req.VaccinationChecks,

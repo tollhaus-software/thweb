@@ -1,66 +1,109 @@
-import React, { useState } from 'react';
-import { ShieldCheck, Plus, Trash2, Edit3, X, Check, Lock } from 'lucide-react';
-import { t } from '../../utils/i18n';
+import React, { useState, useEffect, useRef } from 'react';
+import { ShieldCheck, Plus, Trash, Pencil, Check, X, Calendar, Lock } from 'lucide-react';
+import { t, CURRENT_LOCALE, formatDisplayDate, parseInputDate } from '../../utils/i18n';
+import { CellPopover } from './CellPopover';
+import { CalendarDropdown } from '../CalendarDropdown';
 
 export interface VaccinationCheck {
   vaccination_type: string;
-  checked_by: string;
-  checked_on: string;
-  proof_seen: string;
+  vaccination_status?: string;
+  checked_by?: string;
+  checked_on?: string;
+  proof_seen?: string;
+  entry_created_by?: string;
 }
 
-interface VaccinationStatusEditorProps {
+export interface VaccinationStatusPopoverProps {
+  isOpen: boolean;
+  onClose: () => void;
+  anchorEl: HTMLElement | React.RefObject<HTMLElement | null> | string | (() => HTMLElement | null) | null;
   checks?: VaccinationCheck[];
   currentUserEmail?: string;
-  onSave: (newChecks: VaccinationCheck[]) => void;
-  isUnlocked?: boolean;
-  onUnlock?: () => void;
+  onSave: (newChecks: VaccinationCheck[]) => void | Promise<void>;
+  readOnly?: boolean;
+  personType?: 'parent' | 'child';
 }
 
-export const VaccinationStatusEditor: React.FC<VaccinationStatusEditorProps> = ({
+export interface VaccinationStatusCellProps {
+  id?: string;
+  checks?: VaccinationCheck[];
+  isActive?: boolean;
+  onOpenManage: (anchor: HTMLElement | string) => void;
+  isUnlocked?: boolean;
+  onUnlock?: () => void;
+  readOnly?: boolean;
+}
+
+const VACCINATION_STATUS_OPTIONS_BY_TYPE: Record<string, { label: string; value: string }[]> = {
+  masern: [
+    { label: 'Masern 1 Impfung', value: 'Masern 1 Impfung' },
+    { label: 'Masern 2 Impfungen', value: 'Masern 2 Impfungen' },
+    { label: 'Masern nicht benötigt (Geburtsdatum vor 1971)', value: 'Masern nicht benötigt (Geburtsdatum vor 1971)' },
+  ],
+};
+
+const normalizeCheck = (check: VaccinationCheck): VaccinationCheck => {
+  const rawType = (check.vaccination_type || '').trim();
+  const rawTypeLower = rawType.toLowerCase();
+  const vType = 'masern';
+  let vStatus = check.vaccination_status || '';
+
+  if (!vStatus) {
+    if (
+      rawType === 'Masern 1 Impfung' ||
+      rawType === 'Masern 2 Impfungen' ||
+      rawType === 'Masern nicht benötigt (Geburtsdatum vor 1971)'
+    ) {
+      vStatus = rawType;
+    } else if (rawTypeLower === 'masern') {
+      vStatus = 'Masern 2 Impfungen';
+    } else {
+      vStatus = rawType || 'Masern 2 Impfungen';
+    }
+  }
+
+  return {
+    ...check,
+    vaccination_type: vType,
+    vaccination_status: vStatus,
+    checked_on: check.checked_on || new Date().toISOString().split('T')[0],
+    checked_by: check.checked_by || '',
+    entry_created_by: check.entry_created_by || '',
+    proof_seen: check.proof_seen || 'Impfausweis',
+  };
+};
+
+export const VaccinationStatusCell: React.FC<VaccinationStatusCellProps> = ({
+  id,
   checks = [],
-  currentUserEmail = '',
-  onSave,
+  isActive = false,
+  onOpenManage,
   isUnlocked = true,
   onUnlock,
+  readOnly = false,
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [localChecks, setLocalChecks] = useState<VaccinationCheck[]>(checks);
+  const cellId = id || 'cell-vaccination';
 
-  // New item form state
-  const [vType, setVType] = useState('Masern');
-  const [proof, setProof] = useState('Impfausweis');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [by, setBy] = useState(currentUserEmail);
+  const latestCheck = React.useMemo(() => {
+    if (!checks || checks.length === 0) return null;
+    return checks.reduce((latest, current) => {
+      if (!latest) return current;
+      const latestTime = latest.checked_on ? new Date(latest.checked_on).getTime() : -Infinity;
+      const currentTime = current.checked_on ? new Date(current.checked_on).getTime() : -Infinity;
+      if (isNaN(latestTime) && isNaN(currentTime)) {
+        return (current.checked_on || '') >= (latest.checked_on || '') ? current : latest;
+      }
+      if (isNaN(latestTime)) return current;
+      if (isNaN(currentTime)) return latest;
+      return currentTime >= latestTime ? current : latest;
+    }, checks[0]);
+  }, [checks]);
 
-  const handleOpen = () => {
-    setLocalChecks(checks || []);
-    setBy(currentUserEmail);
-    setDate(new Date().toISOString().split('T')[0]);
-    setIsOpen(true);
-  };
-
-  const handleAddCheck = () => {
-    if (!vType.trim()) return;
-    const newCheck: VaccinationCheck = {
-      vaccination_type: vType.trim(),
-      proof_seen: proof.trim() || 'Impfausweis',
-      checked_on: date || new Date().toISOString().split('T')[0],
-      checked_by: by.trim() || currentUserEmail || 'admin',
-    };
-    setLocalChecks([...localChecks, newCheck]);
-    setVType('Masern');
-    setProof('Impfausweis');
-  };
-
-  const handleRemoveCheck = (index: number) => {
-    setLocalChecks(localChecks.filter((_, i) => i !== index));
-  };
-
-  const handleSave = () => {
-    onSave(localChecks);
-    setIsOpen(false);
-  };
+  const displayStatus = React.useMemo(() => {
+    if (!latestCheck) return '';
+    const normalized = normalizeCheck(latestCheck);
+    return normalized.vaccination_status || normalized.vaccination_type;
+  }, [latestCheck]);
 
   if (!isUnlocked) {
     return (
@@ -88,240 +131,604 @@ export const VaccinationStatusEditor: React.FC<VaccinationStatusEditorProps> = (
   }
 
   return (
-    <div style={{ position: 'relative', display: 'inline-block', maxWidth: '100%' }}>
-      {/* Display Badge View */}
+    <div
+      id={cellId}
+      onClick={(e) => {
+        const el = document.getElementById(cellId) || e.currentTarget;
+        onOpenManage(el);
+      }}
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        width: '100%',
+        gap: '0.25rem',
+        cursor: 'pointer',
+        minHeight: '28px',
+        borderRadius: '4px',
+        padding: '2px 4px',
+        backgroundColor: isActive ? 'var(--accent-bg)' : 'transparent',
+        transition: 'background-color 0.15s ease-in-out',
+        fontWeight: 'normal',
+      }}
+      onMouseEnter={(e) => {
+        if (!isActive) e.currentTarget.style.backgroundColor = 'var(--accent-bg)';
+      }}
+      onMouseLeave={(e) => {
+        if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
+      }}
+      title={readOnly ? t('vaccinationStatus') : t('manageVaccinationStatus')}
+    >
       <div
-        onClick={handleOpen}
         style={{
-          display: 'inline-flex',
+          display: 'flex',
           alignItems: 'center',
           gap: '0.35rem',
-          padding: '0.25rem 0.5rem',
-          borderRadius: '4px',
-          background: 'var(--bg-subtle)',
-          border: '1px solid var(--border)',
-          cursor: 'pointer',
-          fontSize: '0.825rem',
-          color: 'var(--text)',
-          transition: 'all 0.15s ease',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          flex: 1,
+          minWidth: 0,
         }}
-        title="Klicken zum Bearbeiten des Impfstatus"
       >
-        <ShieldCheck size={14} style={{ color: 'var(--text-muted)' }} />
-        {checks.length > 0 ? (
-          <span>
-            {checks.map((c) => c.vaccination_type).join(', ')} ({checks.length})
+        <ShieldCheck
+          size={14}
+          style={{
+            color: checks && checks.length > 0 ? '#16a34a' : 'var(--text-muted)',
+            flexShrink: 0,
+          }}
+        />
+        {displayStatus ? (
+          <span
+            style={{
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              fontWeight: 500,
+              color: 'var(--text-h)',
+            }}
+          >
+            {displayStatus}
           </span>
         ) : (
-          <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Kein Impfnachweis</span>
+          <span style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.85rem' }}>
+            {t('noVaccinationStatus')}
+          </span>
         )}
-        <Edit3 size={12} style={{ marginLeft: '0.2rem', color: 'var(--text-muted)', opacity: 0.7 }} />
       </div>
-
-      {/* Modal / Dialog Popover */}
-      {isOpen && (
-        <div
+      {!readOnly && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            const el = document.getElementById(cellId) || e.currentTarget;
+            onOpenManage(el);
+          }}
+          className="easy-edit-button"
           style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(15, 23, 42, 0.45)',
-            backdropFilter: 'blur(3px)',
-            zIndex: 9999,
-            display: 'flex',
+            padding: '2px',
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
+            color: 'var(--primary)',
+            width: '24px',
+            height: '24px',
+            flexShrink: 0,
           }}
-          onClick={() => setIsOpen(false)}
+          title={t('manageVaccinationStatus')}
         >
-          <div
-            style={{
-              backgroundColor: 'var(--bg-surface)',
-              borderRadius: '12px',
-              padding: '1.25rem',
-              width: '460px',
-              maxWidth: '92vw',
-              boxShadow: 'var(--shadow)',
-              border: '1px solid var(--border)',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <ShieldCheck size={20} color="#16a34a" />
-                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600, color: 'var(--text-h)' }}>
-                  Geschützter Impfstatus
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsOpen(false)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* List of Current Checks */}
-            <div style={{ marginBottom: '1rem', maxHeight: '200px', overflowY: 'auto' }}>
-              {localChecks.length === 0 ? (
-                <div style={{ padding: '0.75rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.875rem', background: 'var(--bg-subtle)', borderRadius: '6px' }}>
-                  Keine verifizierten Impfnachweise eingetragen.
-                </div>
-              ) : (
-                localChecks.map((item, idx) => (
-                  <div
-                    key={idx}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '0.5rem 0.75rem',
-                      marginBottom: '0.35rem',
-                      background: 'var(--bg-subtle)',
-                      borderRadius: '6px',
-                      fontSize: '0.85rem',
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontWeight: 600, color: 'var(--text-h)' }}>{item.vaccination_type}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        Nachweis: {item.proof_seen} | Am: {item.checked_on} ({item.checked_by})
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveCheck(idx)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: '#ef4444',
-                        cursor: 'pointer',
-                        padding: '0.2rem',
-                      }}
-                      title="Löschen"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Add New Check Form */}
-            <div style={{ background: 'var(--bg-subtle)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', marginBottom: '1rem' }}>
-              <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-                Neuen Nachweis erfassen
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                <div>
-                  <label style={{ fontSize: '0.725rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>Impfung</label>
-                  <input
-                    type="text"
-                    value={vType}
-                    onChange={(e) => setVType(e.target.value)}
-                    placeholder="z.B. Masern"
-                    style={{ width: '100%', padding: '0.35rem 0.5rem', borderRadius: '4px', border: '1px solid var(--input-border)', background: 'var(--input-bg)', color: 'var(--input-text)', fontSize: '0.825rem' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.725rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>Gesehener Nachweis</label>
-                  <input
-                    type="text"
-                    value={proof}
-                    onChange={(e) => setProof(e.target.value)}
-                    placeholder="z.B. Impfausweis"
-                    style={{ width: '100%', padding: '0.35rem 0.5rem', borderRadius: '4px', border: '1px solid var(--input-border)', background: 'var(--input-bg)', color: 'var(--input-text)', fontSize: '0.825rem' }}
-                  />
-                </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                <div>
-                  <label style={{ fontSize: '0.725rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>Geprüft am</label>
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    style={{ width: '100%', padding: '0.35rem 0.5rem', borderRadius: '4px', border: '1px solid var(--input-border)', background: 'var(--input-bg)', color: 'var(--input-text)', fontSize: '0.825rem' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.725rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.2rem' }}>Geprüft von</label>
-                  <input
-                    type="text"
-                    value={by}
-                    onChange={(e) => setBy(e.target.value)}
-                    placeholder="E-Mail"
-                    style={{ width: '100%', padding: '0.35rem 0.5rem', borderRadius: '4px', border: '1px solid var(--input-border)', background: 'var(--input-bg)', color: 'var(--input-text)', fontSize: '0.825rem' }}
-                  />
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleAddCheck}
-                style={{
-                  width: '100%',
-                  padding: '0.4rem',
-                  backgroundColor: 'var(--primary)',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontWeight: 500,
-                  fontSize: '0.825rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.35rem',
-                }}
-              >
-                <Plus size={14} /> Eintragen
-              </button>
-            </div>
-
-            {/* Footer Buttons */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-              <button
-                type="button"
-                onClick={() => setIsOpen(false)}
-                style={{
-                  padding: '0.4rem 0.85rem',
-                  border: '1px solid var(--border)',
-                  background: 'var(--bg-surface)',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontSize: '0.85rem',
-                  color: 'var(--text-secondary)',
-                }}
-              >
-                Abbrechen
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                style={{
-                  padding: '0.4rem 0.85rem',
-                  backgroundColor: '#16a34a',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontSize: '0.85rem',
-                  fontWeight: 500,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.35rem',
-                }}
-              >
-                <Check size={14} /> Speichern
-              </button>
-            </div>
-          </div>
-        </div>
+          <Pencil size={13} />
+        </button>
       )}
     </div>
+  );
+};
+
+export const VaccinationStatusPopover: React.FC<VaccinationStatusPopoverProps> = ({
+  isOpen,
+  onClose,
+  anchorEl,
+  checks = [],
+  currentUserEmail = '',
+  onSave,
+  readOnly = false,
+  personType = 'parent',
+}) => {
+  // Normalize checks directly from props
+  const normalizedChecks = React.useMemo(() => {
+    return (checks || []).map(normalizeCheck);
+  }, [checks]);
+
+  const getInitialNewDate = (): string => {
+    const today = new Date();
+    return CURRENT_LOCALE === 'de' ? formatDisplayDate(today) : today.toISOString().split('T')[0];
+  };
+
+  const [isAddingRow, setIsAddingRow] = useState(false);
+  const [newStatus, setNewStatus] = useState<string>('');
+  const [newDate, setNewDate] = useState<string>(getInitialNewDate);
+  const [newCheckedBy, setNewCheckedBy] = useState<string>(currentUserEmail);
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+
+  const statusSelectRef = useRef<HTMLSelectElement>(null);
+  const dateInputRef = useRef<HTMLInputElement>(null);
+  const dateContainerRef = useRef<HTMLDivElement>(null);
+
+  // Focus status select when adding row
+  useEffect(() => {
+    if (isOpen && isAddingRow) {
+      const timer = setTimeout(() => {
+        if (statusSelectRef.current) {
+          statusSelectRef.current.focus();
+        }
+      }, 60);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, isAddingRow]);
+
+  const handleStartAdd = () => {
+    setNewStatus('');
+    setNewDate(getInitialNewDate());
+    setNewCheckedBy(currentUserEmail || '');
+    setIsAddingRow(true);
+    setIsCalendarOpen(false);
+  };
+
+  const handleCancelAdd = () => {
+    setIsAddingRow(false);
+    setIsCalendarOpen(false);
+  };
+
+  const handleSaveNewRow = async () => {
+    if (!newStatus.trim()) return;
+    const parsedDate = parseInputDate(newDate);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(parsedDate)) {
+      alert(t('invalidDateFormat'));
+      return;
+    }
+
+    const newCheck: VaccinationCheck = {
+      vaccination_type: 'masern',
+      vaccination_status: newStatus.trim(),
+      checked_on: parsedDate,
+      checked_by: newCheckedBy.trim() || currentUserEmail || 'admin',
+      entry_created_by: currentUserEmail || 'admin',
+      proof_seen: 'Impfausweis',
+    };
+
+    try {
+      await onSave([...normalizedChecks, newCheck]);
+      setIsAddingRow(false);
+      setIsCalendarOpen(false);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to save vaccination check';
+      alert(message);
+    }
+  };
+
+  const handleDeleteCheck = async (index: number) => {
+    if (!window.confirm(t('vaccinationCheckDeleteConfirm'))) return;
+    const updated = normalizedChecks.filter((_, idx) => idx !== index);
+    try {
+      await onSave(updated);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to delete vaccination check';
+      alert(message);
+    }
+  };
+
+  const statusOptions = React.useMemo(() => {
+    const all = VACCINATION_STATUS_OPTIONS_BY_TYPE['masern'] || [];
+    if (personType === 'child') {
+      return all.filter((opt) => opt.value !== 'Masern nicht benötigt (Geburtsdatum vor 1971)');
+    }
+    return all;
+  }, [personType]);
+
+  if (!isOpen) return null;
+
+  return (
+    <CellPopover
+      isOpen={isOpen}
+      onClose={onClose}
+      anchorEl={anchorEl}
+      width={readOnly ? 780 : 870}
+      minWidth={readOnly ? 740 : 830}
+      style={{
+        padding: '12px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px',
+      }}
+    >
+      {/* Vaccination Checks Table */}
+      <div
+        style={{
+          border: '1px solid var(--border)',
+          borderRadius: '6px',
+          overflowX: 'auto',
+        }}
+      >
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', tableLayout: 'fixed' }}>
+          <colgroup>
+            <col style={{ width: '310px' }} />
+            <col style={{ width: '190px' }} />
+            <col style={{ width: '220px' }} />
+            {!readOnly && <col style={{ width: '80px' }} />}
+          </colgroup>
+          <thead>
+            <tr style={{ background: 'var(--bg-subtle)', borderBottom: '1px solid var(--border)' }}>
+              <th style={{ padding: '6px 8px', textAlign: 'left' }}>{t('vaccinationStatus')}</th>
+              <th style={{ padding: '6px 8px', textAlign: 'left' }}>{t('date')}</th>
+              <th style={{ padding: '6px 8px', textAlign: 'left' }}>{t('checkedBy')}</th>
+              {!readOnly && <th style={{ padding: '6px 8px', textAlign: 'center' }}></th>}
+            </tr>
+          </thead>
+          <tbody>
+            {normalizedChecks.map((item, idx) => {
+              const currentStatus = item.vaccination_status || item.vaccination_type || 'Masern 2 Impfungen';
+              const checkedBy = (item.checked_by || '').trim();
+              const entryCreatedBy = (item.entry_created_by || '').trim();
+              const showDifferentCreator = Boolean(
+                entryCreatedBy &&
+                checkedBy &&
+                entryCreatedBy.toLowerCase() !== checkedBy.toLowerCase()
+              );
+
+              return (
+                <tr key={idx} style={{ borderBottom: '1px solid var(--border)' }}>
+                  {/* Vaccination Status (Non-editable) */}
+                  <td style={{ padding: '6px 8px' }}>
+                    <span style={{ fontWeight: 600 }}>{currentStatus}</span>
+                  </td>
+
+                  {/* Date (Non-editable) */}
+                  <td style={{ padding: '6px 8px' }}>
+                    <span>{formatDisplayDate(item.checked_on)}</span>
+                  </td>
+
+                  {/* Gecheckt durch (Non-editable view; shows "<checked_by>\n(<entry_created_by>)" if different) */}
+                  <td style={{ padding: '6px 8px' }}>
+                    {showDifferentCreator ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', lineHeight: 1.3 }}>
+                        <span>{checkedBy || '-'}</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          ({entryCreatedBy})
+                        </span>
+                      </div>
+                    ) : (
+                      <span>{checkedBy || '-'}</span>
+                    )}
+                  </td>
+
+                  {/* Delete Action */}
+                  {!readOnly && (
+                    <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCheck(idx)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#ef4444',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          padding: '2px',
+                          borderRadius: '4px',
+                        }}
+                        title={t('delete')}
+                      >
+                        <Trash size={14} />
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+
+            {/* Editable row at bottom when adding */}
+            {isAddingRow && (
+              <tr
+                style={{
+                  background: 'var(--accent-bg, rgba(2, 132, 199, 0.06))',
+                  borderTop: normalizedChecks.length > 0 ? '1px dashed var(--primary)' : 'none',
+                }}
+              >
+                {/* Status Select */}
+                <td style={{ padding: '6px 8px' }}>
+                  <select
+                    ref={statusSelectRef}
+                    value={newStatus}
+                    onChange={(e) => setNewStatus(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        if (newStatus.trim()) {
+                          handleSaveNewRow();
+                        }
+                      }
+                      if (e.key === 'Escape') handleCancelAdd();
+                    }}
+                    style={{
+                      padding: '3px 6px',
+                      fontSize: '0.825rem',
+                      border: '1px solid var(--input-border)',
+                      borderRadius: '4px',
+                      background: 'var(--input-bg)',
+                      color: newStatus ? 'var(--input-text)' : 'var(--text-muted)',
+                      width: '100%',
+                      boxSizing: 'border-box',
+                    }}
+                  >
+                    <option value="" disabled>
+                      {t('pleaseSelect')}
+                    </option>
+                    {statusOptions.map((sOpt) => (
+                      <option key={sOpt.value} value={sOpt.value} style={{ color: 'var(--input-text)' }}>
+                        {sOpt.label}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+
+                {/* Date Input with Calendar */}
+                <td style={{ padding: '6px 8px' }}>
+                  <div
+                    ref={dateContainerRef}
+                    style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%' }}
+                  >
+                    <input
+                      ref={dateInputRef}
+                      type="text"
+                      value={newDate}
+                      onChange={(e) => setNewDate(e.target.value)}
+                      onFocus={() => setIsCalendarOpen(true)}
+                      onClick={() => setIsCalendarOpen(true)}
+                      placeholder={CURRENT_LOCALE === 'de' ? 'TT.MM.JJJJ' : 'YYYY-MM-DD'}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          setIsCalendarOpen(false);
+                          handleSaveNewRow();
+                        }
+                        if (e.key === 'Escape') {
+                          if (isCalendarOpen) {
+                            setIsCalendarOpen(false);
+                          } else {
+                            handleCancelAdd();
+                          }
+                        }
+                        if (e.key === 'F4' || (e.altKey && e.key === 'ArrowDown')) {
+                          e.preventDefault();
+                          setIsCalendarOpen((prev) => !prev);
+                        }
+                      }}
+                      style={{
+                        padding: '3px 28px 3px 6px',
+                        fontSize: '0.825rem',
+                        border: '1px solid var(--input-border)',
+                        borderRadius: '4px',
+                        background: 'var(--input-bg)',
+                        color: 'var(--input-text)',
+                        width: '100%',
+                        boxSizing: 'border-box',
+                      }}
+                      required
+                    />
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      style={{
+                        position: 'absolute',
+                        right: '4px',
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '2px',
+                        color: isCalendarOpen ? 'var(--primary)' : '#64748b',
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsCalendarOpen((prev) => !prev);
+                      }}
+                      title={t('date')}
+                    >
+                      <Calendar size={15} />
+                    </button>
+                    <CalendarDropdown
+                      anchorRef={dateContainerRef}
+                      isOpen={isCalendarOpen}
+                      onClose={() => setIsCalendarOpen(false)}
+                      selectedDateStr={newDate}
+                      onSelectDate={(formatted) => {
+                        setNewDate(formatted);
+                        setIsCalendarOpen(false);
+                      }}
+                    />
+                  </div>
+                </td>
+
+                {/* Gecheckt durch (Editable text input) */}
+                <td style={{ padding: '6px 8px' }}>
+                  <input
+                    type="text"
+                    value={newCheckedBy}
+                    onChange={(e) => setNewCheckedBy(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSaveNewRow();
+                      if (e.key === 'Escape') handleCancelAdd();
+                    }}
+                    placeholder="E-Mail"
+                    style={{
+                      padding: '3px 6px',
+                      fontSize: '0.825rem',
+                      border: '1px solid var(--input-border)',
+                      borderRadius: '4px',
+                      background: 'var(--input-bg)',
+                      color: 'var(--input-text)',
+                      width: '100%',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </td>
+
+                {/* Actions: Save / Cancel */}
+                <td style={{ padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <button
+                      type="button"
+                      onClick={handleSaveNewRow}
+                      disabled={!newStatus.trim()}
+                      title={t('save')}
+                      style={{
+                        background: newStatus.trim() ? 'var(--primary)' : 'var(--border)',
+                        color: newStatus.trim() ? '#fff' : 'var(--text-muted)',
+                        border: 'none',
+                        borderRadius: '4px',
+                        padding: '3px 6px',
+                        cursor: newStatus.trim() ? 'pointer' : 'not-allowed',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Check size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCancelAdd}
+                      title={t('cancel')}
+                      style={{
+                        background: 'transparent',
+                        color: '#64748b',
+                        border: '1px solid var(--border)',
+                        borderRadius: '4px',
+                        padding: '3px 6px',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            )}
+
+            {/* No items recorded placeholder */}
+            {!isAddingRow && normalizedChecks.length === 0 && (
+              <tr>
+                <td
+                  colSpan={readOnly ? 3 : 4}
+                  style={{
+                    padding: '1rem',
+                    textAlign: 'center',
+                    color: '#94a3b8',
+                    fontStyle: 'italic',
+                  }}
+                >
+                  {t('noVaccinationChecksRecorded')}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Centered neutral '+' button under the existing rows */}
+      {!readOnly && !isAddingRow && (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: '6px 0 2px 0',
+          }}
+        >
+          <button
+            type="button"
+            onClick={handleStartAdd}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '4px 16px',
+              fontSize: '0.85rem',
+              fontWeight: 500,
+              background: 'var(--bg-subtle)',
+              color: 'var(--text)',
+              border: '1px solid var(--border)',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              transition: 'background-color 0.15s ease, border-color 0.15s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--border)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--bg-subtle)';
+            }}
+            title={t('addVaccinationCheck')}
+          >
+            <Plus size={16} />
+          </button>
+        </div>
+      )}
+    </CellPopover>
+  );
+};
+
+export interface StandaloneVaccinationStatusEditorProps {
+  checks?: VaccinationCheck[];
+  currentUserEmail?: string;
+  onSave: (newChecks: VaccinationCheck[]) => void;
+  isUnlocked?: boolean;
+  onUnlock?: () => void;
+  readOnly?: boolean;
+  personType?: 'parent' | 'child';
+}
+
+export const VaccinationStatusEditor: React.FC<StandaloneVaccinationStatusEditorProps> = ({
+  checks = [],
+  currentUserEmail = '',
+  onSave,
+  isUnlocked = true,
+  onUnlock,
+  readOnly = false,
+  personType = 'parent',
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const triggerRef = useRef<HTMLDivElement>(null);
+
+  return (
+    <>
+      <div ref={triggerRef} style={{ width: '100%' }}>
+        <VaccinationStatusCell
+          checks={checks}
+          isActive={isOpen}
+          onOpenManage={() => setIsOpen(true)}
+          isUnlocked={isUnlocked}
+          onUnlock={onUnlock}
+          readOnly={readOnly}
+        />
+      </div>
+      <VaccinationStatusPopover
+        isOpen={isOpen}
+        onClose={() => setIsOpen(false)}
+        anchorEl={triggerRef}
+        checks={checks}
+        currentUserEmail={currentUserEmail}
+        onSave={onSave}
+        readOnly={readOnly}
+        personType={personType}
+      />
+    </>
   );
 };
