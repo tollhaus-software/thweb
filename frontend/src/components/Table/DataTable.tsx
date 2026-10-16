@@ -291,7 +291,7 @@ export function DataTable<TData>({
                               {onAddParent && (
                                 <button
                                   type="button"
-                                  className="family-action-button family-add-parent-button"
+                                  className={`family-action-button ${!onAddChild ? 'family-add-button ' : ''}family-add-parent-button`}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     onAddParent(familyId, familyName);

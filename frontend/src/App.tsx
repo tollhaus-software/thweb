@@ -4898,7 +4898,7 @@ const Dashboard: React.FC = () => {
             data={parentsFamilyData}
             columns={parentColumns}
             getSubRows={(row: any) => row.parents}
-            onAddRow={openAddParent}
+            onAddParent={openAddParent}
             onJumpToFamily={handleJumpFromParentsToChildren}
             jumpToFamilyTitle={t('jumpToFamilyInChildren')}
             highlightedRowId={highlightedRowId}
@@ -4908,7 +4908,7 @@ const Dashboard: React.FC = () => {
             data={childrenFamilyData}
             columns={childColumns}
             getSubRows={(row: any) => row.children}
-            onAddRow={openAddChild}
+            onAddChild={openAddChild}
             onJumpToFamily={handleJumpFromChildrenToParents}
             jumpToFamilyTitle={t('jumpToFamilyInParents')}
             emptySubRowsText={t('noChildrenYet')}

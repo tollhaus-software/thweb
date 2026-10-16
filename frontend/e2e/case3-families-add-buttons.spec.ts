@@ -84,7 +84,30 @@ test.describe('Test Case 3: Families View Add Buttons (+ Kind and + Elternteil)'
     await expect(familyRow.locator('.family-sub-header-parents')).toContainText('Markus Mustermann');
     await expect(familyRow.locator('.family-sub-header-parents')).toContainText('Erika Mustermann');
 
+    // --- Step 5: Verify Parents tab has + Elternteil button on the right side with matching style ---
+    await page.getByRole('button', { name: 'Eltern(MGA)', exact: true }).click();
+    const parentsFamilyRow = page.locator('tr.family-group-row', { hasText: 'Mustermann' });
+    await expect(parentsFamilyRow).toBeVisible();
+    const parentsActionsContainer = parentsFamilyRow.locator('.family-group-actions');
+    await expect(parentsActionsContainer).toBeVisible();
+    const parentsAddParentBtn = parentsFamilyRow.getByRole('button', { name: '+ Elternteil' });
+    await expect(parentsAddParentBtn).toBeVisible();
+    await expect(parentsAddParentBtn).toHaveClass(/family-action-button/);
+    await expect(parentsAddParentBtn).toHaveClass(/family-add-parent-button/);
+
+    // --- Step 6: Verify Children tab has + Kind button on the right side with matching style ---
+    await page.getByRole('button', { name: 'Kinder(MGA)', exact: true }).click();
+    const childrenFamilyRow = page.locator('tr.family-group-row', { hasText: 'Mustermann' });
+    await expect(childrenFamilyRow).toBeVisible();
+    const childrenActionsContainer = childrenFamilyRow.locator('.family-group-actions');
+    await expect(childrenActionsContainer).toBeVisible();
+    const childrenAddChildBtn = childrenFamilyRow.getByRole('button', { name: '+ Kind' });
+    await expect(childrenAddChildBtn).toBeVisible();
+    await expect(childrenAddChildBtn).toHaveClass(/family-action-button/);
+    await expect(childrenAddChildBtn).toHaveClass(/family-add-child-button/);
+
     // Take a screenshot of the families view for visual verification
+    await page.getByRole('button', { name: 'Familien(MGA)', exact: true }).click();
     await page.screenshot({ path: 'test-results/families-view-buttons.png' });
   });
 });
