@@ -302,17 +302,31 @@ export function DataTable<TData>({
               }
 
               const rowId = (row.original as any).id;
+              const rowType = (row.original as any)._rowType;
+              const rowClasses = [
+                rowId === highlightedRowId ? 'highlighted-row' : '',
+                rowType === 'parent' ? 'overview-parent-row' : '',
+                rowType === 'child' ? 'overview-child-row' : '',
+              ]
+                .filter(Boolean)
+                .join(' ');
               return (
-                <tr key={row.id} id={`row-${rowId}`} className={rowId === highlightedRowId ? 'highlighted-row' : undefined}>
+                <tr key={row.id} id={`row-${rowId}`} className={rowClasses || undefined}>
                   {row.getVisibleCells().map((cell) => {
+                    const meta = cell.column.columnDef.meta as any;
+                    if (meta?.skipCell?.(row.original)) {
+                      return null;
+                    }
+                    const colSpan = meta?.getColSpan?.(row.original) ?? 1;
                     const isFixed = cell.column.id === 'first_name' || cell.column.id === 'child_name';
                     return (
                       <td
                         key={cell.id}
+                        colSpan={colSpan > 1 ? colSpan : undefined}
                         className={isFixed ? 'sticky-col' : undefined}
                         style={{
-                          width: isFixed ? '1%' : `${cell.column.getSize()}px`,
-                          minWidth: `${cell.column.getSize()}px`,
+                          width: colSpan > 1 ? undefined : isFixed ? '1%' : `${cell.column.getSize()}px`,
+                          minWidth: colSpan > 1 ? undefined : `${cell.column.getSize()}px`,
                           boxSizing: 'border-box',
                           whiteSpace: isFixed ? 'nowrap' : undefined,
                         }}

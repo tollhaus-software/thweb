@@ -398,7 +398,7 @@ header {
 
 /* Family Group Header row in two-layer table */
 tr.family-group-row {
-  background-color: var(--bg-hover);
+  background-color: var(--bg-subtle);
 }
 
 tr.family-group-row td {
@@ -409,6 +409,15 @@ tr.family-group-row td {
   font-size: 0.85rem;
   border-bottom: 2px solid var(--border);
   padding: 0.35rem 0.6rem;
+}
+
+.data-table tr.overview-parent-row,
+.data-table tr.overview-parent-row td,
+.data-table tr.overview-parent-row td.sticky-col,
+.data-table tr.overview-parent-row:hover,
+.data-table tr.overview-parent-row:hover td,
+.data-table tr.overview-parent-row:hover td.sticky-col {
+  background-color: var(--bg-subtle) !important;
 }
 
 .family-sub-header-parents {

@@ -14,10 +14,16 @@ test.describe('Test Case 5: Restricted Users Support', () => {
           {
             first_name: 'Hans',
             last_name: 'Schmidt',
+            address: 'Königstraße 10, 70173 Stuttgart',
             emails: [
               {
                 value: 'hans.schmidt@tollhaus-stuttgart.de',
                 identifier_email: true,
+                address_list: true,
+              },
+              {
+                value: 'hans.second@example.com',
+                identifier_email: false,
                 address_list: true,
               },
               {
@@ -29,6 +35,10 @@ test.describe('Test Case 5: Restricted Users Support', () => {
             phones: [
               {
                 value: '0171 1234567',
+                address_list: true,
+              },
+              {
+                value: '0711 998877',
                 address_list: true,
               },
             ],
@@ -64,7 +74,7 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     });
     expect(addGcRes.ok()).toBeTruthy();
 
-    // Create a second family: Müller with child Tom
+    // Create a second family: Müller / Weber (two surnames) with child Tom Müller
     const createFam2Res = await request.post('/api/families', {
       headers: { Authorization: 'Bearer developer@example.com' },
       data: {
@@ -72,6 +82,7 @@ test.describe('Test Case 5: Restricted Users Support', () => {
           {
             first_name: 'Lisa',
             last_name: 'Müller',
+            address: 'Schlossplatz 5, 70173 Stuttgart',
             emails: [
               {
                 value: 'lisa.mueller@example.com',
@@ -85,6 +96,11 @@ test.describe('Test Case 5: Restricted Users Support', () => {
                 address_list: true,
               },
             ],
+          },
+          {
+            first_name: 'Max',
+            last_name: 'Weber',
+            address: 'Schlossplatz 5, 70173 Stuttgart',
           },
         ],
       },
@@ -144,14 +160,71 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     // Verify no "Familie hinzufügen" button
     await expect(page.getByRole('button', { name: 'Familie hinzufügen' })).toHaveCount(0);
 
-    // Verify families are rendered in overview
-    const schmidtRow = page.locator('tr.family-group-row', { hasText: 'Schmidt' });
-    await expect(schmidtRow).toBeVisible();
-    await expect(schmidtRow).toContainText('Hans Schmidt');
-    await expect(schmidtRow).toContainText('hans.schmidt@tollhaus-stuttgart.de');
-    await expect(schmidtRow).toContainText('0171 1234567');
+    // Verify familiesOverview table has NO table header with column names and NO vertical separator (sticky-col)
+    await expect(page.locator('table.data-table thead')).toHaveCount(0);
+    await expect(page.locator('table.data-table th')).toHaveCount(0);
+    await expect(page.locator('table.data-table td.sticky-col')).toHaveCount(0);
+
+    // Verify family group header rows are rendered in overview
+    const schmidtHeaderRow = page.locator('tr.family-group-row', { hasText: 'Schmidt' });
+    await expect(schmidtHeaderRow).toBeVisible();
+
+    // Verify parent rows are rendered as separate rows with overview-parent-row class
+    const hansRow = page.locator('tr.overview-parent-row', { hasText: 'Hans Schmidt' });
+    const lisaRow = page.locator('tr.overview-parent-row', { hasText: 'Lisa Müller' });
+    await expect(hansRow).toBeVisible();
+    await expect(lisaRow).toBeVisible();
+
+    // Parent rows must have the same background color as the family sub-header
+    const headerBg = await schmidtHeaderRow.locator('td').first().evaluate((el) => getComputedStyle(el).backgroundColor);
+    const hansBg = await hansRow.locator('td').first().evaluate((el) => getComputedStyle(el).backgroundColor);
+    const hansCol2Bg = await hansRow.locator('td').nth(1).evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(hansBg).toBe(headerBg);
+    expect(hansCol2Bg).toBe(headerBg);
+
+    // Verify Hans Schmidt's 4 columns: Name, 📞 Phone(s) newline-separated, 📧 Email(s) newline-separated, 🏠 Address
+    await expect(hansRow.locator('td').nth(0)).toHaveText('Hans Schmidt');
+    await expect(hansRow.locator('td').nth(1)).toContainText('📞');
+    await expect(hansRow.locator('td').nth(1)).toContainText('0171 1234567\n0711 998877');
+    await expect(hansRow.locator('td').nth(2)).toContainText('📧');
+    await expect(hansRow.locator('td').nth(2)).toContainText('hans.schmidt@tollhaus-stuttgart.de\nhans.second@example.com');
     // Secret non-address-list email must NOT be shown
-    await expect(schmidtRow).not.toContainText('secret.hans@example.com');
+    await expect(hansRow).not.toContainText('secret.hans@example.com');
+    await expect(hansRow.locator('td').nth(3)).toContainText('🏠');
+    await expect(hansRow.locator('td').nth(3)).toContainText('Königstraße 10, 70173 Stuttgart');
+
+    // Only one 📞 and one 📧 symbol for multiple newline-separated entries, vertically centered
+    await expect(hansRow.locator('td').nth(1).locator('.overview-contact-symbol')).toHaveCount(1);
+    await expect(hansRow.locator('td').nth(2).locator('.overview-contact-symbol')).toHaveCount(1);
+    const phoneSymbolBox = await hansRow.locator('td').nth(1).locator('.overview-contact-symbol').boundingBox();
+    const phoneCellBox = await hansRow.locator('td').nth(1).boundingBox();
+    expect(phoneSymbolBox).not.toBeNull();
+    expect(phoneCellBox).not.toBeNull();
+    if (phoneSymbolBox && phoneCellBox) {
+      const symbolCenterY = phoneSymbolBox.y + phoneSymbolBox.height / 2;
+      const cellCenterY = phoneCellBox.y + phoneCellBox.height / 2;
+      expect(Math.abs(symbolCenterY - cellCenterY)).toBeLessThan(4);
+    }
+
+    // Verify all parent columns and symbols are aligned across parent rows (with child rows in between)
+    for (let colIdx = 0; colIdx < 4; colIdx++) {
+      const box1 = await hansRow.locator('td').nth(colIdx).boundingBox();
+      const box2 = await lisaRow.locator('td').nth(colIdx).boundingBox();
+      expect(box1).not.toBeNull();
+      expect(box2).not.toBeNull();
+      if (box1 && box2) {
+        expect(Math.abs(box1.x - box2.x)).toBeLessThan(1);
+      }
+    }
+    for (let symCol = 1; symCol <= 3; symCol++) {
+      const sym1 = await hansRow.locator('td').nth(symCol).locator('.overview-contact-symbol').boundingBox();
+      const sym2 = await lisaRow.locator('td').nth(symCol).locator('.overview-contact-symbol').boundingBox();
+      expect(sym1).not.toBeNull();
+      expect(sym2).not.toBeNull();
+      if (sym1 && sym2) {
+        expect(Math.abs(sym1.x - sym2.x)).toBeLessThan(1);
+      }
+    }
 
     // Verify NO jump links to parent or child tabs exist
     await expect(page.locator('.family-parent-link')).toHaveCount(0);
@@ -161,9 +234,17 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     await expect(page.getByRole('button', { name: '+ Kind' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: '+ Elternteil' })).toHaveCount(0);
 
-    // Check Mia Schmidt's row (own family child)
-    const miaRow = page.locator('tr', { hasText: 'Mia' });
+    // Check Mia Schmidt's row (own family child, single surname in family -> surname omitted, indented)
+    const miaRow = page.locator('tr.overview-child-row', { hasText: 'Mia' });
     await expect(miaRow).toBeVisible();
+    await expect(miaRow.locator('td').first()).toHaveText('Mia');
+    // Child name span is indented to the right relative to parent name span
+    const hansNamePadding = await hansRow.locator('td').first().locator('span').evaluate((el) => parseFloat(getComputedStyle(el).paddingLeft));
+    const miaNamePadding = await miaRow.locator('td').first().locator('span').evaluate((el) => parseFloat(getComputedStyle(el).paddingLeft));
+    expect(miaNamePadding).toBeGreaterThan(hansNamePadding);
+    // Child rows have different background color from parent rows
+    const miaBg = await miaRow.locator('td').first().evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(miaBg).not.toBe(hansBg);
     // For own child, current group is displayed simply as "<group name>" (e.g. "Kleine Gr.")
     await expect(miaRow).toContainText('Kleine Gr.');
     // Must NOT contain extended duration/date text like "seit" or "(1J"
@@ -173,9 +254,10 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     await miaRow.click();
     await expect(page.locator('div[style*="position: fixed"]')).toHaveCount(0);
 
-    // Check Tom Müller's row (other family child)
-    const tomRow = page.locator('tr', { hasText: 'Tom' });
+    // Check Tom Müller's row (other family child, family has two surnames Müller / Weber -> surname kept)
+    const tomRow = page.locator('tr.overview-child-row', { hasText: 'Tom' });
     await expect(tomRow).toBeVisible();
+    await expect(tomRow.locator('td').first()).toHaveText('Tom Müller');
     // For other family child, group is NOT exposed: shows '-'
     await expect(tomRow.locator('td').last()).toHaveText('-');
 
