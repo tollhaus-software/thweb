@@ -86,6 +86,7 @@ type OverviewParent struct {
 	LastName  string                `json:"last_name"`
 	Emails    models.MultiValueList `json:"emails"`
 	Phones    models.MultiValueList `json:"phones"`
+	Address   string                `json:"address"`
 }
 
 type OverviewFamily struct {
@@ -136,6 +137,7 @@ func (s *Server) HandleListFamiliesOverview(w http.ResponseWriter, r *http.Reque
 				LastName:  p.LastName,
 				Emails:    filteredEmails,
 				Phones:    filteredPhones,
+				Address:   p.Address,
 			})
 		}
 
@@ -300,11 +302,13 @@ func (s *Server) HandleCreateFamily(w http.ResponseWriter, r *http.Request) {
 		LastName  string                `json:"last_name"`
 		Emails    models.MultiValueList `json:"emails"`
 		Phones    models.MultiValueList `json:"phones"`
+		Address   string                `json:"address"`
 		Parents   []struct {
 			FirstName string                `json:"first_name"`
 			LastName  string                `json:"last_name"`
 			Emails    models.MultiValueList `json:"emails"`
 			Phones    models.MultiValueList `json:"phones"`
+			Address   string                `json:"address"`
 		} `json:"parents"`
 	}
 
@@ -321,6 +325,7 @@ func (s *Server) HandleCreateFamily(w http.ResponseWriter, r *http.Request) {
 				LastName:  p.LastName,
 				Emails:    p.Emails,
 				Phones:    p.Phones,
+				Address:   p.Address,
 			})
 		}
 	} else if req.FirstName != "" || req.LastName != "" {
@@ -329,6 +334,7 @@ func (s *Server) HandleCreateFamily(w http.ResponseWriter, r *http.Request) {
 			LastName:  req.LastName,
 			Emails:    req.Emails,
 			Phones:    req.Phones,
+			Address:   req.Address,
 		})
 	}
 

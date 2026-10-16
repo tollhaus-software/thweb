@@ -186,6 +186,7 @@ type Parent struct {
 	LastName                   string                  `json:"last_name"`
 	Emails                     MultiValueList          `json:"emails"`
 	Phones                     MultiValueList          `json:"phones"`
+	Address                    string                  `json:"address"`
 	Notes                      string                  `json:"notes"`
 	VaccinationStatusProtected []byte                  `json:"vaccination_status_protected,omitempty"`
 	VaccinationChecks          []VaccinationCheck      `json:"vaccination_checks,omitempty"`

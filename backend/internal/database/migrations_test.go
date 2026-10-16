@@ -69,6 +69,33 @@ func TestApplySchemaMigrations(t *testing.T) {
 		t.Errorf("expected emails data_type 'jsonb', got %q", emailsColType)
 	}
 
+	var addressCol string
+	err = testDB.QueryRow(`
+		SELECT column_name 
+		FROM information_schema.columns 
+		WHERE table_name = 'parents' AND column_name = 'address';
+	`).Scan(&addressCol)
+	if err != nil {
+		t.Fatalf("expected address column to exist in parents: %v", err)
+	}
+	if addressCol != "address" {
+		t.Errorf("expected column_name 'address', got %q", addressCol)
+	}
+
+	// Test rollback of migration 00011
+	if err := goose.DownContext(context.Background(), testDB, "migrations"); err != nil {
+		t.Fatalf("failed to roll back migration 00011: %v", err)
+	}
+
+	err = testDB.QueryRow(`
+		SELECT column_name 
+		FROM information_schema.columns 
+		WHERE table_name = 'parents' AND column_name = 'address';
+	`).Scan(&addressCol)
+	if err != sql.ErrNoRows {
+		t.Errorf("expected address column to be dropped after rolling back migration 00011, got err: %v", err)
+	}
+
 	// Test rollback of migration 00010
 	if err := goose.DownContext(context.Background(), testDB, "migrations"); err != nil {
 		t.Fatalf("failed to roll back migration 00010: %v", err)

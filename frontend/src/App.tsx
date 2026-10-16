@@ -11,6 +11,7 @@ import { Pencil, Trash, Undo, Redo, Calendar, ClipboardList, Lock, Unlock, Arrow
 import { useGoogleLogin } from '@react-oauth/google';
 import { MultiValueListEditor, type MultiValueFlagConfig, type MultiValueEntry, type MultiValueItem, getEntryValue, isFlagActive } from './components/Table/MultiValueListEditor';
 import { NotesEditor } from './components/Table/NotesEditor';
+import { AddressEditor } from './components/Table/AddressEditor';
 import { GroupChangesPopover } from './components/Table/GroupChangesPopover';
 import { MembershipsModal } from './components/Table/MembershipsModal';
 import { VaccinationStatusEditor, type VaccinationCheck } from './components/Table/VaccinationStatusEditor';
@@ -49,6 +50,7 @@ interface Parent {
   last_name: string;
   emails?: MultiValueEntry[];
   phones?: MultiValueEntry[];
+  address?: string;
   notes?: string;
   vaccination_checks?: VaccinationCheck[];
   events?: HygieneBelehrungEvent[];
@@ -387,6 +389,7 @@ interface OverviewParent {
   last_name: string;
   emails?: MultiValueEntry[];
   phones?: MultiValueEntry[];
+  address?: string;
 }
 
 interface OverviewChild {
@@ -3131,6 +3134,49 @@ const Dashboard: React.FC = () => {
       .catch((err) => alert(err.message));
   };
 
+  const handleSaveFamilyParents = (familyId: string, updatedParents: Parent[]) => {
+    const family = families.find(f => f.id === familyId);
+    if (!family) return;
+
+    const originalParents = family.parents || [];
+
+    fetch(`/api/families/${family.id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ parents: updatedParents }),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          if (res.status === 403) {
+            const errData = await res.json().catch(() => ({}));
+            if (errData.error === 'kms_access_denied') {
+              sessionStorage.removeItem('kms_access_token');
+              setKmsAccessToken(null);
+              const errMsg = t('kmsAccessDenied');
+              setKmsError(errMsg);
+              throw new Error(errMsg);
+            }
+            if (errData.error) {
+              alert(errData.error);
+              throw new Error(errData.error);
+            }
+          }
+          throw new Error('Failed to update parents');
+        }
+        pushAction({
+          type: 'UPDATE_PARENT',
+          payload: {
+            tab: 'parents',
+            familyId: family.id,
+            beforeParents: originalParents,
+            afterParents: updatedParents,
+          }
+        });
+        fetchFamilies();
+      })
+      .catch((err) => alert(err.message));
+  };
+
   const handleSaveChildField = (child: Child, fieldName: keyof Child, newValue: any) => {
     let formattedValue = newValue;
     const isDateField = fieldName === 'birth_date';
@@ -3246,7 +3292,8 @@ const Dashboard: React.FC = () => {
         const lnMatch = (p.last_name || '').toLowerCase().includes(query);
         const emailMatch = (p.emails || []).some(e => getEntryValue(e).toLowerCase().includes(query));
         const phoneMatch = (p.phones || []).some(ph => getEntryValue(ph).toLowerCase().includes(query));
-        return fnMatch || lnMatch || emailMatch || phoneMatch;
+        const addressMatch = (p.address || '').toLowerCase().includes(query);
+        return fnMatch || lnMatch || emailMatch || phoneMatch || addressMatch;
       });
 
       return {
@@ -3443,7 +3490,8 @@ const Dashboard: React.FC = () => {
       const parentContactMatch = (f.parents || []).some((p) => {
         const emailMatch = (p.emails || []).some((e: any) => getEntryValue(e).toLowerCase().includes(query));
         const phoneMatch = (p.phones || []).some((ph: any) => getEntryValue(ph).toLowerCase().includes(query));
-        return emailMatch || phoneMatch;
+        const addressMatch = (p.address || '').toLowerCase().includes(query);
+        return emailMatch || phoneMatch || addressMatch;
       });
 
       const familyMatch = familyName.toLowerCase().includes(query) || parentNames.toLowerCase().includes(query) || parentContactMatch;
@@ -3663,6 +3711,23 @@ const Dashboard: React.FC = () => {
         }
       },
       {
+        header: t('address'),
+        accessorKey: 'address',
+        size: 250,
+        cell: (info) => {
+          const parent = info.row.original;
+          const family = families.find((f) => f.id === parent.family_id);
+          const familyParents = family?.parents || [parent];
+          return (
+            <AddressEditor
+              parent={parent}
+              familyParents={familyParents}
+              onSave={(updatedParents) => handleSaveFamilyParents(parent.family_id, updatedParents)}
+            />
+          );
+        }
+      },
+      {
         header: t('notes'),
         accessorKey: 'notes',
         size: 260,
@@ -3757,7 +3822,7 @@ const Dashboard: React.FC = () => {
         }
       }
     ],
-    [families, handleSaveParentField, handleDeleteParent, isVaccinationUnlocked, handleRequestKmsAuth, hasPermission, user?.email, membershipPopoverAnchor, targetParentMemberships, openManageMemberships, multiValuePopoverAnchor, activeParentForMultiValue, activeMultiValueField, openManageMultiValue]
+    [families, handleSaveParentField, handleSaveFamilyParents, handleDeleteParent, isVaccinationUnlocked, handleRequestKmsAuth, hasPermission, user?.email, membershipPopoverAnchor, targetParentMemberships, openManageMemberships, multiValuePopoverAnchor, activeParentForMultiValue, activeMultiValueField, openManageMultiValue]
   );
 
   const childGroupColumn = React.useMemo<ColumnDef<any>>(

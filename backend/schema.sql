@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS parents (
     last_name TEXT NOT NULL,
     emails TEXT[] NOT NULL DEFAULT '{}',
     phones TEXT[] NOT NULL DEFAULT '{}',
+    address TEXT NOT NULL DEFAULT '',
     notes TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
