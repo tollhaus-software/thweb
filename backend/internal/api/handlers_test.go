@@ -569,5 +569,120 @@ func TestHandleCalculateFees_RestrictedUser(t *testing.T) {
 	}
 }
 
+func TestParentAddress_PersistenceAndRetrieval(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := store.NewStore(pool)
+	hub := NewHub()
+	go hub.Run()
+	s := &Server{
+		Store: appStore,
+		Hub:   hub,
+	}
+
+	testUserID := uuid.New()
+	testUserEmail := "test-user-addr-" + testUserID.String() + "@example.com"
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2)", testUserID, testUserEmail)
+	if err != nil {
+		t.Fatalf("failed to insert test user: %v", err)
+	}
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", testUserID)
+	}()
+
+	familyID := uuid.New()
+	p1ID := uuid.New()
+	p2ID := uuid.New()
+
+	parents := []models.Parent{
+		{
+			ID:        p1ID,
+			FamilyID:  familyID,
+			FirstName: "Alice",
+			LastName:  "Test",
+			Address:   "Hauptstr. 1, 70173 Stuttgart",
+		},
+		{
+			ID:        p2ID,
+			FamilyID:  familyID,
+			FirstName: "Bob",
+			LastName:  "Test",
+			Address:   "Gartenweg 2, 70174 Stuttgart",
+		},
+	}
+
+	// 1. Create/Insert parents with distinct addresses
+	if err := appStore.UpdateFamilyParents(ctx, testUserID, familyID, parents); err != nil {
+		t.Fatalf("failed to insert parents with addresses: %v", err)
+	}
+	defer func() {
+		_ = appStore.DeleteFamily(ctx, testUserID, familyID)
+	}()
+
+	// 2. Query parents directly and verify addresses
+	loaded, err := appStore.GetParentsByFamilyID(ctx, familyID)
+	if err != nil {
+		t.Fatalf("failed to load parents: %v", err)
+	}
+	if len(loaded) != 2 {
+		t.Fatalf("expected 2 parents, got %d", len(loaded))
+	}
+	parentMap := make(map[uuid.UUID]models.Parent)
+	for _, p := range loaded {
+		parentMap[p.ID] = p
+	}
+	if parentMap[p1ID].Address != "Hauptstr. 1, 70173 Stuttgart" {
+		t.Errorf("expected p1 address 'Hauptstr. 1, 70173 Stuttgart', got '%s'", parentMap[p1ID].Address)
+	}
+	if parentMap[p2ID].Address != "Gartenweg 2, 70174 Stuttgart" {
+		t.Errorf("expected p2 address 'Gartenweg 2, 70174 Stuttgart', got '%s'", parentMap[p2ID].Address)
+	}
+
+	// 3. Update to shared address for all parents of the family
+	sharedAddress := "Gemeinsameweg 99, 70178 Stuttgart"
+	updateBody := fmt.Sprintf(`{"parents":[{"id":"%s","family_id":"%s","first_name":"Alice","last_name":"Test","address":"%s"},{"id":"%s","family_id":"%s","first_name":"Bob","last_name":"Test","address":"%s"}]}`,
+		p1ID, familyID, sharedAddress, p2ID, familyID, sharedAddress)
+
+	adminUser := &models.UserWithPermissions{
+		ID:                   testUserID,
+		Email:                testUserEmail,
+		EffectivePermissions: []string{"families.all.read", "families.all.write"},
+	}
+
+	req := httptest.NewRequest("PUT", "/api/families/"+familyID.String()+"/parents", strings.NewReader(updateBody))
+	req = req.WithContext(context.WithValue(req.Context(), auth.UserContextKey, adminUser))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", familyID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	rec := httptest.NewRecorder()
+	s.HandleUpdateFamilyParents(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d (%s)", rec.Code, rec.Body.String())
+	}
+
+	// 4. Verify shared address persisted
+	loadedAfterUpdate, err := appStore.GetParentsByFamilyID(ctx, familyID)
+	if err != nil {
+		t.Fatalf("failed to reload parents: %v", err)
+	}
+	for _, p := range loadedAfterUpdate {
+		if p.Address != sharedAddress {
+			t.Errorf("expected parent %s to have shared address '%s', got '%s'", p.FirstName, sharedAddress, p.Address)
+		}
+	}
+}
+
 
 
