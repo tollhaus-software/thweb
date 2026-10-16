@@ -390,7 +390,8 @@ func TestHandleListFamiliesOverview_ProjectionAndScoping(t *testing.T) {
 				{Value: "111-public", AddressList: true},
 				{Value: "111-private", AddressList: false},
 			},
-			Notes: "Sensitive parent notes that should NOT be in overview",
+			Address: "Musterstraße 10, 70173 Stuttgart",
+			Notes:   "Sensitive parent notes that should NOT be in overview",
 		},
 	}
 	if err := appStore.UpdateFamilyParents(ctx, testUserID, familyID1, parents1); err != nil {
@@ -473,12 +474,15 @@ func TestHandleListFamiliesOverview_ProjectionAndScoping(t *testing.T) {
 	if strings.Contains(bodyStr, "111-private") {
 		t.Errorf("HandleListFamiliesOverview leaked non-address-list phone: %s", bodyStr)
 	}
-	// MUST contain public email and phone
+	// MUST contain public email, phone, and address
 	if !strings.Contains(bodyStr, "alice.public@example.com") {
 		t.Errorf("expected alice.public@example.com in overview, got: %s", bodyStr)
 	}
 	if !strings.Contains(bodyStr, "111-public") {
 		t.Errorf("expected 111-public in overview, got: %s", bodyStr)
+	}
+	if !strings.Contains(bodyStr, "Musterstraße 10, 70173 Stuttgart") {
+		t.Errorf("expected parent address in overview, got: %s", bodyStr)
 	}
 	// Family 1 child Charlie should have group changes
 	if !strings.Contains(bodyStr, "Charlie") {

@@ -3469,8 +3469,27 @@ const Dashboard: React.FC = () => {
         .filter(Boolean)
         .join(', ');
 
+      const allSurnames = Array.from(
+        new Set(
+          [
+            ...(f.parents || []).map((p) => (p.last_name || '').trim()),
+            ...(f.children || []).map((c) => (c.last_name || '').trim()),
+          ].filter(Boolean)
+        )
+      );
+      const hasSingleFamilySurname = allSurnames.length === 1;
+
+      const allParents = (f.parents || []).map((p) => ({
+        ...p,
+        _rowType: 'parent' as const,
+        family_id: f.id,
+        family_name: familyName,
+      }));
+
       const allChildren = (f.children || []).map((c) => ({
         ...c,
+        _rowType: 'child' as const,
+        hide_last_name: hasSingleFamilySurname,
         family_id: f.id,
         family_name: familyName,
       }));
@@ -3496,62 +3515,20 @@ const Dashboard: React.FC = () => {
 
       const familyMatch = familyName.toLowerCase().includes(query) || parentNames.toLowerCase().includes(query) || parentContactMatch;
 
-      const subHeader = (f.parents && f.parents.length > 0) ? (
-        <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
-          {f.parents.map((p, idx) => {
-            const pName = `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Parent';
-            const emails = (p.emails || []).map((e: any) => getEntryValue(e)).filter(Boolean);
-            const phones = (p.phones || []).map((ph: any) => getEntryValue(ph)).filter(Boolean);
-            const contactDetails: string[] = [];
-            if (phones.length > 0) {
-              contactDetails.push(phones.join(', '));
-            }
-            if (emails.length > 0) {
-              contactDetails.push(emails.join(', '));
-            }
-            const contactStr = contactDetails.length > 0 ? ` (${contactDetails.join(' · ')})` : '';
-
-            return (
-              <React.Fragment key={p.id}>
-                {idx > 0 && <span style={{ color: 'var(--border)' }}>|</span>}
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                  <span style={{ fontWeight: 500, color: 'var(--text)' }}>{pName}</span>
-                  {contactStr && (
-                    <span style={{ color: 'var(--text-muted)' }}>{contactStr}</span>
-                  )}
-                </span>
-              </React.Fragment>
-            );
-          })}
-        </span>
-      ) : null;
+      const childrenToInclude =
+        query && familyMatch && filteredChildren.length === 0 ? allChildren : filteredChildren;
 
       return {
         id: f.id,
         family_name: familyName,
-        sub_header: subHeader,
-        children: filteredChildren,
+        subRows: [...allParents, ...childrenToInclude],
+        hasMatchingChildren: filteredChildren.length > 0,
         nameMatch: familyMatch,
       };
     });
 
     if (!query) return mapped;
-    return mapped
-      .filter((f) => f.nameMatch || f.children.length > 0)
-      .map((f) => {
-        if (f.nameMatch && f.children.length === 0) {
-          const originalFamily = overviewFamilies.find((orig) => orig.id === f.id);
-          return {
-            ...f,
-            children: (originalFamily?.children || []).map((c) => ({
-              ...c,
-              family_id: f.id,
-              family_name: f.family_name,
-            })),
-          };
-        }
-        return f;
-      });
+    return mapped.filter((f) => f.nameMatch || f.hasMatchingChildren);
   }, [overviewFamilies, globalFilter]);
 
   const hygieneColumns = React.useMemo<ColumnDef<any>[]>(() => {
@@ -4122,25 +4099,66 @@ const Dashboard: React.FC = () => {
   const overviewColumns = React.useMemo<ColumnDef<any>[]>(
     () => [
       {
-        id: 'child_name',
-        accessorFn: (child: any) => `${child.first_name || ''} ${child.last_name || ''}`.trim(),
-        header: t('firstNameEdit'),
-        size: 240,
-        minSize: 200,
+        id: 'overview_name',
+        accessorFn: (row: any) => `${row.first_name || ''} ${row.last_name || ''}`.trim(),
+        header: '',
+        size: 220,
+        minSize: 180,
         cell: (info) => {
-          const child = info.row.original;
-          const fullName = `${child.first_name || ''} ${child.last_name || ''}`.trim() || '-';
+          const item = info.row.original;
+          if (item._rowType === 'child') {
+            const displayName = item.hide_last_name
+              ? (item.first_name || '').trim() || '-'
+              : `${item.first_name || ''} ${item.last_name || ''}`.trim() || '-';
+            return <span style={{ paddingLeft: '1.25rem', display: 'inline-block' }}>{displayName}</span>;
+          }
+          const fullName = `${item.first_name || ''} ${item.last_name || ''}`.trim() || '-';
           return <span>{fullName}</span>;
         },
       },
       {
-        header: t('group'),
         id: 'group',
-        size: 240,
-        minSize: 200,
+        header: '',
+        size: 220,
+        minSize: 180,
+        meta: {
+          getColSpan: (row: any) => (row._rowType === 'child' ? 3 : 1),
+        },
         cell: (info) => {
-          const child = info.row.original;
-          const groupInfo = getChildGroupInfo(child.group_changes);
+          const item = info.row.original;
+          if (item._rowType === 'parent') {
+            const phones = (item.phones || [])
+              .filter((ph: any) => isFlagActive(ph, 'address_list', true))
+              .map((ph: any) => getEntryValue(ph).trim())
+              .filter(Boolean);
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span
+                  className="overview-contact-symbol"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '1.25rem',
+                    flexShrink: 0,
+                    userSelect: 'none',
+                  }}
+                >
+                  📞
+                </span>
+                <span
+                  style={{
+                    whiteSpace: 'pre-line',
+                    color: phones.length === 0 ? 'var(--text-muted)' : 'var(--text)',
+                  }}
+                >
+                  {phones.length > 0 ? phones.join('\n') : '-'}
+                </span>
+              </div>
+            );
+          }
+
+          const groupInfo = getChildGroupInfo(item.group_changes);
           const displayGroup =
             groupInfo.currentGroup && groupInfo.currentGroup > 0 && !groupInfo.isFuture && !groupInfo.isExited
               ? (groupInfo.groupName || getGroupShortLabel(groupInfo.currentGroup))
@@ -4149,6 +4167,87 @@ const Dashboard: React.FC = () => {
             <span style={{ color: displayGroup === '-' ? 'var(--text-muted)' : 'var(--text)' }}>
               {displayGroup}
             </span>
+          );
+        },
+      },
+      {
+        id: 'overview_emails',
+        header: '',
+        size: 260,
+        minSize: 200,
+        meta: {
+          skipCell: (row: any) => row._rowType === 'child',
+        },
+        cell: (info) => {
+          const item = info.row.original;
+          if (item._rowType !== 'parent') return null;
+          const emails = (item.emails || [])
+            .filter((e: any) => isFlagActive(e, 'address_list', true))
+            .map((e: any) => getEntryValue(e).trim())
+            .filter(Boolean);
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span
+                className="overview-contact-symbol"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '1.25rem',
+                  flexShrink: 0,
+                  userSelect: 'none',
+                }}
+              >
+                📧
+              </span>
+              <span
+                style={{
+                  whiteSpace: 'pre-line',
+                  color: emails.length === 0 ? 'var(--text-muted)' : 'var(--text)',
+                }}
+              >
+                {emails.length > 0 ? emails.join('\n') : '-'}
+              </span>
+            </div>
+          );
+        },
+      },
+      {
+        id: 'overview_address',
+        header: '',
+        size: 260,
+        minSize: 200,
+        meta: {
+          skipCell: (row: any) => row._rowType === 'child',
+        },
+        cell: (info) => {
+          const item = info.row.original;
+          if (item._rowType !== 'parent') return null;
+          const address = (item.address || '').trim();
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span
+                className="overview-contact-symbol"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '1.25rem',
+                  flexShrink: 0,
+                  userSelect: 'none',
+                }}
+              >
+                🏠
+              </span>
+              <span
+                style={{
+                  whiteSpace: 'pre-line',
+                  color: !address ? 'var(--text-muted)' : 'var(--text)',
+                }}
+              >
+                {address || '-'}
+              </span>
+            </div>
           );
         },
       },
@@ -4501,8 +4600,8 @@ const Dashboard: React.FC = () => {
           <DataTable
             data={overviewFamiliesTabData}
             columns={overviewColumns}
-            getSubRows={(row: any) => row.children}
-            emptySubRowsText={t('noChildrenYet')}
+            getSubRows={(row: any) => row.subRows}
+            hideHeader
             highlightedRowId={highlightedRowId}
           />
         ) : activeTab === 'parents' ? (
