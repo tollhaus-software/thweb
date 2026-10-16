@@ -688,5 +688,39 @@ func TestParentAddress_PersistenceAndRetrieval(t *testing.T) {
 	}
 }
 
+func TestComputeChildOverviewGroupStatus(t *testing.T) {
+	now := time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)
 
+	// 1. No group changes -> nil, false
+	cg, isFormer := computeChildOverviewGroupStatus(nil, now)
+	if cg != nil || isFormer {
+		t.Errorf("expected nil, false for empty changes; got %v, %v", cg, isFormer)
+	}
 
+	// 2. Future enrollment only -> nil, false
+	cg, isFormer = computeChildOverviewGroupStatus([]models.ChildGroupChange{
+		{ChangeDate: time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+	}, now)
+	if cg != nil || isFormer {
+		t.Errorf("expected nil, false for future-only change; got %v, %v", cg, isFormer)
+	}
+
+	// 3. Active enrollment -> *int(2), false
+	cg, isFormer = computeChildOverviewGroupStatus([]models.ChildGroupChange{
+		{ChangeDate: time.Date(2025, 9, 1, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+		{ChangeDate: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), TargetGroup: 2},
+		{ChangeDate: time.Date(2027, 9, 1, 0, 0, 0, 0, time.UTC), TargetGroup: 0},
+	}, now)
+	if cg == nil || *cg != 2 || isFormer {
+		t.Errorf("expected 2, false for active enrollment; got %v, %v", cg, isFormer)
+	}
+
+	// 4. Exited on or before today -> nil, true
+	cg, isFormer = computeChildOverviewGroupStatus([]models.ChildGroupChange{
+		{ChangeDate: time.Date(2024, 9, 1, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+		{ChangeDate: time.Date(2026, 8, 31, 0, 0, 0, 0, time.UTC), TargetGroup: 0},
+	}, now)
+	if cg != nil || !isFormer {
+		t.Errorf("expected nil, true for former child; got %v, %v", cg, isFormer)
+	}
+}

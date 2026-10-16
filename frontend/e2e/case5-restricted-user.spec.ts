@@ -258,8 +258,33 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     const tomRow = page.locator('tr.overview-child-row', { hasText: 'Tom' });
     await expect(tomRow).toBeVisible();
     await expect(tomRow.locator('td').first()).toHaveText('Tom Müller');
-    // For other family child, group is NOT exposed: shows '-'
-    await expect(tomRow.locator('td').last()).toHaveText('-');
+    // For other family child, current group is also shown (without exposing full group change history)
+    await expect(tomRow.locator('td').last()).toContainText('Grosse Gr.');
+
+    // Toggle grouping to "Nach Gruppe" and verify group headers and family block layout
+    await page.getByRole('button', { name: 'Nach Gruppe' }).click();
+    await expect(page.locator('tr.family-group-row', { hasText: 'Kleine Gruppe' })).toBeVisible();
+    await expect(page.locator('tr.family-group-row', { hasText: 'Große Gruppe' })).toBeVisible();
+    // Empty groups are not shown
+    await expect(page.locator('tr.family-group-row', { hasText: 'Hort' })).toHaveCount(0);
+    await expect(page.locator('tr.family-group-row', { hasText: 'Noch keine Gruppe' })).toHaveCount(0);
+    await expect(page.locator('tr.family-group-row', { hasText: 'Ehemalige' })).toHaveCount(0);
+    // In "Nach Gruppe" mode, Mia's row displays her full name ("Mia Schmidt") and empty 2nd column
+    const miaByGroupRow = page.locator('tr.overview-child-row', { hasText: 'Mia Schmidt' });
+    const hansByGroupRow = page.locator('tr.overview-parent-row', { hasText: 'Hans Schmidt' }).first();
+    await expect(miaByGroupRow).toBeVisible();
+    await expect(miaByGroupRow.locator('td').nth(1)).toHaveText('');
+    // Opposite indentation: child name is non-indented, parent name is indented
+    const miaGroupPadding = await miaByGroupRow.locator('td').first().locator('span').evaluate((el) => parseFloat(getComputedStyle(el).paddingLeft));
+    const hansGroupPadding = await hansByGroupRow.locator('td').first().locator('span').evaluate((el) => parseFloat(getComputedStyle(el).paddingLeft));
+    expect(miaGroupPadding).toBe(0);
+    expect(hansGroupPadding).toBeGreaterThan(miaGroupPadding);
+    // Child and parent rows have no special background color in "Nach Gruppe" mode
+    const miaGroupBg = await miaByGroupRow.locator('td').first().evaluate((el) => getComputedStyle(el).backgroundColor);
+    const hansGroupBg = await hansByGroupRow.locator('td').first().evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(hansGroupBg).toBe(miaGroupBg);
+    // Switch back to "Nach Familie"
+    await page.getByRole('button', { name: 'Nach Familie' }).click();
 
     // Step 5: Switch to "Betreuungsgebühren" tab
     await feesTab.click();

@@ -77,7 +77,43 @@ type OverviewChild struct {
 	ID           uuid.UUID                 `json:"id"`
 	FirstName    string                    `json:"first_name"`
 	LastName     string                    `json:"last_name"`
+	CurrentGroup *int                      `json:"current_group,omitempty"`
+	IsFormer     bool                      `json:"is_former,omitempty"`
 	GroupChanges []models.ChildGroupChange `json:"group_changes,omitempty"`
+}
+
+func computeChildOverviewGroupStatus(changes []models.ChildGroupChange, now time.Time) (*int, bool) {
+	if len(changes) == 0 {
+		return nil, false
+	}
+	todayStr := now.Format("2006-01-02")
+	var firstEnroll *models.ChildGroupChange
+	for i := range changes {
+		if changes[i].TargetGroup > 0 {
+			firstEnroll = &changes[i]
+			break
+		}
+	}
+	if firstEnroll != nil && firstEnroll.ChangeDate.Format("2006-01-02") > todayStr {
+		return nil, false
+	}
+
+	var effective []models.ChildGroupChange
+	for _, c := range changes {
+		if c.ChangeDate.Format("2006-01-02") <= todayStr {
+			effective = append(effective, c)
+		}
+	}
+	if len(effective) == 0 {
+		return nil, false
+	}
+
+	latest := effective[len(effective)-1]
+	if latest.TargetGroup == 0 {
+		return nil, true
+	}
+	grp := latest.TargetGroup
+	return &grp, false
 }
 
 type OverviewParent struct {
@@ -105,6 +141,7 @@ func (s *Server) HandleListFamiliesOverview(w http.ResponseWriter, r *http.Reque
 	user := auth.GetUser(r.Context())
 	hasSelfService := user != nil && user.HasPermission("families.self.selfservice")
 	hasFamiliesAll := user != nil && user.HasPermission("families.all.read")
+	now := time.Now()
 
 	overview := make([]OverviewFamily, 0, len(families))
 	for _, fam := range families {
@@ -143,10 +180,13 @@ func (s *Server) HandleListFamiliesOverview(w http.ResponseWriter, r *http.Reque
 
 		ovChildren := make([]OverviewChild, 0, len(fam.Children))
 		for _, c := range fam.Children {
+			currGrp, isFormer := computeChildOverviewGroupStatus(c.GroupChanges, now)
 			ovc := OverviewChild{
-				ID:        c.ID,
-				FirstName: c.FirstName,
-				LastName:  c.LastName,
+				ID:           c.ID,
+				FirstName:    c.FirstName,
+				LastName:     c.LastName,
+				CurrentGroup: currGrp,
+				IsFormer:     isFormer,
 			}
 			if canViewGroupChanges {
 				ovc.GroupChanges = c.GroupChanges

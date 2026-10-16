@@ -396,8 +396,46 @@ interface OverviewChild {
   id: string;
   first_name: string;
   last_name: string;
+  current_group?: number | null;
+  is_former?: boolean;
   group_changes?: ChildGroupChange[];
 }
+
+const getOverviewChildGroupStatus = (
+  child: OverviewChild
+): { currentGroup: number | null; isFormer: boolean; groupLabel: string } => {
+  if (typeof child.current_group === 'number' && child.current_group > 0) {
+    return {
+      currentGroup: child.current_group,
+      isFormer: false,
+      groupLabel: getGroupShortLabel(child.current_group),
+    };
+  }
+  if (child.is_former) {
+    return {
+      currentGroup: null,
+      isFormer: true,
+      groupLabel: '-',
+    };
+  }
+  if (child.group_changes && child.group_changes.length > 0) {
+    const info = getChildGroupInfo(child.group_changes);
+    const activeGrp =
+      info.currentGroup && info.currentGroup > 0 && !info.isFuture && !info.isExited
+        ? info.currentGroup
+        : null;
+    return {
+      currentGroup: activeGrp,
+      isFormer: info.isExited,
+      groupLabel: activeGrp ? info.groupName || getGroupShortLabel(activeGrp) : '-',
+    };
+  }
+  return {
+    currentGroup: null,
+    isFormer: false,
+    groupLabel: '-',
+  };
+};
 
 interface OverviewFamily {
   id: string;
@@ -1596,6 +1634,7 @@ const Dashboard: React.FC = () => {
 
   const [families, setFamilies] = React.useState<Family[]>([]);
   const [overviewFamilies, setOverviewFamilies] = React.useState<OverviewFamily[]>([]);
+  const [overviewGroupBy, setOverviewGroupBy] = React.useState<'family' | 'group'>('family');
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [activeTab, setActiveTab] = React.useState<
     'familiesOverview' | 'families' | 'parents' | 'children' | 'childcareFees' | 'hygieneBelehrung' | 'audit' | 'admin' | 'kiosk'
@@ -3499,6 +3538,148 @@ const Dashboard: React.FC = () => {
 
   const overviewFamiliesTabData = React.useMemo(() => {
     const query = (globalFilter || '').trim().toLowerCase();
+
+    if (overviewGroupBy === 'group') {
+      const groupBuckets: {
+        id: string;
+        key: string;
+        label: string;
+        matchesChild: (status: { currentGroup: number | null; isFormer: boolean }) => boolean;
+      }[] = [
+        {
+          id: 'overview-group-1',
+          key: 'group1',
+          label: t('overviewGroup1'),
+          matchesChild: (s) => s.currentGroup === 1,
+        },
+        {
+          id: 'overview-group-2',
+          key: 'group2',
+          label: t('overviewGroup2'),
+          matchesChild: (s) => s.currentGroup === 2,
+        },
+        {
+          id: 'overview-group-3',
+          key: 'group3',
+          label: t('overviewGroup3'),
+          matchesChild: (s) => s.currentGroup === 3,
+        },
+        {
+          id: 'overview-group-none',
+          key: 'none',
+          label: t('overviewGroupNone'),
+          matchesChild: (s) => s.currentGroup === null && !s.isFormer,
+        },
+        {
+          id: 'overview-group-former',
+          key: 'former',
+          label: t('overviewGroupFormer'),
+          matchesChild: (s) => s.currentGroup === null && s.isFormer,
+        },
+      ];
+
+      const bucketsData = groupBuckets.map((bucket) => {
+        const bucketLabelMatches = query ? bucket.label.toLowerCase().includes(query) : false;
+
+        const familyBlocks: {
+          familyId: string;
+          familyName: string;
+          rows: any[];
+        }[] = [];
+
+        overviewFamilies.forEach((f) => {
+          const childrenInBucket = (f.children || []).filter((c) =>
+            bucket.matchesChild(getOverviewChildGroupStatus(c))
+          );
+          if (childrenInBucket.length === 0) return;
+
+          const lastNames = Array.from(new Set((f.parents || []).map((p) => p.last_name).filter(Boolean)));
+          const familyName = lastNames.join(' / ') || 'Familie';
+          const parentNames = (f.parents || [])
+            .map((p) => `${p.first_name || ''} ${p.last_name || ''}`.trim())
+            .filter(Boolean)
+            .join(', ');
+
+          const parentContactMatch = (f.parents || []).some((p) => {
+            const emailMatch = (p.emails || []).some((e: any) => getEntryValue(e).toLowerCase().includes(query));
+            const phoneMatch = (p.phones || []).some((ph: any) => getEntryValue(ph).toLowerCase().includes(query));
+            const addressMatch = (p.address || '').toLowerCase().includes(query);
+            return emailMatch || phoneMatch || addressMatch;
+          });
+
+          const familyMatch =
+            !query ||
+            bucketLabelMatches ||
+            familyName.toLowerCase().includes(query) ||
+            parentNames.toLowerCase().includes(query) ||
+            parentContactMatch;
+
+          const sortedBucketChildren = [...childrenInBucket]
+            .sort((a, b) => (a.first_name || '').localeCompare(b.first_name || '', CURRENT_LOCALE))
+            .map((c) => ({
+              ...c,
+              id: `${c.id}-${bucket.key}`,
+              _rowType: 'child' as const,
+              hide_last_name: false,
+              hide_group: true,
+              indent_name: false,
+              no_special_bg: true,
+              family_id: f.id,
+              family_name: familyName,
+            }));
+
+          const filteredBucketChildren = sortedBucketChildren.filter((c) => {
+            if (!query) return true;
+            const fullName = `${c.first_name || ''} ${c.last_name || ''}`.trim().toLowerCase();
+            const fnMatch = (c.first_name || '').toLowerCase().includes(query);
+            const lnMatch = (c.last_name || '').toLowerCase().includes(query);
+            return fnMatch || lnMatch || fullName.includes(query);
+          });
+
+          if (!familyMatch && filteredBucketChildren.length === 0) {
+            return;
+          }
+
+          const childrenToInclude =
+            query && familyMatch && filteredBucketChildren.length === 0
+              ? sortedBucketChildren
+              : filteredBucketChildren;
+
+          const sortedParents = [...(f.parents || [])]
+            .sort((a, b) => (a.first_name || '').localeCompare(b.first_name || '', CURRENT_LOCALE))
+            .map((p) => ({
+              ...p,
+              id: `${p.id}-${bucket.key}`,
+              _rowType: 'parent' as const,
+              indent_name: true,
+              no_special_bg: true,
+              family_id: f.id,
+              family_name: familyName,
+            }));
+
+          familyBlocks.push({
+            familyId: f.id,
+            familyName,
+            rows: [...childrenToInclude, ...sortedParents],
+          });
+        });
+
+        familyBlocks.sort((a, b) => a.familyName.localeCompare(b.familyName, CURRENT_LOCALE));
+
+        const subRows = familyBlocks.flatMap((fb) => fb.rows);
+
+        return {
+          id: bucket.id,
+          family_name: bucket.label,
+          subRows,
+          hasMatchingRows: subRows.length > 0,
+          nameMatch: bucketLabelMatches,
+        };
+      });
+
+      return bucketsData.filter((b) => b.subRows.length > 0);
+    }
+
     const mapped = overviewFamilies.map((f) => {
       const lastNames = Array.from(new Set((f.parents || []).map((p) => p.last_name).filter(Boolean)));
       const familyName = lastNames.join(' / ') || 'Familie';
@@ -3537,8 +3718,8 @@ const Dashboard: React.FC = () => {
         const fullName = `${c.first_name || ''} ${c.last_name || ''}`.trim().toLowerCase();
         const fnMatch = (c.first_name || '').toLowerCase().includes(query);
         const lnMatch = (c.last_name || '').toLowerCase().includes(query);
-        const groupInfo = getChildGroupInfo(c.group_changes);
-        const groupMatch = groupInfo.groupLabel.toLowerCase().includes(query);
+        const groupStatus = getOverviewChildGroupStatus(c);
+        const groupMatch = groupStatus.groupLabel.toLowerCase().includes(query);
         const familyNameMatch = familyName.toLowerCase().includes(query);
         const parentMatch = parentNames.toLowerCase().includes(query);
         return fnMatch || lnMatch || fullName.includes(query) || groupMatch || familyNameMatch || parentMatch;
@@ -3567,7 +3748,7 @@ const Dashboard: React.FC = () => {
 
     if (!query) return mapped;
     return mapped.filter((f) => f.nameMatch || f.hasMatchingChildren);
-  }, [overviewFamilies, globalFilter]);
+  }, [overviewFamilies, globalFilter, overviewGroupBy]);
 
   const hygieneColumns = React.useMemo<ColumnDef<any>[]>(() => {
     return [
@@ -4144,14 +4325,23 @@ const Dashboard: React.FC = () => {
         minSize: 180,
         cell: (info) => {
           const item = info.row.original;
+          const isIndented = item.indent_name ?? item._rowType === 'child';
           if (item._rowType === 'child') {
             const displayName = item.hide_last_name
               ? (item.first_name || '').trim() || '-'
               : `${item.first_name || ''} ${item.last_name || ''}`.trim() || '-';
-            return <span style={{ paddingLeft: '1.25rem', display: 'inline-block' }}>{displayName}</span>;
+            return (
+              <span style={isIndented ? { paddingLeft: '1.25rem', display: 'inline-block' } : undefined}>
+                {displayName}
+              </span>
+            );
           }
           const fullName = `${item.first_name || ''} ${item.last_name || ''}`.trim() || '-';
-          return <span>{fullName}</span>;
+          return (
+            <span style={isIndented ? { paddingLeft: '1.25rem', display: 'inline-block' } : undefined}>
+              {fullName}
+            </span>
+          );
         },
       },
       {
@@ -4196,11 +4386,12 @@ const Dashboard: React.FC = () => {
             );
           }
 
-          const groupInfo = getChildGroupInfo(item.group_changes);
-          const displayGroup =
-            groupInfo.currentGroup && groupInfo.currentGroup > 0 && !groupInfo.isFuture && !groupInfo.isExited
-              ? (groupInfo.groupName || getGroupShortLabel(groupInfo.currentGroup))
-              : '-';
+          if (item.hide_group) {
+            return null;
+          }
+
+          const groupStatus = getOverviewChildGroupStatus(item);
+          const displayGroup = groupStatus.groupLabel;
           return (
             <span style={{ color: displayGroup === '-' ? 'var(--text-muted)' : 'var(--text)' }}>
               {displayGroup}
@@ -4471,8 +4662,8 @@ const Dashboard: React.FC = () => {
             </div>
             <button
               type="button"
-              className="context-return-dismiss"
               onClick={handleDismissReturnNav}
+              className="context-return-dismiss"
               title={t('dismiss')}
             >
               <X size={15} />
@@ -4490,6 +4681,58 @@ const Dashboard: React.FC = () => {
                 placeholder={activeTab === 'families' || activeTab === 'familiesOverview' ? t('searchFamilies') : activeTab === 'children' ? t('searchChildren') : t('searchParents')}
                 style={{ marginBottom: 0 }}
               />
+              {activeTab === 'familiesOverview' && (
+                <div
+                  className="overview-grouping-toggle"
+                  role="group"
+                  aria-label={t('groupingLabel')}
+                  style={{
+                    display: 'inline-flex',
+                    border: '1px solid var(--border)',
+                    borderRadius: '4px',
+                    overflow: 'hidden',
+                    background: 'var(--bg-surface)',
+                    height: '34px',
+                    boxSizing: 'border-box',
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setOverviewGroupBy('family')}
+                    aria-pressed={overviewGroupBy === 'family'}
+                    style={{
+                      padding: '0 0.75rem',
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                      border: 'none',
+                      cursor: 'pointer',
+                      background: overviewGroupBy === 'family' ? 'var(--primary)' : 'transparent',
+                      color: overviewGroupBy === 'family' ? '#ffffff' : 'var(--text)',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {t('groupByFamily')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOverviewGroupBy('group')}
+                    aria-pressed={overviewGroupBy === 'group'}
+                    style={{
+                      padding: '0 0.75rem',
+                      fontSize: '0.85rem',
+                      fontWeight: 600,
+                      border: 'none',
+                      borderLeft: '1px solid var(--border)',
+                      cursor: 'pointer',
+                      background: overviewGroupBy === 'group' ? 'var(--primary)' : 'transparent',
+                      color: overviewGroupBy === 'group' ? '#ffffff' : 'var(--text)',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {t('groupByGroup')}
+                  </button>
+                </div>
+              )}
               <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                 <button
                   onClick={handleUndo}
