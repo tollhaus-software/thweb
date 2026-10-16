@@ -629,9 +629,10 @@ tr.family-group-row td {
   to { transform: translateY(0); opacity: 1; }
 }
 
-/* Navigation links for Parents and Children in Families Table */
+/* Navigation links for Parents and Children in Families Table and Family Sub-headers */
 .family-parent-link,
-.family-child-link {
+.family-child-link,
+.family-header-link {
   background: transparent;
   border: none;
   padding: 0;
@@ -646,7 +647,8 @@ tr.family-group-row td {
 }
 
 .family-parent-link:hover,
-.family-child-link:hover {
+.family-child-link:hover,
+.family-header-link:hover {
   color: var(--primary);
   text-decoration-color: var(--primary);
 }
