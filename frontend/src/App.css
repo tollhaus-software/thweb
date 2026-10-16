@@ -411,12 +411,12 @@ tr.family-group-row td {
   padding: 0.35rem 0.6rem;
 }
 
-.data-table tr.overview-parent-row,
-.data-table tr.overview-parent-row td,
-.data-table tr.overview-parent-row td.sticky-col,
-.data-table tr.overview-parent-row:hover,
-.data-table tr.overview-parent-row:hover td,
-.data-table tr.overview-parent-row:hover td.sticky-col {
+.data-table tr.overview-parent-row:not(.no-special-bg),
+.data-table tr.overview-parent-row:not(.no-special-bg) td,
+.data-table tr.overview-parent-row:not(.no-special-bg) td.sticky-col,
+.data-table tr.overview-parent-row:not(.no-special-bg):hover,
+.data-table tr.overview-parent-row:not(.no-special-bg):hover td,
+.data-table tr.overview-parent-row:not(.no-special-bg):hover td.sticky-col {
   background-color: var(--bg-subtle) !important;
 }
 

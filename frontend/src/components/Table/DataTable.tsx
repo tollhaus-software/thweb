@@ -321,10 +321,12 @@ export function DataTable<TData>({
 
               const rowId = (row.original as any).id;
               const rowType = (row.original as any)._rowType;
+              const noSpecialBg = Boolean((row.original as any).no_special_bg);
               const rowClasses = [
                 rowId === highlightedRowId ? 'highlighted-row' : '',
                 rowType === 'parent' ? 'overview-parent-row' : '',
                 rowType === 'child' ? 'overview-child-row' : '',
+                noSpecialBg ? 'no-special-bg' : '',
               ]
                 .filter(Boolean)
                 .join(' ');
