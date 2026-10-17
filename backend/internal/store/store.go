@@ -544,6 +544,47 @@ func (s *Store) DeleteHygieneEvent(ctx context.Context, userID uuid.UUID, eventI
 	})
 }
 
+func (s *Store) UpdateHygieneEvent(ctx context.Context, userID uuid.UUID, eventID uuid.UUID, eventDate time.Time, eventType string, documentation string) (models.HygieneBelehrungEvent, error) {
+	transactionID := uuid.New()
+	var updated models.HygieneBelehrungEvent
+	err := s.WithTx(ctx, func(tx pgx.Tx) error {
+		var oldEvent models.HygieneBelehrungEvent
+		err := tx.QueryRow(ctx, "SELECT id, parent_id, event_date, event_type, documentation FROM hygiene_belehrung_events WHERE id = $1", eventID).
+			Scan(&oldEvent.ID, &oldEvent.ParentID, &oldEvent.EventDate, &oldEvent.EventType, &oldEvent.Documentation)
+		if err != nil {
+			return err
+		}
+
+		var familyID uuid.UUID
+		err = tx.QueryRow(ctx, "SELECT family_id FROM parents WHERE id = $1", oldEvent.ParentID).Scan(&familyID)
+		if err != nil {
+			return err
+		}
+
+		updated = models.HygieneBelehrungEvent{
+			ID:            oldEvent.ID,
+			ParentID:      oldEvent.ParentID,
+			EventDate:     eventDate,
+			EventType:     eventType,
+			Documentation: documentation,
+		}
+
+		_, err = tx.Exec(ctx,
+			"UPDATE hygiene_belehrung_events SET event_date = $1, event_type = $2, documentation = $3 WHERE id = $4",
+			eventDate, eventType, documentation, eventID)
+		if err != nil {
+			return err
+		}
+
+		return s.recordAudit(ctx, tx, transactionID, &familyID, "hygiene_event", eventID, "UPDATE", oldEvent, updated, userID)
+	})
+
+	if err != nil {
+		return models.HygieneBelehrungEvent{}, err
+	}
+	return updated, nil
+}
+
 func (s *Store) CreateTHMembership(ctx context.Context, userID uuid.UUID, m models.THMembership) (models.THMembership, error) {
 	if m.EndDate != nil && m.EndDate.Format("2006-01-02") <= m.StartDate.Format("2006-01-02") {
 		return models.THMembership{}, fmt.Errorf("end date must be greater than start date")

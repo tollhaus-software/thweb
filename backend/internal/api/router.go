@@ -82,6 +82,7 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		// Hygiene Belehrung
 		r.With(auth.RequirePermission("hygiene.all.write")).Post("/api/hygiene-events", server.HandleCreateHygieneEvent)
 		r.With(auth.RequirePermission("hygiene.all.write")).Post("/api/parents/{id}/hygiene-events", server.HandleCreateHygieneEvent)
+		r.With(auth.RequirePermission("hygiene.all.write")).Put("/api/hygiene-events/{id}", server.HandleUpdateHygieneEvent)
 		r.With(auth.RequirePermission("hygiene.all.write")).Delete("/api/hygiene-events/{id}", server.HandleDeleteHygieneEvent)
 
 		// TH Membership
