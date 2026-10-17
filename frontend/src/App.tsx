@@ -7,7 +7,7 @@ import './App.css';
 import { DataTable } from './components/Table/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import EasyEdit, { Types } from './components/InlineEdit';
-import { Pencil, Trash, Undo, Redo, Calendar, ClipboardList, Lock, Unlock, ArrowLeft, ArrowRight, X, Clock, AlertCircle, LayoutDashboard, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Pencil, Trash, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, X, Clock, AlertCircle, LayoutDashboard, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { MultiValueListEditor, type MultiValueFlagConfig, type MultiValueEntry, type MultiValueItem, getEntryValue, isFlagActive } from './components/Table/MultiValueListEditor';
 import { NotesEditor } from './components/Table/NotesEditor';
@@ -15,6 +15,7 @@ import { AddressEditor } from './components/Table/AddressEditor';
 import { GroupChangesPopover } from './components/Table/GroupChangesPopover';
 import { MembershipsModal } from './components/Table/MembershipsModal';
 import { VaccinationStatusPopover, VaccinationStatusCell, type VaccinationCheck } from './components/Table/VaccinationStatusEditor';
+import { HygieneEventsPopover, HygieneCell, type ParentWithHygiene } from './components/Table/HygieneEventsPopover';
 import { ChildcareFeesCalculator } from './components/ChildcareFeesCalculator';
 import { KioskDashboard } from './components/Dashboard/KioskDashboard';
 import { KioskProvisioning } from './components/Admin/KioskProvisioning';
@@ -1631,6 +1632,7 @@ const Dashboard: React.FC = () => {
   const canReadFamiliesAll = hasPermission('families.all.read');
   const canReadFees = hasPermission('fees.all.read') || hasPermission('fees.self.read');
   const canWriteChildren = hasPermission('children.all.write');
+  const canWriteHygiene = hasPermission('hygiene.all.write');
 
   const [families, setFamilies] = React.useState<Family[]>([]);
   const [overviewFamilies, setOverviewFamilies] = React.useState<OverviewFamily[]>([]);
@@ -1887,12 +1889,9 @@ const Dashboard: React.FC = () => {
   const [newChildLastName, setNewChildLastName] = React.useState('');
   const [newChildBirthDate, setNewChildBirthDate] = React.useState('');
 
-  // Hygiene Belehrung Event states
-  const [manageHygieneOpen, setManageHygieneOpen] = React.useState(false);
-  const [targetParent, setTargetParent] = React.useState<Parent | null>(null);
-  const [newEventDate, setNewEventDate] = React.useState('');
-  const [newEventType, setNewEventType] = React.useState<'initial' | 'recertify'>('recertify');
-  const [newEventDocumentation, setNewEventDocumentation] = React.useState('');
+  // Hygiene Belehrung Event popover states
+  const [targetParent, setTargetParent] = React.useState<ParentWithHygiene | null>(null);
+  const [hygienePopoverAnchor, setHygienePopoverAnchor] = React.useState<HTMLElement | string | null>(null);
 
   // Membership popover state
   const [targetParentMemberships, setTargetParentMemberships] = React.useState<Parent | null>(null);
@@ -2149,6 +2148,19 @@ const Dashboard: React.FC = () => {
             start_date: target.start_date,
             end_date: target.end_date,
             membership_type: target.membership_type,
+          }),
+        });
+        if (!res.ok) throw new Error();
+      }
+      else if (type === 'UPDATE_HYGIENE_EVENT') {
+        const target = isUndo ? payload.before : payload.after;
+        const res = await fetch(`/api/hygiene-events/${payload.eventId}`, {
+          method: 'PUT',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({
+            event_date: target.event_date,
+            event_type: target.event_type,
+            documentation: target.documentation,
           }),
         });
         if (!res.ok) throw new Error();
@@ -2502,13 +2514,13 @@ const Dashboard: React.FC = () => {
         setAddChildOpen(false);
       }
     };
-    if (addParentOpen || addFamilyOpen || addChildOpen || manageHygieneOpen) {
+    if (addParentOpen || addFamilyOpen || addChildOpen) {
       window.addEventListener('keydown', handleKeyDown);
     }
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [addParentOpen, addFamilyOpen, addChildOpen, manageHygieneOpen]);
+  }, [addParentOpen, addFamilyOpen, addChildOpen]);
 
   const openAddParent = (familyId: string, familyName: string) => {
     setTargetFamily({ id: familyId, name: familyName });
@@ -2769,81 +2781,110 @@ const Dashboard: React.FC = () => {
     setTargetParentMemberships({ ...targetParentMemberships, memberships: updatedMemberships });
   };
 
-  const openManageHygiene = (parent: Parent) => {
+  const openManageHygiene = React.useCallback((parent: ParentWithHygiene, anchor: HTMLElement | string) => {
     setTargetParent(parent);
-    setNewEventDate(new Date().toISOString().split('T')[0]);
-    const hasInitial = (parent.events || []).some(e => e.event_type === 'initial');
-    setNewEventType(hasInitial ? 'recertify' : 'initial');
-    setNewEventDocumentation('');
-    setManageHygieneOpen(true);
-  };
+    setHygienePopoverAnchor(anchor);
+  }, []);
 
-  const handleAddHygieneEvent = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!targetParent) return;
-    if (!newEventDate) {
-      alert(t('invalidDate'));
-      return;
-    }
+  const closeManageHygiene = React.useCallback(() => {
+    setHygienePopoverAnchor(null);
+    setTargetParent(null);
+  }, []);
 
+  const handleAddHygieneEvent = async (parentId: string, eventDate: string, eventType: 'initial' | 'recertify', documentation: string) => {
     const payload = {
-      parent_id: targetParent.id,
-      event_date: `${newEventDate}T00:00:00Z`,
-      event_type: newEventType,
-      documentation: newEventDocumentation.trim(),
+      parent_id: parentId,
+      event_date: eventDate,
+      event_type: eventType,
+      documentation: documentation,
     };
 
-    fetch('/api/hygiene-events', {
+    const res = await fetch('/api/hygiene-events', {
       method: 'POST',
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(payload),
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to create hygiene event');
-        return res.json();
-      })
-      .then((createdEvent) => {
-        pushAction({
-          type: 'ADD_HYGIENE_EVENT',
-          payload: {
-            tab: activeTab === 'hygieneBelehrung' ? 'hygieneBelehrung' : 'parents',
-            parentId: targetParent.id,
-            eventId: createdEvent.id,
-            event: createdEvent,
-          }
-        });
-        fetchFamilies();
-        const updatedEvents = [createdEvent, ...(targetParent.events || [])].sort(
-          (a, b) => new Date(b.event_date).getTime() - new Date(a.event_date).getTime()
-        );
-        const updatedParent = { ...targetParent, events: updatedEvents };
-        setTargetParent(updatedParent);
-        setNewEventDocumentation('');
-        const hasInitial = updatedEvents.some(ev => ev.event_type === 'initial');
-        setNewEventType(hasInitial ? 'recertify' : 'initial');
-      })
-      .catch((err) => alert(err.message));
+    });
+    if (!res.ok) {
+      const err = await res.text().catch(() => '');
+      throw new Error(`Failed to create hygiene event: ${err || res.statusText}`);
+    }
+    const createdEvent = await res.json();
+    pushAction({
+      type: 'ADD_HYGIENE_EVENT',
+      payload: {
+        tab: activeTab === 'hygieneBelehrung' ? 'hygieneBelehrung' : 'parents',
+        parentId: parentId,
+        eventId: createdEvent.id,
+        event: createdEvent,
+      }
+    });
+    await fetchFamilies();
   };
 
-  const handleDeleteHygieneEvent = (eventId: string) => {
-    if (!targetParent) return;
+  const handleDeleteHygieneEvent = async (eventId: string) => {
     if (!window.confirm(t('eventDeleteConfirm'))) return;
 
-    fetch(`/api/hygiene-events/${eventId}`, {
+    const res = await fetch(`/api/hygiene-events/${eventId}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to delete hygiene event');
-        purgeActionsForEntity(eventId);
-        fetchFamilies();
-        const updatedEvents = (targetParent.events || []).filter((e) => e.id !== eventId);
-        const updatedParent = { ...targetParent, events: updatedEvents };
-        setTargetParent(updatedParent);
-        const hasInitial = updatedEvents.some(ev => ev.event_type === 'initial');
-        setNewEventType(hasInitial ? 'recertify' : 'initial');
-      })
-      .catch((err) => alert(err.message));
+    });
+    if (!res.ok) {
+      const err = await res.text().catch(() => '');
+      throw new Error(`Failed to delete hygiene event: ${err || res.statusText}`);
+    }
+    purgeActionsForEntity(eventId);
+    await fetchFamilies();
+  };
+
+  const handleUpdateHygieneEvent = async (
+    eventId: string,
+    fields: {
+      event_date?: string;
+      event_type?: 'initial' | 'recertify';
+      documentation?: string;
+    }
+  ) => {
+    const existingEvent = (activeParentForHygiene?.events || []).find((e) => e.id === eventId);
+    if (!existingEvent) return;
+    const parentId = activeParentForHygiene?.id || existingEvent.parent_id;
+
+    const payload = {
+      event_date: fields.event_date !== undefined ? fields.event_date : existingEvent.event_date,
+      event_type: fields.event_type !== undefined ? fields.event_type : existingEvent.event_type,
+      documentation: fields.documentation !== undefined ? fields.documentation : existingEvent.documentation,
+    };
+
+    const res = await fetch(`/api/hygiene-events/${eventId}`, {
+      method: 'PUT',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.text().catch(() => '');
+      throw new Error(`Failed to update hygiene event: ${err || res.statusText}`);
+    }
+    await res.json();
+    if (existingEvent && parentId) {
+      pushAction({
+        type: 'UPDATE_HYGIENE_EVENT',
+        payload: {
+          tab: activeTab === 'hygieneBelehrung' ? 'hygieneBelehrung' : 'parents',
+          parentId: parentId,
+          eventId: eventId,
+          before: {
+            event_date: existingEvent.event_date,
+            event_type: existingEvent.event_type,
+            documentation: existingEvent.documentation,
+          },
+          after: {
+            event_date: payload.event_date,
+            event_type: payload.event_type,
+            documentation: payload.documentation,
+          },
+        },
+      });
+    }
+    await fetchFamilies();
   };
 
   const openManageGroupChanges = (child: Child, anchor: HTMLElement | string) => {
@@ -3803,56 +3844,49 @@ const Dashboard: React.FC = () => {
       {
         header: t('initialTraining'),
         id: 'initial_training',
-        size: 320,
+        size: 280,
         cell: (info: any) => {
           const parent = info.row.original;
           if (!parent || !parent.id) return null;
-          const initialEvent = (parent.events || []).find((e: any) => e.event_type === 'initial');
-          return <span>{initialEvent ? formatDisplayDate(initialEvent.event_date) : '-'}</span>;
+          const isCurrentActive = Boolean(
+            hygienePopoverAnchor && activeParentForHygiene?.id === parent.id
+          );
+          return (
+            <HygieneCell
+              id={`cell-hygiene-initial-${parent.id}`}
+              parent={parent}
+              eventType="initial"
+              isActive={isCurrentActive}
+              onOpenManage={openManageHygiene}
+              readOnly={!canWriteHygiene}
+            />
+          );
         }
       },
       {
         header: t('lastInstruction'),
         id: 'last_instruction',
-        size: 320,
+        size: 280,
         cell: (info: any) => {
           const parent = info.row.original;
           if (!parent || !parent.id) return null;
-          const events = parent.events || [];
-          if (events.length === 0) return <span>-</span>;
-          const latestEvent = events[0];
-          return <span>{formatDisplayDate(latestEvent.event_date)}</span>;
-        }
-      },
-      {
-        header: '',
-        id: 'actions',
-        size: 220,
-        cell: (info: any) => {
-          const parent = info.row.original;
-          if (!parent || !parent.id) return null;
+          const isCurrentActive = Boolean(
+            hygienePopoverAnchor && activeParentForHygiene?.id === parent.id
+          );
           return (
-            <button
-              onClick={() => openManageHygiene(parent)}
-              className="secondary-button"
-              style={{
-                padding: '0.25rem 0.5rem',
-                fontSize: '0.8rem',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.25rem',
-                cursor: 'pointer',
-              }}
-              title={t('manageEvents')}
-            >
-              <ClipboardList size={14} />
-              {t('manageEvents')}
-            </button>
+            <HygieneCell
+              id={`cell-hygiene-refresh-${parent.id}`}
+              parent={parent}
+              eventType="recertify"
+              isActive={isCurrentActive}
+              onOpenManage={openManageHygiene}
+              readOnly={!canWriteHygiene}
+            />
           );
         }
       }
     ];
-  }, [families]);
+  }, [hygienePopoverAnchor, activeParentForHygiene, openManageHygiene, canWriteHygiene]);
 
   const parentColumns = React.useMemo<ColumnDef<any>[]>(
     () => [
@@ -5284,169 +5318,6 @@ const Dashboard: React.FC = () => {
         </div>
       )}
 
-        {/* Manage Hygiene Events Modal */}
-        {manageHygieneOpen && activeParentForHygiene && (
-          <div className="modal-overlay">
-            <div className="modal-container" style={{ maxWidth: '600px' }}>
-              <h2>{t('manageHygieneTitle')} {activeParentForHygiene.first_name} {activeParentForHygiene.last_name}</h2>
-              
-              {/* List of existing events */}
-              <div style={{ marginBottom: '1.5rem', maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '6px' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                  <thead>
-                    <tr style={{ background: 'var(--bg-subtle)', borderBottom: '1px solid var(--border)' }}>
-                      <th style={{ padding: '0.5rem', textAlign: 'left' }}>{t('date')}</th>
-                      <th style={{ padding: '0.5rem', textAlign: 'left' }}>{t('eventType')}</th>
-                      <th style={{ padding: '0.5rem', textAlign: 'left' }}>{t('documentation')}</th>
-                      <th style={{ padding: '0.5rem', width: '50px' }}></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(activeParentForHygiene.events || []).length === 0 ? (
-                      <tr>
-                        <td colSpan={4} style={{ padding: '1rem', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic' }}>
-                          {t('noEventsRecorded')}
-                        </td>
-                      </tr>
-                    ) : (
-                      (activeParentForHygiene.events || []).map((ev) => (
-                        <tr key={ev.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                          <td style={{ padding: '0.5rem' }}>{formatDisplayDate(ev.event_date)}</td>
-                          <td style={{ padding: '0.5rem' }}>
-                            {ev.event_type === 'initial' ? t('initialType') : t('recertifyType')}
-                          </td>
-                          <td style={{ padding: '0.5rem', whiteSpace: 'pre-wrap' }}>{ev.documentation || '-'}</td>
-                          <td style={{ padding: '0.5rem', textAlign: 'center' }}>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteHygieneEvent(ev.id)}
-                              style={{
-                                background: 'none',
-                                border: 'none',
-                                color: '#ef4444',
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                              }}
-                              title={t('delete')}
-                            >
-                              <Trash size={14} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Add New Event Form */}
-              <form onSubmit={handleAddHygieneEvent} style={{ borderTop: '2px dashed var(--border)', paddingTop: '1.25rem' }}>
-                <h3 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '0.75rem', color: 'var(--text-h)' }}>
-                  {t('addEvent')}
-                </h3>
-                <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
-                  {/* Event Date */}
-                  <div className="modal-form-group" style={{ flex: 1, marginBottom: 0 }}>
-                    <label>{t('date')}</label>
-                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                      <input
-                        type="text"
-                        value={CURRENT_LOCALE === 'de' ? formatDisplayDate(newEventDate) : newEventDate}
-                        readOnly
-                        placeholder={CURRENT_LOCALE === 'de' ? 'TT.MM.JJJJ' : 'YYYY-MM-DD'}
-                        style={{ width: '100%', paddingRight: '2.5rem' }}
-                      />
-                      <button
-                        type="button"
-                        style={{
-                          position: 'absolute',
-                          right: '6px',
-                          background: 'transparent',
-                          border: 'none',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          padding: '4px',
-                          color: '#64748b',
-                        }}
-                        onClick={(e) => {
-                          const input = e.currentTarget.parentElement?.querySelector('input[type="date"]') as HTMLInputElement;
-                          if (input) {
-                            try {
-                              input.showPicker();
-                            } catch (err) {
-                              input.click();
-                            }
-                          }
-                        }}
-                      >
-                        <Calendar size={18} />
-                      </button>
-                      <input
-                        type="date"
-                        value={newEventDate}
-                        style={{
-                          position: 'absolute',
-                          right: '4px',
-                          width: '0px',
-                          height: '0px',
-                          opacity: 0,
-                          pointerEvents: 'none',
-                        }}
-                        onChange={(e) => setNewEventDate(e.target.value)}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  {/* Event Type */}
-                  <div className="modal-form-group" style={{ flex: 1, marginBottom: 0 }}>
-                    <label>{t('eventType')}</label>
-                    <select
-                      value={newEventType}
-                      onChange={(e) => setNewEventType(e.target.value as 'initial' | 'recertify')}
-                      style={{ width: '100%', padding: '0.45rem', border: '1px solid var(--border)', borderRadius: '4px' }}
-                      required
-                    >
-                      <option value="initial">{t('initialType')}</option>
-                      <option value="recertify">{t('recertifyType')}</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Documentation */}
-                <div className="modal-form-group" style={{ marginBottom: '1.25rem' }}>
-                  <label>{t('documentation')}</label>
-                  <textarea
-                    value={newEventDocumentation}
-                    onChange={(e) => setNewEventDocumentation(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '0.5rem',
-                      border: '1px solid var(--border)',
-                      borderRadius: '4px',
-                      minHeight: '60px',
-                      fontSize: '0.875rem',
-                    }}
-                    placeholder={t('newItem')}
-                  />
-                </div>
-
-                <div className="modal-actions">
-                  <button type="button" className="cancel-btn" onClick={() => setManageHygieneOpen(false)}>
-                    {t('cancel')}
-                  </button>
-                  <button type="submit" className="submit-btn">
-                    {t('addEvent')}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
         {/* Manage Memberships Popover */}
         <MembershipsModal
           key={activeParentForMemberships?.id || 'memberships-modal'}
@@ -5501,6 +5372,19 @@ const Dashboard: React.FC = () => {
           onSave={activeVaccinationData ? activeVaccinationData.save : () => {}}
           readOnly={activeVaccinationData?.type === 'child' ? !canWriteChildren : false}
           personType={activeVaccinationData?.type}
+        />
+
+        {/* Manage Hygiene Events Popover */}
+        <HygieneEventsPopover
+          key={activeParentForHygiene?.id || 'hygiene-popover'}
+          isOpen={Boolean(hygienePopoverAnchor && activeParentForHygiene)}
+          anchorEl={hygienePopoverAnchor}
+          onClose={closeManageHygiene}
+          parent={activeParentForHygiene}
+          onAddEvent={handleAddHygieneEvent}
+          onUpdateEvent={handleUpdateHygieneEvent}
+          onDeleteEvent={handleDeleteHygieneEvent}
+          readOnly={!canWriteHygiene}
         />
     </div>
   );

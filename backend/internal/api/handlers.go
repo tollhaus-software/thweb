@@ -938,6 +938,45 @@ func (s *Server) HandleDeleteHygieneEvent(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (s *Server) HandleUpdateHygieneEvent(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	idStr := chi.URLParam(r, "id")
+	eventID, err := uuid.Parse(idStr)
+	if err != nil {
+		httpErrorLog(w, r, "Invalid event ID", http.StatusBadRequest, err)
+		return
+	}
+
+	var req struct {
+		EventDate     string `json:"event_date"`
+		EventType     string `json:"event_type"`
+		Documentation string `json:"documentation"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpErrorLog(w, r, "Invalid request body JSON", http.StatusBadRequest, err)
+		return
+	}
+
+	if req.EventType != "initial" && req.EventType != "recertify" {
+		httpErrorLog(w, r, "Invalid event_type (must be 'initial' or 'recertify')", http.StatusBadRequest, nil)
+		return
+	}
+
+	eventDate, err := parseFlexibleDate(req.EventDate)
+	if err != nil {
+		httpErrorLog(w, r, fmt.Sprintf("Invalid event_date format %q", req.EventDate), http.StatusBadRequest, err)
+		return
+	}
+
+	updated, err := s.Store.UpdateHygieneEvent(r.Context(), user.ID, eventID, eventDate, req.EventType, req.Documentation)
+	if err != nil {
+		httpErrorLog(w, r, "Failed to update hygiene event", http.StatusInternalServerError, err)
+		return
+	}
+
+	jsonResponse(w, updated)
+}
+
 func (s *Server) HandleCreateTHMembership(w http.ResponseWriter, r *http.Request) {
 	user := auth.GetUser(r.Context())
 	idStr := chi.URLParam(r, "id")
