@@ -1,4 +1,5 @@
-import { useState, Fragment } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
+import { createPortal } from 'react-dom';
 import {
   useReactTable,
   getCoreRowModel,
@@ -10,6 +11,7 @@ import {
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
 import { SlidersHorizontal, Plus, ChevronDown, ChevronRight } from 'lucide-react';
 import { t } from '../../utils/i18n';
+import { CellPopover } from './CellPopover';
 
 interface DataTableProps<TData> {
   data: TData[];
@@ -25,6 +27,8 @@ interface DataTableProps<TData> {
   hideHeader?: boolean;
   highlightedRowId?: string | null;
   className?: string;
+  getCardHeader?: (item: any) => React.ReactNode;
+  stickyFirstColumn?: boolean;
 }
 
 export function DataTable<TData>({
@@ -41,10 +45,30 @@ export function DataTable<TData>({
   hideHeader,
   highlightedRowId,
   className,
+  getCardHeader,
+  stickyFirstColumn = false,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
   const [isOpen, setIsOpen] = useState(false);
+
+  const desktopButtonRef = useRef<HTMLButtonElement>(null);
+  const mobileButtonRef = useRef<HTMLButtonElement>(null);
+
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    return typeof window !== 'undefined' ? window.innerWidth <= 768 : false;
+  });
+
+  const [cardsSlotEl, setCardsSlotEl] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    setCardsSlotEl(document.getElementById('cards-view-columns-slot'));
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const table = useReactTable({
     data,
@@ -63,103 +87,96 @@ export function DataTable<TData>({
     getSubRows,
   });
 
-  return (
-    <div className={`data-table-wrapper ${className ? `${className}-wrapper` : ''}`}>
-      {/* Column selector toolbar */}
-      {!hideHeader && (
-        <div className="data-table-toolbar">
-          <button
-            type="button"
-            onClick={() => setIsOpen(!isOpen)}
-            className="secondary-button"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              padding: '0.4rem 0.75rem',
-              fontSize: '0.85rem',
-              cursor: 'pointer',
-              border: '1px solid var(--border)',
-              borderRadius: '4px',
-              background: 'var(--bg-surface)',
-              color: 'var(--text)',
-              transition: 'all 0.2s',
-            }}
-          >
-            <SlidersHorizontal size={14} />
-            <span>{t('columns')}</span>
-          </button>
+  const wrapperClassName = [
+    'data-table-wrapper',
+    ...(className ? className.split(' ').filter(Boolean).map((c) => `${c}-wrapper`) : []),
+  ].join(' ');
 
-          {isOpen && (
-            <>
-              {/* Click-outside backdrop to close */}
-              <div
-                onClick={() => setIsOpen(false)}
+  const hasActionsCol = table.getAllLeafColumns().some((col) => col.id === 'actions');
+  const targetSlot = cardsSlotEl || (typeof document !== 'undefined' ? document.getElementById('cards-view-columns-slot') : null);
+
+  const mobileColumnsSlot = isMobile && targetSlot && !hideHeader ? (
+    createPortal(
+      <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+        <button
+          ref={mobileButtonRef}
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="secondary-button cards-view-columns-btn"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.35rem',
+            padding: '0.4rem 0.75rem',
+            borderRadius: '4px',
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border)',
+            color: 'var(--text)',
+            fontSize: '0.85rem',
+            fontWeight: 500,
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+            height: '34px',
+            boxSizing: 'border-box',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+          }}
+          title={t('toggleColumns')}
+        >
+          <SlidersHorizontal size={14} />
+          <span>{t('columns')}</span>
+        </button>
+      </div>,
+      targetSlot
+    )
+  ) : null;
+
+  return (
+    <div className={wrapperClassName}>
+      {mobileColumnsSlot}
+
+      {!hideHeader && (
+        <CellPopover
+          isOpen={isOpen}
+          onClose={() => setIsOpen(false)}
+          anchorEl={isMobile ? mobileButtonRef : desktopButtonRef}
+          width={220}
+          minWidth={180}
+        >
+          <div style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', borderBottom: '1px solid var(--border)', marginBottom: '0.4rem' }}>
+            {t('toggleColumns')}
+          </div>
+          {table.getAllLeafColumns().map((column) => {
+            if (column.id === 'actions') return null;
+            const headerText = typeof column.columnDef.header === 'string' ? column.columnDef.header : (column.id || '');
+            if (!headerText) return null;
+            return (
+              <label
+                key={column.id}
                 style={{
-                  position: 'fixed',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  zIndex: 40,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  padding: '0.25rem 0.5rem',
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                  borderRadius: '4px',
+                  userSelect: 'none',
+                  transition: 'background-color 0.15s',
                 }}
-              />
-              {/* Popover */}
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '100%',
-                  right: 0,
-                  marginTop: '0.25rem',
-                  background: 'var(--bg-surface)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '6px',
-                  boxShadow: 'var(--shadow)',
-                  padding: '0.5rem',
-                  zIndex: 50,
-                  minWidth: '180px',
-                  maxHeight: '250px',
-                  overflowY: 'auto',
-                  textAlign: 'left',
-                }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-hover)')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
               >
-                <div style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', borderBottom: '1px solid var(--border)', marginBottom: '0.4rem' }}>
-                  {t('toggleColumns')}
-                </div>
-                {table.getAllLeafColumns().map((column) => {
-                  if (column.id === 'actions') return null;
-                  const headerText = typeof column.columnDef.header === 'string' ? column.columnDef.header : (column.id || '');
-                  if (!headerText) return null;
-                  return (
-                    <label
-                      key={column.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.5rem',
-                        padding: '0.25rem 0.5rem',
-                        fontSize: '0.85rem',
-                        cursor: 'pointer',
-                        borderRadius: '4px',
-                        userSelect: 'none',
-                        transition: 'background-color 0.15s',
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-hover)'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={column.getIsVisible()}
-                        onChange={column.getToggleVisibilityHandler()}
-                      />
-                      <span>{headerText}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            </>
-          )}
-        </div>
+                <input
+                  type="checkbox"
+                  checked={column.getIsVisible()}
+                  onChange={column.getToggleVisibilityHandler()}
+                />
+                <span>{headerText}</span>
+              </label>
+            );
+          })}
+        </CellPopover>
       )}
 
       <div className="table-container">
@@ -174,26 +191,67 @@ export function DataTable<TData>({
             <thead>
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => {
-                    const isFixed = header.column.id === 'first_name' || header.column.id === 'child_name';
+                  {headerGroup.headers.map((header, headerIndex) => {
+                    const isFixed = Boolean(stickyFirstColumn) && (header.column.id === 'first_name' || header.column.id === 'child_name');
+                    const isActions = header.column.id === 'actions';
+                    const isLastHeader = headerIndex === headerGroup.headers.length - 1;
+                    const shouldRenderColumnsInTh = !isMobile && (hasActionsCol ? isActions : isLastHeader);
+
                     return (
                       <th
                         key={header.id}
-                        onClick={header.column.getCanSort() ? header.column.getToggleSortingHandler() : undefined}
+                        onClick={!shouldRenderColumnsInTh && header.column.getCanSort() ? header.column.getToggleSortingHandler() : undefined}
                         className={isFixed ? 'sticky-col' : undefined}
                         style={{
-                          cursor: header.column.getCanSort() ? 'pointer' : 'default',
+                          cursor: !shouldRenderColumnsInTh && header.column.getCanSort() ? 'pointer' : 'default',
                           width: isFixed ? '1%' : `${header.getSize()}px`,
                           minWidth: `${header.getSize()}px`,
                           boxSizing: 'border-box',
                           whiteSpace: 'nowrap',
+                          textAlign: isActions ? 'right' : undefined,
+                          padding: isActions ? '0.2rem 0.5rem' : undefined,
                         }}
                       >
-                        {flexRender(header.column.columnDef.header, header.getContext())}
-                        {{
-                          asc: ' 🔼',
-                          desc: ' 🔽',
-                        }[header.column.getIsSorted() as string] ?? null}
+                        {shouldRenderColumnsInTh ? (
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: isActions ? 'flex-end' : 'space-between', gap: '0.4rem', width: '100%' }}>
+                            {!isActions && flexRender(header.column.columnDef.header, header.getContext())}
+                            <button
+                              ref={desktopButtonRef}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setIsOpen(!isOpen);
+                              }}
+                              className="secondary-button table-header-columns-btn"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.35rem',
+                                padding: '0.2rem 0.55rem',
+                                fontSize: '0.8rem',
+                                fontWeight: 500,
+                                cursor: 'pointer',
+                                border: '1px solid var(--border)',
+                                borderRadius: '4px',
+                                background: 'var(--bg-surface)',
+                                color: 'var(--text)',
+                                transition: 'all 0.15s ease',
+                              }}
+                              title={t('toggleColumns')}
+                            >
+                              <SlidersHorizontal size={13} />
+                              <span>{t('columns')}</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            {flexRender(header.column.columnDef.header, header.getContext())}
+                            {{
+                              asc: ' 🔼',
+                              desc: ' 🔽',
+                            }[header.column.getIsSorted() as string] ?? null}
+                          </>
+                        )}
                       </th>
                     );
                   })}
@@ -372,16 +430,32 @@ export function DataTable<TData>({
                 .join(' ');
               return (
                 <tr key={row.id} id={`row-${rowId}`} className={rowClasses || undefined}>
+                  {(() => {
+                    if (!isMobile || !getCardHeader) return null;
+                    const headerContent = getCardHeader(row.original);
+                    if (!headerContent) return null;
+                    return (
+                      <td className="card-person-header" data-card-header="true">
+                        <div className="card-person-header-content">
+                          {headerContent}
+                        </div>
+                      </td>
+                    );
+                  })()}
                   {row.getVisibleCells().map((cell) => {
                     const meta = cell.column.columnDef.meta as any;
                     if (meta?.skipCell?.(row.original)) {
                       return null;
                     }
                     const colSpan = meta?.getColSpan?.(row.original) ?? 1;
-                    const isFixed = cell.column.id === 'first_name' || cell.column.id === 'child_name';
+                    const isFixed = Boolean(stickyFirstColumn) && (cell.column.id === 'first_name' || cell.column.id === 'child_name');
+                    const colHeader = cell.column.columnDef.header;
+                    const headerText = typeof colHeader === 'string' ? colHeader : '';
                     return (
                       <td
                         key={cell.id}
+                        data-label={headerText}
+                        data-column-id={cell.column.id}
                         colSpan={colSpan > 1 ? colSpan : undefined}
                         className={isFixed ? 'sticky-col' : undefined}
                         style={{

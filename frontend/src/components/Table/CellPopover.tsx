@@ -53,7 +53,33 @@ export const CellPopover: React.FC<CellPopoverProps> = ({
     return null;
   }, [anchorEl]);
 
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    return typeof window !== 'undefined' ? window.innerWidth <= 768 : false;
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const getPositionStyle = useCallback((): React.CSSProperties | null => {
+    if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+      return {
+        position: 'fixed',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        top: 'auto',
+        width: '100%',
+        maxWidth: '100%',
+        maxHeight: '85vh',
+        zIndex: 10000,
+      };
+    }
+
     const el = getTargetEl();
     if (!el) return null;
     const rect = el.getBoundingClientRect();
@@ -105,6 +131,11 @@ export const CellPopover: React.FC<CellPopoverProps> = ({
     if (!isOpen) return;
 
     const updatePosition = () => {
+      if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+        const pos = getPositionStyle();
+        if (pos) setPositionStyle(pos);
+        return;
+      }
       const el = getTargetEl();
       if (!el) return;
       const rect = el.getBoundingClientRect();
@@ -167,25 +198,53 @@ export const CellPopover: React.FC<CellPopoverProps> = ({
   if (!isOpen) return null;
 
   return createPortal(
-    <div
-      ref={popupRef}
-      className={className}
-      style={{
-        ...positionStyle,
-        minWidth,
-        background: 'var(--bg-surface)',
-        border: '1px solid var(--border)',
-        borderRadius: '8px',
-        boxShadow: 'var(--shadow)',
-        boxSizing: 'border-box',
-        animation: 'fadeIn 0.15s ease-out',
-        overflowY: 'auto',
-        ...style,
-      }}
-      onClick={(e) => e.stopPropagation()}
-    >
-      {children}
-    </div>,
+    <>
+      {isMobile && (
+        <div
+          className="cell-popover-mobile-backdrop"
+          onClick={onClose}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.45)',
+            zIndex: 9999,
+            animation: 'fadeIn 0.2s ease-out',
+          }}
+        />
+      )}
+      <div
+        ref={popupRef}
+        className={`${className} ${isMobile ? 'cell-popover-bottom-sheet' : ''}`}
+        style={{
+          ...positionStyle,
+          minWidth: isMobile ? '100%' : minWidth,
+          background: 'var(--bg-surface)',
+          border: isMobile ? 'none' : '1px solid var(--border)',
+          borderTop: isMobile ? '1px solid var(--border)' : undefined,
+          borderRadius: isMobile ? '16px 16px 0 0' : '8px',
+          boxShadow: isMobile ? '0 -8px 30px rgba(0, 0, 0, 0.25)' : 'var(--shadow)',
+          boxSizing: 'border-box',
+          animation: isMobile ? 'slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1)' : 'fadeIn 0.15s ease-out',
+          overflowY: 'auto',
+          ...style,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {isMobile && (
+          <div
+            style={{
+              width: '36px',
+              height: '4px',
+              borderRadius: '2px',
+              backgroundColor: 'var(--border-strong, #cbd5e1)',
+              margin: '8px auto 6px auto',
+              flexShrink: 0,
+            }}
+          />
+        )}
+        {children}
+      </div>
+    </>,
     document.body
   );
 };

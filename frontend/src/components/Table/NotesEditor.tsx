@@ -15,7 +15,6 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
   placeholder = 'Add note...',
 }) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [hovered, setHovered] = useState(false);
   const [tempValue, setTempValue] = useState(value);
   const triggerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -82,10 +81,9 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
     <div
       ref={triggerRef}
       style={{ position: 'relative', width: '100%', display: 'inline-block' }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
     >
       <div
+        className="notes-cell-wrapper"
         onClick={() => {
           if (!isEditing) {
             startEditing();
@@ -121,14 +119,7 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
         >
           {preview || placeholder}
         </span>
-        <div
-          style={{
-            opacity: hovered || isEditing ? 1 : 0,
-            transition: 'opacity 0.15s ease-in-out',
-            display: 'flex',
-            alignItems: 'center',
-          }}
-        >
+        <div className="cell-edit-pencil-btn-wrapper" style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto' }}>
           <button
             type="button"
             onClick={(e) => {
@@ -139,27 +130,10 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
                 startEditing();
               }
             }}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--primary)',
-              cursor: 'pointer',
-              padding: '2px',
-              borderRadius: '4px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '24px',
-              height: '24px',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'var(--accent-bg)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-            }}
+            className="cell-edit-pencil-btn"
+            title={t('editNotes')}
           >
-            <Pencil size={12} />
+            <Pencil size={13} />
           </button>
         </div>
       </div>

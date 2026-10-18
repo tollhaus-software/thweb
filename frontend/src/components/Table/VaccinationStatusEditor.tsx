@@ -133,6 +133,7 @@ export const VaccinationStatusCell: React.FC<VaccinationStatusCellProps> = ({
   return (
     <div
       id={cellId}
+      className="vaccination-cell-wrapper"
       onClick={(e) => {
         const el = document.getElementById(cellId) || e.currentTarget;
         onOpenManage(el);
@@ -204,20 +205,7 @@ export const VaccinationStatusCell: React.FC<VaccinationStatusCellProps> = ({
             const el = document.getElementById(cellId) || e.currentTarget;
             onOpenManage(el);
           }}
-          className="easy-edit-button"
-          style={{
-            padding: '2px',
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--primary)',
-            width: '24px',
-            height: '24px',
-            flexShrink: 0,
-          }}
+          className="cell-edit-pencil-btn"
           title={t('manageVaccinationStatus')}
         >
           <Pencil size={13} />
