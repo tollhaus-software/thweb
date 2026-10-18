@@ -363,37 +363,50 @@ header {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  opacity: 0.3;
+  opacity: 0.65;
   transition: opacity 0.15s ease-in-out;
+  flex-shrink: 0;
 }
 
-.easy-edit-hover-on .easy-edit-view-button-wrapper {
-  opacity: 0.8;
+.easy-edit-hover-on .easy-edit-view-button-wrapper,
+tr:hover .easy-edit-view-button-wrapper {
+  opacity: 1;
 }
 
 .easy-edit-view-button-wrapper:hover {
   opacity: 1 !important;
 }
 
-/* Customize the pencil button in view mode */
-.easy-edit-view-button-wrapper button.easy-edit-button {
+/* Unified cell edit pencil button across all table and card fields */
+.easy-edit-view-button-wrapper button.easy-edit-button,
+.cell-edit-pencil-btn {
   background: transparent;
   border: none;
   color: var(--primary);
   cursor: pointer;
-  padding: 0.25rem;
+  padding: 0;
   border-radius: 4px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.15s ease, color 0.15s ease;
-  width: 28px;
-  height: 28px;
+  transition: background-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+  width: 24px;
+  height: 24px;
+  opacity: 0.65;
+  flex-shrink: 0;
 }
 
+.cell-edit-pencil-btn:hover,
+tr:hover .cell-edit-pencil-btn,
 .easy-edit-view-button-wrapper button.easy-edit-button:hover {
   background-color: var(--accent-bg);
   color: var(--primary);
+  opacity: 1;
+}
+
+/* Card person header - only displayed in mobile card view */
+.card-person-header {
+  display: none !important;
 }
 
 /* Family Group Header row in two-layer table */
@@ -786,6 +799,16 @@ tr.family-group-row td {
   display: none !important;
 }
 
+/* Child card compact & full view defaults on desktop */
+.family-card-birthdate-prefix,
+.child-group-compact-view {
+  display: none;
+}
+
+.child-group-full-view {
+  display: inline-flex;
+}
+
 /* Adaptive Card Layout for familiesOverview on smaller screens (<= 768px) */
 @media (max-width: 768px) {
   .dashboard-container {
@@ -808,9 +831,11 @@ tr.family-group-row td {
   }
 
   .search-input {
-    width: 100% !important;
+    flex: 1 1 160px !important;
+    width: auto !important;
     max-width: 100% !important;
-    min-width: 0 !important;
+    min-width: 130px !important;
+    margin-bottom: 0 !important;
   }
 
   .overview-table-wrapper {
@@ -1054,6 +1079,317 @@ tr.family-group-row td {
   .data-table.overview-table tr.family-group-row.highlighted-row td {
     border-color: var(--primary) !important;
     outline: 2px solid var(--primary) !important;
+  }
+
+  /* Card Layout for parents, children, and families tabs on smaller screens (<= 768px) */
+  .card-table-wrapper {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .card-table-wrapper .table-container {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    width: 100% !important;
+  }
+
+  .data-table.card-table {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    border-collapse: separate !important;
+  }
+
+  .data-table.card-table thead {
+    display: none !important;
+  }
+
+  .data-table.card-table tbody {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+    width: 100% !important;
+  }
+
+  /* Family Group Header in card-table */
+  .data-table.card-table tr.family-group-row {
+    display: block !important;
+    width: 100% !important;
+    margin-top: 0.75rem !important;
+    margin-bottom: 0.15rem !important;
+    background: transparent !important;
+  }
+
+  .data-table.card-table tr.family-group-row:first-child {
+    margin-top: 0 !important;
+  }
+
+  .data-table.card-table tr.family-group-row td {
+    display: block !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    padding: 0.55rem 0.85rem !important;
+    border-radius: 8px !important;
+    border: 1px solid var(--border) !important;
+    background-color: var(--bg-subtle) !important;
+    color: var(--text-h) !important;
+    font-size: 0.95rem !important;
+    font-weight: 700 !important;
+  }
+
+  .data-table.card-table tr.family-group-row .family-group-row-container {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 0.5rem !important;
+  }
+
+  .data-table.card-table tr.family-group-row .family-group-row-left {
+    position: static !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 0.5rem !important;
+  }
+
+  .data-table.card-table tr.family-group-row .family-group-actions {
+    position: static !important;
+    margin-left: auto !important;
+  }
+
+  /* Person Card in card-table */
+  .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    padding: 0.65rem 0.85rem !important;
+    margin-bottom: 0.25rem !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+    background-color: var(--bg-surface) !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+    gap: 0.2rem !important;
+  }
+
+  .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row):hover {
+    background-color: var(--bg-surface) !important;
+  }
+
+  /* Cells inside Card: Labeled Key-Value Rows */
+  .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    padding: 0.35rem 0 !important;
+    border: none !important;
+    border-bottom: 1px solid var(--border) !important;
+    background: transparent !important;
+    box-sizing: border-box !important;
+    gap: 0.5rem !important;
+  }
+
+  .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td:last-child {
+    border-bottom: none !important;
+  }
+
+  .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td::before {
+    content: attr(data-label);
+    font-size: 0.8rem !important;
+    font-weight: 600 !important;
+    color: var(--text-secondary) !important;
+    min-width: 85px !important;
+    max-width: 120px !important;
+    flex-shrink: 0 !important;
+    text-align: left !important;
+  }
+
+  .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td[data-label=""]::before,
+  .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td[data-column-id="actions"]::before {
+    display: none !important;
+  }
+
+  .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td[data-column-id="actions"] {
+    justify-content: flex-end !important;
+    padding-top: 0.25rem !important;
+  }
+
+  /* Card person header at top of person card */
+  .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td.card-person-header {
+    display: flex !important;
+    justify-content: flex-start !important;
+    align-items: center !important;
+    width: 100% !important;
+    font-size: 1.05rem !important;
+    font-weight: 700 !important;
+    color: var(--text-h) !important;
+    padding: 0.1rem 0 0.45rem 0 !important;
+    border-bottom: 1px solid var(--border) !important;
+    margin-bottom: 0.2rem !important;
+  }
+
+  .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td.card-person-header::before {
+    display: none !important;
+  }
+
+  .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td.card-person-header .card-person-header-content {
+    font-size: 1.05rem !important;
+    font-weight: 700 !important;
+    color: var(--text-h) !important;
+    text-align: left !important;
+  }
+
+  .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td.sticky-col {
+    position: static !important;
+    white-space: normal !important;
+    box-shadow: none !important;
+  }
+
+  .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td > * {
+    max-width: 100% !important;
+  }
+
+  .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td > div {
+    flex: 1 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding-right: 0 !important;
+  }
+
+  .data-table.card-table .address-cell-wrapper,
+  .data-table.card-table .notes-cell-wrapper,
+  .data-table.card-table .membership-cell-wrapper,
+  .data-table.card-table .startdatum-cell-wrapper,
+  .data-table.card-table .child-group-cell-wrapper,
+  .data-table.card-table .vaccination-cell-wrapper,
+  .data-table.card-table .multi-value-cell-wrapper,
+  .data-table.card-table .emails-cell-wrapper,
+  .data-table.card-table .phones-cell-wrapper {
+    padding-right: 0 !important;
+  }
+
+  .data-table.card-table .cell-edit-pencil-btn,
+  .data-table.card-table .easy-edit-view-button-wrapper,
+  .data-table.card-table .cell-edit-pencil-btn-wrapper,
+  .data-table.card-table .child-group-manage-btn {
+    opacity: 0.8 !important;
+    margin-left: auto !important;
+    margin-right: 0 !important;
+    flex-shrink: 0 !important;
+  }
+
+  .data-table.card-table .cell-edit-pencil-btn:active,
+  .data-table.card-table .easy-edit-view-button-wrapper button:active {
+    opacity: 1 !important;
+  }
+
+  .data-table.card-table .easy-edit-inline-wrapper {
+    justify-content: flex-end !important;
+    gap: 0.35rem !important;
+  }
+
+  /* Empty sub-row in card-table */
+  .data-table.card-table tr.empty-sub-row td {
+    display: block !important;
+    width: 100% !important;
+    padding: 0.5rem 0.85rem !important;
+  }
+
+  /* Highlighted row state */
+  .data-table.card-table tr.highlighted-row {
+    outline: 2px solid var(--primary) !important;
+    outline-offset: -1px !important;
+  }
+
+  .data-table.card-table tr.family-group-row.highlighted-row td {
+    border-color: var(--primary) !important;
+    outline: 2px solid var(--primary) !important;
+  }
+
+  /* In families-table mobile cards: child card layout */
+  .data-table.families-table tr:not(.family-group-row):not(.empty-sub-row) {
+    gap: 0.15rem !important;
+    padding: 0.75rem 0.9rem !important;
+  }
+
+  /* Align left, remove border-bottom and adjust padding for child card fields in families-table */
+  .data-table.families-table tr:not(.family-group-row):not(.empty-sub-row) td[data-column-id="child_name"],
+  .data-table.families-table tr:not(.family-group-row):not(.empty-sub-row) td[data-column-id="birth_date"],
+  .data-table.families-table tr:not(.family-group-row):not(.empty-sub-row) td[data-column-id="group"] {
+    justify-content: flex-start !important;
+    border-bottom: none !important;
+    padding: 0.05rem 0 !important;
+    min-height: auto !important;
+    width: 100% !important;
+  }
+
+  /* No "Vorname", "Geburtsdatum", or "Gruppe" labels in child cards */
+  .data-table.families-table tr:not(.family-group-row):not(.empty-sub-row) td[data-column-id="child_name"]::before,
+  .data-table.families-table tr:not(.family-group-row):not(.empty-sub-row) td[data-column-id="birth_date"]::before,
+  .data-table.families-table tr:not(.family-group-row):not(.empty-sub-row) td[data-column-id="group"]::before {
+    display: none !important;
+  }
+
+  /* Child card header styling */
+  .data-table.families-table tr:not(.family-group-row):not(.empty-sub-row) td[data-column-id="child_name"] {
+    font-size: 1.05rem !important;
+    font-weight: 700 !important;
+    padding-bottom: 0.2rem !important;
+  }
+
+  .data-table.families-table tr:not(.family-group-row):not(.empty-sub-row) td[data-column-id="child_name"] .family-child-link {
+    font-size: 1.05rem !important;
+    font-weight: 700 !important;
+    color: var(--text-h) !important;
+    text-decoration: underline !important;
+    text-decoration-color: var(--border) !important;
+    text-underline-offset: 3px !important;
+  }
+
+  /* Birthdate styling */
+  .data-table.families-table tr:not(.family-group-row):not(.empty-sub-row) td[data-column-id="birth_date"] {
+    font-size: 0.85rem !important;
+    color: var(--text-secondary) !important;
+  }
+
+  .data-table.families-table .family-card-birthdate-prefix {
+    display: inline !important;
+  }
+
+  /* Group info styling */
+  .data-table.families-table tr:not(.family-group-row):not(.empty-sub-row) td[data-column-id="group"] {
+    font-size: 0.85rem !important;
+    color: var(--text-secondary) !important;
+  }
+
+  .data-table.families-table .child-group-full-view {
+    display: none !important;
+  }
+
+  .data-table.families-table .child-group-compact-view {
+    display: inline !important;
+  }
+
+  .data-table.families-table .child-group-manage-btn {
+    display: none !important;
+  }
+
+  .data-table.families-table tr:not(.family-group-row):not(.empty-sub-row) td[data-column-id="notes"] {
+    margin-top: 0.2rem !important;
+    border-top: 1px dashed var(--border) !important;
+    border-bottom: none !important;
+    padding-top: 0.35rem !important;
+  }
+
+  .data-table.families-table tr:not(.family-group-row):not(.empty-sub-row) td[data-column-id="actions"] {
+    display: none !important;
   }
 }
 

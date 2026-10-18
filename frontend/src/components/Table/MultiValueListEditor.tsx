@@ -723,7 +723,7 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
                                 opacity: canEdit ? 1 : 0.35,
                               }}
                             >
-                              <Pencil size={14} />
+                              <Pencil size={13} />
                             </button>
                             <button
                               type="button"

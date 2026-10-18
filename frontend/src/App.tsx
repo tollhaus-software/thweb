@@ -7,7 +7,7 @@ import './App.css';
 import { DataTable } from './components/Table/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import EasyEdit, { Types } from './components/InlineEdit';
-import { Pencil, Trash, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, X, Clock, AlertCircle, LayoutDashboard, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Pencil, Trash, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, X, Clock, AlertCircle, LayoutDashboard, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { MultiValueListEditor, type MultiValueFlagConfig, type MultiValueEntry, type MultiValueItem, getEntryValue, isFlagActive } from './components/Table/MultiValueListEditor';
 import { NotesEditor } from './components/Table/NotesEditor';
@@ -239,6 +239,7 @@ const ChildGroupCell: React.FC<ChildGroupCellProps> = ({
   return (
     <div
       id={cellId}
+      className="child-group-cell-wrapper"
       onClick={(e) => {
         const cellEl = document.getElementById(cellId) || e.currentTarget;
         onOpenManage(child, cellEl);
@@ -282,102 +283,99 @@ const ChildGroupCell: React.FC<ChildGroupCellProps> = ({
           color: groupInfo.isExited ? 'var(--text-muted)' : 'inherit',
         }}
       >
-        {groupInfo.isFuture && groupInfo.groupName ? (
-          <span style={{ display: 'inline-flex', alignItems: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-                width: '100px',
-                minWidth: '100px',
-                flexShrink: 0,
-                whiteSpace: 'nowrap',
-                color: 'var(--text-muted)',
-              }}
-            >
-              <ArrowRight size={13} style={{ flexShrink: 0 }} />
-              <span>{groupInfo.groupName}</span>
+        <span className="child-group-compact-view">
+          {groupInfo.groupName && groupInfo.sinceText ? (
+            `${groupInfo.groupName} (${groupInfo.sinceText})`
+          ) : groupInfo.isFuture && groupInfo.groupName && groupInfo.futureDateText ? (
+            `${groupInfo.groupName} (${groupInfo.futureDateText})`
+          ) : (
+            groupInfo.groupLabel
+          )}
+        </span>
+        <span className="child-group-full-view" style={{ display: 'inline-flex', alignItems: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {groupInfo.isFuture && groupInfo.groupName ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  width: '100px',
+                  minWidth: '100px',
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                <ArrowRight size={13} style={{ flexShrink: 0 }} />
+                <span>{groupInfo.groupName}</span>
+              </span>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  width: '135px',
+                  minWidth: '135px',
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <Clock size={14} style={{ flexShrink: 0 }} />
+                <span>{groupInfo.futureDateText}</span>
+              </span>
             </span>
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-                width: '135px',
-                minWidth: '135px',
-                flexShrink: 0,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              <Clock size={14} style={{ flexShrink: 0 }} />
-              <span>{groupInfo.futureDateText}</span>
+          ) : groupInfo.groupName && groupInfo.sinceText ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: '100px',
+                  minWidth: '100px',
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {groupInfo.groupName}
+              </span>
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: '135px',
+                  minWidth: '135px',
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {groupInfo.sinceText}
+              </span>
+              <span
+                style={{
+                  display: 'inline-block',
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {groupInfo.durationStr}
+              </span>
             </span>
-          </span>
-        ) : groupInfo.groupName && groupInfo.sinceText ? (
-          <span style={{ display: 'inline-flex', alignItems: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            <span
-              style={{
-                display: 'inline-block',
-                width: '100px',
-                minWidth: '100px',
-                flexShrink: 0,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {groupInfo.groupName}
-            </span>
-            <span
-              style={{
-                display: 'inline-block',
-                width: '135px',
-                minWidth: '135px',
-                flexShrink: 0,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {groupInfo.sinceText}
-            </span>
-            <span
-              style={{
-                display: 'inline-block',
-                flexShrink: 0,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {groupInfo.durationStr}
-            </span>
-          </span>
-        ) : (
-          <span>{groupInfo.groupLabel}</span>
-        )}
+          ) : (
+            <span>{groupInfo.groupLabel}</span>
+          )}
+        </span>
       </div>
       {!readOnly && (
         <button
           type="button"
+          className="cell-edit-pencil-btn child-group-manage-btn"
           onClick={(e) => {
             e.stopPropagation();
             const cellEl = document.getElementById(cellId) || e.currentTarget;
             onOpenManage(child, cellEl);
           }}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: 'var(--primary)',
-            cursor: 'pointer',
-            padding: '2px',
-            borderRadius: '4px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: '24px',
-            height: '24px',
-            flexShrink: 0,
-            marginLeft: '4px',
-          }}
           title={t('manageGroupChanges')}
         >
-          <Pencil size={12} />
+          <Pencil size={13} />
         </button>
       )}
     </div>
@@ -499,6 +497,7 @@ const ParentMembershipCell: React.FC<ParentMembershipCellProps> = ({
   return (
     <div
       id={cellId}
+      className="membership-cell-wrapper"
       onClick={(e) => {
         const cellEl = document.getElementById(cellId) || e.currentTarget;
         onOpenManage(parent, cellEl);
@@ -508,6 +507,7 @@ const ParentMembershipCell: React.FC<ParentMembershipCellProps> = ({
         justifyContent: 'space-between',
         alignItems: 'center',
         width: '100%',
+        flex: 1,
         gap: '0.25rem',
         cursor: 'pointer',
         minHeight: '28px',
@@ -544,19 +544,10 @@ const ParentMembershipCell: React.FC<ParentMembershipCellProps> = ({
           const cellEl = document.getElementById(cellId) || e.currentTarget;
           onOpenManage(parent, cellEl);
         }}
-        className="easy-edit-button"
-        style={{
-          padding: '2px',
-          background: 'transparent',
-          border: 'none',
-          cursor: 'pointer',
-          display: 'inline-flex',
-          alignItems: 'center',
-          color: 'var(--primary)',
-        }}
+        className="cell-edit-pencil-btn"
         title={t('manageMemberships')}
       >
-        <Pencil size={14} />
+        <Pencil size={13} />
       </button>
     </div>
   );
@@ -583,6 +574,7 @@ const ParentMultiValueCell: React.FC<ParentMultiValueCellProps> = ({
   return (
     <div
       id={cellId}
+      className={`multi-value-cell-wrapper ${field}-cell-wrapper`}
       onClick={(e) => {
         const cellEl = document.getElementById(cellId) || e.currentTarget;
         onOpenManage(parent, field, cellEl);
@@ -686,17 +678,7 @@ const ParentMultiValueCell: React.FC<ParentMultiValueCellProps> = ({
           const cellEl = document.getElementById(cellId) || e.currentTarget;
           onOpenManage(parent, field, cellEl);
         }}
-        className="easy-edit-button"
-        style={{
-          padding: '2px',
-          background: 'transparent',
-          border: 'none',
-          cursor: 'pointer',
-          display: 'inline-flex',
-          alignItems: 'center',
-          color: 'var(--primary)',
-          opacity: isActive ? 1 : 0.6,
-        }}
+        className="cell-edit-pencil-btn"
         title={placeholder}
       >
         <Pencil size={13} />
@@ -3966,7 +3948,7 @@ function formatParentsSummary(parents: any[]): string {
               type={EasyEditTypes.TEXT}
               value={parent.first_name}
               onSave={(val: string) => handleSaveParentField(parent, 'first_name', val)}
-              editButtonLabel={<Pencil size={14} />}
+              editButtonLabel={<Pencil size={13} />}
               instructions={t('editFirstName')}
               viewAttributes={{}}
               inputAttributes={{}}
@@ -3987,7 +3969,7 @@ function formatParentsSummary(parents: any[]): string {
               type={EasyEditTypes.TEXT}
               value={parent.last_name}
               onSave={(val: string) => handleSaveParentField(parent, 'last_name', val)}
-              editButtonLabel={<Pencil size={14} />}
+              editButtonLabel={<Pencil size={13} />}
               instructions={t('editLastName')}
               viewAttributes={{}}
               inputAttributes={{}}
@@ -4197,7 +4179,7 @@ function formatParentsSummary(parents: any[]): string {
               type={EasyEditTypes.TEXT}
               value={child.first_name}
               onSave={(val: string) => handleSaveChildField(child, 'first_name', val)}
-              editButtonLabel={<Pencil size={14} />}
+              editButtonLabel={<Pencil size={13} />}
               instructions={t('editFirstName')}
               viewAttributes={{}}
               inputAttributes={{}}
@@ -4218,7 +4200,7 @@ function formatParentsSummary(parents: any[]): string {
               type={EasyEditTypes.TEXT}
               value={child.last_name}
               onSave={(val: string) => handleSaveChildField(child, 'last_name', val)}
-              editButtonLabel={<Pencil size={14} />}
+              editButtonLabel={<Pencil size={13} />}
               instructions={t('editLastName')}
               viewAttributes={{}}
               inputAttributes={{}}
@@ -4243,7 +4225,7 @@ function formatParentsSummary(parents: any[]): string {
               onSave={(val: string) => {
                 handleSaveChildField(child, 'birth_date', parseInputDate(val));
               }}
-              editButtonLabel={<Pencil size={14} />}
+              editButtonLabel={<Pencil size={13} />}
               instructions={t('editBirthDate')}
               displayComponent={<span>{formatDisplayDate(child.birth_date)}</span>}
               viewAttributes={{}}
@@ -4268,13 +4250,14 @@ function formatParentsSummary(parents: any[]): string {
           return (
             <div
               id={cellId}
+              className="startdatum-cell-wrapper"
               onDoubleClick={(e) => {
                 e.stopPropagation();
                 window.getSelection()?.removeAllRanges();
                 const cellEl = document.getElementById(cellId) || e.currentTarget;
                 openManageGroupChanges(child, cellEl);
               }}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', cursor: 'pointer' }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', flex: 1, cursor: 'pointer' }}
               title={t('manageGroupChanges')}
             >
               <span>{groupInfo.startDate ? formatDisplayDate(groupInfo.startDate) : '-'}</span>
@@ -4285,31 +4268,10 @@ function formatParentsSummary(parents: any[]): string {
                   const cellEl = document.getElementById(cellId) || e.currentTarget;
                   openManageGroupChanges(child, cellEl);
                 }}
-                className="easy-edit-button"
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: 'var(--primary)',
-                  cursor: 'pointer',
-                  padding: '2px',
-                  borderRadius: '4px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '24px',
-                  height: '24px',
-                  flexShrink: 0,
-                  marginLeft: '4px',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'var(--accent-bg)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }}
+                className="cell-edit-pencil-btn"
                 title={t('manageGroupChanges')}
               >
-                <Pencil size={12} />
+                <Pencil size={13} />
               </button>
             </div>
           );
@@ -4440,7 +4402,16 @@ function formatParentsSummary(parents: any[]): string {
         minSize: 120,
         cell: (info) => {
           const child = info.row.original;
-          return <span>{formatDisplayDate(child.birth_date) || '-'}</span>;
+          const formatted = formatDisplayDate(child.birth_date);
+          if (!formatted) {
+            return <span>-</span>;
+          }
+          return (
+            <span className="family-child-birthdate">
+              <span className="family-card-birthdate-prefix">geb. </span>
+              {formatted}
+            </span>
+          );
         }
       },
       childGroupColumn,
@@ -4457,6 +4428,13 @@ function formatParentsSummary(parents: any[]): string {
             />
           );
         }
+      },
+      {
+        id: 'actions',
+        header: '',
+        size: 85,
+        minSize: 85,
+        cell: () => null,
       },
     ],
     [childGroupColumn, handleJumpToChild, handleSaveChildField]
@@ -4820,7 +4798,7 @@ function formatParentsSummary(parents: any[]): string {
 
         {activeTab !== 'childcareFees' && activeTab !== 'audit' && activeTab !== 'admin' && activeTab !== 'kiosk' && (
           <div className="controls-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <div className="controls-left" style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <div className="controls-left" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
               <input
                 value={globalFilter ?? ''}
                 onChange={(e) => setGlobalFilter(e.target.value)}
@@ -4828,6 +4806,35 @@ function formatParentsSummary(parents: any[]): string {
                 placeholder={activeTab === 'families' || activeTab === 'familiesOverview' ? t('searchFamilies') : activeTab === 'children' ? t('searchChildren') : t('searchParents')}
                 style={{ marginBottom: 0 }}
               />
+
+              {(activeTab === 'parents' || activeTab === 'children' || activeTab === 'families') && (
+                <button
+                  type="button"
+                  onClick={openAddFamily}
+                  className="primary-button add-family-button"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    padding: '0.45rem 0.85rem',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    border: 'none',
+                    background: 'var(--primary)',
+                    color: '#ffffff',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                    height: '34px',
+                    boxSizing: 'border-box',
+                    fontSize: '0.85rem',
+                  }}
+                >
+                  <Plus size={14} />
+                  <span>{t('addFamily')}</span>
+                </button>
+              )}
+
               {activeTab === 'familiesOverview' && (
                 <div
                   className="overview-grouping-toggle"
@@ -4930,6 +4937,7 @@ function formatParentsSummary(parents: any[]): string {
                   <button
                     type="button"
                     onClick={handleLockKmsAuth}
+                    className="secondary-button vaccination-status-btn"
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
@@ -4939,20 +4947,25 @@ function formatParentsSummary(parents: any[]): string {
                       background: 'var(--bg-surface)',
                       border: '1px solid var(--border)',
                       color: 'var(--text)',
-                      fontSize: '0.875rem',
+                      fontSize: '0.85rem',
                       fontWeight: 500,
                       cursor: 'pointer',
                       transition: 'all 0.15s ease',
+                      height: '34px',
+                      boxSizing: 'border-box',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
                     }}
                     title="Klicken zum Sperren"
                   >
                     <Unlock size={15} color="var(--primary)" />
-                    <span>{t('vaccinationStatusUnlocked')}</span>
+                    <span>{t('vaccinationStatus')}</span>
                   </button>
                 ) : (
                   <button
                     type="button"
                     onClick={handleRequestKmsAuth}
+                    className="secondary-button vaccination-status-btn"
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
@@ -4963,33 +4976,24 @@ function formatParentsSummary(parents: any[]): string {
                       border: '1px solid var(--border)',
                       color: 'var(--text)',
                       cursor: 'pointer',
-                      fontSize: '0.875rem',
+                      fontSize: '0.85rem',
                       fontWeight: 500,
                       transition: 'all 0.15s ease',
+                      height: '34px',
+                      boxSizing: 'border-box',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
                     }}
                     title={t('showVaccinationStatus')}
                   >
                     <Lock size={15} color="var(--text-muted)" />
-                    <span>{t('showVaccinationStatus')}</span>
+                    <span>{t('vaccinationStatus')}</span>
                   </button>
                 )
               )}
+
+              <div id="cards-view-columns-slot" style={{ display: 'inline-flex', alignItems: 'center' }} />
             </div>
-            {(activeTab === 'parents' || activeTab === 'children' || activeTab === 'families') && (
-              <button
-                onClick={openAddFamily}
-                className="primary-button"
-                style={{
-                  padding: '0.5rem 1.25rem',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontWeight: '600',
-                  border: 'none'
-                }}
-              >
-                {t('addFamily')}
-              </button>
-            )}
           </div>
         )}
 
@@ -5043,6 +5047,7 @@ function formatParentsSummary(parents: any[]): string {
           />
         ) : activeTab === 'parents' ? (
           <DataTable
+            className="card-table parents-table"
             data={parentsFamilyData}
             columns={parentColumns}
             getSubRows={(row: any) => row.parents}
@@ -5051,9 +5056,11 @@ function formatParentsSummary(parents: any[]): string {
             jumpToFamilyLabel={t('jumpToChildrenShort')}
             jumpToFamilyTitle={t('jumpToFamilyInChildren')}
             highlightedRowId={highlightedRowId}
+            getCardHeader={(parent: any) => `${parent.first_name || ''} ${parent.last_name || ''}`.trim() || '-'}
           />
         ) : activeTab === 'children' ? (
           <DataTable
+            className="card-table children-table"
             data={childrenFamilyData}
             columns={childColumns}
             getSubRows={(row: any) => row.children}
@@ -5063,9 +5070,11 @@ function formatParentsSummary(parents: any[]): string {
             jumpToFamilyTitle={t('jumpToFamilyInParents')}
             emptySubRowsText={t('noChildrenYet')}
             highlightedRowId={highlightedRowId}
+            getCardHeader={(child: any) => `${child.first_name || ''} ${child.last_name || ''}`.trim() || '-'}
           />
         ) : activeTab === 'families' ? (
           <DataTable
+            className="card-table families-table"
             data={familiesTabData}
             columns={familyChildColumns}
             getSubRows={(row: any) => row.children}
@@ -5073,6 +5082,7 @@ function formatParentsSummary(parents: any[]): string {
             onAddParent={openAddParent}
             emptySubRowsText={t('noChildrenYet')}
             highlightedRowId={highlightedRowId}
+            stickyFirstColumn
           />
         ) : activeTab === 'hygieneBelehrung' ? (
           <DataTable
