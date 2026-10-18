@@ -7,7 +7,7 @@ import './App.css';
 import { DataTable } from './components/Table/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import EasyEdit, { Types } from './components/InlineEdit';
-import { Pencil, Trash, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, ArrowUpRight, X, Clock, AlertCircle, LayoutDashboard, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { Pencil, Trash, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, ArrowUpRight, X, Clock, AlertCircle, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { MultiValueListEditor, type MultiValueFlagConfig, type MultiValueEntry, type MultiValueItem, getEntryValue, isFlagActive } from './components/Table/MultiValueListEditor';
 import { NotesEditor } from './components/Table/NotesEditor';
@@ -1663,10 +1663,11 @@ const Dashboard: React.FC = () => {
 
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [activeTab, setActiveTab] = React.useState<
-    'familiesOverview' | 'families' | 'parents' | 'children' | 'childcareFees' | 'hygieneBelehrung' | 'audit' | 'admin' | 'kiosk'
+    'familiesOverview' | 'families' | 'parents' | 'children' | 'childcareFees' | 'hygieneBelehrung' | 'audit' | 'admin' | 'kiosk' | 'dashboard'
   >(() => {
     const rawHash = window.location.hash.replace('#', '');
     const hash = rawHash.split('?')[0];
+    const pathname = window.location.pathname.replace(/\/+$/, '');
     if (
       (hash === 'familiesOverview' && canReadOverview) ||
       (hash === 'families' && canReadFamiliesAll) ||
@@ -1676,9 +1677,11 @@ const Dashboard: React.FC = () => {
       (hash === 'hygieneBelehrung' && (canReadFamiliesAll || hasPermission('hygiene.all.write'))) ||
       (hash === 'audit' && canReadAudit) ||
       (hash === 'admin' && canManageUsers) ||
-      (hash === 'kiosk' && canProvisionKiosk)
+      (hash === 'kiosk' && canProvisionKiosk) ||
+      hash === 'dashboard' ||
+      pathname === '/dashboard'
     ) {
-      return hash as any;
+      return (pathname === '/dashboard' ? 'dashboard' : hash) as any;
     }
     const saved = localStorage.getItem('thweb_active_tab');
     if (
@@ -1690,7 +1693,8 @@ const Dashboard: React.FC = () => {
       (saved === 'hygieneBelehrung' && (canReadFamiliesAll || hasPermission('hygiene.all.write'))) ||
       (saved === 'audit' && canReadAudit) ||
       (saved === 'admin' && canManageUsers) ||
-      (saved === 'kiosk' && canProvisionKiosk)
+      (saved === 'kiosk' && canProvisionKiosk) ||
+      saved === 'dashboard'
     ) {
       return saved as any;
     }
@@ -2466,7 +2470,8 @@ const Dashboard: React.FC = () => {
         (hash === 'hygieneBelehrung' && (canReadFamiliesAll || hasPermission('hygiene.all.write'))) ||
         (hash === 'audit' && canReadAudit) ||
         (hash === 'admin' && canManageUsers) ||
-        (hash === 'kiosk' && canProvisionKiosk)
+        (hash === 'kiosk' && canProvisionKiosk) ||
+        hash === 'dashboard'
       ) {
         setActiveTab(hash as any);
         localStorage.setItem('thweb_active_tab', hash);
@@ -2507,6 +2512,9 @@ const Dashboard: React.FC = () => {
       }
     };
     window.addEventListener('hashchange', handleHashChange);
+    if (window.location.pathname.replace(/\/+$/, '') === '/dashboard') {
+      window.history.replaceState(null, '', '/#dashboard');
+    }
     if (!window.location.hash) {
       window.location.hash = activeTab;
     } else if (window.location.hash.includes('?')) {
@@ -4652,29 +4660,6 @@ function formatParentsSummary(parents: any[]): string {
         <h1>{t('title')}</h1>
         <div className="user-info" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <span>{user?.email}</span>
-          <button
-            onClick={() => {
-              window.history.pushState({}, '', '/dashboard');
-              window.dispatchEvent(new PopStateEvent('popstate'));
-            }}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.4rem',
-              padding: '0.4rem 0.8rem',
-              borderRadius: '6px',
-              border: '1px solid var(--border)',
-              background: 'var(--bg-surface)',
-              color: 'var(--primary)',
-              fontWeight: 600,
-              fontSize: '0.9rem',
-              cursor: 'pointer',
-            }}
-            title={t('kioskDashboard')}
-          >
-            <LayoutDashboard size={16} />
-            <span>{t('kioskDashboard')}</span>
-          </button>
           <button onClick={logout}>{t('logout')}</button>
         </div>
       </header>
@@ -4778,6 +4763,13 @@ function formatParentsSummary(parents: any[]): string {
                 {t('kioskCertificates')}
               </button>
             )}
+            <button 
+              onClick={() => handleTabClick('dashboard')}
+              className={`tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
+              data-active={activeTab === 'dashboard'}
+            >
+              {t('kioskDashboard')}
+            </button>
           </div>
 
           {canScrollRight && (
@@ -4831,7 +4823,7 @@ function formatParentsSummary(parents: any[]): string {
           </div>
         )}
 
-        {activeTab !== 'childcareFees' && activeTab !== 'audit' && activeTab !== 'admin' && activeTab !== 'kiosk' && (
+        {activeTab !== 'childcareFees' && activeTab !== 'audit' && activeTab !== 'admin' && activeTab !== 'kiosk' && activeTab !== 'dashboard' && (
           <div className="controls-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <div className="controls-left" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
               <input
@@ -5134,6 +5126,8 @@ function formatParentsSummary(parents: any[]): string {
           <AdminView />
         ) : activeTab === 'kiosk' && canProvisionKiosk ? (
           <KioskProvisioning token={token} />
+        ) : activeTab === 'dashboard' ? (
+          <KioskDashboard embedded={true} />
         ) : (
           <ChildcareFeesCalculator
             token={token}
@@ -5504,22 +5498,6 @@ function formatParentsSummary(parents: any[]): string {
 
 const AppContent: React.FC = () => {
   const { user, loading } = useAuth();
-  const [currentPath, setCurrentPath] = React.useState<string>(() => window.location.pathname);
-  const [currentHash, setCurrentHash] = React.useState<string>(() => window.location.hash);
-
-  React.useEffect(() => {
-    const handleLocationChange = () => {
-      setCurrentPath(window.location.pathname);
-      setCurrentHash(window.location.hash);
-    };
-
-    window.addEventListener('popstate', handleLocationChange);
-    window.addEventListener('hashchange', handleLocationChange);
-    return () => {
-      window.removeEventListener('popstate', handleLocationChange);
-      window.removeEventListener('hashchange', handleLocationChange);
-    };
-  }, []);
 
   if (loading) {
     return <div>{t('loading')}</div>;
@@ -5532,25 +5510,6 @@ const AppContent: React.FC = () => {
 
   if (!user) {
     return <LandingPage />;
-  }
-
-  const normalizedPath = currentPath.replace(/\/+$/, '');
-  const normalizedHash = currentHash.replace('#', '').split('?')[0];
-  const isDashboard =
-    normalizedPath === '/dashboard' ||
-    normalizedHash === 'dashboard' ||
-    normalizedHash === '/dashboard';
-
-  if (isDashboard) {
-    return (
-      <KioskDashboard
-        onBackToPortal={() => {
-          window.history.pushState({}, '', '/');
-          setCurrentPath('/');
-          setCurrentHash('');
-        }}
-      />
-    );
   }
 
   return <Dashboard />;

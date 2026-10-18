@@ -29,9 +29,10 @@ interface RealtimeEvent {
 
 export interface KioskDashboardProps {
   onBackToPortal?: () => void;
+  embedded?: boolean;
 }
 
-export const KioskDashboard: React.FC<KioskDashboardProps> = () => {
+export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false }) => {
   const { token } = useAuth();
 
   // If selectedDate is null, the frontend omits the ?date parameter, requesting "today" from backend
@@ -185,14 +186,14 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = () => {
   const formattedTime = `${hours}:${minutes}`;
 
   return (
-    <div className="kiosk-tablet-page">
+    <div className={`kiosk-tablet-page ${embedded ? 'embedded' : ''}`}>
       <div className="kiosk-tablet-container">
         
         {/* Content Area (taking up most of the screen space) */}
         <main className="kiosk-content-area">
           {error && (
             <div className="kiosk-error-banner">
-              <AlertCircle size={24} />
+              <AlertCircle size={embedded ? 20 : 24} />
               <span>{error}</span>
             </div>
           )}
@@ -205,7 +206,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = () => {
               title={t('previousDay')}
               aria-label={t('previousDay')}
             >
-              <ChevronLeft size={44} />
+              <ChevronLeft size={embedded ? 28 : 44} />
             </button>
 
             <h1 className="kiosk-header-date">{formattedDate}</h1>
@@ -216,14 +217,14 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = () => {
               title={t('nextDay')}
               aria-label={t('nextDay')}
             >
-              <ChevronRight size={44} />
+              <ChevronRight size={embedded ? 28 : 44} />
             </button>
           </header>
 
           {/* Card 2: Shows who is cooking. Header on top left: "Koch / Köchin" */}
           <section className="kiosk-card kiosk-card-cook">
             <div className="kiosk-card-header">
-              <UtensilsCrossed size={26} className="kiosk-card-header-icon" />
+              <UtensilsCrossed size={embedded ? 20 : 26} className="kiosk-card-header-icon" />
               <span>{t('whoIsCooking')}</span>
             </div>
             <div className="kiosk-cook-content">
@@ -238,7 +239,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = () => {
           {/* Card 3: Shows the meal, with header "Es gibt:" and up to 3 meal components as lines */}
           <section className="kiosk-card kiosk-card-meal">
             <div className="kiosk-card-header">
-              <Soup size={26} className="kiosk-card-header-icon" />
+              <Soup size={embedded ? 20 : 26} className="kiosk-card-header-icon" />
               <span>{t('mealTitle')}</span>
             </div>
             <div className="kiosk-meal-lines">
@@ -260,7 +261,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = () => {
           {/* Card 4: TODOs / warnings, aligned vertically at the bottom of the content area */}
           <section className="kiosk-card kiosk-card-todos">
             <div className="kiosk-card-header">
-              <AlertCircle size={26} className="kiosk-card-header-icon" />
+              <AlertCircle size={embedded ? 20 : 26} className="kiosk-card-header-icon" />
               <span>{t('tasksAndInfoTitle')}</span>
             </div>
             <div className="kiosk-todos-list">
@@ -269,7 +270,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = () => {
                   if (task === 'yellow_bin_retrieve') {
                     return (
                       <div key={idx} className="kiosk-todo-item kiosk-todo-yellow">
-                        <Trash2 size={36} className="kiosk-todo-icon" />
+                        <Trash2 size={embedded ? 24 : 36} className="kiosk-todo-icon" />
                         <span>{t('yellowBinRetrieve')}</span>
                       </div>
                     );
@@ -277,7 +278,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = () => {
                   if (task === 'yellow_bin_put_out') {
                     return (
                       <div key={idx} className="kiosk-todo-item kiosk-todo-yellow">
-                        <Trash2 size={36} className="kiosk-todo-icon" />
+                        <Trash2 size={embedded ? 24 : 36} className="kiosk-todo-icon" />
                         <span>{t('yellowBinPutOut')}</span>
                       </div>
                     );
@@ -285,7 +286,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = () => {
                   if (task === 'clean_coffe_machine' || task === 'clean_coffee_machine') {
                     return (
                       <div key={idx} className="kiosk-todo-item kiosk-todo-coffee">
-                        <Coffee size={36} className="kiosk-todo-icon" />
+                        <Coffee size={embedded ? 24 : 36} className="kiosk-todo-icon" />
                         <span>{t('cleanCoffeeMachine')}</span>
                       </div>
                     );
@@ -293,7 +294,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = () => {
                   if (task === 'clean_refrigerator') {
                     return (
                       <div key={idx} className="kiosk-todo-item kiosk-todo-refrigerator">
-                        <Refrigerator size={36} className="kiosk-todo-icon" />
+                        <Refrigerator size={embedded ? 24 : 36} className="kiosk-todo-icon" />
                         <span>{t('cleanRefrigerator')}</span>
                       </div>
                     );
@@ -301,7 +302,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = () => {
                   // Fallback for any other custom task/info
                   return (
                     <div key={idx} className="kiosk-todo-item kiosk-todo-default">
-                      <AlertCircle size={36} className="kiosk-todo-icon" />
+                      <AlertCircle size={embedded ? 24 : 36} className="kiosk-todo-icon" />
                       <span>{task}</span>
                     </div>
                   );
@@ -325,7 +326,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = () => {
               title={t('home')}
               aria-label={t('home')}
             >
-              <Home size={28} />
+              <Home size={embedded ? 22 : 28} />
             </button>
 
             <button
