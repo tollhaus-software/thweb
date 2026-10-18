@@ -7,7 +7,7 @@ import './App.css';
 import { DataTable } from './components/Table/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import EasyEdit, { Types } from './components/InlineEdit';
-import { Pencil, Trash, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, X, Clock, AlertCircle, LayoutDashboard, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { Pencil, Trash, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, ArrowUpRight, X, Clock, AlertCircle, LayoutDashboard, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { MultiValueListEditor, type MultiValueFlagConfig, type MultiValueEntry, type MultiValueItem, getEntryValue, isFlagActive } from './components/Table/MultiValueListEditor';
 import { NotesEditor } from './components/Table/NotesEditor';
@@ -3603,7 +3603,8 @@ const Dashboard: React.FC = () => {
                   }}
                   title={t('jumpToParent')}
                 >
-                  {pName}
+                  <span>{pName}</span>
+                  <ArrowUpRight size={12} className="family-link-icon" />
                 </button>
               </React.Fragment>
             );
@@ -4422,7 +4423,8 @@ function formatParentsSummary(parents: any[]): string {
               }}
               title={t('jumpToChild')}
             >
-              {fullName}
+              <span>{fullName}</span>
+              <ArrowUpRight size={13} className="family-link-icon" />
             </button>
           );
         }
