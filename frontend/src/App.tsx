@@ -4280,6 +4280,9 @@ function formatParentsSummary(parents: any[]): string {
         header: t('startdatum'),
         id: 'start_date',
         size: 130,
+        meta: {
+          cardLabel: t('startDateCardLabel'),
+        },
         cell: (info) => {
           const child = info.row.original;
           const isCurrentActive = Boolean(groupPopoverAnchor && targetChildGroupChanges?.id === child.id);
@@ -4917,7 +4920,8 @@ function formatParentsSummary(parents: any[]): string {
                   </button>
                 </div>
               )}
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              {activeTab !== 'familiesOverview' && (
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                 <button
                   onClick={handleUndo}
                   disabled={undoStack.length === 0}
@@ -4960,7 +4964,8 @@ function formatParentsSummary(parents: any[]): string {
                 >
                   <Redo size={16} />
                 </button>
-              </div>
+                </div>
+              )}
 
               {(activeTab === 'parents' || activeTab === 'children') && hasPermission('vaccination.status.manage') && (
                 isVaccinationUnlocked ? (

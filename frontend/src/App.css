@@ -1361,9 +1361,12 @@ tr.family-group-row td {
     outline: 2px solid var(--primary) !important;
   }
 
-  /* In children-table mobile cards: Geburtsdatum label is shortened to "Geb." */
+  /* In children-table mobile cards: Geburtsdatum label is shortened to "Geb.", Startdatum to "Start" */
   .data-table.children-table tr:not(.family-group-row):not(.empty-sub-row) td[data-column-id="birth_date"]::before {
     content: "Geb." !important;
+  }
+  .data-table.children-table tr:not(.family-group-row):not(.empty-sub-row) td[data-column-id="start_date"]::before {
+    content: "Start" !important;
   }
 
   /* In families-table mobile cards: child card layout */
