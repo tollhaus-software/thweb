@@ -781,3 +781,279 @@ tr.family-group-row td {
   background-color: var(--bg-hover);
 }
 
+/* Desktop: parents toggle row in group mode is hidden */
+.overview-parents-toggle-row {
+  display: none !important;
+}
+
+/* Adaptive Card Layout for familiesOverview on smaller screens (<= 768px) */
+@media (max-width: 768px) {
+  .dashboard-container {
+    padding: 0.75rem !important;
+  }
+
+  .dashboard-container.table-view-active {
+    padding: 0.75rem !important;
+  }
+
+  .controls-row {
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+  }
+
+  .controls-left {
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+    width: 100% !important;
+  }
+
+  .search-input {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .overview-table-wrapper {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .overview-table-wrapper .table-container {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    width: 100% !important;
+  }
+
+  .data-table.overview-table {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .data-table.overview-table tbody {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+    width: 100% !important;
+  }
+
+  /* Family / Group section header */
+  .data-table.overview-table tr.family-group-row {
+    display: block !important;
+    width: 100% !important;
+    margin-top: 0.75rem !important;
+    margin-bottom: 0.15rem !important;
+    background: transparent !important;
+  }
+
+  .data-table.overview-table tr.family-group-row:first-child {
+    margin-top: 0 !important;
+  }
+
+  .data-table.overview-table tr.family-group-row td {
+    display: block !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    padding: 0.55rem 0.85rem !important;
+    border-radius: 8px !important;
+    border: 1px solid var(--border) !important;
+    background-color: var(--bg-subtle) !important;
+    color: var(--text-h) !important;
+    font-size: 0.95rem !important;
+    font-weight: 700 !important;
+  }
+
+  .data-table.overview-table tr.family-group-row .family-group-row-left {
+    position: static !important;
+  }
+
+  /* Parent Card */
+  .data-table.overview-table tr.overview-parent-row {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    padding: 0.75rem 0.85rem !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+    background-color: var(--bg-surface) !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+    gap: 0.45rem !important;
+  }
+
+  .data-table.overview-table tr.overview-parent-row:hover {
+    background-color: var(--bg-surface) !important;
+  }
+
+  .data-table.overview-table tr.overview-parent-row td {
+    display: flex !important;
+    align-items: flex-start !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    background: transparent !important;
+  }
+
+  .data-table.overview-table tr.overview-parent-row td:first-child {
+    font-size: 1rem !important;
+    font-weight: 600 !important;
+    color: var(--text-h) !important;
+    padding-bottom: 0.35rem !important;
+    border-bottom: 1px solid var(--border) !important;
+  }
+
+  .data-table.overview-table tr.overview-parent-row .overview-person-name {
+    padding-left: 0 !important;
+    display: block !important;
+  }
+
+  .data-table.overview-table tr.overview-parent-row .overview-contact-symbol {
+    font-size: 0.95rem !important;
+    width: 1.25rem !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Child Card */
+  .data-table.overview-table tr.overview-child-row {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    padding: 0.6rem 0.85rem !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+    background-color: var(--bg-surface) !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+  }
+
+  .data-table.overview-table tr.overview-child-row:hover {
+    background-color: var(--bg-surface) !important;
+  }
+
+  .data-table.overview-table tr.overview-child-row td {
+    display: inline-flex !important;
+    align-items: center !important;
+    width: auto !important;
+    min-width: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    background: transparent !important;
+  }
+
+  .data-table.overview-table tr.overview-child-row td:first-child {
+    font-size: 0.95rem !important;
+    font-weight: 600 !important;
+    color: var(--text-h) !important;
+  }
+
+  .data-table.overview-table tr.overview-child-row .overview-person-name {
+    padding-left: 0 !important;
+  }
+
+  .data-table.overview-table .overview-child-group-badge {
+    display: inline-block !important;
+    background-color: var(--bg-subtle) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 9999px !important;
+    padding: 0.15rem 0.55rem !important;
+    font-size: 0.8rem !important;
+    font-weight: 500 !important;
+  }
+
+  /* In group mode on mobile: expandable parents toggle row */
+  .data-table.overview-table tr.overview-parents-toggle-row {
+    display: block !important;
+    width: calc(100% - 1rem) !important;
+    margin-left: 1rem !important;
+    margin-top: 0.15rem !important;
+    margin-bottom: 0.35rem !important;
+    box-sizing: border-box !important;
+  }
+
+  .data-table.overview-table tr.overview-parents-toggle-row td {
+    display: block !important;
+    width: 100% !important;
+    padding: 0 !important;
+    border: none !important;
+    background: transparent !important;
+  }
+
+  .overview-parents-toggle-btn {
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.5rem !important;
+    width: 100% !important;
+    padding: 0.45rem 0.75rem !important;
+    background-color: var(--bg-subtle) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: 6px !important;
+    color: var(--text) !important;
+    font-size: 0.85rem !important;
+    cursor: pointer !important;
+    transition: all 0.15s ease !important;
+    text-align: left !important;
+    box-sizing: border-box !important;
+  }
+
+  .overview-parents-toggle-btn:hover {
+    background-color: var(--bg-hover) !important;
+  }
+
+  .overview-parents-toggle-chevron {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    color: var(--text-secondary) !important;
+    flex-shrink: 0 !important;
+  }
+
+  .overview-parents-toggle-label {
+    flex: 1 !important;
+    font-weight: 600 !important;
+    color: var(--text-h) !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  .overview-parents-toggle-badge {
+    font-size: 0.75rem !important;
+    font-weight: 500 !important;
+    color: var(--text-secondary) !important;
+    background: var(--bg-surface) !important;
+    border: 1px solid var(--border) !important;
+    padding: 0.1rem 0.45rem !important;
+    border-radius: 4px !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* When collapsed in group mode on mobile: hide parent cards */
+  .data-table.overview-table tr.overview-group-parent-row.group-parent-collapsed {
+    display: none !important;
+  }
+
+  /* When expanded in group mode on mobile: show parent cards indented to the right */
+  .data-table.overview-table tr.overview-group-parent-row.group-parent-expanded {
+    display: flex !important;
+    flex-direction: column !important;
+    width: calc(100% - 1.25rem) !important;
+    margin-left: 1.25rem !important;
+    border-left: 3px solid var(--primary) !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Highlighted row state */
+  .data-table.overview-table tr.highlighted-row {
+    outline: 2px solid var(--primary) !important;
+    outline-offset: -1px !important;
+  }
+
+  .data-table.overview-table tr.family-group-row.highlighted-row td {
+    border-color: var(--primary) !important;
+    outline: 2px solid var(--primary) !important;
+  }
+}
+

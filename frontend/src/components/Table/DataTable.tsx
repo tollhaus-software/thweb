@@ -8,7 +8,7 @@ import {
   flexRender,
 } from '@tanstack/react-table';
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
-import { SlidersHorizontal, Plus } from 'lucide-react';
+import { SlidersHorizontal, Plus, ChevronDown, ChevronRight } from 'lucide-react';
 import { t } from '../../utils/i18n';
 
 interface DataTableProps<TData> {
@@ -24,6 +24,7 @@ interface DataTableProps<TData> {
   emptySubRowsText?: string;
   hideHeader?: boolean;
   highlightedRowId?: string | null;
+  className?: string;
 }
 
 export function DataTable<TData>({
@@ -39,6 +40,7 @@ export function DataTable<TData>({
   emptySubRowsText,
   hideHeader,
   highlightedRowId,
+  className,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
@@ -62,7 +64,7 @@ export function DataTable<TData>({
   });
 
   return (
-    <div className="data-table-wrapper">
+    <div className={`data-table-wrapper ${className ? `${className}-wrapper` : ''}`}>
       {/* Column selector toolbar */}
       {!hideHeader && (
         <div className="data-table-toolbar">
@@ -162,7 +164,7 @@ export function DataTable<TData>({
 
       <div className="table-container">
         <table
-          className="data-table"
+          className={`data-table ${className || ''}`}
           style={{
             width: 'max-content',
             minWidth: '100%',
@@ -322,12 +324,49 @@ export function DataTable<TData>({
 
               const rowId = (row.original as any).id;
               const rowType = (row.original as any)._rowType;
+
+              if (rowType === 'parents-toggle') {
+                const item = row.original as any;
+                const isExpanded = Boolean(item.isExpanded);
+                return (
+                  <tr
+                    key={row.id}
+                    id={`row-${item.id}`}
+                    className={`overview-parents-toggle-row ${isExpanded ? 'expanded' : 'collapsed'}`}
+                  >
+                    <td colSpan={table.getVisibleLeafColumns().length}>
+                      <button
+                        type="button"
+                        className="overview-parents-toggle-btn"
+                        onClick={item.onToggle}
+                        aria-expanded={isExpanded}
+                      >
+                        <span className="overview-parents-toggle-chevron">
+                          {isExpanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                        </span>
+                        <span className="overview-parents-toggle-label">
+                          {item.summaryText}
+                        </span>
+                        <span className="overview-parents-toggle-badge">
+                          {t('parents')}
+                        </span>
+                      </button>
+                    </td>
+                  </tr>
+                );
+              }
+
               const noSpecialBg = Boolean((row.original as any).no_special_bg);
+              const isGroupModeParent = Boolean((row.original as any).isGroupModeParent);
+              const isParentExpanded = Boolean((row.original as any).isExpanded);
               const rowClasses = [
                 rowId === highlightedRowId ? 'highlighted-row' : '',
                 rowType === 'parent' ? 'overview-parent-row' : '',
                 rowType === 'child' ? 'overview-child-row' : '',
                 noSpecialBg ? 'no-special-bg' : '',
+                isGroupModeParent ? 'overview-group-parent-row' : '',
+                isGroupModeParent && !isParentExpanded ? 'group-parent-collapsed' : '',
+                isGroupModeParent && isParentExpanded ? 'group-parent-expanded' : '',
               ]
                 .filter(Boolean)
                 .join(' ');
