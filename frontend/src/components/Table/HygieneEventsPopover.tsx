@@ -74,7 +74,10 @@ export const HygieneCell: React.FC<HygieneCellProps> = ({
   return (
     <div
       id={cellId}
-      onClick={(e) => {
+      className="hygiene-cell-wrapper"
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        window.getSelection()?.removeAllRanges();
         const el = document.getElementById(cellId) || e.currentTarget;
         onOpenManage(parent, el);
       }}
@@ -84,19 +87,12 @@ export const HygieneCell: React.FC<HygieneCellProps> = ({
         alignItems: 'center',
         width: '100%',
         gap: '0.25rem',
-        cursor: 'pointer',
         minHeight: '28px',
         borderRadius: '4px',
         padding: '2px 4px',
         backgroundColor: isActive ? 'var(--accent-bg)' : 'transparent',
         transition: 'background-color 0.15s ease-in-out',
         fontWeight: 'normal',
-      }}
-      onMouseEnter={(e) => {
-        if (!isActive) e.currentTarget.style.backgroundColor = 'var(--accent-bg)';
-      }}
-      onMouseLeave={(e) => {
-        if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
       }}
       title={readOnly ? t('hygieneBelehrung') : t('manageEvents')}
     >
@@ -130,20 +126,7 @@ export const HygieneCell: React.FC<HygieneCellProps> = ({
             const el = document.getElementById(cellId) || e.currentTarget;
             onOpenManage(parent, el);
           }}
-          className="easy-edit-button"
-          style={{
-            padding: '2px',
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--primary)',
-            width: '24px',
-            height: '24px',
-            flexShrink: 0,
-          }}
+          className="cell-edit-pencil-btn"
           title={t('manageEvents')}
         >
           <Pencil size={13} />

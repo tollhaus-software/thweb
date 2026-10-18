@@ -62,11 +62,11 @@ test.describe('Test Case 7: Parent Address Feature', () => {
     // --- Step 2: Open Address Popover for Erika ---
     // Initially empty placeholder
     const erikaAddrCell = erikaRow.locator('td').filter({ hasText: /Adresse hinzufügen/i }).first();
-    await expect(erikaAddrCell).toBeVisible();
+    // Verify single-click does not open, double-click opens address popover
     await erikaAddrCell.click();
-
-    // Verify Popover is displayed
     const popover = page.locator('.glass-popup');
+    await expect(popover).toBeHidden();
+    await erikaAddrCell.dblclick();
     await expect(popover).toBeVisible();
 
     // Verify radio buttons: "gemeinsame Adresse" and "individuelle Adressen"
@@ -93,7 +93,7 @@ test.describe('Test Case 7: Parent Address Feature', () => {
 
     // --- Step 3: Switch to "individuelle Adressen" and set different addresses ---
     const markusAddrCell = markusRow.locator('td', { hasText: 'Königstraße 1, 70173 Stuttgart' });
-    await markusAddrCell.click();
+    await markusAddrCell.locator('.cell-edit-pencil-btn').click();
     await expect(popover).toBeVisible();
 
     // Switch to individual mode
@@ -116,8 +116,8 @@ test.describe('Test Case 7: Parent Address Feature', () => {
     await expect(markusRow.locator('td', { hasText: 'Schlossplatz 2, 70173 Stuttgart' })).toBeVisible();
 
     // --- Step 4: Edge Case - Going back from "individuelle Adressen" to "gemeinsame Adresse" ---
-    // Open popover again (parents now have different addresses, so individual mode opens initially)
-    await erikaRow.locator('td', { hasText: 'Königstraße 1, 70173 Stuttgart' }).click();
+    // Open popover again via pencil button (parents now have different addresses, so individual mode opens initially)
+    await erikaRow.locator('td', { hasText: 'Königstraße 1, 70173 Stuttgart' }).locator('.cell-edit-pencil-btn').click();
     await expect(popover).toBeVisible();
     await expect(popover.getByRole('radio', { name: 'individuelle Adressen' })).toBeChecked();
 

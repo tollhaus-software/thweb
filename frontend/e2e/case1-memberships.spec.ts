@@ -35,14 +35,13 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     const parentRow = page.locator('tr', { hasText: 'Anna' }).filter({ hasText: 'Schmidt' });
     await expect(parentRow).toBeVisible();
 
-    // --- Step 2: Add a "full" membership starting on 20.10.2025 ---
-    // Clicking the membership cell directly should open the memberships popover
+    // Single-clicking the membership cell does NOT open popover (allowing selection), double-clicking opens it
     const membershipCell = parentRow.locator('[id^="cell-membership-"]');
     await expect(membershipCell).toBeVisible();
     await membershipCell.click();
-
-    // The membership popover should open (like group changes editor)
     const popover = page.locator('.memberships-popover');
+    await expect(popover).toBeHidden();
+    await membershipCell.dblclick();
     await expect(popover).toBeVisible();
 
     // Since there were no existing memberships, it automatically enters editing mode
@@ -138,9 +137,9 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     await expect(parentRow).not.toContainText('Voll');
 
     // --- Step 6: Test multi-value editor popover (e-mails) ---
-    // 6A. Clicking the email cell opens the popover. Since no emails exist yet, it automatically behaves as if '+' was clicked
+    // 6A. Double-clicking the email cell opens the popover. Since no emails exist yet, it automatically behaves as if '+' was clicked
     const emailCell = parentRow.locator('td').nth(2);
-    await emailCell.click();
+    await emailCell.dblclick();
 
     const emailPopover = page.locator('.multivalue-popover');
     await expect(emailPopover).toBeVisible();
@@ -155,8 +154,8 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     await expect(emailPopover).toBeHidden();
     await expect(parentRow).toContainText('persisted@example.com');
 
-    // 6B. Reopen popover by clicking the email cell
-    await emailCell.click();
+    // 6B. Reopen popover by clicking the pencil button
+    await emailCell.locator('.cell-edit-pencil-btn').click();
     await expect(emailPopover).toBeVisible();
 
     // Verify existing email is listed as a row with pencil, trash, identifier flag (🆔), and address list flag (📋)
@@ -325,8 +324,8 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     await expect(cellIdIndicator).toBeVisible();
     await expect(cellIdIndicator).toHaveCSS('opacity', '1');
 
-    // 3. Open popover as caregiver
-    await emailCell.click();
+    // 3. Open popover as caregiver via dblclick
+    await emailCell.dblclick();
     const emailPopover = page.locator('.multivalue-popover');
     await expect(emailPopover).toBeVisible();
 
@@ -564,9 +563,9 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     const parentRow = page.locator('tr', { hasText: 'Sabine' }).filter({ hasText: 'Schneider' });
     await expect(parentRow).toBeVisible();
 
-    // 3. Open email popover on Sabine's email cell
+    // 3. Open email popover on Sabine's email cell via dblclick
     const emailCell = parentRow.locator('[id^="cell-emails-"]');
-    await emailCell.click();
+    await emailCell.dblclick();
     const emailPopover = page.locator('.multivalue-popover');
     await expect(emailPopover).toBeVisible();
 
@@ -579,8 +578,8 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     await expect(emailPopover).toBeHidden();
     await expect(parentRow).toContainText('🆔');
 
-    // 4. Open email popover again and toggle address list (turn OFF)
-    await emailCell.click();
+    // 4. Open email popover again via pencil button and toggle address list (turn OFF)
+    await emailCell.locator('.cell-edit-pencil-btn').click();
     await expect(emailPopover).toBeVisible();
     const addrBtn = emailPopover.locator('.flag-address_list').first();
     await addrBtn.click();

@@ -202,6 +202,66 @@ const getChildGroupInfo = (changes: ChildGroupChange[] | undefined): ChildGroupI
   };
 };
 
+interface ChildStartDateCellProps {
+  child: Child;
+  isActive: boolean;
+  onOpenManage: (child: Child, anchor: HTMLElement | string) => void;
+  readOnly?: boolean;
+}
+
+const ChildStartDateCell: React.FC<ChildStartDateCellProps> = ({
+  child,
+  isActive,
+  onOpenManage,
+  readOnly = false,
+}) => {
+  const groupInfo = getChildGroupInfo(child.group_changes);
+  const cellId = `cell-start_date-${child.id}`;
+  return (
+    <div
+      id={cellId}
+      className="startdatum-cell-wrapper"
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        window.getSelection()?.removeAllRanges();
+        const cellEl = document.getElementById(cellId) || e.currentTarget;
+        onOpenManage(child, cellEl);
+      }}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        width: '100%',
+        flex: 1,
+        gap: '0.25rem',
+        minHeight: '28px',
+        borderRadius: '4px',
+        padding: '2px 4px',
+        backgroundColor: isActive ? 'var(--accent-bg)' : 'transparent',
+        transition: 'background-color 0.15s ease-in-out',
+        fontWeight: 'normal',
+      }}
+      title={readOnly ? t('viewGroupChanges') : t('manageGroupChanges')}
+    >
+      <span>{groupInfo.startDate ? formatDisplayDate(groupInfo.startDate) : '-'}</span>
+      {!readOnly && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            const cellEl = document.getElementById(cellId) || e.currentTarget;
+            onOpenManage(child, cellEl);
+          }}
+          className="cell-edit-pencil-btn"
+          title={t('manageGroupChanges')}
+        >
+          <Pencil size={13} />
+        </button>
+      )}
+    </div>
+  );
+};
+
 interface ChildGroupCellProps {
   child: Child;
   isActive: boolean;
@@ -240,7 +300,9 @@ const ChildGroupCell: React.FC<ChildGroupCellProps> = ({
     <div
       id={cellId}
       className="child-group-cell-wrapper"
-      onClick={(e) => {
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        window.getSelection()?.removeAllRanges();
         const cellEl = document.getElementById(cellId) || e.currentTarget;
         onOpenManage(child, cellEl);
       }}
@@ -250,23 +312,12 @@ const ChildGroupCell: React.FC<ChildGroupCellProps> = ({
         alignItems: 'center',
         width: '100%',
         gap: '0.25rem',
-        cursor: 'pointer',
         minHeight: '28px',
         borderRadius: '4px',
         padding: '2px 4px',
         backgroundColor: isActive ? 'var(--accent-bg)' : 'transparent',
         transition: 'background-color 0.15s ease-in-out',
         fontWeight: 'normal',
-      }}
-      onMouseEnter={(e) => {
-        if (!isActive) {
-          e.currentTarget.style.backgroundColor = 'var(--accent-bg)';
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!isActive) {
-          e.currentTarget.style.backgroundColor = 'transparent';
-        }
       }}
       title={readOnly ? t('viewGroupChanges') : t('manageGroupChanges')}
     >
@@ -498,7 +549,9 @@ const ParentMembershipCell: React.FC<ParentMembershipCellProps> = ({
     <div
       id={cellId}
       className="membership-cell-wrapper"
-      onClick={(e) => {
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        window.getSelection()?.removeAllRanges();
         const cellEl = document.getElementById(cellId) || e.currentTarget;
         onOpenManage(parent, cellEl);
       }}
@@ -509,22 +562,11 @@ const ParentMembershipCell: React.FC<ParentMembershipCellProps> = ({
         width: '100%',
         flex: 1,
         gap: '0.25rem',
-        cursor: 'pointer',
         minHeight: '28px',
         borderRadius: '4px',
         padding: '2px 4px',
         backgroundColor: isActive ? 'var(--accent-bg)' : 'transparent',
         transition: 'background-color 0.15s ease-in-out',
-      }}
-      onMouseEnter={(e) => {
-        if (!isActive) {
-          e.currentTarget.style.backgroundColor = 'var(--accent-bg)';
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!isActive) {
-          e.currentTarget.style.backgroundColor = 'transparent';
-        }
       }}
       title={t('manageMemberships')}
     >
@@ -575,7 +617,9 @@ const ParentMultiValueCell: React.FC<ParentMultiValueCellProps> = ({
     <div
       id={cellId}
       className={`multi-value-cell-wrapper ${field}-cell-wrapper`}
-      onClick={(e) => {
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        window.getSelection()?.removeAllRanges();
         const cellEl = document.getElementById(cellId) || e.currentTarget;
         onOpenManage(parent, field, cellEl);
       }}
@@ -587,20 +631,9 @@ const ParentMultiValueCell: React.FC<ParentMultiValueCellProps> = ({
         minHeight: '28px',
         borderRadius: '4px',
         padding: '2px 4px',
-        cursor: 'pointer',
         backgroundColor: isActive ? 'var(--accent-bg)' : 'transparent',
         transition: 'background-color 0.15s ease-in-out',
         gap: '0.25rem',
-      }}
-      onMouseEnter={(e) => {
-        if (!isActive) {
-          e.currentTarget.style.backgroundColor = 'var(--accent-bg)';
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!isActive) {
-          e.currentTarget.style.backgroundColor = 'transparent';
-        }
       }}
       title={placeholder}
     >
@@ -4245,35 +4278,13 @@ function formatParentsSummary(parents: any[]): string {
         size: 130,
         cell: (info) => {
           const child = info.row.original;
-          const groupInfo = getChildGroupInfo(child.group_changes);
-          const cellId = `cell-start_date-${child.id}`;
+          const isCurrentActive = Boolean(groupPopoverAnchor && targetChildGroupChanges?.id === child.id);
           return (
-            <div
-              id={cellId}
-              className="startdatum-cell-wrapper"
-              onDoubleClick={(e) => {
-                e.stopPropagation();
-                window.getSelection()?.removeAllRanges();
-                const cellEl = document.getElementById(cellId) || e.currentTarget;
-                openManageGroupChanges(child, cellEl);
-              }}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', flex: 1, cursor: 'pointer' }}
-              title={t('manageGroupChanges')}
-            >
-              <span>{groupInfo.startDate ? formatDisplayDate(groupInfo.startDate) : '-'}</span>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const cellEl = document.getElementById(cellId) || e.currentTarget;
-                  openManageGroupChanges(child, cellEl);
-                }}
-                className="cell-edit-pencil-btn"
-                title={t('manageGroupChanges')}
-              >
-                <Pencil size={13} />
-              </button>
-            </div>
+            <ChildStartDateCell
+              child={child}
+              isActive={isCurrentActive}
+              onOpenManage={openManageGroupChanges}
+            />
           );
         }
       },
@@ -4362,7 +4373,22 @@ function formatParentsSummary(parents: any[]): string {
         }
       }
     ],
-    [families, handleSaveChildField, handleDeleteChild, openManageGroupChanges, childGroupColumn, isVaccinationUnlocked, handleRequestKmsAuth, hasPermission, user?.email, vaccinationPopoverAnchor, targetVaccinationPerson, openManageVaccination]
+    [
+      families,
+      handleSaveChildField,
+      handleDeleteChild,
+      openManageGroupChanges,
+      groupPopoverAnchor,
+      targetChildGroupChanges,
+      childGroupColumn,
+      isVaccinationUnlocked,
+      handleRequestKmsAuth,
+      hasPermission,
+      user?.email,
+      vaccinationPopoverAnchor,
+      targetVaccinationPerson,
+      openManageVaccination,
+    ]
   );
 
   const familyChildColumns = React.useMemo<ColumnDef<any>[]>(
