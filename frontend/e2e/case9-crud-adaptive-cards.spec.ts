@@ -74,6 +74,7 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     await expect(parentsTab).toBeVisible();
     await parentsTab.click();
     await expect(parentsTab).toHaveClass(/active/);
+    await page.waitForLoadState('networkidle');
 
     // Verify parents table thead is hidden on mobile
     const parentsThead = page.locator('.parents-table thead');
@@ -115,11 +116,13 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     const parentRightEdges: number[] = [];
     for (let i = 0; i < parentPencilCount; i++) {
       const btn = parentPencilButtons.nth(i);
-      const box = await btn.boundingBox();
-      expect(box).not.toBeNull();
-      if (box) {
-        parentRightEdges.push(box.x + box.width);
-      }
+      await expect(btn).toBeVisible();
+      await btn.scrollIntoViewIfNeeded();
+      const rect = await btn.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return { x: r.x, width: r.width };
+      });
+      parentRightEdges.push(rect.x + rect.width);
       const svg = btn.locator('svg');
       await expect(svg).toHaveAttribute('width', '13');
       await expect(svg).toHaveAttribute('height', '13');
@@ -209,6 +212,7 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     await expect(childrenTab).toBeVisible();
     await childrenTab.click();
     await expect(childrenTab).toHaveClass(/active/);
+    await page.waitForLoadState('networkidle');
 
     // Verify "Add family" is next to the search box in Children tab
     const childrenAddFamilyBtn = page.getByRole('button', { name: 'Familie hinzufügen' });
@@ -259,6 +263,11 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     const birthDateLabelText = await childBirthDateCell.evaluate((el) => getComputedStyle(el, '::before').content);
     expect(birthDateLabelText.replace(/"/g, '')).toBe('Geb.');
 
+    const childStartDateCell = timRow.locator('td[data-column-id="start_date"]');
+    await expect(childStartDateCell).toHaveAttribute('data-label', 'Start');
+    const startDateLabelText = await childStartDateCell.evaluate((el) => getComputedStyle(el, '::before').content);
+    expect(startDateLabelText.replace(/"/g, '')).toBe('Start');
+
     const groupCell = timRow.locator('td[data-column-id="group"]');
     await expect(groupCell).toHaveAttribute('data-label', /Gruppe/i);
 
@@ -299,11 +308,13 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     const childRightEdges: number[] = [];
     for (let i = 0; i < childPencilCount; i++) {
       const btn = childPencilButtons.nth(i);
-      const box = await btn.boundingBox();
-      expect(box).not.toBeNull();
-      if (box) {
-        childRightEdges.push(box.x + box.width);
-      }
+      await expect(btn).toBeVisible();
+      await btn.scrollIntoViewIfNeeded();
+      const rect = await btn.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return { x: r.x, width: r.width };
+      });
+      childRightEdges.push(rect.x + rect.width);
       const svg = btn.locator('svg');
       await expect(svg).toHaveAttribute('width', '13');
       await expect(svg).toHaveAttribute('height', '13');
@@ -320,6 +331,7 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     await expect(familiesTab).toBeVisible();
     await familiesTab.click();
     await expect(familiesTab).toHaveClass(/active/);
+    await page.waitForLoadState('networkidle');
 
     // Verify "Add family" is next to the search box in Families tab
     const familiesAddFamilyBtn = page.getByRole('button', { name: 'Familie hinzufügen' });
