@@ -450,7 +450,7 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     // Switch to children tab on desktop and verify hovering on birth_date does NOT highlight unrelated pencil buttons
     const dtChildrenTab = page.getByRole('button', { name: 'Kinder(MGA)', exact: true });
     await dtChildrenTab.click();
-    const dtChildRow = page.locator('.children-table tbody tr:not(.family-group-row)', { hasText: 'Tim' });
+    const dtChildRow = page.locator('.children-table tbody tr:not(.family-group-row)', { hasText: 'Müller' });
     await expect(dtChildRow).toBeVisible();
     const dtBirthDateCell = dtChildRow.locator('td[data-column-id="birth_date"]');
     await dtBirthDateCell.hover();
@@ -499,6 +499,44 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
 
     await page.keyboard.press('Escape');
     await expect(page.locator('.glass-popup')).toBeHidden();
+
+    // Verify in-cell editors for first_name, last_name, birth_date on desktop do NOT expand cell width or shift table
+    const dtChildBirthDateTd = dtChildRow.locator('td[data-column-id="birth_date"]');
+    const dtChildFirstNameTd = dtChildRow.locator('td[data-column-id="first_name"]');
+    const bDateBoxBefore = await dtChildBirthDateTd.boundingBox();
+    const fNameBoxBefore = await dtChildFirstNameTd.boundingBox();
+    expect(bDateBoxBefore).not.toBeNull();
+    expect(fNameBoxBefore).not.toBeNull();
+
+    // Open birth_date inline editor
+    await dtChildBirthDateTd.locator('.easy-edit-button').click();
+    const bDateInput = dtChildBirthDateTd.locator('input');
+    await expect(bDateInput).toBeVisible();
+    const bDateBoxAfter = await dtChildBirthDateTd.boundingBox();
+    expect(bDateBoxAfter).not.toBeNull();
+    // Layout must not shift: cell width must remain unchanged
+    expect(Math.abs(bDateBoxAfter!.width - bDateBoxBefore!.width)).toBeLessThan(1);
+    // Editor styling consistency
+    await expect(bDateInput).toHaveCSS('box-sizing', 'border-box');
+    await expect(bDateInput).toHaveCSS('border-radius', '4px');
+    await expect(bDateInput).toHaveCSS('height', '28px');
+
+    await page.keyboard.press('Escape');
+    await expect(bDateInput).toBeHidden();
+
+    // Open first_name inline editor
+    await dtChildFirstNameTd.locator('.easy-edit-button').click();
+    const fNameInput = dtChildFirstNameTd.locator('input');
+    await expect(fNameInput).toBeVisible();
+    const fNameBoxAfter = await dtChildFirstNameTd.boundingBox();
+    expect(fNameBoxAfter).not.toBeNull();
+    expect(Math.abs(fNameBoxAfter!.width - fNameBoxBefore!.width)).toBeLessThan(1);
+    await expect(fNameInput).toHaveCSS('box-sizing', 'border-box');
+    await expect(fNameInput).toHaveCSS('border-radius', '4px');
+    await expect(fNameInput).toHaveCSS('height', '28px');
+
+    await page.keyboard.press('Escape');
+    await expect(fNameInput).toBeHidden();
   });
 });
 

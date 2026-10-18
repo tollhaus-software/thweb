@@ -292,29 +292,20 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
       <div
         ref={wrapperRef}
         className="easy-edit-inline-wrapper"
-        style={{ position: 'relative', width: '100%' }}
         onClick={(e) => e.stopPropagation()}
       >
         <input
           ref={inputRef}
           type="text"
+          className="easy-edit-input"
+          size={1}
           value={tempValue}
           onChange={(e) => setTempValue(e.target.value)}
           onKeyDown={handleKeyDown}
           onBlur={handleInputBlur}
           autoFocus
           placeholder={CURRENT_LOCALE === 'de' ? 'TT.MM.JJJJ' : 'YYYY-MM-DD'}
-          style={{
-            flex: 1,
-            minWidth: 0,
-            padding: '0.25rem 0.5rem',
-            border: '1px solid var(--input-border)',
-            borderRadius: '4px',
-            fontSize: '0.95rem',
-            background: 'var(--input-bg)',
-            color: 'var(--input-text)',
-            boxSizing: 'border-box',
-          }}
+          {...inputAttributes}
         />
         <CalendarDropdown
           anchorRef={wrapperRef}
@@ -335,10 +326,16 @@ export const InlineEdit: React.FC<InlineEditProps> = ({
   const inputType = type === Types.DATE ? 'date' : 'text';
 
   return (
-    <div className="easy-edit-inline-wrapper">
+    <div
+      ref={wrapperRef}
+      className="easy-edit-inline-wrapper"
+      onClick={(e) => e.stopPropagation()}
+    >
       <input
         ref={inputRef}
         type={inputType}
+        className="easy-edit-input"
+        size={1}
         value={tempValue}
         onChange={(e) => setTempValue(e.target.value)}
         onKeyDown={handleKeyDown}
