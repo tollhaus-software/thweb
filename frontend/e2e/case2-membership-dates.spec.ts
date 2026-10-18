@@ -80,8 +80,8 @@ test.describe('Test Case 2: Inferred Default Start Date from Oldest Group Change
     const parentRowAgain = page.locator('tr', { hasText: 'Maximilian' }).filter({ hasText: 'Bauer' });
     await expect(parentRowAgain).toBeVisible();
 
-    // Clicking membership cell opens the membership popover
-    await parentRowAgain.locator('[id^="cell-membership-"]').click();
+    // Double-clicking membership cell opens the membership popover
+    await parentRowAgain.locator('[id^="cell-membership-"]').dblclick();
 
     const membershipPopover = page.locator('.memberships-popover');
     await expect(membershipPopover).toBeVisible();

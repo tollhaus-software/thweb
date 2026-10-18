@@ -369,7 +369,15 @@ header {
 }
 
 .easy-edit-hover-on .easy-edit-view-button-wrapper,
-tr:hover .easy-edit-view-button-wrapper {
+.cell-edit-pencil-btn-wrapper:hover .cell-edit-pencil-btn,
+.notes-cell-wrapper:hover .cell-edit-pencil-btn,
+.address-cell-wrapper:hover .cell-edit-pencil-btn,
+.startdatum-cell-wrapper:hover .cell-edit-pencil-btn,
+.child-group-cell-wrapper:hover .cell-edit-pencil-btn,
+.vaccination-cell-wrapper:hover .cell-edit-pencil-btn,
+.multi-value-cell-wrapper:hover .cell-edit-pencil-btn,
+.membership-cell-wrapper:hover .cell-edit-pencil-btn,
+.hygiene-cell-wrapper:hover .cell-edit-pencil-btn {
   opacity: 1;
 }
 
@@ -397,7 +405,6 @@ tr:hover .easy-edit-view-button-wrapper {
 }
 
 .cell-edit-pencil-btn:hover,
-tr:hover .cell-edit-pencil-btn,
 .easy-edit-view-button-wrapper button.easy-edit-button:hover {
   background-color: var(--accent-bg);
   color: var(--primary);
@@ -1279,7 +1286,7 @@ tr.family-group-row td {
   .data-table.card-table .easy-edit-view-button-wrapper,
   .data-table.card-table .cell-edit-pencil-btn-wrapper,
   .data-table.card-table .child-group-manage-btn {
-    opacity: 0.8 !important;
+    opacity: 0.85 !important;
     margin-left: auto !important;
     margin-right: 0 !important;
     flex-shrink: 0 !important;
@@ -1375,10 +1382,6 @@ tr.family-group-row td {
 
   .data-table.families-table .child-group-compact-view {
     display: inline !important;
-  }
-
-  .data-table.families-table .child-group-manage-btn {
-    display: none !important;
   }
 
   .data-table.families-table tr:not(.family-group-row):not(.empty-sub-row) td[data-column-id="notes"] {

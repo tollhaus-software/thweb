@@ -171,12 +171,9 @@ export const AddressEditor = <T extends AddressEditorParent>({
     >
       <div
         className="address-cell-wrapper"
-        onClick={() => {
-          if (!isEditing) {
-            startEditing();
-          }
-        }}
-        onDoubleClick={() => {
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          window.getSelection()?.removeAllRanges();
           if (!isEditing) {
             startEditing();
           }
@@ -187,7 +184,6 @@ export const AddressEditor = <T extends AddressEditorParent>({
           alignItems: 'center',
           width: '100%',
           gap: '0.25rem',
-          cursor: 'pointer',
           minHeight: '28px',
           borderRadius: '4px',
           backgroundColor: isEditing ? 'var(--accent-bg)' : 'transparent',

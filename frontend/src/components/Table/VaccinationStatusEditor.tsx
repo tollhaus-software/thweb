@@ -134,7 +134,9 @@ export const VaccinationStatusCell: React.FC<VaccinationStatusCellProps> = ({
     <div
       id={cellId}
       className="vaccination-cell-wrapper"
-      onClick={(e) => {
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        window.getSelection()?.removeAllRanges();
         const el = document.getElementById(cellId) || e.currentTarget;
         onOpenManage(el);
       }}
@@ -144,19 +146,12 @@ export const VaccinationStatusCell: React.FC<VaccinationStatusCellProps> = ({
         alignItems: 'center',
         width: '100%',
         gap: '0.25rem',
-        cursor: 'pointer',
         minHeight: '28px',
         borderRadius: '4px',
         padding: '2px 4px',
         backgroundColor: isActive ? 'var(--accent-bg)' : 'transparent',
         transition: 'background-color 0.15s ease-in-out',
         fontWeight: 'normal',
-      }}
-      onMouseEnter={(e) => {
-        if (!isActive) e.currentTarget.style.backgroundColor = 'var(--accent-bg)';
-      }}
-      onMouseLeave={(e) => {
-        if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
       }}
       title={readOnly ? t('vaccinationStatus') : t('manageVaccinationStatus')}
     >

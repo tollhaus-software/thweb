@@ -168,8 +168,10 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     await page.keyboard.press('Escape');
     await expect(colSheet).toBeHidden();
 
-    // Verify Popover opens as a Bottom Sheet with backdrop on mobile
+    // In cards view: clicking field text does NOT open bottom sheet, tapping pencil opens it
     await emailCell.click();
+    await expect(page.locator('.cell-popover-mobile-backdrop')).toBeHidden();
+    await emailCell.locator('.cell-edit-pencil-btn').click();
 
     const mobileBackdrop = page.locator('.cell-popover-mobile-backdrop');
     await expect(mobileBackdrop).toBeVisible();
@@ -255,14 +257,33 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     const groupCell = timRow.locator('td[data-column-id="group"]');
     await expect(groupCell).toHaveAttribute('data-label', /Gruppe/i);
 
-    // Click group to open GroupChanges bottom sheet
-    await groupCell.click();
+    // Tap pencil button to open GroupChanges bottom sheet
+    await groupCell.locator('.cell-edit-pencil-btn').click();
     await expect(page.locator('.cell-popover-mobile-backdrop')).toBeVisible();
     const groupBottomSheet = page.locator('.cell-popover-bottom-sheet');
     await expect(groupBottomSheet).toBeVisible();
     await expect(groupBottomSheet).toContainText('Grosse Gruppe');
 
+    const mobileStartDateWrapper = timRow.locator('td[data-column-id="start_date"] .startdatum-cell-wrapper');
+    const mobileGroupWrapper = groupCell.locator('.child-group-cell-wrapper');
+    await expect(mobileStartDateWrapper).toHaveCSS('background-color', /rgba\(170, 59, 255, 0\.1\)|rgba\(192, 132, 252, 0\.15\)/);
+    await expect(mobileGroupWrapper).toHaveCSS('background-color', /rgba\(170, 59, 255, 0\.1\)|rgba\(192, 132, 252, 0\.15\)/);
+
     // Close bottom sheet via Escape
+    await page.keyboard.press('Escape');
+    await expect(groupBottomSheet).toBeHidden();
+    await expect(mobileStartDateWrapper).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect(mobileGroupWrapper).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+
+    // Tap pencil button on start date to open GroupChanges bottom sheet in mobile card
+    const startDateCell = timRow.locator('td[data-column-id="start_date"]');
+    await startDateCell.locator('.cell-edit-pencil-btn').click();
+    await expect(groupBottomSheet).toBeVisible();
+
+    // Verify both start date and group are highlighted when opened from start date pencil icon on mobile card
+    await expect(mobileStartDateWrapper).toHaveCSS('background-color', /rgba\(170, 59, 255, 0\.1\)|rgba\(192, 132, 252, 0\.15\)/);
+    await expect(mobileGroupWrapper).toHaveCSS('background-color', /rgba\(170, 59, 255, 0\.1\)|rgba\(192, 132, 252, 0\.15\)/);
+
     await page.keyboard.press('Escape');
     await expect(groupBottomSheet).toBeHidden();
 
@@ -349,8 +370,8 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
       expect(groupBox.y).toBeGreaterThan(birthBox.y);
     }
 
-    // Clicking group cell opens bottom sheet
-    await groupCellInFam.click();
+    // Tapping group pencil button opens bottom sheet
+    await groupCellInFam.locator('.cell-edit-pencil-btn').click();
     await expect(page.locator('.cell-popover-mobile-backdrop')).toBeVisible();
     const memBottomSheet = page.locator('.cell-popover-bottom-sheet');
     await expect(memBottomSheet).toBeVisible();
@@ -393,9 +414,13 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     const dtFamChildDisplay = await dtFamChildRow.evaluate((el) => getComputedStyle(el).display);
     expect(dtFamChildDisplay).toBe('table-row');
 
-    // Click popover on desktop: should open standard anchored popover, not bottom sheet
+    // On desktop: single-click on dtGroupCell does NOT open popover (allowing text selection)
     const dtGroupCell = dtFamChildRow.locator('td[data-column-id="group"]');
     await dtGroupCell.click();
+    await expect(page.locator('.glass-popup')).toBeHidden();
+
+    // Double-click on desktop opens standard anchored popover, not bottom sheet
+    await dtGroupCell.dblclick();
     await expect(page.locator('.cell-popover-mobile-backdrop')).toBeHidden();
     const desktopPopover = page.locator('.glass-popup');
     await expect(desktopPopover).toBeVisible();
@@ -408,5 +433,72 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     await dtParentsTab.click();
     await expect(page.locator('.parents-table .card-person-header')).toBeHidden();
     await expect(page.locator('.parents-table tbody tr:not(.family-group-row) td[data-column-id="first_name"]').first()).not.toHaveClass(/sticky-col/);
+
+    // Verify hovering on first_name does NOT highlight unrelated pencil buttons (address, emails, phones, memberships)
+    const dtParentRow = page.locator('.parents-table tbody tr:not(.family-group-row)', { hasText: 'Sabine' });
+    await expect(dtParentRow).toBeVisible();
+    const dtParentFirstNameCell = dtParentRow.locator('td[data-column-id="first_name"]');
+    await dtParentFirstNameCell.hover();
+    const parentPencils = dtParentRow.locator('.cell-edit-pencil-btn');
+    const dtParentPencilCount = await parentPencils.count();
+    expect(dtParentPencilCount).toBeGreaterThanOrEqual(2);
+    for (let i = 0; i < dtParentPencilCount; i++) {
+      const btn = parentPencils.nth(i);
+      await expect.poll(async () => await btn.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
+    }
+
+    // Switch to children tab on desktop and verify hovering on birth_date does NOT highlight unrelated pencil buttons
+    const dtChildrenTab = page.getByRole('button', { name: 'Kinder(MGA)', exact: true });
+    await dtChildrenTab.click();
+    const dtChildRow = page.locator('.children-table tbody tr:not(.family-group-row)', { hasText: 'Tim' });
+    await expect(dtChildRow).toBeVisible();
+    const dtBirthDateCell = dtChildRow.locator('td[data-column-id="birth_date"]');
+    await dtBirthDateCell.hover();
+
+    const childPencils = dtChildRow.locator('.cell-edit-pencil-btn');
+    const dtChildPencilCount = await childPencils.count();
+    expect(dtChildPencilCount).toBeGreaterThanOrEqual(3);
+    for (let i = 0; i < dtChildPencilCount; i++) {
+      const btn = childPencils.nth(i);
+      await expect.poll(async () => await btn.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
+    }
+
+    // Hovering directly over a specific pencil button highlights ONLY that button
+    const firstChildPencil = childPencils.first();
+    await firstChildPencil.hover();
+    await expect.poll(async () => await firstChildPencil.evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
+    // Remaining pencil buttons in the row stay unhighlighted
+    for (let i = 1; i < dtChildPencilCount; i++) {
+      const btn = childPencils.nth(i);
+      await expect.poll(async () => await btn.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
+    }
+
+    // In Children tab on desktop table layout: clicking edit pencil on "start date" highlights BOTH "start date" and "group"
+    const dtChildStartDateWrapper = dtChildRow.locator('td[data-column-id="start_date"] .startdatum-cell-wrapper');
+    const dtChildGroupWrapper = dtChildRow.locator('td[data-column-id="group"] .child-group-cell-wrapper');
+    const dtChildStartDatePencil = dtChildRow.locator('td[data-column-id="start_date"] .cell-edit-pencil-btn');
+
+    await dtChildStartDatePencil.click();
+    await expect(page.locator('.glass-popup')).toBeVisible();
+
+    await expect(dtChildStartDateWrapper).toHaveCSS('background-color', /rgba\(170, 59, 255, 0\.1\)|rgba\(192, 132, 252, 0\.15\)/);
+    await expect(dtChildGroupWrapper).toHaveCSS('background-color', /rgba\(170, 59, 255, 0\.1\)|rgba\(192, 132, 252, 0\.15\)/);
+
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.glass-popup')).toBeHidden();
+    await expect(dtChildStartDateWrapper).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect(dtChildGroupWrapper).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+
+    // In Children tab on desktop table layout: clicking edit pencil on "group" also highlights BOTH "start date" and "group"
+    const dtChildGroupPencil = dtChildRow.locator('td[data-column-id="group"] .cell-edit-pencil-btn');
+    await dtChildGroupPencil.click();
+    await expect(page.locator('.glass-popup')).toBeVisible();
+
+    await expect(dtChildStartDateWrapper).toHaveCSS('background-color', /rgba\(170, 59, 255, 0\.1\)|rgba\(192, 132, 252, 0\.15\)/);
+    await expect(dtChildGroupWrapper).toHaveCSS('background-color', /rgba\(170, 59, 255, 0\.1\)|rgba\(192, 132, 252, 0\.15\)/);
+
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.glass-popup')).toBeHidden();
   });
 });
+
