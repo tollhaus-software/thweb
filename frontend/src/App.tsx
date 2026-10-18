@@ -4246,7 +4246,8 @@ function formatParentsSummary(parents: any[]): string {
       {
         header: t('birthDateEdit'),
         accessorKey: 'birth_date',
-        size: 120,
+        size: 140,
+        minSize: 130,
         cell: (info) => {
           const child = info.row.original;
           const initialDate = child.birth_date ? child.birth_date.split('T')[0] : '';
