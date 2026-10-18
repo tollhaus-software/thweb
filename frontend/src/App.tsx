@@ -1637,6 +1637,15 @@ const Dashboard: React.FC = () => {
   const [families, setFamilies] = React.useState<Family[]>([]);
   const [overviewFamilies, setOverviewFamilies] = React.useState<OverviewFamily[]>([]);
   const [overviewGroupBy, setOverviewGroupBy] = React.useState<'family' | 'group'>('family');
+  const [expandedGroupParents, setExpandedGroupParents] = React.useState<Record<string, boolean>>({});
+
+  const handleToggleGroupParents = React.useCallback((key: string) => {
+    setExpandedGroupParents((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  }, []);
+
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [activeTab, setActiveTab] = React.useState<
     'familiesOverview' | 'families' | 'parents' | 'children' | 'childcareFees' | 'hygieneBelehrung' | 'audit' | 'admin' | 'kiosk'
@@ -3614,6 +3623,40 @@ const Dashboard: React.FC = () => {
       });
   }, [families, globalFilter, handleJumpToParent]);
 
+function formatParentsSummary(parents: any[]): string {
+  if (!parents || parents.length === 0) return '';
+  const validParents = parents.filter((p) => p && (p.first_name || p.last_name));
+  if (validParents.length === 0) return '';
+  if (validParents.length === 1) {
+    return `${validParents[0].first_name || ''} ${validParents[0].last_name || ''}`.trim() || 'Elternteil';
+  }
+  if (validParents.length === 2) {
+    const p1 = validParents[0];
+    const p2 = validParents[1];
+    const fn1 = (p1.first_name || '').trim();
+    const ln1 = (p1.last_name || '').trim();
+    const fn2 = (p2.first_name || '').trim();
+    const ln2 = (p2.last_name || '').trim();
+
+    if (ln1 && ln2 && ln1.toLowerCase() === ln2.toLowerCase()) {
+      if (fn1 && fn2) {
+        return `${fn1} & ${fn2} ${ln1}`;
+      }
+      return `${fn1 || fn2} ${ln1}`.trim();
+    }
+
+    const full1 = `${fn1} ${ln1}`.trim();
+    const full2 = `${fn2} ${ln2}`.trim();
+    if (full1 && full2) {
+      return `${full1} & ${full2}`;
+    }
+  }
+  return validParents
+    .map((p) => `${p.first_name || ''} ${p.last_name || ''}`.trim())
+    .filter(Boolean)
+    .join(' & ');
+}
+
   const overviewFamiliesTabData = React.useMemo(() => {
     const query = (globalFilter || '').trim().toLowerCase();
 
@@ -3724,21 +3767,42 @@ const Dashboard: React.FC = () => {
               : filteredBucketChildren;
 
           const sortedParents = [...(f.parents || [])]
-            .sort((a, b) => (a.first_name || '').localeCompare(b.first_name || '', CURRENT_LOCALE))
-            .map((p) => ({
-              ...p,
-              id: `${p.id}-${bucket.key}`,
-              _rowType: 'parent' as const,
-              indent_name: true,
-              no_special_bg: true,
-              family_id: f.id,
-              family_name: familyName,
-            }));
+            .sort((a, b) => (a.first_name || '').localeCompare(b.first_name || '', CURRENT_LOCALE));
+
+          const groupFamilyKey = `${bucket.key}-${f.id}`;
+          const isExplicitlyExpanded = expandedGroupParents[groupFamilyKey];
+          const parentNamesMatch = query ? parentNames.toLowerCase().includes(query) : false;
+          const autoExpandSearch = query ? Boolean(parentNamesMatch || parentContactMatch) : false;
+          const isExpanded = isExplicitlyExpanded !== undefined ? isExplicitlyExpanded : autoExpandSearch;
+
+          const mappedParents = sortedParents.map((p) => ({
+            ...p,
+            id: `${p.id}-${bucket.key}`,
+            _rowType: 'parent' as const,
+            indent_name: true,
+            no_special_bg: true,
+            family_id: f.id,
+            family_name: familyName,
+            isGroupModeParent: true,
+            isExpanded,
+            groupFamilyKey,
+          }));
+
+          const toggleRow = sortedParents.length > 0 ? {
+            id: `toggle-${groupFamilyKey}`,
+            _rowType: 'parents-toggle' as const,
+            groupFamilyKey,
+            summaryText: formatParentsSummary(sortedParents),
+            isExpanded,
+            onToggle: () => handleToggleGroupParents(groupFamilyKey),
+          } : null;
 
           familyBlocks.push({
             familyId: f.id,
             familyName,
-            rows: [...childrenToInclude, ...sortedParents],
+            rows: toggleRow
+              ? [...childrenToInclude, toggleRow, ...mappedParents]
+              : [...childrenToInclude, ...mappedParents],
           });
         });
 
@@ -3826,7 +3890,7 @@ const Dashboard: React.FC = () => {
 
     if (!query) return mapped;
     return mapped.filter((f) => f.nameMatch || f.hasMatchingChildren);
-  }, [overviewFamilies, globalFilter, overviewGroupBy]);
+  }, [overviewFamilies, globalFilter, overviewGroupBy, expandedGroupParents, handleToggleGroupParents]);
 
   const hygieneColumns = React.useMemo<ColumnDef<any>[]>(() => {
     return [
@@ -4414,14 +4478,14 @@ const Dashboard: React.FC = () => {
               ? (item.first_name || '').trim() || '-'
               : `${item.first_name || ''} ${item.last_name || ''}`.trim() || '-';
             return (
-              <span style={isIndented ? { paddingLeft: '1.25rem', display: 'inline-block' } : undefined}>
+              <span className="overview-person-name" style={isIndented ? { paddingLeft: '1.25rem', display: 'inline-block' } : undefined}>
                 {displayName}
               </span>
             );
           }
           const fullName = `${item.first_name || ''} ${item.last_name || ''}`.trim() || '-';
           return (
-            <span style={isIndented ? { paddingLeft: '1.25rem', display: 'inline-block' } : undefined}>
+            <span className="overview-person-name" style={isIndented ? { paddingLeft: '1.25rem', display: 'inline-block' } : undefined}>
               {fullName}
             </span>
           );
@@ -4476,7 +4540,7 @@ const Dashboard: React.FC = () => {
           const groupStatus = getOverviewChildGroupStatus(item);
           const displayGroup = groupStatus.groupLabel;
           return (
-            <span style={{ color: displayGroup === '-' ? 'var(--text-muted)' : 'var(--text)' }}>
+            <span className="overview-child-group-badge" style={{ color: displayGroup === '-' ? 'var(--text-muted)' : 'var(--text)' }}>
               {displayGroup}
             </span>
           );
@@ -4756,7 +4820,7 @@ const Dashboard: React.FC = () => {
 
         {activeTab !== 'childcareFees' && activeTab !== 'audit' && activeTab !== 'admin' && activeTab !== 'kiosk' && (
           <div className="controls-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <div className="controls-left" style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
               <input
                 value={globalFilter ?? ''}
                 onChange={(e) => setGlobalFilter(e.target.value)}
@@ -4970,6 +5034,7 @@ const Dashboard: React.FC = () => {
 
         {activeTab === 'familiesOverview' ? (
           <DataTable
+            className="overview-table"
             data={overviewFamiliesTabData}
             columns={overviewColumns}
             getSubRows={(row: any) => row.subRows}
