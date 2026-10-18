@@ -451,10 +451,11 @@ export function DataTable<TData>({
                     const isFixed = Boolean(stickyFirstColumn) && (cell.column.id === 'first_name' || cell.column.id === 'child_name');
                     const colHeader = cell.column.columnDef.header;
                     const headerText = typeof colHeader === 'string' ? colHeader : '';
+                    const labelText = meta?.cardLabel ?? headerText;
                     return (
                       <td
                         key={cell.id}
-                        data-label={headerText}
+                        data-label={labelText}
                         data-column-id={cell.column.id}
                         colSpan={colSpan > 1 ? colSpan : undefined}
                         className={isFixed ? 'sticky-col' : undefined}
