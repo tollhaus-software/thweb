@@ -1361,6 +1361,11 @@ tr.family-group-row td {
     outline: 2px solid var(--primary) !important;
   }
 
+  /* In children-table mobile cards: Geburtsdatum label is shortened to "Geb." */
+  .data-table.children-table tr:not(.family-group-row):not(.empty-sub-row) td[data-column-id="birth_date"]::before {
+    content: "Geb." !important;
+  }
+
   /* In families-table mobile cards: child card layout */
   .data-table.families-table tr:not(.family-group-row):not(.empty-sub-row) {
     gap: 0.15rem !important;

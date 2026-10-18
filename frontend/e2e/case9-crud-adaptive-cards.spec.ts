@@ -254,6 +254,11 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     const childFirstNameCell = timRow.locator('td[data-column-id="first_name"]');
     await expect(childFirstNameCell).not.toHaveClass(/sticky-col/);
 
+    const childBirthDateCell = timRow.locator('td[data-column-id="birth_date"]');
+    await expect(childBirthDateCell).toHaveAttribute('data-label', 'Geb.');
+    const birthDateLabelText = await childBirthDateCell.evaluate((el) => getComputedStyle(el, '::before').content);
+    expect(birthDateLabelText.replace(/"/g, '')).toBe('Geb.');
+
     const groupCell = timRow.locator('td[data-column-id="group"]');
     await expect(groupCell).toHaveAttribute('data-label', /Gruppe/i);
 
