@@ -1991,12 +1991,22 @@ const Dashboard: React.FC = () => {
   });
 
   const [undoStack, setUndoStack] = React.useState<any[]>(() => {
-    const saved = localStorage.getItem('thweb_undo_stack');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      localStorage.removeItem('thweb_undo_stack');
+      const saved = sessionStorage.getItem('thweb_undo_stack');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
   });
   const [redoStack, setRedoStack] = React.useState<any[]>(() => {
-    const saved = localStorage.getItem('thweb_redo_stack');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      localStorage.removeItem('thweb_redo_stack');
+      const saved = sessionStorage.getItem('thweb_redo_stack');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
   });
 
   const undoStackRef = React.useRef(undoStack);
@@ -2011,8 +2021,12 @@ const Dashboard: React.FC = () => {
     redoStackRef.current = redo;
     setUndoStack(undo);
     setRedoStack(redo);
-    localStorage.setItem('thweb_undo_stack', JSON.stringify(undo));
-    localStorage.setItem('thweb_redo_stack', JSON.stringify(redo));
+    try {
+      sessionStorage.setItem('thweb_undo_stack', JSON.stringify(undo));
+      sessionStorage.setItem('thweb_redo_stack', JSON.stringify(redo));
+    } catch {
+      // Ignore quota/security errors in storage
+    }
   };
 
   const pushAction = (action: any) => {
