@@ -52,6 +52,8 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-mock}
       USE_TLS: "false"
       DOMAIN_NAME: ${DOMAIN_NAME:-localhost}
+      APP_TITLE: ${APP_TITLE:-}
+      APP_LOGO_URL: ${APP_LOGO_URL:-}
     depends_on:
       - backend
 

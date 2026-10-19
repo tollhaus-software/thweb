@@ -19,6 +19,8 @@ import { HygieneEventsPopover, HygieneCell, type ParentWithHygiene } from './com
 import { ChildcareFeesCalculator } from './components/ChildcareFeesCalculator';
 import { KioskDashboard } from './components/Dashboard/KioskDashboard';
 import { KioskProvisioning } from './components/Admin/KioskProvisioning';
+import { getAppConfig } from './config/appConfig';
+import { HeaderOverflowMenu } from './components/Header/HeaderOverflowMenu';
 import { t, CURRENT_LOCALE, formatDisplayDate, parseInputDate, calculateYearsAndMonths, formatTollhausEmail } from './utils/i18n';
 
 const EasyEditComponent = EasyEdit;
@@ -1079,9 +1081,23 @@ const LandingPage: React.FC = () => {
     );
   }
 
+  const appConfig = getAppConfig();
+  const appTitle = appConfig.title || 'Kindergarten Management System';
+
   return (
     <div style={{ textAlign: 'center', marginTop: '50px' }}>
-      <h1>Kindergarten Management System</h1>
+      {appConfig.logoUrl ? (
+        <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'center' }}>
+          <img
+            src={appConfig.logoUrl}
+            alt={appTitle}
+            title={appTitle}
+            style={{ maxHeight: '80px', maxWidth: '300px', objectFit: 'contain' }}
+          />
+        </div>
+      ) : (
+        <h1>{appTitle}</h1>
+      )}
       <p>Please log in to access the system.</p>
       <LoginButton />
     </div>
@@ -1617,6 +1633,9 @@ import { useRealtime } from './hooks/useRealtime';
 
 const Dashboard: React.FC = () => {
   const { user, token, logout, hasPermission } = useAuth();
+  const appConfig = getAppConfig();
+  const appTitle = appConfig.title || t('title');
+  const appLogoUrl = appConfig.logoUrl;
 
   // KMS Step-up Auth state
   const [kmsAccessToken, setKmsAccessToken] = React.useState<string | null>(() => {
@@ -4657,10 +4676,31 @@ function formatParentsSummary(parents: any[]): string {
   return (
     <div className={`dashboard-container ${isTableTab ? 'table-view-active' : ''}`}>
       <header>
-        <h1>{t('title')}</h1>
+        <div className="header-brand">
+          {appLogoUrl ? (
+            <img
+              src={appLogoUrl}
+              alt={appTitle}
+              title={appTitle}
+              className="app-header-logo"
+            />
+          ) : (
+            <h1>{appTitle}</h1>
+          )}
+        </div>
         <div className="user-info" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <span>{user?.email}</span>
-          <button onClick={logout}>{t('logout')}</button>
+          <span title={user?.email}>{user?.email}</span>
+          <button
+            type="button"
+            className="header-signout-desktop"
+            onClick={logout}
+          >
+            {t('logout')}
+          </button>
+          <HeaderOverflowMenu
+            className="header-overflow-mobile"
+            onLogout={logout}
+          />
         </div>
       </header>
       <main className={isTableTab ? 'main-table-view' : ''}>
@@ -5498,6 +5538,14 @@ function formatParentsSummary(parents: any[]): string {
 
 const AppContent: React.FC = () => {
   const { user, loading } = useAuth();
+  const appConfig = getAppConfig();
+  const appTitle = appConfig.title || t('title');
+
+  React.useEffect(() => {
+    if (appTitle) {
+      document.title = appTitle;
+    }
+  }, [appTitle]);
 
   if (loading) {
     return <div>{t('loading')}</div>;

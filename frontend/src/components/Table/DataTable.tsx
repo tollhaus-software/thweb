@@ -11,6 +11,7 @@ import {
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
 import { SlidersHorizontal, Plus, ChevronDown, ChevronRight } from 'lucide-react';
 import { t } from '../../utils/i18n';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { CellPopover } from './CellPopover';
 
 interface DataTableProps<TData> {
@@ -55,19 +56,11 @@ export function DataTable<TData>({
   const desktopButtonRef = useRef<HTMLButtonElement>(null);
   const mobileButtonRef = useRef<HTMLButtonElement>(null);
 
-  const [isMobile, setIsMobile] = useState<boolean>(() => {
-    return typeof window !== 'undefined' ? window.innerWidth <= 768 : false;
-  });
-
+  const isMobile = useIsMobile();
   const [cardsSlotEl, setCardsSlotEl] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth <= 768);
-    };
-    window.addEventListener('resize', handleResize);
     setCardsSlotEl(document.getElementById('cards-view-columns-slot'));
-    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   const table = useReactTable({

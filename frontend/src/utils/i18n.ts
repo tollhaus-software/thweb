@@ -263,7 +263,7 @@ const translations: Record<Locale, Record<string, string>> = {
   },
   en: {
     title: 'Kindergarten Directory',
-    logout: 'Logout',
+    logout: 'Sign out',
     parents: 'Parents(MGA)',
     children: 'Children(MGA)',
     families: 'Families(MGA)',
