@@ -302,4 +302,134 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     await expect(feesTable).toContainText('Schmidt');
     await expect(feesTable).not.toContainText('Müller');
   });
+
+  test('verifies sort order of families, parents, and children in familiesOverview', async ({ request, page }) => {
+    // 1. Reset DB
+    const resetRes = await request.post('/api/test/reset');
+    expect(resetRes.ok()).toBeTruthy();
+
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    // Seed Family 1: "Becker" with parents "Zack" and "Alice", and 3 children born in different years
+    const createBeckerRes = await request.post('/api/families', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        parents: [
+          {
+            first_name: 'Zack',
+            last_name: 'Becker',
+            emails: [{ value: 'zack.becker@example.com', identifier_email: true, address_list: true }],
+            phones: [{ value: '111', address_list: true }],
+          },
+          {
+            first_name: 'Alice',
+            last_name: 'Becker',
+            emails: [{ value: 'alice.becker@example.com', identifier_email: false, address_list: true }],
+            phones: [{ value: '222', address_list: true }],
+          },
+        ],
+      },
+    });
+    expect(createBeckerRes.ok()).toBeTruthy();
+    const beckerFam = await createBeckerRes.json();
+
+    // Create children out of birthdate order: Zoe (2022), Ben (2018), Clara (2020)
+    const zoeId = crypto.randomUUID();
+    await request.post(`/api/families/${beckerFam.id}/children`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: { id: zoeId, family_id: beckerFam.id, first_name: 'Zoe', last_name: 'Becker', birth_date: '2022-03-01' },
+    });
+    await request.post(`/api/children/${zoeId}/group_changes`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: { child_id: zoeId, change_date: todayStr, target_group: 1 },
+    });
+
+    const benId = crypto.randomUUID();
+    await request.post(`/api/families/${beckerFam.id}/children`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: { id: benId, family_id: beckerFam.id, first_name: 'Ben', last_name: 'Becker', birth_date: '2018-06-15' },
+    });
+    await request.post(`/api/children/${benId}/group_changes`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: { child_id: benId, change_date: todayStr, target_group: 1 },
+    });
+
+    const claraId = crypto.randomUUID();
+    await request.post(`/api/families/${beckerFam.id}/children`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: { id: claraId, family_id: beckerFam.id, first_name: 'Clara', last_name: 'Becker', birth_date: '2020-01-10' },
+    });
+    await request.post(`/api/children/${claraId}/group_changes`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: { child_id: claraId, change_date: todayStr, target_group: 1 },
+    });
+
+    // Seed Family 2: "Adams" (should sort BEFORE "Becker" alphabetically)
+    const createAdamsRes = await request.post('/api/families', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        parents: [
+          {
+            first_name: 'Bob',
+            last_name: 'Adams',
+            emails: [{ value: 'bob.adams@example.com', identifier_email: true, address_list: true }],
+            phones: [{ value: '333', address_list: true }],
+          },
+        ],
+      },
+    });
+    expect(createAdamsRes.ok()).toBeTruthy();
+    const adamsFam = await createAdamsRes.json();
+
+    const danId = crypto.randomUUID();
+    await request.post(`/api/families/${adamsFam.id}/children`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: { id: danId, family_id: adamsFam.id, first_name: 'Dan', last_name: 'Adams', birth_date: '2019-05-01' },
+    });
+    await request.post(`/api/children/${danId}/group_changes`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: { child_id: danId, change_date: todayStr, target_group: 1 },
+    });
+
+    // Login as restricted user (zack.becker@example.com)
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'zack.becker@example.com');
+    });
+    await page.goto('/');
+
+    const overviewTab = page.getByRole('button', { name: 'Familien', exact: true });
+    await expect(overviewTab).toBeVisible();
+
+    // 1. In "By Family" grouping:
+    // Families sorted alphabetically: Adams before Becker
+    const familyHeaders = page.locator('tr.family-group-row');
+    await expect(familyHeaders).toHaveCount(2);
+    await expect(familyHeaders.nth(0)).toContainText('Adams');
+    await expect(familyHeaders.nth(1)).toContainText('Becker');
+
+    // In Becker family:
+    // Parents sorted by given name: Alice before Zack
+    const parentRows = page.locator('tr.overview-parent-row');
+    // Adams parent (Bob) is in Adams, then Alice and Zack in Becker
+    await expect(parentRows.nth(1)).toContainText('Alice Becker');
+    await expect(parentRows.nth(2)).toContainText('Zack Becker');
+
+    // Children in Becker family sorted by birth date: Ben (2018) -> Clara (2020) -> Zoe (2022)
+    const beckerChildren = page.locator('tr.overview-child-row', { hasText: /Ben|Clara|Zoe/ });
+    await expect(beckerChildren).toHaveCount(3);
+    await expect(beckerChildren.nth(0)).toContainText('Ben');
+    await expect(beckerChildren.nth(1)).toContainText('Clara');
+    await expect(beckerChildren.nth(2)).toContainText('Zoe');
+
+    // 2. Switch to "By Group":
+    await page.getByRole('button', { name: 'Nach Gruppe' }).click();
+
+    // Within "Kleine Gruppe", families are sorted alphabetically: Adams before Becker
+    // In Becker family group, children are sorted by birth date: Ben -> Clara -> Zoe
+    const groupBeckerChildren = page.locator('tr.overview-child-row', { hasText: /Becker/ });
+    await expect(groupBeckerChildren).toHaveCount(3);
+    await expect(groupBeckerChildren.nth(0)).toContainText('Ben Becker');
+    await expect(groupBeckerChildren.nth(1)).toContainText('Clara Becker');
+    await expect(groupBeckerChildren.nth(2)).toContainText('Zoe Becker');
+  });
 });

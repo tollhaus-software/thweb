@@ -71,6 +71,18 @@ const translations: Record<Locale, Record<string, string>> = {
     groupingLabel: 'Gruppierung',
     groupByFamily: 'Nach Familie',
     groupByGroup: 'Nach Gruppe',
+    sort: 'Sortierung',
+    sortFamiliesTitle: 'Familien-Sortierung anpassen',
+    sortFamiliesHeader: 'Sortierung nach Familie',
+    sortGroupFamilyName: 'Familienname',
+    sortGroupLastStart: 'Letztes Eintrittsdatum (jüngstes Kind)',
+    sortGroupFirstStart: 'Erstes Eintrittsdatum (Familienbeginn)',
+    sortNameAsc: 'Name (A → Z)',
+    sortNameDesc: 'Name (Z → A)',
+    sortLastStartDesc: 'Neueste zuerst (absteigend)',
+    sortLastStartAsc: 'Älteste zuerst (aufsteigend)',
+    sortFirstStartAsc: 'Früheste zuerst (aufsteigend)',
+    sortFirstStartDesc: 'Späteste zuerst (absteigend)',
     group: 'Gruppe',
     groupChange: 'Gruppenwechsel',
     manageGroupChanges: 'Gruppenwechsel verwalten',
@@ -336,6 +348,18 @@ const translations: Record<Locale, Record<string, string>> = {
     groupingLabel: 'Grouping',
     groupByFamily: 'By Family',
     groupByGroup: 'By Group',
+    sort: 'Sort',
+    sortFamiliesTitle: 'Customize family sort order',
+    sortFamiliesHeader: 'Sort by Family',
+    sortGroupFamilyName: 'Family Name',
+    sortGroupLastStart: 'Most Recent Start Date (Youngest Child)',
+    sortGroupFirstStart: 'First Start Date (Family Inception)',
+    sortNameAsc: 'Name (A → Z)',
+    sortNameDesc: 'Name (Z → A)',
+    sortLastStartDesc: 'Newest first (descending)',
+    sortLastStartAsc: 'Oldest first (ascending)',
+    sortFirstStartAsc: 'Earliest first (ascending)',
+    sortFirstStartDesc: 'Latest first (descending)',
     group: 'Group',
     groupChange: 'Group Change',
     manageGroupChanges: 'Manage Group Changes',
@@ -673,4 +697,20 @@ export const formatTollhausEmail = (firstName: string, lastName: string): string
   const ln = replaceUmlauts(lastName);
   if (!fn && !ln) return '';
   return `${fn}.${ln}@tollhaus-stuttgart.de`;
+};
+
+/**
+ * Compares two birth dates chronologically (oldest child to youngest).
+ * Missing/null dates sort to the bottom.
+ */
+export const compareBirthDates = (bd1?: string | null, bd2?: string | null): number => {
+  if (!bd1 && !bd2) return 0;
+  if (!bd1) return 1;
+  if (!bd2) return -1;
+  const t1 = new Date(bd1).getTime();
+  const t2 = new Date(bd2).getTime();
+  if (!isNaN(t1) && !isNaN(t2)) {
+    return t1 - t2;
+  }
+  return bd1.localeCompare(bd2);
 };

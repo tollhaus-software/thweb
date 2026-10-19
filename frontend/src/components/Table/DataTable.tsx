@@ -279,7 +279,7 @@ export function DataTable<TData>({
                             }}
                           >
                             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem' }}>
-                              <span>{familyName}</span>
+                              <span className="family-name-text">{familyName}</span>
                               {onJumpToFamily && jumpToFamilyLabel && (
                                 <button
                                   type="button"

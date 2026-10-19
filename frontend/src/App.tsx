@@ -7,7 +7,7 @@ import './App.css';
 import { DataTable } from './components/Table/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import EasyEdit, { Types } from './components/InlineEdit';
-import { Pencil, Trash, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, ArrowUpRight, X, Clock, AlertCircle, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { Pencil, Trash, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, ArrowUpRight, X, Clock, AlertCircle, ChevronLeft, ChevronRight, Plus, ArrowUpDown, Check } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { MultiValueListEditor, type MultiValueFlagConfig, type MultiValueEntry, type MultiValueItem, getEntryValue, isFlagActive } from './components/Table/MultiValueListEditor';
 import { NotesEditor } from './components/Table/NotesEditor';
@@ -21,7 +21,8 @@ import { KioskDashboard } from './components/Dashboard/KioskDashboard';
 import { KioskProvisioning } from './components/Admin/KioskProvisioning';
 import { getAppConfig } from './config/appConfig';
 import { HeaderOverflowMenu } from './components/Header/HeaderOverflowMenu';
-import { t, CURRENT_LOCALE, formatDisplayDate, parseInputDate, calculateYearsAndMonths, formatTollhausEmail } from './utils/i18n';
+import { CellPopover } from './components/Table/CellPopover';
+import { t, CURRENT_LOCALE, formatDisplayDate, parseInputDate, calculateYearsAndMonths, formatTollhausEmail, compareBirthDates } from './utils/i18n';
 
 const EasyEditComponent = EasyEdit;
 const EasyEditTypes = Types;
@@ -501,6 +502,49 @@ interface Family {
   parents: Parent[];
   children?: Child[];
 }
+
+export type FamilySortOrder =
+  | 'name_asc'
+  | 'name_desc'
+  | 'last_start_desc'
+  | 'last_start_asc'
+  | 'first_start_asc'
+  | 'first_start_desc';
+
+export const sortOptionGroups: {
+  groupLabelKey: string;
+  options: { key: FamilySortOrder; labelKey: string }[];
+}[] = [
+  {
+    groupLabelKey: 'sortGroupFamilyName',
+    options: [
+      { key: 'name_asc', labelKey: 'sortNameAsc' },
+      { key: 'name_desc', labelKey: 'sortNameDesc' },
+    ],
+  },
+  {
+    groupLabelKey: 'sortGroupLastStart',
+    options: [
+      { key: 'last_start_desc', labelKey: 'sortLastStartDesc' },
+      { key: 'last_start_asc', labelKey: 'sortLastStartAsc' },
+    ],
+  },
+  {
+    groupLabelKey: 'sortGroupFirstStart',
+    options: [
+      { key: 'first_start_asc', labelKey: 'sortFirstStartAsc' },
+      { key: 'first_start_desc', labelKey: 'sortFirstStartDesc' },
+    ],
+  },
+];
+
+export const getSortOptionLabel = (order: FamilySortOrder): string => {
+  for (const group of sortOptionGroups) {
+    const found = group.options.find((opt) => opt.key === order);
+    if (found) return t(found.labelKey);
+  }
+  return t('sortNameAsc');
+};
 
 const getMembershipStatus = (memberships: THMembership[] | undefined) => {
   if (!memberships || memberships.length === 0) return { text: '', color: 'inherit' };
@@ -1684,6 +1728,40 @@ const Dashboard: React.FC = () => {
       [key]: !prev[key],
     }));
   }, []);
+
+  const [familySortOrder, setFamilySortOrder] = React.useState<FamilySortOrder>(() => {
+    try {
+      const saved = localStorage.getItem('thweb_family_sort_order');
+      if (
+        saved &&
+        [
+          'name_asc',
+          'name_desc',
+          'last_start_desc',
+          'last_start_asc',
+          'first_start_asc',
+          'first_start_desc',
+        ].includes(saved)
+      ) {
+        return saved as FamilySortOrder;
+      }
+    } catch {
+      // ignore
+    }
+    return 'name_asc';
+  });
+
+  const handleSetFamilySortOrder = React.useCallback((order: FamilySortOrder) => {
+    setFamilySortOrder(order);
+    try {
+      localStorage.setItem('thweb_family_sort_order', order);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const [sortPopoverOpen, setSortPopoverOpen] = React.useState(false);
+  const sortButtonRef = React.useRef<HTMLButtonElement>(null);
 
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [activeTab, setActiveTab] = React.useState<
@@ -3585,13 +3663,90 @@ const Dashboard: React.FC = () => {
     }
   }, [families, targetVaccinationPerson, handleSaveParentField, handleSaveChildField]);
 
+function getFamilyStartDates(f: Family): string[] {
+  const dates: string[] = [];
+  for (const child of f.children || []) {
+    const groupInfo = getChildGroupInfo(child.group_changes);
+    let childStart = groupInfo.startDate ? groupInfo.startDate.split('T')[0] : null;
+    if (!childStart && (child as any).start_date) {
+      childStart = String((child as any).start_date).split('T')[0];
+    }
+    if (childStart && /^\d{4}-\d{2}-\d{2}$/.test(childStart)) {
+      dates.push(childStart);
+    }
+  }
+  dates.sort();
+  return dates;
+}
+
+function sortFamilyBlocks<T extends { id: string; family_name: string; originalFamily?: Family }>(
+  items: T[],
+  sortOrder: FamilySortOrder,
+  locale: string = CURRENT_LOCALE
+): T[] {
+  return [...items].sort((a, b) => {
+    if (sortOrder === 'name_asc') {
+      const cmp = a.family_name.localeCompare(b.family_name, locale);
+      if (cmp !== 0) return cmp;
+      return (a.id || '').localeCompare(b.id || '');
+    }
+    if (sortOrder === 'name_desc') {
+      const cmp = b.family_name.localeCompare(a.family_name, locale);
+      if (cmp !== 0) return cmp;
+      return (a.id || '').localeCompare(b.id || '');
+    }
+
+    const aDates = a.originalFamily ? getFamilyStartDates(a.originalFamily) : [];
+    const bDates = b.originalFamily ? getFamilyStartDates(b.originalFamily) : [];
+
+    if (sortOrder === 'last_start_desc' || sortOrder === 'last_start_asc') {
+      const aLast = aDates.length > 0 ? aDates[aDates.length - 1] : null;
+      const bLast = bDates.length > 0 ? bDates[bDates.length - 1] : null;
+
+      if (!aLast && !bLast) {
+        return a.family_name.localeCompare(b.family_name, locale) || (a.id || '').localeCompare(b.id || '');
+      }
+      if (!aLast) return 1;
+      if (!bLast) return -1;
+
+      const cmp = sortOrder === 'last_start_desc' ? bLast.localeCompare(aLast) : aLast.localeCompare(bLast);
+      if (cmp !== 0) return cmp;
+      return a.family_name.localeCompare(b.family_name, locale) || (a.id || '').localeCompare(b.id || '');
+    }
+
+    if (sortOrder === 'first_start_asc' || sortOrder === 'first_start_desc') {
+      const aFirst = aDates.length > 0 ? aDates[0] : null;
+      const bFirst = bDates.length > 0 ? bDates[0] : null;
+
+      if (!aFirst && !bFirst) {
+        return a.family_name.localeCompare(b.family_name, locale) || (a.id || '').localeCompare(b.id || '');
+      }
+      if (!aFirst) return 1;
+      if (!bFirst) return -1;
+
+      const cmp = sortOrder === 'first_start_asc' ? aFirst.localeCompare(bFirst) : bFirst.localeCompare(aFirst);
+      if (cmp !== 0) return cmp;
+      return a.family_name.localeCompare(b.family_name, locale) || (a.id || '').localeCompare(b.id || '');
+    }
+
+    return 0;
+  });
+}
+
   // Structure families with their parent sub-rows for two-layer rendering
   const parentsFamilyData = React.useMemo(() => {
     const query = (globalFilter || '').trim().toLowerCase();
     const mapped = families.map(f => {
       const lastNames = Array.from(new Set((f.parents || []).map(p => p.last_name).filter(Boolean)));
       const familyName = lastNames.join(' / ') || 'New Family';
-      const allParents = (f.parents || []).map(p => ({
+
+      const sortedParents = [...(f.parents || [])].sort((a, b) => {
+        const cmp = (a.first_name || '').localeCompare(b.first_name || '', CURRENT_LOCALE);
+        if (cmp !== 0) return cmp;
+        return (a.last_name || '').localeCompare(b.last_name || '', CURRENT_LOCALE);
+      });
+
+      const allParents = sortedParents.map(p => ({
         ...p,
         family_id: f.id,
         family_name: familyName,
@@ -3613,17 +3768,25 @@ const Dashboard: React.FC = () => {
         family_name: familyName,
         parents: filteredParents,
         nameMatch: familyName.toLowerCase().includes(query),
+        originalFamily: f,
       };
     });
 
-    if (!query) return mapped;
-    return mapped.filter(f => f.nameMatch || f.parents.length > 0)
+    const sorted = sortFamilyBlocks(mapped, familySortOrder, CURRENT_LOCALE);
+
+    if (!query) return sorted;
+    return sorted.filter(f => f.nameMatch || f.parents.length > 0)
       .map(f => {
         if (f.nameMatch && f.parents.length === 0) {
           const originalFamily = families.find(orig => orig.id === f.id);
+          const origParents = [...(originalFamily?.parents || [])].sort((a, b) => {
+            const cmp = (a.first_name || '').localeCompare(b.first_name || '', CURRENT_LOCALE);
+            if (cmp !== 0) return cmp;
+            return (a.last_name || '').localeCompare(b.last_name || '', CURRENT_LOCALE);
+          });
           return {
             ...f,
-            parents: (originalFamily?.parents || []).map(p => ({
+            parents: origParents.map(p => ({
               ...p,
               family_id: f.id,
               family_name: f.family_name,
@@ -3632,7 +3795,7 @@ const Dashboard: React.FC = () => {
         }
         return f;
       });
-  }, [families, globalFilter]);
+  }, [families, globalFilter, familySortOrder]);
 
   // Structure families with their children sub-rows for two-layer rendering
   const childrenFamilyData = React.useMemo(() => {
@@ -3640,7 +3803,14 @@ const Dashboard: React.FC = () => {
     const mapped = families.map(f => {
       const lastNames = Array.from(new Set((f.parents || []).map(p => p.last_name).filter(Boolean)));
       const familyName = lastNames.join(' / ') || 'New Family';
-      const allChildren = (f.children || []).map(c => ({
+
+      const sortedChildren = [...(f.children || [])].sort((a, b) => {
+        const cmp = compareBirthDates(a.birth_date, b.birth_date);
+        if (cmp !== 0) return cmp;
+        return (a.first_name || '').localeCompare(b.first_name || '', CURRENT_LOCALE);
+      });
+
+      const allChildren = sortedChildren.map(c => ({
         ...c,
         family_id: f.id,
         family_name: familyName,
@@ -3663,17 +3833,25 @@ const Dashboard: React.FC = () => {
         family_name: familyName,
         children: filteredChildren,
         nameMatch: familyName.toLowerCase().includes(query),
+        originalFamily: f,
       };
     });
 
-    if (!query) return mapped;
-    return mapped.filter(f => f.nameMatch || f.children.length > 0)
+    const sorted = sortFamilyBlocks(mapped, familySortOrder, CURRENT_LOCALE);
+
+    if (!query) return sorted;
+    return sorted.filter(f => f.nameMatch || f.children.length > 0)
       .map(f => {
         if (f.nameMatch && f.children.length === 0) {
           const originalFamily = families.find(orig => orig.id === f.id);
+          const origChildren = [...(originalFamily?.children || [])].sort((a, b) => {
+            const cmp = compareBirthDates(a.birth_date, b.birth_date);
+            if (cmp !== 0) return cmp;
+            return (a.first_name || '').localeCompare(b.first_name || '', CURRENT_LOCALE);
+          });
           return {
             ...f,
-            children: (originalFamily?.children || []).map(c => ({
+            children: origChildren.map(c => ({
               ...c,
               family_id: f.id,
               family_name: f.family_name,
@@ -3682,7 +3860,7 @@ const Dashboard: React.FC = () => {
         }
         return f;
       });
-  }, [families, globalFilter]);
+  }, [families, globalFilter, familySortOrder]);
 
   // Structure families with their children sub-rows for the families tab
   const familiesTabData = React.useMemo(() => {
@@ -3690,12 +3868,25 @@ const Dashboard: React.FC = () => {
     const mapped = families.map(f => {
       const lastNames = Array.from(new Set((f.parents || []).map(p => p.last_name).filter(Boolean)));
       const familyName = lastNames.join(' / ') || 'New Family';
-      const parentNames = (f.parents || [])
+
+      const sortedParents = [...(f.parents || [])].sort((a, b) => {
+        const cmp = (a.first_name || '').localeCompare(b.first_name || '', CURRENT_LOCALE);
+        if (cmp !== 0) return cmp;
+        return (a.last_name || '').localeCompare(b.last_name || '', CURRENT_LOCALE);
+      });
+
+      const parentNames = sortedParents
         .map(p => `${p.first_name || ''} ${p.last_name || ''}`.trim())
         .filter(Boolean)
         .join(', ');
 
-      const allChildren = (f.children || []).map(c => ({
+      const sortedChildren = [...(f.children || [])].sort((a, b) => {
+        const cmp = compareBirthDates(a.birth_date, b.birth_date);
+        if (cmp !== 0) return cmp;
+        return (a.first_name || '').localeCompare(b.first_name || '', CURRENT_LOCALE);
+      });
+
+      const allChildren = sortedChildren.map(c => ({
         ...c,
         family_id: f.id,
         family_name: familyName,
@@ -3720,9 +3911,9 @@ const Dashboard: React.FC = () => {
 
       const familyMatch = familyName.toLowerCase().includes(query) || parentNames.toLowerCase().includes(query);
 
-      const subHeader = (f.parents && f.parents.length > 0) ? (
+      const subHeader = (sortedParents && sortedParents.length > 0) ? (
         <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: '0.25rem', alignItems: 'center' }}>
-          {f.parents.map((p, idx) => {
+          {sortedParents.map((p, idx) => {
             const pName = `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Parent';
             return (
               <React.Fragment key={p.id}>
@@ -3751,17 +3942,25 @@ const Dashboard: React.FC = () => {
         sub_header: subHeader,
         children: filteredChildren,
         nameMatch: familyMatch,
+        originalFamily: f,
       };
     });
 
-    if (!query) return mapped;
-    return mapped.filter(f => f.nameMatch || f.children.length > 0)
+    const sorted = sortFamilyBlocks(mapped, familySortOrder, CURRENT_LOCALE);
+
+    if (!query) return sorted;
+    return sorted.filter(f => f.nameMatch || f.children.length > 0)
       .map(f => {
         if (f.nameMatch && f.children.length === 0) {
           const originalFamily = families.find(orig => orig.id === f.id);
+          const origChildren = [...(originalFamily?.children || [])].sort((a, b) => {
+            const cmp = compareBirthDates(a.birth_date, b.birth_date);
+            if (cmp !== 0) return cmp;
+            return (a.first_name || '').localeCompare(b.first_name || '', CURRENT_LOCALE);
+          });
           return {
             ...f,
-            children: (originalFamily?.children || []).map(c => ({
+            children: origChildren.map(c => ({
               ...c,
               family_id: f.id,
               family_name: f.family_name,
@@ -3770,7 +3969,7 @@ const Dashboard: React.FC = () => {
         }
         return f;
       });
-  }, [families, globalFilter, handleJumpToParent]);
+  }, [families, globalFilter, familySortOrder, handleJumpToParent]);
 
 function formatParentsSummary(parents: any[]): string {
   if (!parents || parents.length === 0) return '';
@@ -3884,20 +4083,18 @@ function formatParentsSummary(parents: any[]): string {
             parentNames.toLowerCase().includes(query) ||
             parentContactMatch;
 
-          const sortedBucketChildren = [...childrenInBucket]
-            .sort((a, b) => (a.first_name || '').localeCompare(b.first_name || '', CURRENT_LOCALE))
-            .map((c) => ({
-              ...c,
-              id: `${c.id}-${bucket.key}`,
-              original_id: c.id,
-              _rowType: 'child' as const,
-              hide_last_name: false,
-              hide_group: true,
-              indent_name: false,
-              no_special_bg: true,
-              family_id: f.id,
-              family_name: familyName,
-            }));
+          const sortedBucketChildren = [...childrenInBucket].map((c) => ({
+            ...c,
+            id: `${c.id}-${bucket.key}`,
+            original_id: c.id,
+            _rowType: 'child' as const,
+            hide_last_name: false,
+            hide_group: true,
+            indent_name: false,
+            no_special_bg: true,
+            family_id: f.id,
+            family_name: familyName,
+          }));
 
           const filteredBucketChildren = sortedBucketChildren.filter((c) => {
             if (!query) return true;
@@ -3976,7 +4173,14 @@ function formatParentsSummary(parents: any[]): string {
     const mapped = overviewFamilies.map((f) => {
       const lastNames = Array.from(new Set((f.parents || []).map((p) => p.last_name).filter(Boolean)));
       const familyName = lastNames.join(' / ') || 'Familie';
-      const parentNames = (f.parents || [])
+
+      const sortedParents = [...(f.parents || [])].sort((a, b) => {
+        const cmp = (a.first_name || '').localeCompare(b.first_name || '', CURRENT_LOCALE);
+        if (cmp !== 0) return cmp;
+        return (a.last_name || '').localeCompare(b.last_name || '', CURRENT_LOCALE);
+      });
+
+      const parentNames = sortedParents
         .map((p) => `${p.first_name || ''} ${p.last_name || ''}`.trim())
         .filter(Boolean)
         .join(', ');
@@ -3991,7 +4195,7 @@ function formatParentsSummary(parents: any[]): string {
       );
       const hasSingleFamilySurname = allSurnames.length === 1;
 
-      const allParents = (f.parents || []).map((p) => ({
+      const allParents = sortedParents.map((p) => ({
         ...p,
         _rowType: 'parent' as const,
         family_id: f.id,
@@ -4037,6 +4241,12 @@ function formatParentsSummary(parents: any[]): string {
         hasMatchingChildren: filteredChildren.length > 0,
         nameMatch: familyMatch,
       };
+    });
+
+    mapped.sort((a, b) => {
+      const cmp = a.family_name.localeCompare(b.family_name, CURRENT_LOCALE);
+      if (cmp !== 0) return cmp;
+      return (a.id || '').localeCompare(b.id || '');
     });
 
     if (!query) return mapped;
@@ -5218,6 +5428,117 @@ function formatParentsSummary(parents: any[]): string {
               )}
 
               <div id="cards-view-columns-slot" style={{ display: 'inline-flex', alignItems: 'center' }} />
+
+              {(activeTab === 'parents' || activeTab === 'children' || activeTab === 'families') && (
+                <>
+                  <button
+                    ref={sortButtonRef}
+                    type="button"
+                    onClick={() => setSortPopoverOpen((prev) => !prev)}
+                    className="secondary-button family-sort-button"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      padding: '0.45rem 0.85rem',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontWeight: 500,
+                      border: '1px solid var(--border)',
+                      background: 'var(--bg-surface)',
+                      color: 'var(--text)',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                      height: '34px',
+                      boxSizing: 'border-box',
+                      fontSize: '0.85rem',
+                    }}
+                    title={t('sortFamiliesTitle')}
+                  >
+                    <ArrowUpDown size={14} />
+                    <span>{t('sort')}: {getSortOptionLabel(familySortOrder)}</span>
+                  </button>
+
+                  <CellPopover
+                    isOpen={sortPopoverOpen}
+                    onClose={() => setSortPopoverOpen(false)}
+                    anchorEl={sortButtonRef}
+                    width={320}
+                    minWidth={280}
+                  >
+                    <div
+                      style={{
+                        padding: '0.35rem 0.6rem',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        color: 'var(--text-muted)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.04em',
+                        borderBottom: '1px solid var(--border)',
+                        marginBottom: '0.4rem',
+                      }}
+                    >
+                      {t('sortFamiliesHeader')}
+                    </div>
+                    {sortOptionGroups.map((group, gIdx) => (
+                      <div key={group.groupLabelKey} style={{ marginTop: gIdx === 0 ? 0 : '0.5rem', marginBottom: '0.25rem' }}>
+                        <div
+                          style={{
+                            padding: '0.2rem 0.6rem',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            color: 'var(--text-muted)',
+                          }}
+                        >
+                          {t(group.groupLabelKey as any)}
+                        </div>
+                        {group.options.map((opt) => {
+                          const isSelected = familySortOrder === opt.key;
+                          return (
+                            <button
+                              key={opt.key}
+                              type="button"
+                              className="family-sort-option-btn"
+                              data-sort-order={opt.key}
+                              onClick={() => {
+                                handleSetFamilySortOrder(opt.key);
+                                setSortPopoverOpen(false);
+                              }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                width: '100%',
+                                textAlign: 'left',
+                                gap: '0.5rem',
+                                padding: '0.4rem 0.6rem',
+                                fontSize: '0.85rem',
+                                cursor: 'pointer',
+                                borderRadius: '4px',
+                                border: 'none',
+                                background: isSelected ? 'var(--primary-subtle, rgba(0, 100, 200, 0.08))' : 'transparent',
+                                color: isSelected ? 'var(--primary)' : 'var(--text)',
+                                fontWeight: isSelected ? 600 : 400,
+                                transition: 'background-color 0.15s',
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!isSelected) e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
+                              }}
+                            >
+                              <div style={{ width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                {isSelected && <Check size={14} color="var(--primary)" />}
+                              </div>
+                              <span>{t(opt.labelKey as any)}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </CellPopover>
+                </>
+              )}
             </div>
           </div>
         )}
