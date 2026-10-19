@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { CheckSquare, Square, Info, ChevronDown, ChevronRight } from 'lucide-react';
+import { CheckSquare, Square, Info, ChevronDown, ChevronRight, ChevronLeft } from 'lucide-react';
 import { t, CURRENT_LOCALE } from '../utils/i18n';
 import { useAuth } from '../context/AuthContext';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 interface Parent {
   id: string;
@@ -157,7 +158,7 @@ const FeeTooltipContent: React.FC<{ description: string; change?: FeeChangeResul
   }, [visible, applyPosition]);
 
   useEffect(() => {
-    if (!isPinned) return;
+    if (!isPinned && !isHovered) return;
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
       if (
@@ -167,13 +168,14 @@ const FeeTooltipContent: React.FC<{ description: string; change?: FeeChangeResul
         !popupRef.current.contains(target)
       ) {
         setIsPinned(false);
+        setIsHovered(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isPinned]);
+  }, [isPinned, isHovered]);
 
   useEffect(() => {
     if (!isPinned && !isHovered) return;
@@ -309,6 +311,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
 }) => {
   const { hasPermission } = useAuth();
   const canSelectFamilies = hasPermission('fees.all.read');
+  const isMobile = useIsMobile();
   const currentYear = new Date().getFullYear();
 
   // Month range state (persisted in browser localStorage)
@@ -349,6 +352,9 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
   const [selectedFamilyIds, setSelectedFamilyIds] = useState<string[]>(() =>
     families.map((f) => f.id)
   );
+  const [mobileSelectedFamilyId, setMobileSelectedFamilyId] = useState<string>(() =>
+    families[0]?.id || ''
+  );
   const [familySearch, setFamilySearch] = useState('');
   const [isFamiliesExpanded, setIsFamiliesExpanded] = useState<boolean>(false);
 
@@ -362,9 +368,77 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
   useEffect(() => {
     if (families && families.length > 0 && !hasInitializedRef.current) {
       setSelectedFamilyIds(families.map((f) => f.id));
+      setMobileSelectedFamilyId((prev) => prev || families[0]?.id || '');
       hasInitializedRef.current = true;
     }
   }, [families]);
+
+  // Helper to format family names
+  const getFamilyName = useCallback((f: Family) => {
+    const lastNames = Array.from(
+      new Set((f.parents || []).map((p) => p.last_name).filter(Boolean))
+    );
+    return lastNames.join(' / ') || 'New Family';
+  }, []);
+
+  const mobileSelectableFamilies = useMemo(() => {
+    if (canSelectFamilies) {
+      return families.map((f) => ({ id: f.id, name: getFamilyName(f) }));
+    }
+    if (results?.family_fees) {
+      return results.family_fees.map((r) => {
+        const fam = families.find((f) => f.id === r.family_id);
+        return {
+          id: r.family_id,
+          name: fam ? getFamilyName(fam) : r.family_name,
+        };
+      });
+    }
+    return [];
+  }, [canSelectFamilies, families, results, getFamilyName]);
+
+  const activeMobileFamilyId = useMemo(() => {
+    if (mobileSelectableFamilies.length === 0) return '';
+    if (
+      mobileSelectedFamilyId &&
+      mobileSelectableFamilies.some((f) => f.id === mobileSelectedFamilyId)
+    ) {
+      return mobileSelectedFamilyId;
+    }
+    return mobileSelectableFamilies[0].id;
+  }, [mobileSelectableFamilies, mobileSelectedFamilyId]);
+
+  const currentMobileFamilyIndex = useMemo(() => {
+    if (!activeMobileFamilyId) return -1;
+    return mobileSelectableFamilies.findIndex((f) => f.id === activeMobileFamilyId);
+  }, [mobileSelectableFamilies, activeMobileFamilyId]);
+
+  const handlePrevFamily = () => {
+    if (currentMobileFamilyIndex > 0) {
+      setMobileSelectedFamilyId(mobileSelectableFamilies[currentMobileFamilyIndex - 1].id);
+    }
+  };
+
+  const handleNextFamily = () => {
+    if (
+      currentMobileFamilyIndex >= 0 &&
+      currentMobileFamilyIndex < mobileSelectableFamilies.length - 1
+    ) {
+      setMobileSelectedFamilyId(mobileSelectableFamilies[currentMobileFamilyIndex + 1].id);
+    }
+  };
+
+  const effectiveSelectedFamilyIds = useMemo(() => {
+    if (!isMobile) return selectedFamilyIds;
+    if (activeMobileFamilyId && !selectedFamilyIds.includes(activeMobileFamilyId)) {
+      return [...selectedFamilyIds, activeMobileFamilyId];
+    }
+    return selectedFamilyIds.length > 0
+      ? selectedFamilyIds
+      : activeMobileFamilyId
+      ? [activeMobileFamilyId]
+      : [];
+  }, [isMobile, selectedFamilyIds, activeMobileFamilyId]);
 
   const activeRequestIdRef = useRef(0);
   const resultsRef = useRef(results);
@@ -375,7 +449,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
 
   // Derived validation error
   const validationError = useMemo(() => {
-    if (canSelectFamilies && families.length > 0 && selectedFamilyIds.length === 0) {
+    if (canSelectFamilies && families.length > 0 && effectiveSelectedFamilyIds.length === 0) {
       return t('selectAtLeastOneFamily') || 'Please select at least one family.';
     }
     const startMonthStr = `${startYear}-${startMonth}`;
@@ -384,7 +458,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
       return t('startMonthAfterEndMonth') || 'Start month cannot be after end month.';
     }
     return null;
-  }, [canSelectFamilies, families.length, selectedFamilyIds.length, startYear, startMonth, endYear, endMonth]);
+  }, [canSelectFamilies, families.length, effectiveSelectedFamilyIds.length, startYear, startMonth, endYear, endMonth]);
 
   const error = validationError || apiError;
 
@@ -419,13 +493,24 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
       });
   }, [results, selectedFamilyIds, canSelectFamilies]);
 
-  // Helper to format family names
-  const getFamilyName = (f: Family) => {
-    const lastNames = Array.from(
-      new Set((f.parents || []).map((p) => p.last_name).filter(Boolean))
+  const activeMobileFamilyFee = useMemo(() => {
+    if (!results || !results.family_fees) return null;
+    if (!canSelectFamilies && results.family_fees.length === 1) {
+      return results.family_fees[0];
+    }
+    return (
+      results.family_fees.find((r) => r.family_id === activeMobileFamilyId) ||
+      results.family_fees[0] ||
+      null
     );
-    return lastNames.join(' / ') || 'New Family';
-  };
+  }, [results, canSelectFamilies, activeMobileFamilyId]);
+
+  const mobileFeeChanges = useMemo(() => {
+    if (!results || !results.fee_changes || !activeMobileFamilyFee) return [];
+    return results.fee_changes
+      .filter((chg) => chg.family_id === activeMobileFamilyFee.family_id)
+      .sort((a, b) => a.month.localeCompare(b.month));
+  }, [results, activeMobileFamilyFee]);
 
   // Filtered families list based on search query
   const filteredFamilies = families.filter((f) => {
@@ -449,8 +534,8 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
   };
 
   useEffect(() => {
-    if (validationError || (canSelectFamilies && selectedFamilyIds.length === 0)) {
-      prevSelectedFamilyIdsRef.current = selectedFamilyIds;
+    if (validationError || (canSelectFamilies && effectiveSelectedFamilyIds.length === 0)) {
+      prevSelectedFamilyIdsRef.current = effectiveSelectedFamilyIds;
       return;
     }
 
@@ -462,9 +547,9 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
     const tokenChanged = prevTokenRef.current !== token;
     const rangeChanged = prevRangeRef.current !== currentRange;
     const prevSelected = prevSelectedFamilyIdsRef.current || [];
-    const hasAddedFamilies = canSelectFamilies ? selectedFamilyIds.some((id) => !prevSelected.includes(id)) : false;
+    const hasAddedFamilies = canSelectFamilies ? effectiveSelectedFamilyIds.some((id) => !prevSelected.includes(id)) : false;
 
-    prevSelectedFamilyIdsRef.current = selectedFamilyIds;
+    prevSelectedFamilyIdsRef.current = effectiveSelectedFamilyIds;
     prevRangeRef.current = currentRange;
     prevTokenRef.current = token;
 
@@ -496,7 +581,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
       body: JSON.stringify({
         start_month: startMonthStr,
         end_month: endMonthStr,
-        ...(canSelectFamilies ? { family_ids: selectedFamilyIds } : {}),
+        ...(canSelectFamilies ? { family_ids: effectiveSelectedFamilyIds } : {}),
       }),
       signal: controller.signal,
     })
@@ -529,7 +614,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
       isSubscribed = false;
       controller.abort();
     };
-  }, [token, validationError, startYear, startMonth, endYear, endMonth, selectedFamilyIds, canSelectFamilies]);
+  }, [token, validationError, startYear, startMonth, endYear, endMonth, effectiveSelectedFamilyIds, canSelectFamilies]);
 
   const monthsColumns = useMemo(() => {
     if (!results) return [];
@@ -569,6 +654,9 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
     return `${monthNames[monthIdx]} ${y}`;
   };
 
+  const showMobileFamilySelector =
+    isMobile && (canSelectFamilies ? mobileSelectableFamilies.length > 0 : mobileSelectableFamilies.length > 1);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', textAlign: 'left' }}>
       <div
@@ -592,7 +680,15 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
           )}
         </div>
 
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', marginBottom: '1.25rem' }}>
+        <div
+          className="fees-month-range-row"
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '1.5rem',
+            marginBottom: (!isMobile && canSelectFamilies) || showMobileFamilySelector ? '1.25rem' : 0,
+          }}
+        >
           {/* Start Month */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
             <label style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
@@ -656,8 +752,58 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
           </div>
         </div>
 
-        {/* Families Checklist (Expandable) */}
-        {canSelectFamilies && (
+        {/* Mobile Single-Family Selector (Dropdown + Prev/Next) */}
+        {showMobileFamilySelector && (
+          <div className="fees-mobile-family-selector-group">
+            <label
+              htmlFor="mobile-family-select"
+              style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}
+            >
+              {t('family')}
+            </label>
+            <div className="fees-mobile-family-selector">
+              <button
+                type="button"
+                className="fees-family-nav-btn fees-family-prev-btn"
+                onClick={handlePrevFamily}
+                disabled={currentMobileFamilyIndex <= 0}
+                aria-label={t('previousFamily')}
+                title={t('previousFamily')}
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <select
+                id="mobile-family-select"
+                className="fees-family-select"
+                value={activeMobileFamilyId}
+                onChange={(e) => setMobileSelectedFamilyId(e.target.value)}
+                aria-label={t('family')}
+              >
+                {mobileSelectableFamilies.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="fees-family-nav-btn fees-family-next-btn"
+                onClick={handleNextFamily}
+                disabled={
+                  currentMobileFamilyIndex < 0 ||
+                  currentMobileFamilyIndex >= mobileSelectableFamilies.length - 1
+                }
+                aria-label={t('nextFamily')}
+                title={t('nextFamily')}
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Families Checklist (Expandable - Desktop) */}
+        {!isMobile && canSelectFamilies && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.25rem' }}>
           <div>
             <button
@@ -829,7 +975,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
 
       {results && !validationError && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', opacity: loading ? 0.6 : 1, transition: 'opacity 0.2s' }}>
-          {/* Family Fees Grid */}
+          {/* Family Fees Grid / Mobile Vertical List */}
           <div
             style={{
               background: 'var(--bg-surface)',
@@ -842,46 +988,110 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
             <h4 style={{ margin: '0 0 1rem 0', color: 'var(--text-h)', fontSize: '1rem', fontWeight: 600 }}>
               {canSelectFamilies ? t('familyFeesGrid') : (t('monthlyFeesSelf') || 'Monatliche Betreuungsgebühren')}
             </h4>
-            <div style={{ overflowX: 'auto' }}>
-              <table className="data-table" style={{ width: 'max-content', minWidth: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr>
-                    <th className="sticky-col" style={{ border: '1px solid var(--border)', padding: '0.5rem', whiteSpace: 'nowrap', width: '1%' }}>{t('family')}</th>
-                    {monthsColumns.map((m) => (
-                      <th key={m} style={{ textAlign: 'right', border: '1px solid var(--border)', padding: '0.5rem' }}>
-                        {formatMonth(m)}
+            {isMobile ? (
+              <div style={{ overflowX: 'auto' }}>
+                <table className="data-table fees-mobile-vertical-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ border: '1px solid var(--border)', padding: '0.5rem 0.65rem' }}>
+                        {t('month')}
                       </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedFamilyFees.map((res) => (
-                    <tr key={res.family_id}>
-                      <td className="sticky-col" style={{ fontWeight: 600, color: 'var(--text-h)', border: '1px solid var(--border)', padding: '0.5rem', whiteSpace: 'nowrap', width: '1%' }}>{res.family_name}</td>
-                      {monthsColumns.map((m) => {
-                        const monthData = (res.monthly_fees || []).find((mf) => mf.month === m);
-                        const change = (results.fee_changes || []).find(
-                          (chg) => chg.family_id === res.family_id && chg.month === m
-                        );
-                        return (
-                          <td key={m} style={{ textAlign: 'right', fontWeight: 500, color: 'var(--text)', border: '1px solid var(--border)', padding: '0.5rem', backgroundColor: change ? 'var(--highlight-bg)' : 'transparent' }}>
+                      <th style={{ textAlign: 'right', border: '1px solid var(--border)', padding: '0.5rem 0.65rem' }}>
+                        {activeMobileFamilyFee
+                          ? `${t('fee')} (${
+                              mobileSelectableFamilies.find((f) => f.id === activeMobileFamilyFee.family_id)?.name ||
+                              activeMobileFamilyFee.family_name
+                            })`
+                          : t('fee')}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {monthsColumns.map((m) => {
+                      const monthData = (activeMobileFamilyFee?.monthly_fees || []).find((mf) => mf.month === m);
+                      const change = (results.fee_changes || []).find(
+                        (chg) => chg.family_id === activeMobileFamilyFee?.family_id && chg.month === m
+                      );
+                      return (
+                        <tr key={m} data-month={m}>
+                          <td
+                            style={{
+                              fontWeight: 600,
+                              color: 'var(--text-h)',
+                              border: '1px solid var(--border)',
+                              padding: '0.5rem 0.65rem',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {formatMonth(m)}
+                          </td>
+                          <td
+                            style={{
+                              textAlign: 'right',
+                              fontWeight: 500,
+                              color: 'var(--text)',
+                              border: '1px solid var(--border)',
+                              padding: '0.5rem 0.65rem',
+                              backgroundColor: change ? 'var(--highlight-bg)' : 'transparent',
+                            }}
+                          >
                             {monthData ? (
                               <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', width: '100%' }}>
-                                {monthData.fee.toFixed(2)}
+                                {monthData.fee.toFixed(2)} EUR
                                 <FeeTooltip description={monthData.description} change={change} />
                               </span>
-                            ) : '-'}
+                            ) : (
+                              '-'
+                            )}
                           </td>
-                        );
-                      })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table className="data-table" style={{ width: 'max-content', minWidth: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      <th className="sticky-col" style={{ border: '1px solid var(--border)', padding: '0.5rem', whiteSpace: 'nowrap', width: '1%' }}>{t('family')}</th>
+                      {monthsColumns.map((m) => (
+                        <th key={m} style={{ textAlign: 'right', border: '1px solid var(--border)', padding: '0.5rem' }}>
+                          {formatMonth(m)}
+                        </th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {sortedFamilyFees.map((res) => (
+                      <tr key={res.family_id}>
+                        <td className="sticky-col" style={{ fontWeight: 600, color: 'var(--text-h)', border: '1px solid var(--border)', padding: '0.5rem', whiteSpace: 'nowrap', width: '1%' }}>{res.family_name}</td>
+                        {monthsColumns.map((m) => {
+                          const monthData = (res.monthly_fees || []).find((mf) => mf.month === m);
+                          const change = (results.fee_changes || []).find(
+                            (chg) => chg.family_id === res.family_id && chg.month === m
+                          );
+                          return (
+                            <td key={m} style={{ textAlign: 'right', fontWeight: 500, color: 'var(--text)', border: '1px solid var(--border)', padding: '0.5rem', backgroundColor: change ? 'var(--highlight-bg)' : 'transparent' }}>
+                              {monthData ? (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', width: '100%' }}>
+                                  {monthData.fee.toFixed(2)}
+                                  <FeeTooltip description={monthData.description} change={change} />
+                                </span>
+                              ) : '-'}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
-          {/* Fee Changes Table */}
+          {/* Fee Changes Table / Mobile Cards */}
           <div
             style={{
               background: 'var(--bg-surface)',
@@ -894,7 +1104,45 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
             <h4 style={{ margin: '0 0 1rem 0', color: 'var(--text-h)', fontSize: '1rem', fontWeight: 600 }}>
               {t('feeChanges')}
             </h4>
-            {sortedFeeChanges.length === 0 ? (
+            {isMobile ? (
+              mobileFeeChanges.length === 0 ? (
+                <div style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.85rem', padding: '0.5rem' }}>
+                  {t('noFeeChanges')}
+                </div>
+              ) : (
+                <div className="fee-changes-cards-list">
+                  {mobileFeeChanges.map((chg, idx) => (
+                    <div
+                      key={`${chg.family_id}-${chg.month}-${idx}`}
+                      className="fee-change-card"
+                      data-month={chg.month}
+                    >
+                      <div className="fee-change-card-header">
+                        {formatMonth(chg.month)}
+                      </div>
+                      <div className="fee-change-card-row" data-field="previous_fee">
+                        <span className="fee-change-card-label">{t('previousFee')}</span>
+                        <span className="fee-change-card-value" style={{ color: 'var(--text-muted)' }}>
+                          {chg.previous_fee.toFixed(2)} EUR
+                        </span>
+                      </div>
+                      <div className="fee-change-card-row" data-field="new_fee">
+                        <span className="fee-change-card-label">{t('newFee')}</span>
+                        <span className="fee-change-card-value" style={{ fontWeight: 600, color: 'var(--primary)' }}>
+                          {chg.new_fee.toFixed(2)} EUR
+                        </span>
+                      </div>
+                      <div className="fee-change-card-row" data-field="reason">
+                        <span className="fee-change-card-label">{t('reason')}</span>
+                        <span className="fee-change-card-value fee-change-card-reason">
+                          {renderWithLineBreaks(chg.reason) || '-'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            ) : sortedFeeChanges.length === 0 ? (
               <div style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.85rem', padding: '0.5rem' }}>
                 {t('noFeeChanges')}
               </div>
@@ -932,3 +1180,4 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
     </div>
   );
 };
+
