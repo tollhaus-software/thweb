@@ -1990,11 +1990,70 @@ const Dashboard: React.FC = () => {
     onConfirm: () => {},
   });
 
+  const stripVaccination = (child: any): any => {
+    if (!child) return child;
+    const { vaccination_checks, vaccination_status_protected, ...rest } = child;
+    return rest;
+  };
+
+  const stripParentsVaccination = (parents: any[]): any[] => {
+    if (!Array.isArray(parents)) return parents;
+    return parents.map((p) => {
+      if (!p) return p;
+      const { vaccination_checks, vaccination_status_protected, ...rest } = p;
+      return rest;
+    });
+  };
+
+  const isPureVaccinationAction = (action: any): boolean => {
+    if (!action || !action.payload) return false;
+    if (action.type === 'UPDATE_CHILD') {
+      const b = stripVaccination(action.payload.before);
+      const a = stripVaccination(action.payload.after);
+      return JSON.stringify(b) === JSON.stringify(a);
+    }
+    if (action.type === 'UPDATE_PARENT') {
+      const b = stripParentsVaccination(action.payload.beforeParents || []);
+      const a = stripParentsVaccination(action.payload.afterParents || []);
+      return JSON.stringify(b) === JSON.stringify(a);
+    }
+    return false;
+  };
+
+  const sanitizeHistoryAction = (action: any): any => {
+    if (!action || !action.payload) return action;
+    if (action.type === 'UPDATE_CHILD') {
+      return {
+        ...action,
+        payload: {
+          ...action.payload,
+          before: stripVaccination(action.payload.before),
+          after: stripVaccination(action.payload.after),
+        },
+      };
+    }
+    if (action.type === 'UPDATE_PARENT') {
+      return {
+        ...action,
+        payload: {
+          ...action.payload,
+          beforeParents: stripParentsVaccination(action.payload.beforeParents || []),
+          afterParents: stripParentsVaccination(action.payload.afterParents || []),
+        },
+      };
+    }
+    return action;
+  };
+
   const [undoStack, setUndoStack] = React.useState<any[]>(() => {
     try {
       localStorage.removeItem('thweb_undo_stack');
       const saved = sessionStorage.getItem('thweb_undo_stack');
-      return saved ? JSON.parse(saved) : [];
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed)
+        ? parsed.filter((a) => !isPureVaccinationAction(a)).map(sanitizeHistoryAction)
+        : [];
     } catch {
       return [];
     }
@@ -2003,7 +2062,11 @@ const Dashboard: React.FC = () => {
     try {
       localStorage.removeItem('thweb_redo_stack');
       const saved = sessionStorage.getItem('thweb_redo_stack');
-      return saved ? JSON.parse(saved) : [];
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed)
+        ? parsed.filter((a) => !isPureVaccinationAction(a)).map(sanitizeHistoryAction)
+        : [];
     } catch {
       return [];
     }
@@ -2030,7 +2093,9 @@ const Dashboard: React.FC = () => {
   };
 
   const pushAction = (action: any) => {
-    const newUndo = [...undoStackRef.current, action];
+    if (isPureVaccinationAction(action)) return;
+    const sanitized = sanitizeHistoryAction(action);
+    const newUndo = [...undoStackRef.current, sanitized];
     if (newUndo.length > 50) {
       newUndo.shift();
     }
@@ -2075,7 +2140,7 @@ const Dashboard: React.FC = () => {
 
     try {
       if (type === 'UPDATE_PARENT') {
-        const targetParents = isUndo ? payload.beforeParents : payload.afterParents;
+        const targetParents = stripParentsVaccination(isUndo ? payload.beforeParents : payload.afterParents);
         const res = await fetch(`/api/families/${payload.familyId}`, {
           method: 'PUT',
           headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
@@ -2084,7 +2149,7 @@ const Dashboard: React.FC = () => {
         if (!res.ok) throw new Error();
       } 
       else if (type === 'UPDATE_CHILD') {
-        const targetChild = isUndo ? payload.before : payload.after;
+        const targetChild = stripVaccination(isUndo ? payload.before : payload.after);
         const res = await fetch(`/api/children/${payload.childId}`, {
           method: 'PUT',
           headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
@@ -3329,16 +3394,18 @@ const Dashboard: React.FC = () => {
           }
           throw new Error('Failed to update parent');
         }
-        pushAction({
-          type: 'UPDATE_PARENT',
-          payload: {
-            tab: 'parents',
-            familyId: family.id,
-            parentId: parent.id,
-            beforeParents: originalParents,
-            afterParents: updatedParents,
-          }
-        });
+        if (fieldName !== 'vaccination_checks') {
+          pushAction({
+            type: 'UPDATE_PARENT',
+            payload: {
+              tab: 'parents',
+              familyId: family.id,
+              parentId: parent.id,
+              beforeParents: stripParentsVaccination(originalParents),
+              afterParents: stripParentsVaccination(updatedParents),
+            }
+          });
+        }
         return fetchFamilies();
       })
       .catch((err) => alert(err.message));
@@ -3378,8 +3445,8 @@ const Dashboard: React.FC = () => {
           payload: {
             tab: 'parents',
             familyId: family.id,
-            beforeParents: originalParents,
-            afterParents: updatedParents,
+            beforeParents: stripParentsVaccination(originalParents),
+            afterParents: stripParentsVaccination(updatedParents),
           }
         });
         fetchFamilies();
@@ -3415,15 +3482,17 @@ const Dashboard: React.FC = () => {
           }
           throw new Error('Failed to update child');
         }
-        pushAction({
-          type: 'UPDATE_CHILD',
-          payload: {
-            tab: 'children',
-            childId: child.id,
-            before: child,
-            after: updatedChild,
-          }
-        });
+        if (fieldName !== 'vaccination_checks') {
+          pushAction({
+            type: 'UPDATE_CHILD',
+            payload: {
+              tab: 'children',
+              childId: child.id,
+              before: stripVaccination(child),
+              after: stripVaccination(updatedChild),
+            }
+          });
+        }
         return fetchFamilies();
       })
       .catch((err) => alert(err.message));
