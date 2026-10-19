@@ -334,7 +334,7 @@ func (s *Server) HandleListAuditLogs(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"error": "Forbidden"})
 		return
 	}
-	logs, err := s.Store.ListAuditLogs(r.Context())
+	logs, err := s.Store.ListAuditLogsForUser(r.Context(), user)
 	if err != nil {
 		httpErrorLog(w, r, "Failed to list audit logs", http.StatusInternalServerError, err)
 		return

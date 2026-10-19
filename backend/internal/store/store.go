@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/pavolmarko/thweb-backend/internal/audit"
 	"github.com/pavolmarko/thweb-backend/internal/models"
 )
 
@@ -347,6 +348,14 @@ func (s *Store) GetHistory(ctx context.Context, entityID uuid.UUID) ([]models.Au
 		return nil, err
 	}
 	return logs, nil
+}
+
+func (s *Store) GetHistoryForUser(ctx context.Context, entityID uuid.UUID, user *models.UserWithPermissions) ([]models.AuditLog, error) {
+	logs, err := s.GetHistory(ctx, entityID)
+	if err != nil {
+		return nil, err
+	}
+	return audit.FilterAuditLogsForUser(user, logs), nil
 }
 
 func (s *Store) GetParentsByFamilyID(ctx context.Context, familyID uuid.UUID) ([]models.Parent, error) {
@@ -1025,6 +1034,52 @@ func (s *Store) ListAuditLogs(ctx context.Context) ([]models.AuditLog, error) {
 		return nil, err
 	}
 	return logs, nil
+}
+
+func (s *Store) ListAuditLogsForUser(ctx context.Context, user *models.UserWithPermissions) ([]models.AuditLog, error) {
+	if user == nil {
+		return []models.AuditLog{}, nil
+	}
+
+	var rows pgx.Rows
+	var err error
+
+	// If the user does not have global access and is scoped to a specific family
+	if !user.HasPermission("*") && !user.HasPermission("families.all.read") && user.FamilyID != nil {
+		rows, err = s.db.Query(ctx, `
+			SELECT a.id, a.transaction_id, a.family_id, a.entity_type, a.entity_id, a.operation, a.before_snapshot, a.after_snapshot, a.changed_by, COALESCE(u.email, ''), a.created_at
+			FROM audit_log a
+			LEFT JOIN users u ON a.changed_by = u.id
+			WHERE a.family_id = $1
+			ORDER BY a.created_at DESC
+		`, *user.FamilyID)
+	} else {
+		rows, err = s.db.Query(ctx, `
+			SELECT a.id, a.transaction_id, a.family_id, a.entity_type, a.entity_id, a.operation, a.before_snapshot, a.after_snapshot, a.changed_by, COALESCE(u.email, ''), a.created_at
+			FROM audit_log a
+			LEFT JOIN users u ON a.changed_by = u.id
+			ORDER BY a.created_at DESC
+		`)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var logs []models.AuditLog
+	for rows.Next() {
+		var l models.AuditLog
+		err := rows.Scan(&l.ID, &l.TransactionID, &l.FamilyID, &l.EntityType, &l.EntityID, &l.Operation, &l.BeforeSnapshot, &l.AfterSnapshot, &l.ChangedBy, &l.ChangedByEmail, &l.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		logs = append(logs, l)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return audit.FilterAuditLogsForUser(user, logs), nil
 }
 
 func (s *Store) ListRoles(ctx context.Context) ([]models.Role, error) {
