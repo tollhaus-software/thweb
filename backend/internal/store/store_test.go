@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -404,4 +405,215 @@ func TestAuditModifications_ExcludesVaccinationStatus(t *testing.T) {
 		t.Fatalf("expected 2 logs for membership (INSERT + UPDATE), got: %+v", memLogs)
 	}
 }
+
+func TestListAuditLogsForUser_PermissionsAndVisibility(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := NewStore(pool)
+	if err := appStore.ResetTestData(ctx); err != nil {
+		t.Fatalf("ResetTestData failed: %v", err)
+	}
+
+	testUserID := uuid.New()
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, 'audit-perm-tester@example.com') ON CONFLICT (id) DO NOTHING", testUserID)
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", testUserID)
+	}()
+
+	// Create Family 1
+	fam1Parents := []models.Parent{
+		{
+			FirstName: "Erika",
+			LastName:  "Mustermann",
+			Notes:     "Confidential staff evaluation note",
+			Emails: models.MultiValueList{
+				{Value: "erika@example.com", AddressList: true},
+				{Value: "erika.private@example.com", AddressList: false},
+			},
+		},
+	}
+	fam1, err := appStore.CreateFamilyWithParents(ctx, testUserID, fam1Parents)
+	if err != nil {
+		t.Fatalf("CreateFamilyWithParents failed: %v", err)
+	}
+	fam1ParentID := fam1.Parents[0].ID
+
+	// Create Child in Family 1
+	childID := uuid.New()
+	childBirth := time.Date(2022, 5, 10, 0, 0, 0, 0, time.UTC)
+	err = appStore.UpdateChild(ctx, testUserID, childID, models.Child{
+		ID:        childID,
+		FamilyID:  fam1.ID,
+		FirstName: "Max",
+		LastName:  "Mustermann",
+		BirthDate: childBirth,
+		Notes:     "Special care note",
+	})
+	if err != nil {
+		t.Fatalf("UpdateChild failed: %v", err)
+	}
+
+	// Create Child Group Change in Family 1
+	gcDate := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	_, err = appStore.CreateChildGroupChange(ctx, testUserID, models.ChildGroupChange{
+		Child:       childID,
+		ChangeDate:  gcDate,
+		TargetGroup: 2,
+	})
+	if err != nil {
+		t.Fatalf("CreateChildGroupChange failed: %v", err)
+	}
+
+	// Create Hygiene Event in Family 1
+	heDate := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+	_, err = appStore.CreateHygieneEvent(ctx, testUserID, models.HygieneBelehrungEvent{
+		ParentID:      fam1ParentID,
+		EventDate:     heDate,
+		EventType:     "initial",
+		Documentation: "Documented",
+	})
+	if err != nil {
+		t.Fatalf("CreateHygieneEvent failed: %v", err)
+	}
+
+	// Create Membership in Family 1
+	memStart := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	_, err = appStore.CreateTHMembership(ctx, testUserID, models.THMembership{
+		ParentID:       fam1ParentID,
+		StartDate:      memStart,
+		MembershipType: "full_member",
+	})
+	if err != nil {
+		t.Fatalf("CreateTHMembership failed: %v", err)
+	}
+
+	// Create Family 2
+	fam2Parents := []models.Parent{
+		{
+			FirstName: "Hans",
+			LastName:  "Schmidt",
+			Notes:     "Schmidt note",
+		},
+	}
+	fam2, err := appStore.CreateFamilyWithParents(ctx, testUserID, fam2Parents)
+	if err != nil {
+		t.Fatalf("CreateFamilyWithParents 2 failed: %v", err)
+	}
+
+	// 1. Superadmin User: sees all logs from both families
+	adminUser := &models.UserWithPermissions{
+		Email:                "admin@example.com",
+		EffectivePermissions: []string{"*"},
+	}
+	adminLogs, err := appStore.ListAuditLogsForUser(ctx, adminUser)
+	if err != nil {
+		t.Fatalf("ListAuditLogsForUser admin failed: %v", err)
+	}
+	if len(adminLogs) == 0 {
+		t.Fatalf("Expected admin to see audit logs, got 0")
+	}
+
+	hasFam1 := false
+	hasFam2 := false
+	hasMembership := false
+	hasHygiene := false
+	for _, l := range adminLogs {
+		if l.FamilyID != nil && *l.FamilyID == fam1.ID {
+			hasFam1 = true
+		}
+		if l.FamilyID != nil && *l.FamilyID == fam2.ID {
+			hasFam2 = true
+		}
+		if l.EntityType == "th_membership" {
+			hasMembership = true
+		}
+		if l.EntityType == "hygiene_event" {
+			hasHygiene = true
+		}
+	}
+	if !hasFam1 || !hasFam2 || !hasMembership || !hasHygiene {
+		t.Errorf("Admin should see all entity types across both families. fam1=%v, fam2=%v, membership=%v, hygiene=%v", hasFam1, hasFam2, hasMembership, hasHygiene)
+	}
+
+	// 2. Caregiver User without families.all.read / memberships.all.write
+	caregiverUser := &models.UserWithPermissions{
+		Email:                "caregiver@example.com",
+		EffectivePermissions: []string{"children.all.write", "hygiene.all.write", "audit.all.read"},
+	}
+	caregiverLogs, err := appStore.ListAuditLogsForUser(ctx, caregiverUser)
+	if err != nil {
+		t.Fatalf("ListAuditLogsForUser caregiver failed: %v", err)
+	}
+	for _, l := range caregiverLogs {
+		if l.EntityType == "th_membership" {
+			t.Errorf("Caregiver should NOT see th_membership logs")
+		}
+		if l.EntityType == "family" || l.EntityType == "parent" {
+			t.Errorf("Caregiver without families.all.read should NOT see family or parent logs, got %s", l.EntityType)
+		}
+		if l.EntityType != "child" && l.EntityType != "child_group_change" && l.EntityType != "hygiene_event" {
+			t.Errorf("Unexpected entity type for caregiver: %s", l.EntityType)
+		}
+	}
+
+	// 3. Treasurer User without hygiene.all.write / children.all.write
+	treasurerUser := &models.UserWithPermissions{
+		Email:                "treasurer@example.com",
+		EffectivePermissions: []string{"fees.all.read", "memberships.all.write", "audit.all.read"},
+	}
+	treasurerLogs, err := appStore.ListAuditLogsForUser(ctx, treasurerUser)
+	if err != nil {
+		t.Fatalf("ListAuditLogsForUser treasurer failed: %v", err)
+	}
+	for _, l := range treasurerLogs {
+		if l.EntityType == "hygiene_event" {
+			t.Errorf("Treasurer should NOT see hygiene_event logs")
+		}
+		if l.EntityType == "child" || l.EntityType == "child_group_change" {
+			t.Errorf("Treasurer without children.all.write or families.all.read should NOT see child logs, got %s", l.EntityType)
+		}
+	}
+
+	// 4. Self-Service Parent of Family 1
+	selfParentUser := &models.UserWithPermissions{
+		Email:                "parent1@example.com",
+		FamilyID:             &fam1.ID,
+		EffectivePermissions: []string{"families.self.selfservice", "audit.all.read"},
+	}
+	selfParentLogs, err := appStore.ListAuditLogsForUser(ctx, selfParentUser)
+	if err != nil {
+		t.Fatalf("ListAuditLogsForUser selfParent failed: %v", err)
+	}
+	if len(selfParentLogs) == 0 {
+		t.Fatalf("Self parent should see own family logs, got 0")
+	}
+	for _, l := range selfParentLogs {
+		if l.FamilyID == nil || *l.FamilyID != fam1.ID {
+			t.Errorf("Self parent should NEVER see logs from other families, got family: %v", l.FamilyID)
+		}
+		if l.EntityType == "hygiene_event" || l.EntityType == "th_membership" {
+			t.Errorf("Self parent should not see internal hygiene or membership logs, got %s", l.EntityType)
+		}
+		// Verify notes redaction in snapshots
+		if l.EntityType == "parent" && len(l.AfterSnapshot) > 0 {
+			var snap map[string]interface{}
+			json.Unmarshal(l.AfterSnapshot, &snap)
+			if notes, ok := snap["notes"].(string); ok && notes != "" {
+				t.Errorf("Confidential notes must be redacted for self parent, got: %q", notes)
+			}
+		}
+	}
+}
+
 
