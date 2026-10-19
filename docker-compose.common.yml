@@ -53,8 +53,8 @@ services:
       USE_TLS: "false"
       DOMAIN_NAME: ${DOMAIN_NAME:-localhost}
       APP_TITLE: ${APP_TITLE:-}
-      APP_LOGO_URL: ${APP_LOGO_URL:-}
-      APP_FAVICON_URL: ${APP_FAVICON_URL:-}
+      APP_LOGO_FILE: ${APP_LOGO_FILE:-}
+      APP_FAVICON_FILE: ${APP_FAVICON_FILE:-}
     depends_on:
       - backend
 
