@@ -2,10 +2,13 @@ package store
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/pavolmarko/thweb-backend/internal/models"
 )
 
 func TestGetDailyBrief(t *testing.T) {
@@ -144,3 +147,261 @@ func TestGetDailyBrief(t *testing.T) {
 		t.Errorf("expected 'yellow_bin_put_out' in tasks for Thursday, got: %+v", briefThursday.TasksAndInfo)
 	}
 }
+
+func TestAuditModifications_ExcludesVaccinationStatus(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := NewStore(pool)
+	testUserID := uuid.New()
+
+	// Ensure test user exists in users table for FK
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, 'audit-tester@example.com') ON CONFLICT (id) DO NOTHING", testUserID)
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", testUserID)
+	}()
+
+	// 1. Create family with parent
+	parent1 := models.Parent{
+		FirstName: "Audited",
+		LastName:  "Parent",
+		Address:   "Original Address 1",
+		Notes:     "Original notes",
+		Emails: models.MultiValueList{
+			{Value: "audited@example.com", AddressList: true},
+		},
+		Phones: models.MultiValueList{
+			{Value: "+49123456", AddressList: true},
+		},
+	}
+	family, err := appStore.CreateFamilyWithParents(ctx, testUserID, []models.Parent{parent1})
+	if err != nil {
+		t.Fatalf("CreateFamilyWithParents failed: %v", err)
+	}
+	familyID := family.ID
+	parentID := family.Parents[0].ID
+	defer func() {
+		_ = appStore.DeleteFamily(ctx, testUserID, familyID)
+	}()
+
+	// Check audit logs for family & parent INSERT
+	parentLogs, err := appStore.GetHistory(ctx, parentID)
+	if err != nil {
+		t.Fatalf("GetHistory failed: %v", err)
+	}
+	if len(parentLogs) != 1 || parentLogs[0].Operation != "INSERT" {
+		t.Fatalf("expected 1 INSERT audit log for parent, got: %+v", parentLogs)
+	}
+	if strings.Contains(string(parentLogs[0].AfterSnapshot), "vaccination") {
+		t.Errorf("parent INSERT snapshot should NOT contain vaccination fields: %s", string(parentLogs[0].AfterSnapshot))
+	}
+
+	// 2. Modify ONLY vaccination status on parent -> MUST NOT produce an audit log!
+	updatedParentOnlyVac := family.Parents[0]
+	updatedParentOnlyVac.VaccinationStatusProtected = []byte("encrypted-secret-blob")
+	err = appStore.UpdateFamilyParents(ctx, testUserID, familyID, []models.Parent{updatedParentOnlyVac})
+	if err != nil {
+		t.Fatalf("UpdateFamilyParents failed: %v", err)
+	}
+
+	parentLogs, err = appStore.GetHistory(ctx, parentID)
+	if err != nil {
+		t.Fatalf("GetHistory failed: %v", err)
+	}
+	if len(parentLogs) != 1 {
+		t.Fatalf("vaccination-only modification MUST NOT create audit log! expected 1 log, got %d: %+v", len(parentLogs), parentLogs)
+	}
+
+	// 3. Modify parent non-vaccination fields (address & notes) along with vaccination status
+	updatedParentWithChanges := updatedParentOnlyVac
+	updatedParentWithChanges.Address = "New Address 42"
+	updatedParentWithChanges.Notes = "Updated notes"
+	updatedParentWithChanges.VaccinationStatusProtected = []byte("encrypted-secret-blob-v2")
+	err = appStore.UpdateFamilyParents(ctx, testUserID, familyID, []models.Parent{updatedParentWithChanges})
+	if err != nil {
+		t.Fatalf("UpdateFamilyParents failed: %v", err)
+	}
+
+	parentLogs, err = appStore.GetHistory(ctx, parentID)
+	if err != nil {
+		t.Fatalf("GetHistory failed: %v", err)
+	}
+	if len(parentLogs) != 2 {
+		t.Fatalf("expected 2 audit logs for parent (INSERT + UPDATE), got %d", len(parentLogs))
+	}
+	if parentLogs[0].Operation != "UPDATE" {
+		t.Errorf("expected UPDATE operation, got %s", parentLogs[0].Operation)
+	}
+	if strings.Contains(string(parentLogs[0].BeforeSnapshot), "vaccination") || strings.Contains(string(parentLogs[0].AfterSnapshot), "vaccination") {
+		t.Errorf("audit snapshots must NOT leak vaccination data! Before: %s, After: %s", string(parentLogs[0].BeforeSnapshot), string(parentLogs[0].AfterSnapshot))
+	}
+	if !strings.Contains(string(parentLogs[0].AfterSnapshot), "New Address 42") {
+		t.Errorf("expected updated address in after snapshot, got: %s", string(parentLogs[0].AfterSnapshot))
+	}
+
+	// 4. Create child
+	childID := uuid.New()
+	childBirthDate := time.Date(2021, 5, 10, 0, 0, 0, 0, time.UTC)
+	child := models.Child{
+		ID:        childID,
+		FamilyID:  familyID,
+		FirstName: "Tommy",
+		LastName:  "Audited",
+		BirthDate: childBirthDate,
+		Notes:     "Original child note",
+	}
+	err = appStore.UpdateChild(ctx, testUserID, childID, child)
+	if err != nil {
+		t.Fatalf("UpdateChild create failed: %v", err)
+	}
+
+	childLogs, err := appStore.GetHistory(ctx, childID)
+	if err != nil {
+		t.Fatalf("GetHistory child failed: %v", err)
+	}
+	if len(childLogs) != 1 || childLogs[0].Operation != "INSERT" {
+		t.Fatalf("expected 1 INSERT audit log for child, got: %+v", childLogs)
+	}
+
+	// 5. Modify child vaccination status ONLY -> MUST NOT produce audit log!
+	childOnlyVac := child
+	childOnlyVac.VaccinationStatusProtected = []byte("child-secret-blob")
+	err = appStore.UpdateChild(ctx, testUserID, childID, childOnlyVac)
+	if err != nil {
+		t.Fatalf("UpdateChild vac only failed: %v", err)
+	}
+
+	childLogs, err = appStore.GetHistory(ctx, childID)
+	if err != nil {
+		t.Fatalf("GetHistory child failed: %v", err)
+	}
+	if len(childLogs) != 1 {
+		t.Fatalf("child vaccination-only modification MUST NOT create audit log! expected 1 log, got %d: %+v", len(childLogs), childLogs)
+	}
+
+	// 6. Modify child non-vaccination fields (notes)
+	childWithChanges := childOnlyVac
+	childWithChanges.Notes = "Updated child note"
+	err = appStore.UpdateChild(ctx, testUserID, childID, childWithChanges)
+	if err != nil {
+		t.Fatalf("UpdateChild notes failed: %v", err)
+	}
+
+	childLogs, err = appStore.GetHistory(ctx, childID)
+	if err != nil {
+		t.Fatalf("GetHistory child failed: %v", err)
+	}
+	if len(childLogs) != 2 || childLogs[0].Operation != "UPDATE" {
+		t.Fatalf("expected 2 audit logs for child (INSERT + UPDATE), got: %+v", childLogs)
+	}
+	if strings.Contains(string(childLogs[0].BeforeSnapshot), "vaccination") || strings.Contains(string(childLogs[0].AfterSnapshot), "vaccination") {
+		t.Errorf("child audit snapshots must NOT leak vaccination data! Before: %s, After: %s", string(childLogs[0].BeforeSnapshot), string(childLogs[0].AfterSnapshot))
+	}
+
+	// 7. Child Group Change modifications
+	gcDate := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	gc, err := appStore.CreateChildGroupChange(ctx, testUserID, models.ChildGroupChange{
+		Child:       childID,
+		ChangeDate:  gcDate,
+		TargetGroup: 1,
+	})
+	if err != nil {
+		t.Fatalf("CreateChildGroupChange failed: %v", err)
+	}
+	gcLogs, err := appStore.GetHistory(ctx, gc.ID)
+	if err != nil {
+		t.Fatalf("GetHistory gc failed: %v", err)
+	}
+	if len(gcLogs) != 1 || gcLogs[0].Operation != "INSERT" {
+		t.Fatalf("expected 1 INSERT log for group change, got: %+v", gcLogs)
+	}
+
+	// Update child group change
+	updatedGCDate := time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC)
+	_, err = appStore.UpdateChildGroupChange(ctx, testUserID, gc.ID, updatedGCDate, 2)
+	if err != nil {
+		t.Fatalf("UpdateChildGroupChange failed: %v", err)
+	}
+	gcLogs, err = appStore.GetHistory(ctx, gc.ID)
+	if err != nil {
+		t.Fatalf("GetHistory gc after update failed: %v", err)
+	}
+	if len(gcLogs) != 2 || gcLogs[0].Operation != "UPDATE" {
+		t.Fatalf("expected 2 logs for group change (INSERT + UPDATE), got: %+v", gcLogs)
+	}
+
+	// 8. Hygiene Event modifications
+	eventDate := time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC)
+	he, err := appStore.CreateHygieneEvent(ctx, testUserID, models.HygieneBelehrungEvent{
+		ParentID:      parentID,
+		EventDate:     eventDate,
+		EventType:     "initial",
+		Documentation: "Original doc",
+	})
+	if err != nil {
+		t.Fatalf("CreateHygieneEvent failed: %v", err)
+	}
+	heLogs, err := appStore.GetHistory(ctx, he.ID)
+	if err != nil {
+		t.Fatalf("GetHistory hygiene event failed: %v", err)
+	}
+	if len(heLogs) != 1 || heLogs[0].Operation != "INSERT" {
+		t.Fatalf("expected 1 INSERT log for hygiene event, got: %+v", heLogs)
+	}
+
+	// Update hygiene event
+	_, err = appStore.UpdateHygieneEvent(ctx, testUserID, he.ID, eventDate.AddDate(1, 0, 0), "recertify", "Updated doc")
+	if err != nil {
+		t.Fatalf("UpdateHygieneEvent failed: %v", err)
+	}
+	heLogs, err = appStore.GetHistory(ctx, he.ID)
+	if err != nil {
+		t.Fatalf("GetHistory hygiene event after update failed: %v", err)
+	}
+	if len(heLogs) != 2 || heLogs[0].Operation != "UPDATE" {
+		t.Fatalf("expected 2 logs for hygiene event (INSERT + UPDATE), got: %+v", heLogs)
+	}
+
+	// 9. Membership modifications
+	memStartDate := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	mem, err := appStore.CreateTHMembership(ctx, testUserID, models.THMembership{
+		ParentID:       parentID,
+		StartDate:      memStartDate,
+		MembershipType: "full_member",
+	})
+	if err != nil {
+		t.Fatalf("CreateTHMembership failed: %v", err)
+	}
+	memLogs, err := appStore.GetHistory(ctx, mem.ID)
+	if err != nil {
+		t.Fatalf("GetHistory membership failed: %v", err)
+	}
+	if len(memLogs) != 1 || memLogs[0].Operation != "INSERT" {
+		t.Fatalf("expected 1 INSERT log for membership, got: %+v", memLogs)
+	}
+
+	// Update membership
+	memEndDate := time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)
+	_, err = appStore.UpdateTHMembership(ctx, testUserID, mem.ID, memStartDate, &memEndDate, "supporting_member")
+	if err != nil {
+		t.Fatalf("UpdateTHMembership failed: %v", err)
+	}
+	memLogs, err = appStore.GetHistory(ctx, mem.ID)
+	if err != nil {
+		t.Fatalf("GetHistory membership after update failed: %v", err)
+	}
+	if len(memLogs) != 2 || memLogs[0].Operation != "UPDATE" {
+		t.Fatalf("expected 2 logs for membership (INSERT + UPDATE), got: %+v", memLogs)
+	}
+}
+

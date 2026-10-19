@@ -817,6 +817,11 @@ const diffParentSnapshots = (before: any, after: any): string[] => {
     changes.push(`${t('lastName')}: "${before.last_name || ''}" → "${after.last_name || ''}"`);
   }
 
+  // Address
+  if ((before.address || '') !== (after.address || '')) {
+    changes.push(`${t('address')}: "${before.address || ''}" → "${after.address || ''}"`);
+  }
+
   // Notes
   if ((before.notes || '') !== (after.notes || '')) {
     changes.push(`${t('notes')}: "${before.notes || ''}" → "${after.notes || ''}"`);
@@ -907,18 +912,123 @@ const diffParentSnapshots = (before: any, after: any): string[] => {
   return changes;
 };
 
-const formatSnapshotDetails = (log: AuditLog) => {
+const diffChildSnapshots = (before: any, after: any): string[] => {
+  const changes: string[] = [];
+
+  if ((before.first_name || '') !== (after.first_name || '')) {
+    changes.push(`${t('firstName')}: "${before.first_name || ''}" → "${after.first_name || ''}"`);
+  }
+
+  if ((before.last_name || '') !== (after.last_name || '')) {
+    changes.push(`${t('lastName')}: "${before.last_name || ''}" → "${after.last_name || ''}"`);
+  }
+
+  if (formatDisplayDate(before.birth_date) !== formatDisplayDate(after.birth_date)) {
+    changes.push(`${t('birthDate')}: ${formatDisplayDate(before.birth_date)} → ${formatDisplayDate(after.birth_date)}`);
+  }
+
+  if ((before.notes || '') !== (after.notes || '')) {
+    changes.push(`${t('notes')}: "${before.notes || ''}" → "${after.notes || ''}"`);
+  }
+
+  return changes;
+};
+
+const diffGroupChangeSnapshots = (before: any, after: any): string[] => {
+  const changes: string[] = [];
+  const groupLabels: Record<number, string> = {
+    0: t('exit'),
+    1: t('group1'),
+    2: t('group2'),
+    3: t('group3'),
+  };
+  const getGroupLabel = (val: number) => groupLabels[val] || `${t('targetGroup')}: ${val}`;
+
+  if (before.target_group !== after.target_group) {
+    changes.push(`${t('targetGroup')}: ${getGroupLabel(before.target_group)} → ${getGroupLabel(after.target_group)}`);
+  }
+
+  if (formatDisplayDate(before.change_date) !== formatDisplayDate(after.change_date)) {
+    changes.push(`${t('date')}: ${formatDisplayDate(before.change_date)} → ${formatDisplayDate(after.change_date)}`);
+  }
+
+  return changes;
+};
+
+const diffHygieneEventSnapshots = (before: any, after: any): string[] => {
+  const changes: string[] = [];
+  const getHygieneTypeLabel = (val: string) => val === 'initial' ? t('initialType') : t('recertifyType');
+
+  if (before.event_type !== after.event_type) {
+    changes.push(`${t('eventType')}: ${getHygieneTypeLabel(before.event_type)} → ${getHygieneTypeLabel(after.event_type)}`);
+  }
+
+  if (formatDisplayDate(before.event_date) !== formatDisplayDate(after.event_date)) {
+    changes.push(`${t('date')}: ${formatDisplayDate(before.event_date)} → ${formatDisplayDate(after.event_date)}`);
+  }
+
+  if ((before.documentation || '') !== (after.documentation || '')) {
+    changes.push(`${t('documentation')}: "${before.documentation || ''}" → "${after.documentation || ''}"`);
+  }
+
+  return changes;
+};
+
+const diffMembershipSnapshots = (before: any, after: any): string[] => {
+  const changes: string[] = [];
+  const getMembershipLabel = (val: string) => val === 'full_member' ? t('full_member') : t('supporting_member');
+
+  if (before.membership_type !== after.membership_type) {
+    changes.push(`${t('membershipType')}: ${getMembershipLabel(before.membership_type)} → ${getMembershipLabel(after.membership_type)}`);
+  }
+
+  if (formatDisplayDate(before.start_date) !== formatDisplayDate(after.start_date)) {
+    changes.push(`${t('startDateLabel')}: ${formatDisplayDate(before.start_date)} → ${formatDisplayDate(after.start_date)}`);
+  }
+
+  const bEnd = before.end_date ? formatDisplayDate(before.end_date) : '-';
+  const aEnd = after.end_date ? formatDisplayDate(after.end_date) : '-';
+  if (bEnd !== aEnd) {
+    changes.push(`${t('endDateLabel')}: ${bEnd} → ${aEnd}`);
+  }
+
+  return changes;
+};
+
+const formatSnapshotDetails = (log: AuditLog, families: Family[] = []) => {
   const data = log.after_snapshot || log.before_snapshot;
   if (!data) return '-';
 
   const parts: string[] = [];
+
+  const findChildName = (childId: string): string => {
+    for (const f of families) {
+      const c = f.children?.find((ch: any) => ch.id === childId);
+      if (c) return `${c.first_name || ''} ${c.last_name || ''}`.trim();
+    }
+    return '';
+  };
+
+  const findParentName = (parentId: string): string => {
+    for (const f of families) {
+      const p = f.parents?.find((pa: any) => pa.id === parentId);
+      if (p) return `${p.first_name || ''} ${p.last_name || ''}`.trim();
+    }
+    return '';
+  };
   
   if (log.entity_type === 'family') {
     if (data.parents && data.parents.length > 0) {
       const names = data.parents.map((p: any) => `${p.first_name} ${p.last_name}`).join(' & ');
       parts.push(`${t('family')}: ${names}`);
     } else {
-      parts.push(`Family ID: ${log.entity_id}`);
+      const fam = families.find(f => f.id === log.entity_id || f.id === log.family_id);
+      if (fam && fam.parents && fam.parents.length > 0) {
+        const names = fam.parents.map((p: any) => `${p.first_name} ${p.last_name}`).join(' & ');
+        parts.push(`${t('family')}: ${names}`);
+      } else {
+        parts.push(`Family ID: ${log.entity_id}`);
+      }
     }
   }
 
@@ -936,6 +1046,9 @@ const formatSnapshotDetails = (log: AuditLog) => {
       }
     }
 
+    if (data.address) {
+      parts.push(`${t('address')}: ${data.address}`);
+    }
     if (data.emails && data.emails.length > 0) {
       parts.push(`Emails: ${data.emails.map((e: any) => formatMultiValueItem(e, 'emails')).join(', ')}`);
     }
@@ -943,7 +1056,7 @@ const formatSnapshotDetails = (log: AuditLog) => {
       parts.push(`Phones: ${data.phones.map((p: any) => formatMultiValueItem(p, 'phones')).join(', ')}`);
     }
     if (data.notes) {
-      parts.push(`Notes: ${data.notes}`);
+      parts.push(`${t('notes')}: ${data.notes}`);
     }
   }
 
@@ -954,16 +1067,7 @@ const formatSnapshotDetails = (log: AuditLog) => {
     }
 
     if (log.operation === 'UPDATE' && log.before_snapshot && log.after_snapshot) {
-      const changes: string[] = [];
-      if ((log.before_snapshot.first_name || '') !== (log.after_snapshot.first_name || '')) {
-        changes.push(`${t('firstName')}: "${log.before_snapshot.first_name || ''}" → "${log.after_snapshot.first_name || ''}"`);
-      }
-      if ((log.before_snapshot.last_name || '') !== (log.after_snapshot.last_name || '')) {
-        changes.push(`${t('lastName')}: "${log.before_snapshot.last_name || ''}" → "${log.after_snapshot.last_name || ''}"`);
-      }
-      if ((log.before_snapshot.birth_date || '') !== (log.after_snapshot.birth_date || '')) {
-        changes.push(`${t('birthDate')}: ${formatDisplayDate(log.before_snapshot.birth_date)} → ${formatDisplayDate(log.after_snapshot.birth_date)}`);
-      }
+      const changes = diffChildSnapshots(log.before_snapshot, log.after_snapshot);
       if (changes.length > 0) {
         parts.push(`${t('changes')}: ${changes.join(', ')}`);
         return parts.join(' | ');
@@ -973,9 +1077,25 @@ const formatSnapshotDetails = (log: AuditLog) => {
     if (data.birth_date) {
       parts.push(`${t('birthDate')}: ${formatDisplayDate(data.birth_date)}`);
     }
+    if (data.notes) {
+      parts.push(`${t('notes')}: ${data.notes}`);
+    }
   }
 
   if (log.entity_type === 'child_group_change') {
+    const childName = findChildName(data.child);
+    if (childName) {
+      parts.push(childName);
+    }
+
+    if (log.operation === 'UPDATE' && log.before_snapshot && log.after_snapshot) {
+      const changes = diffGroupChangeSnapshots(log.before_snapshot, log.after_snapshot);
+      if (changes.length > 0) {
+        parts.push(`${t('changes')}: ${changes.join(', ')}`);
+        return parts.join(' | ');
+      }
+    }
+
     const groupLabels: Record<number, string> = {
       0: t('exit'),
       1: t('group1'),
@@ -990,10 +1110,23 @@ const formatSnapshotDetails = (log: AuditLog) => {
   }
 
   if (log.entity_type === 'hygiene_event') {
+    const parentName = findParentName(data.parent_id);
+    if (parentName) {
+      parts.push(parentName);
+    }
+
+    if (log.operation === 'UPDATE' && log.before_snapshot && log.after_snapshot) {
+      const changes = diffHygieneEventSnapshots(log.before_snapshot, log.after_snapshot);
+      if (changes.length > 0) {
+        parts.push(`${t('changes')}: ${changes.join(', ')}`);
+        return parts.join(' | ');
+      }
+    }
+
     const typeLabel = data.event_type === 'initial' ? t('initialType') : t('recertifyType');
     parts.push(`${typeLabel}`);
     if (data.event_date) {
-      parts.push(`Datum: ${formatDisplayDate(data.event_date)}`);
+      parts.push(`${t('date')}: ${formatDisplayDate(data.event_date)}`);
     }
     if (data.documentation) {
       parts.push(`Info: ${data.documentation}`);
@@ -1001,6 +1134,19 @@ const formatSnapshotDetails = (log: AuditLog) => {
   }
 
   if (log.entity_type === 'th_membership') {
+    const parentName = findParentName(data.parent_id);
+    if (parentName) {
+      parts.push(parentName);
+    }
+
+    if (log.operation === 'UPDATE' && log.before_snapshot && log.after_snapshot) {
+      const changes = diffMembershipSnapshots(log.before_snapshot, log.after_snapshot);
+      if (changes.length > 0) {
+        parts.push(`${t('changes')}: ${changes.join(', ')}`);
+        return parts.join(' | ');
+      }
+    }
+
     const typeLabel = data.membership_type === 'full_member' ? t('full_member') : t('supporting_member');
     parts.push(`${typeLabel}`);
     if (data.start_date) {
@@ -1014,7 +1160,9 @@ const formatSnapshotDetails = (log: AuditLog) => {
   return parts.join(' | ');
 };
 
-const AuditLogView: React.FC<{ logs: AuditLog[]; loading: boolean }> = ({ logs, loading }) => {
+const AuditLogView: React.FC<{ logs: AuditLog[]; loading: boolean; families?: Family[] }> = ({ logs, loading, families = [] }) => {
+  const [filterText, setFilterText] = React.useState('');
+
   if (loading) {
     return <div style={{ color: '#64748b', padding: '1rem' }}>{t('loading')}</div>;
   }
@@ -1045,9 +1193,11 @@ const AuditLogView: React.FC<{ logs: AuditLog[]; loading: boolean }> = ({ logs, 
       case 'family':
         return t('family');
       case 'parent':
-        return t('parent1');
+        return t('addParentShort');
       case 'child':
-        return t('children');
+        return t('addChildShort');
+      case 'child_group_change':
+        return t('groupChange');
       case 'hygiene_event':
         return t('hygieneBelehrung');
       case 'th_membership':
@@ -1059,8 +1209,29 @@ const AuditLogView: React.FC<{ logs: AuditLog[]; loading: boolean }> = ({ logs, 
 
   const safeLogs = Array.isArray(logs) ? logs : [];
 
+  const filteredLogs = safeLogs.filter((log) => {
+    if (!filterText.trim()) return true;
+    const term = filterText.toLowerCase();
+    const email = (log.changed_by_email || '').toLowerCase();
+    const op = (log.operation || '').toLowerCase();
+    const type = (getEntityTypeLabel(log.entity_type) || '').toLowerCase();
+    const details = formatSnapshotDetails(log, families).toLowerCase();
+    const dateStr = new Date(log.created_at).toLocaleString(CURRENT_LOCALE === 'de' ? 'de-DE' : 'en-US').toLowerCase();
+    return email.includes(term) || op.includes(term) || type.includes(term) || details.includes(term) || dateStr.includes(term);
+  });
+
   return (
     <div className="table-container" style={{ overflowX: 'auto', background: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border)', padding: '1.25rem', boxShadow: 'var(--shadow)' }}>
+      <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <input
+          type="text"
+          value={filterText}
+          onChange={(e) => setFilterText(e.target.value)}
+          placeholder={t('searchAudit')}
+          className="search-input"
+          style={{ maxWidth: '300px', marginBottom: 0 }}
+        />
+      </div>
       <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
         <thead>
           <tr style={{ borderBottom: '2px solid var(--border)' }}>
@@ -1072,14 +1243,14 @@ const AuditLogView: React.FC<{ logs: AuditLog[]; loading: boolean }> = ({ logs, 
           </tr>
         </thead>
         <tbody>
-          {safeLogs.length === 0 ? (
+          {filteredLogs.length === 0 ? (
             <tr>
               <td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic' }}>
                 {CURRENT_LOCALE === 'de' ? 'Keine Einträge vorhanden' : 'No entries found'}
               </td>
             </tr>
           ) : (
-            safeLogs.map((log) => (
+            filteredLogs.map((log) => (
               <tr key={log.id} style={{ borderBottom: '1px solid var(--border)' }}>
                 <td style={{ padding: '0.75rem 0.5rem', color: '#64748b', fontSize: '0.85rem' }}>
                   {new Date(log.created_at).toLocaleString(CURRENT_LOCALE === 'de' ? 'de-DE' : 'en-US')}
@@ -1096,7 +1267,7 @@ const AuditLogView: React.FC<{ logs: AuditLog[]; loading: boolean }> = ({ logs, 
                   {getEntityTypeLabel(log.entity_type)}
                 </td>
                 <td style={{ padding: '0.75rem 0.5rem', color: 'var(--text)', fontSize: '0.85rem', whiteSpace: 'pre-wrap', lineHeight: '1.4' }}>
-                  {formatSnapshotDetails(log)}
+                  {formatSnapshotDetails(log, families)}
                 </td>
               </tr>
             ))
@@ -5638,7 +5809,7 @@ function formatParentsSummary(parents: any[]): string {
             highlightedRowId={highlightedRowId}
           />
         ) : activeTab === 'audit' && canReadAudit ? (
-          <AuditLogView logs={auditLogs} loading={auditLoading} />
+          <AuditLogView logs={auditLogs} loading={auditLoading} families={families.length > 0 ? families : (overviewFamilies as any)} />
         ) : activeTab === 'admin' && canManageUsers ? (
           <AdminView />
         ) : activeTab === 'kiosk' && canProvisionKiosk ? (
