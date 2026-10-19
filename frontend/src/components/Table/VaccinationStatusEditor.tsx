@@ -3,6 +3,7 @@ import { ShieldCheck, Plus, Trash, Pencil, Check, X, Calendar, Lock } from 'luci
 import { t, CURRENT_LOCALE, formatDisplayDate, parseInputDate } from '../../utils/i18n';
 import { CellPopover } from './CellPopover';
 import { CalendarDropdown } from '../CalendarDropdown';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 export interface VaccinationCheck {
   vaccination_type: string;
@@ -220,6 +221,8 @@ export const VaccinationStatusPopover: React.FC<VaccinationStatusPopoverProps> =
   readOnly = false,
   personType = 'parent',
 }) => {
+  const isMobile = useIsMobile();
+
   // Normalize checks directly from props
   const normalizedChecks = React.useMemo(() => {
     return (checks || []).map(normalizeCheck);
@@ -312,6 +315,353 @@ export const VaccinationStatusPopover: React.FC<VaccinationStatusPopoverProps> =
   }, [personType]);
 
   if (!isOpen) return null;
+
+  if (isMobile) {
+    return (
+      <CellPopover
+        isOpen={isOpen}
+        onClose={onClose}
+        anchorEl={anchorEl}
+        style={{
+          padding: '12px 14px 20px 14px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px',
+        }}
+      >
+        {/* Mobile Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '2px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <ShieldCheck size={18} style={{ color: normalizedChecks.length > 0 ? '#16a34a' : 'var(--text-muted)' }} />
+            <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text)' }}>
+              {t('vaccinationStatus')}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '4px',
+              color: 'var(--text-muted)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '4px',
+            }}
+            aria-label={t('cancel')}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Existing Checks as Responsive Cards */}
+        {normalizedChecks.length === 0 && !isAddingRow && (
+          <div
+            style={{
+              padding: '1.25rem 0.5rem',
+              textAlign: 'center',
+              color: '#94a3b8',
+              fontStyle: 'italic',
+              fontSize: '0.875rem',
+            }}
+          >
+            {t('noVaccinationChecksRecorded')}
+          </div>
+        )}
+
+        {normalizedChecks.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {normalizedChecks.map((item, idx) => {
+              const currentStatus = item.vaccination_status || item.vaccination_type || 'Masern 2 Impfungen';
+              const checkedBy = (item.checked_by || '').trim();
+              const entryCreatedBy = (item.entry_created_by || '').trim();
+              const showDifferentCreator = Boolean(
+                entryCreatedBy &&
+                checkedBy &&
+                entryCreatedBy.toLowerCase() !== checkedBy.toLowerCase()
+              );
+
+              return (
+                <div
+                  key={idx}
+                  style={{
+                    border: '1px solid var(--border)',
+                    borderRadius: '8px',
+                    padding: '10px 12px',
+                    background: 'var(--bg-subtle)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                    <span style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--text)', wordBreak: 'break-word' }}>
+                      {currentStatus}
+                    </span>
+                    {!readOnly && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCheck(idx)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#ef4444',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          padding: '4px',
+                          borderRadius: '4px',
+                          flexShrink: 0,
+                        }}
+                        title={t('delete')}
+                        aria-label={t('delete')}
+                      >
+                        <Trash size={15} />
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <Calendar size={13} style={{ flexShrink: 0 }} />
+                      <span>{formatDisplayDate(item.checked_on)}</span>
+                    </div>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                      <span>{t('checkedBy')}:</span>
+                      <span style={{ color: 'var(--text)' }}>
+                        {checkedBy || '-'}
+                        {showDifferentCreator && (
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '4px' }}>
+                            ({entryCreatedBy})
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Mobile Add Form */}
+        {isAddingRow && (
+          <div
+            style={{
+              border: '1px solid var(--primary)',
+              borderRadius: '8px',
+              padding: '12px',
+              background: 'var(--accent-bg, rgba(2, 132, 199, 0.06))',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px',
+            }}
+          >
+            <div style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--text)' }}>
+              {t('addVaccinationCheck')}
+            </div>
+
+            {/* Status Select */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                {t('vaccinationStatus')}
+              </label>
+              <select
+                ref={statusSelectRef}
+                value={newStatus}
+                onChange={(e) => setNewStatus(e.target.value)}
+                style={{
+                  padding: '8px 10px',
+                  fontSize: '0.875rem',
+                  border: '1px solid var(--input-border)',
+                  borderRadius: '6px',
+                  background: 'var(--input-bg)',
+                  color: newStatus ? 'var(--input-text)' : 'var(--text-muted)',
+                  width: '100%',
+                  boxSizing: 'border-box',
+                }}
+              >
+                <option value="" disabled>
+                  {t('pleaseSelect')}
+                </option>
+                {statusOptions.map((sOpt) => (
+                  <option key={sOpt.value} value={sOpt.value} style={{ color: 'var(--input-text)' }}>
+                    {sOpt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Date Input with Calendar */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                {t('date')}
+              </label>
+              <div
+                ref={dateContainerRef}
+                style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%' }}
+              >
+                <input
+                  ref={dateInputRef}
+                  type="text"
+                  value={newDate}
+                  onChange={(e) => setNewDate(e.target.value)}
+                  onFocus={() => setIsCalendarOpen(true)}
+                  onClick={() => setIsCalendarOpen(true)}
+                  placeholder={CURRENT_LOCALE === 'de' ? 'TT.MM.JJJJ' : 'YYYY-MM-DD'}
+                  style={{
+                    padding: '8px 36px 8px 10px',
+                    fontSize: '0.875rem',
+                    border: '1px solid var(--input-border)',
+                    borderRadius: '6px',
+                    background: 'var(--input-bg)',
+                    color: 'var(--input-text)',
+                    width: '100%',
+                    boxSizing: 'border-box',
+                  }}
+                  required
+                />
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '4px',
+                    color: isCalendarOpen ? 'var(--primary)' : '#64748b',
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsCalendarOpen((prev) => !prev);
+                  }}
+                  title={t('date')}
+                >
+                  <Calendar size={18} />
+                </button>
+                <CalendarDropdown
+                  anchorRef={dateContainerRef}
+                  isOpen={isCalendarOpen}
+                  onClose={() => setIsCalendarOpen(false)}
+                  selectedDateStr={newDate}
+                  onSelectDate={(formatted) => {
+                    setNewDate(formatted);
+                    setIsCalendarOpen(false);
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Checked By Input */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                {t('checkedBy')}
+              </label>
+              <input
+                type="text"
+                value={newCheckedBy}
+                onChange={(e) => setNewCheckedBy(e.target.value)}
+                placeholder="E-Mail"
+                style={{
+                  padding: '8px 10px',
+                  fontSize: '0.875rem',
+                  border: '1px solid var(--input-border)',
+                  borderRadius: '6px',
+                  background: 'var(--input-bg)',
+                  color: 'var(--input-text)',
+                  width: '100%',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            {/* Actions: Save / Cancel */}
+            <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+              <button
+                type="button"
+                onClick={handleSaveNewRow}
+                disabled={!newStatus.trim()}
+                style={{
+                  flex: 1,
+                  padding: '8px 14px',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  background: newStatus.trim() ? 'var(--primary)' : 'var(--border)',
+                  color: newStatus.trim() ? '#fff' : 'var(--text-muted)',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: newStatus.trim() ? 'pointer' : 'not-allowed',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                }}
+              >
+                <Check size={16} />
+                <span>{t('save')}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelAdd}
+                style={{
+                  padding: '8px 14px',
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                  background: 'transparent',
+                  color: 'var(--text)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                }}
+              >
+                <X size={16} />
+                <span>{t('cancel')}</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Mobile '+' Add Button */}
+        {!readOnly && !isAddingRow && (
+          <button
+            type="button"
+            onClick={handleStartAdd}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              width: '100%',
+              padding: '8px 16px',
+              fontSize: '0.875rem',
+              fontWeight: 500,
+              background: 'var(--bg-subtle)',
+              color: 'var(--text)',
+              border: '1px dashed var(--border-strong, #94a3b8)',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              marginTop: '4px',
+            }}
+            title={t('addVaccinationCheck')}
+          >
+            <Plus size={16} />
+            <span>{t('addVaccinationCheck')}</span>
+          </button>
+        )}
+      </CellPopover>
+    );
+  }
 
   return (
     <CellPopover
