@@ -26,23 +26,21 @@ fi
 if [ -z "${APP_FAVICON_URL}" ]; then
   if [ -n "${APP_FAVICON_FILE}" ] && [ -f "${APP_FAVICON_FILE}" ]; then
     EXT="${APP_FAVICON_FILE##*.}"
-    cp "${APP_FAVICON_FILE}" "/usr/share/nginx/html/favicon-custom.${EXT}"
-    APP_FAVICON_URL="/favicon-custom.${EXT}"
+    cp "${APP_FAVICON_FILE}" "/usr/share/nginx/html/favicon.${EXT}"
+    APP_FAVICON_URL="/favicon.${EXT}"
   elif [ -f "/etc/thweb/favicon.svg" ]; then
-    cp /etc/thweb/favicon.svg /usr/share/nginx/html/favicon-custom.svg
-    APP_FAVICON_URL="/favicon-custom.svg"
+    cp /etc/thweb/favicon.svg /usr/share/nginx/html/favicon.svg
+    APP_FAVICON_URL="/favicon.svg"
   elif [ -f "/etc/thweb/favicon.ico" ]; then
-    cp /etc/thweb/favicon.ico /usr/share/nginx/html/favicon-custom.ico
-    APP_FAVICON_URL="/favicon-custom.ico"
+    cp /etc/thweb/favicon.ico /usr/share/nginx/html/favicon.ico
+    APP_FAVICON_URL="/favicon.ico"
   elif [ -f "/etc/thweb/favicon.png" ]; then
-    cp /etc/thweb/favicon.png /usr/share/nginx/html/favicon-custom.png
-    APP_FAVICON_URL="/favicon-custom.png"
+    cp /etc/thweb/favicon.png /usr/share/nginx/html/favicon.png
+    APP_FAVICON_URL="/favicon.png"
   elif [ -f "/usr/share/nginx/html/favicon.ico" ]; then
     APP_FAVICON_URL="/favicon.ico"
   elif [ -f "/usr/share/nginx/html/favicon.png" ]; then
     APP_FAVICON_URL="/favicon.png"
-  elif [ -f "/usr/share/nginx/html/favicon-custom.svg" ]; then
-    APP_FAVICON_URL="/favicon-custom.svg"
   fi
 fi
 
