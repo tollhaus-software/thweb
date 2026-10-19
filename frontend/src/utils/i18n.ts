@@ -4,7 +4,7 @@ export const CURRENT_LOCALE: Locale = 'de'; // Switch default locale in code her
 
 const translations: Record<Locale, Record<string, string>> = {
   de: {
-    title: 'Kindergarten-Verzeichnis',
+    title: 'TH Portal',
     logout: 'Abmelden',
     parents: 'Eltern(MGA)',
     overviewParentsBadge: 'Eltern',
@@ -281,7 +281,7 @@ const translations: Record<Locale, Record<string, string>> = {
     reauthPopupClosed: 'Das Anmeldefenster wurde geschlossen, ohne die Anmeldung abzuschließen.',
   },
   en: {
-    title: 'Kindergarten Directory',
+    title: 'TH Portal',
     logout: 'Sign out',
     parents: 'Parents(MGA)',
     overviewParentsBadge: 'Parents',
