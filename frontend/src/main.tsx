@@ -26,6 +26,7 @@ declare global {
       GOOGLE_PROTECTED_DATA_CLIENT_ID?: string;
       APP_TITLE?: string;
       APP_LOGO_URL?: string;
+      APP_FAVICON_URL?: string;
     };
   }
 }

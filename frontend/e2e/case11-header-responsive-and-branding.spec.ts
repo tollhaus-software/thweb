@@ -127,4 +127,21 @@ test.describe('Test Case 11: Header Responsive Sign Out Overflow Menu & Branding
     const textHeading = page.locator('header .header-brand h1');
     await expect(textHeading).toHaveCount(0);
   });
+
+  test('injecting custom favicon updates favicon link tag', async ({ page }) => {
+    await page.addInitScript(() => {
+      window.ENV = {
+        GOOGLE_CLIENT_ID: 'mock',
+        GOOGLE_PROTECTED_DATA_CLIENT_ID: 'mock-protected-data',
+        APP_FAVICON_URL: '/custom-favicon.ico',
+      };
+      localStorage.setItem('token', 'developer@example.com');
+    });
+
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const faviconLink = page.locator("link[rel~='icon']");
+    await expect(faviconLink).toHaveAttribute('href', '/custom-favicon.ico');
+  });
 });

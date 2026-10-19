@@ -5613,12 +5613,25 @@ const AppContent: React.FC = () => {
   const { user, loading } = useAuth();
   const appConfig = getAppConfig();
   const appTitle = appConfig.title || t('title');
+  const faviconUrl = appConfig.faviconUrl;
 
   React.useEffect(() => {
     if (appTitle) {
       document.title = appTitle;
     }
   }, [appTitle]);
+
+  React.useEffect(() => {
+    if (faviconUrl) {
+      let link: HTMLLinkElement | null = document.querySelector("link[rel~='icon']");
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.head.appendChild(link);
+      }
+      link.href = faviconUrl;
+    }
+  }, [faviconUrl]);
 
   if (loading) {
     return <div>{t('loading')}</div>;
