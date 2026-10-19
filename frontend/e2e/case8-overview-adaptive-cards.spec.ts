@@ -144,11 +144,11 @@ test.describe('Test Case 8: Adaptive Card Layout for familiesOverview Tab', () =
     const miaGroupCard = page.locator('tr.overview-child-row', { hasText: 'Mia Schmidt' });
     await expect(miaGroupCard).toBeVisible();
 
-    // Expandable toggle button shows summary "Hans & Laura Schmidt"
+    // Expandable toggle button shows summary "Hans & Laura Schmidt" and exact badge "Eltern" (not "Eltern(MGA)")
     const parentsToggleBtn = page.locator('.overview-parents-toggle-btn');
     await expect(parentsToggleBtn).toBeVisible();
     await expect(parentsToggleBtn).toContainText('Hans & Laura Schmidt');
-    await expect(parentsToggleBtn).toContainText('Eltern');
+    await expect(parentsToggleBtn.locator('.overview-parents-toggle-badge')).toHaveText('Eltern');
 
     // While collapsed: parent cards in group mode are hidden
     const collapsedHansRow = page.locator('tr.overview-group-parent-row', { hasText: 'Hans Schmidt' });
@@ -204,5 +204,22 @@ test.describe('Test Case 8: Adaptive Card Layout for familiesOverview Tab', () =
       expect(Math.abs(dtPhoneBox.y - dtNameBox.y)).toBeLessThan(5);
       expect(Math.abs(dtEmailBox.y - dtPhoneBox.y)).toBeLessThan(5);
     }
+
+    // 6. Verify links from familiesOverview to Eltern(MGA) and Kinder(MGA) for users with families.all.read permission
+    const hansParentLink = desktopHansRow.locator('.family-parent-link.overview-mga-link');
+    await expect(hansParentLink).toBeVisible();
+    await expect(hansParentLink).toHaveText('(MGA Ansicht)');
+    await hansParentLink.click();
+    await expect(page.getByRole('button', { name: 'Eltern(MGA)', exact: true })).toHaveClass(/active/);
+
+    // Return to familiesOverview and test child link
+    await overviewTab.click();
+    await expect(overviewTab).toHaveClass(/active/);
+    const desktopMiaRow = page.locator('tr.overview-child-row', { hasText: 'Mia' });
+    const miaChildLink = desktopMiaRow.locator('.family-child-link.overview-mga-link');
+    await expect(miaChildLink).toBeVisible();
+    await expect(miaChildLink).toHaveText('(MGA Ansicht)');
+    await miaChildLink.click();
+    await expect(page.getByRole('button', { name: 'Kinder(MGA)', exact: true })).toHaveClass(/active/);
   });
 });

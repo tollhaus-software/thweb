@@ -1752,36 +1752,54 @@ const Dashboard: React.FC = () => {
     familyId: string;
     familyName: string;
     type: 'parent' | 'child' | 'family';
-    fromTab?: 'families' | 'parents' | 'children';
+    fromTab?: 'families' | 'familiesOverview' | 'parents' | 'children';
   } | null>(null);
 
-  const handleJumpToParent = React.useCallback((parentId: string, familyId: string, familyName: string) => {
-    setGlobalFilter('');
-    setActiveTab('parents');
-    setHighlightTarget({ id: parentId, key: Date.now() });
-    setReturnNav({ familyId, familyName, type: 'parent', fromTab: 'families' });
-    const params = new URLSearchParams({
-      fromFamily: familyId,
-      familyName,
-      highlight: parentId,
-      type: 'parent',
-    });
-    window.location.hash = `parents?${params.toString()}`;
-  }, []);
+  const handleJumpToParent = React.useCallback(
+    (
+      parentId: string,
+      familyId: string,
+      familyName: string,
+      fromTab: 'families' | 'familiesOverview' = 'families'
+    ) => {
+      setGlobalFilter('');
+      setActiveTab('parents');
+      setHighlightTarget({ id: parentId, key: Date.now() });
+      setReturnNav({ familyId, familyName, type: 'parent', fromTab });
+      const params = new URLSearchParams({
+        fromFamily: familyId,
+        familyName,
+        highlight: parentId,
+        type: 'parent',
+        fromTab,
+      });
+      window.location.hash = `parents?${params.toString()}`;
+    },
+    []
+  );
 
-  const handleJumpToChild = React.useCallback((childId: string, familyId: string, familyName: string) => {
-    setGlobalFilter('');
-    setActiveTab('children');
-    setHighlightTarget({ id: childId, key: Date.now() });
-    setReturnNav({ familyId, familyName, type: 'child', fromTab: 'families' });
-    const params = new URLSearchParams({
-      fromFamily: familyId,
-      familyName,
-      highlight: childId,
-      type: 'child',
-    });
-    window.location.hash = `children?${params.toString()}`;
-  }, []);
+  const handleJumpToChild = React.useCallback(
+    (
+      childId: string,
+      familyId: string,
+      familyName: string,
+      fromTab: 'families' | 'familiesOverview' = 'families'
+    ) => {
+      setGlobalFilter('');
+      setActiveTab('children');
+      setHighlightTarget({ id: childId, key: Date.now() });
+      setReturnNav({ familyId, familyName, type: 'child', fromTab });
+      const params = new URLSearchParams({
+        fromFamily: familyId,
+        familyName,
+        highlight: childId,
+        type: 'child',
+        fromTab,
+      });
+      window.location.hash = `children?${params.toString()}`;
+    },
+    []
+  );
 
   const handleJumpFromParentsToChildren = React.useCallback((familyId: string, familyName: string) => {
     setGlobalFilter('');
@@ -2478,7 +2496,7 @@ const Dashboard: React.FC = () => {
       const fromFamily = searchParams.get('fromFamily');
       const familyName = searchParams.get('familyName');
       const type = searchParams.get('type') as 'parent' | 'child' | 'family' | null;
-      const fromTab = searchParams.get('fromTab') as 'families' | 'parents' | 'children' | null;
+      const fromTab = searchParams.get('fromTab') as 'families' | 'familiesOverview' | 'parents' | 'children' | null;
 
       if (
         (hash === 'familiesOverview' && canReadOverview) ||
@@ -3783,6 +3801,7 @@ function formatParentsSummary(parents: any[]): string {
             .map((c) => ({
               ...c,
               id: `${c.id}-${bucket.key}`,
+              original_id: c.id,
               _rowType: 'child' as const,
               hide_last_name: false,
               hide_group: true,
@@ -3821,6 +3840,7 @@ function formatParentsSummary(parents: any[]): string {
           const mappedParents = sortedParents.map((p) => ({
             ...p,
             id: `${p.id}-${bucket.key}`,
+            original_id: p.id,
             _rowType: 'parent' as const,
             indent_name: true,
             no_special_bg: true,
@@ -4508,8 +4528,8 @@ function formatParentsSummary(parents: any[]): string {
         id: 'overview_name',
         accessorFn: (row: any) => `${row.first_name || ''} ${row.last_name || ''}`.trim(),
         header: '',
-        size: 220,
-        minSize: 180,
+        size: 260,
+        minSize: 210,
         cell: (info) => {
           const item = info.row.original;
           const isIndented = item.indent_name ?? item._rowType === 'child';
@@ -4520,6 +4540,20 @@ function formatParentsSummary(parents: any[]): string {
             return (
               <span className="overview-person-name" style={isIndented ? { paddingLeft: '1.25rem', display: 'inline-block' } : undefined}>
                 {displayName}
+                {canReadFamiliesAll && (
+                  <button
+                    type="button"
+                    className="family-child-link overview-mga-link"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleJumpToChild(item.original_id || item.id, item.family_id, item.family_name || '', 'familiesOverview');
+                    }}
+                    title={t('jumpToChild')}
+                  >
+                    <span>{t('mgaViewLink')}</span>
+                    <ArrowUpRight size={11} className="family-link-icon" />
+                  </button>
+                )}
               </span>
             );
           }
@@ -4527,6 +4561,20 @@ function formatParentsSummary(parents: any[]): string {
           return (
             <span className="overview-person-name" style={isIndented ? { paddingLeft: '1.25rem', display: 'inline-block' } : undefined}>
               {fullName}
+              {canReadFamiliesAll && (
+                <button
+                  type="button"
+                  className="family-parent-link overview-mga-link"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleJumpToParent(item.original_id || item.id, item.family_id, item.family_name || '', 'familiesOverview');
+                  }}
+                  title={t('jumpToParent')}
+                >
+                  <span>{t('mgaViewLink')}</span>
+                  <ArrowUpRight size={11} className="family-link-icon" />
+                </button>
+              )}
             </span>
           );
         },
@@ -4668,7 +4716,7 @@ function formatParentsSummary(parents: any[]): string {
         },
       },
     ],
-    []
+    [canReadFamiliesAll, handleJumpToChild, handleJumpToParent]
   );
 
   const isTableTab = activeTab === 'familiesOverview' || activeTab === 'parents' || activeTab === 'children' || activeTab === 'families' || activeTab === 'hygieneBelehrung';

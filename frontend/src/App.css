@@ -785,6 +785,12 @@ tr.family-group-row td {
   text-underline-offset: 3px;
 }
 
+.overview-mga-link {
+  font-size: 0.78rem;
+  font-weight: 500;
+  margin-left: 0.45rem;
+}
+
 .family-link-icon {
   flex-shrink: 0;
   opacity: 0.75;
