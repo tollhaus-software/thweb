@@ -153,9 +153,9 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     const feesTab = page.getByRole('button', { name: 'Betreuungsgebühren' });
     await expect(feesTab).toBeVisible();
 
-    // - Admin and audit tabs must NOT be visible
+    // - Admin and Historie tabs must NOT be visible
     await expect(page.getByRole('button', { name: 'Admin' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Audit' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Historie' })).toHaveCount(0);
 
     // Verify no "Familie hinzufügen" button
     await expect(page.getByRole('button', { name: 'Familie hinzufügen' })).toHaveCount(0);

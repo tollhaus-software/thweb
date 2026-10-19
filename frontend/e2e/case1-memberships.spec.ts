@@ -586,8 +586,8 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     await page.keyboard.press('Escape');
     await expect(emailPopover).toBeHidden();
 
-    // 5. Switch to Audit tab
-    await page.getByRole('button', { name: 'Audit' }).click();
+    // 5. Switch to Historie tab
+    await page.getByRole('button', { name: 'Historie' }).click();
     const auditTable = page.locator('.data-table');
     await expect(auditTable).toBeVisible();
 

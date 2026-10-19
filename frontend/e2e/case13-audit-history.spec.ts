@@ -43,7 +43,7 @@ test.describe('Test Case 13: Audit Log and History Tracking', () => {
     await expect(johannesRow.locator('td', { hasText: 'Königstraße 10' })).toBeVisible();
 
     // Step 4: Verify audit log shows the modification neatly
-    const auditTabBtn = page.getByRole('button', { name: 'Audit' });
+    const auditTabBtn = page.getByRole('button', { name: 'Historie' });
     await expect(auditTabBtn).toBeVisible();
     await auditTabBtn.click();
 
@@ -107,7 +107,7 @@ test.describe('Test Case 13: Audit Log and History Tracking', () => {
     expect(rowsCountAfterVac).toBe(initialRowsCount);
 
     // Step 8: Search filtering in Audit log
-    const searchInput = page.locator('input[placeholder="Audit durchsuchen..."]');
+    const searchInput = page.locator('input[placeholder="Historie durchsuchen..."]');
     await expect(searchInput).toBeVisible();
     await searchInput.fill('Königstraße');
     await expect(auditTable.locator('tbody tr')).toHaveCount(1);
