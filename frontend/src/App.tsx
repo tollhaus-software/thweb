@@ -755,6 +755,11 @@ const formatMultiValueItem = (item: any, field: 'emails' | 'phones'): string => 
   return `${val} [${flagParts.join(', ')}]`;
 };
 
+const formatTelHref = (phone: string): string => {
+  const cleaned = phone.trim().replace(/\(0\)/g, '').replace(/[^\d+*#]/g, '');
+  return `tel:${cleaned || phone.trim()}`;
+};
+
 const diffParentSnapshots = (before: any, after: any): string[] => {
   const changes: string[] = [];
 
@@ -4595,7 +4600,7 @@ function formatParentsSummary(parents: any[]): string {
               .map((ph: any) => getEntryValue(ph).trim())
               .filter(Boolean);
             return (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
                 <span
                   className="overview-contact-symbol"
                   style={{
@@ -4609,14 +4614,24 @@ function formatParentsSummary(parents: any[]): string {
                 >
                   📞
                 </span>
-                <span
-                  style={{
-                    whiteSpace: 'pre-line',
-                    color: phones.length === 0 ? 'var(--text-muted)' : 'var(--text)',
-                  }}
-                >
-                  {phones.length > 0 ? phones.join('\n') : '-'}
-                </span>
+                {phones.length === 0 ? (
+                  <span style={{ color: 'var(--text-muted)' }}>-</span>
+                ) : (
+                  <span style={{ whiteSpace: 'pre-line', minWidth: 0 }}>
+                    {phones.map((phone: string, idx: number) => (
+                      <React.Fragment key={idx}>
+                        {idx > 0 && '\n'}
+                        <a
+                          href={formatTelHref(phone)}
+                          className="overview-contact-link"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {phone}
+                        </a>
+                      </React.Fragment>
+                    ))}
+                  </span>
+                )}
               </div>
             );
           }
@@ -4650,7 +4665,7 @@ function formatParentsSummary(parents: any[]): string {
             .map((e: any) => getEntryValue(e).trim())
             .filter(Boolean);
           return (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
               <span
                 className="overview-contact-symbol"
                 style={{
@@ -4664,14 +4679,24 @@ function formatParentsSummary(parents: any[]): string {
               >
                 📧
               </span>
-              <span
-                style={{
-                  whiteSpace: 'pre-line',
-                  color: emails.length === 0 ? 'var(--text-muted)' : 'var(--text)',
-                }}
-              >
-                {emails.length > 0 ? emails.join('\n') : '-'}
-              </span>
+              {emails.length === 0 ? (
+                <span style={{ color: 'var(--text-muted)' }}>-</span>
+              ) : (
+                <span style={{ whiteSpace: 'pre-line', minWidth: 0 }}>
+                  {emails.map((email: string, idx: number) => (
+                    <React.Fragment key={idx}>
+                      {idx > 0 && '\n'}
+                      <a
+                        href={`mailto:${email}`}
+                        className="overview-contact-link"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {email}
+                      </a>
+                    </React.Fragment>
+                  ))}
+                </span>
+              )}
             </div>
           );
         },

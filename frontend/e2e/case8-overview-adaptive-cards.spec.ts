@@ -126,6 +126,17 @@ test.describe('Test Case 8: Adaptive Card Layout for familiesOverview Tab', () =
       expect(addressBox.y).toBeGreaterThan(emailBox.y);
     }
 
+    // Verify phone and email are clickable links with tel: and mailto: hrefs
+    const hansPhoneLink = hansRow.locator('a.overview-contact-link[href^="tel:"]');
+    await expect(hansPhoneLink).toBeVisible();
+    await expect(hansPhoneLink).toHaveAttribute('href', 'tel:01711234567');
+    await expect(hansPhoneLink).toHaveText('0171 1234567');
+
+    const hansEmailLink = hansRow.locator('a.overview-contact-link[href^="mailto:"]');
+    await expect(hansEmailLink).toBeVisible();
+    await expect(hansEmailLink).toHaveAttribute('href', 'mailto:hans.schmidt@tollhaus-stuttgart.de');
+    await expect(hansEmailLink).toHaveText('hans.schmidt@tollhaus-stuttgart.de');
+
     // Verify child row is rendered as a compact card with group badge
     const miaRow = page.locator('tr.overview-child-row', { hasText: 'Mia' });
     await expect(miaRow).toBeVisible();
@@ -204,6 +215,15 @@ test.describe('Test Case 8: Adaptive Card Layout for familiesOverview Tab', () =
       expect(Math.abs(dtPhoneBox.y - dtNameBox.y)).toBeLessThan(5);
       expect(Math.abs(dtEmailBox.y - dtPhoneBox.y)).toBeLessThan(5);
     }
+
+    // Verify phone and email links on desktop table view
+    const dtHansPhoneLink = desktopHansRow.locator('a.overview-contact-link[href^="tel:"]');
+    await expect(dtHansPhoneLink).toBeVisible();
+    await expect(dtHansPhoneLink).toHaveAttribute('href', 'tel:01711234567');
+
+    const dtHansEmailLink = desktopHansRow.locator('a.overview-contact-link[href^="mailto:"]');
+    await expect(dtHansEmailLink).toBeVisible();
+    await expect(dtHansEmailLink).toHaveAttribute('href', 'mailto:hans.schmidt@tollhaus-stuttgart.de');
 
     // 6. Verify links from familiesOverview to Eltern(MGA) and Kinder(MGA) for users with families.all.read permission
     const hansParentLink = desktopHansRow.locator('.family-parent-link.overview-mga-link');

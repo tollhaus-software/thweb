@@ -791,6 +791,25 @@ tr.family-group-row td {
   margin-left: 0.45rem;
 }
 
+.overview-contact-link {
+  color: var(--primary);
+  text-decoration: underline;
+  text-decoration-color: rgba(37, 99, 235, 0.35);
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
+}
+
+:root[data-theme="dark"] .overview-contact-link {
+  text-decoration-color: rgba(59, 130, 246, 0.45);
+}
+
+.overview-contact-link:hover {
+  color: var(--primary-hover);
+  text-decoration-color: var(--primary-hover);
+}
+
 .family-link-icon {
   flex-shrink: 0;
   opacity: 0.75;
