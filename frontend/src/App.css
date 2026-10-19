@@ -18,8 +18,9 @@ input, select, textarea {
   opacity: 1;
 }
 
-header h1 {
-  font-size: 1.5rem;
+header h1,
+.header-brand h1 {
+  font-size: 1.25rem;
   margin: 0;
 }
 
@@ -42,15 +43,15 @@ header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
   border-bottom: 1px solid var(--border);
-  padding-bottom: 0.5rem;
+  padding-bottom: 0.4rem;
 }
 
 .header-brand {
   display: flex;
   align-items: center;
-  min-height: 40px;
+  min-height: 36px;
 }
 
 .app-header-logo {
@@ -276,7 +277,7 @@ header {
 }
 
 .tab-btn {
-  padding: 0.75rem 1rem;
+  padding: 0.5rem 1rem;
   background: none;
   border: none;
   border-bottom: 3px solid transparent;
@@ -991,8 +992,17 @@ tr.family-group-row td {
     max-width: 160px;
   }
 
+  .header-brand {
+    min-height: 32px;
+  }
+
   .header-brand h1 {
-    font-size: 1.25rem !important;
+    font-size: 1.1rem !important;
+  }
+
+  header {
+    margin-bottom: 0.5rem !important;
+    padding-bottom: 0.35rem !important;
   }
 
   .user-info span {
@@ -1008,6 +1018,16 @@ tr.family-group-row td {
 
   .dashboard-container.table-view-active {
     padding: 0.75rem !important;
+  }
+
+  .tab-btn {
+    padding: 0.25rem 0.75rem;
+    font-size: 0.85rem;
+  }
+
+  .tab-scroll-btn {
+    width: 24px;
+    height: 24px;
   }
 
   .controls-row {

@@ -1302,7 +1302,7 @@ const LandingPage: React.FC = () => {
   }
 
   const appConfig = getAppConfig();
-  const appTitle = appConfig.title || 'Kindergarten Management System';
+  const appTitle = appConfig.title || t('title');
 
   return (
     <div style={{ textAlign: 'center', marginTop: '50px' }}>
