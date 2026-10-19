@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -484,18 +485,32 @@ func TestHandleListFamiliesOverview_ProjectionAndScoping(t *testing.T) {
 		_ = appStore.DeleteFamily(ctx, testUserID, familyID2)
 	}()
 
-	// Add child to family 1 with group change
+	// Add children to family 1 with different birth dates
 	childID1 := uuid.New()
 	child1 := models.Child{
 		ID:        childID1,
 		FamilyID:  familyID1,
 		FirstName: "Charlie",
 		LastName:  "FamilyOne",
+		BirthDate: time.Date(2021, 5, 1, 0, 0, 0, 0, time.UTC),
 		Notes:     "Secret child notes",
 	}
 	if err := appStore.UpdateChild(ctx, testUserID, childID1, child1); err != nil {
 		t.Fatalf("failed to seed child: %v", err)
 	}
+
+	childID2 := uuid.New()
+	child2 := models.Child{
+		ID:        childID2,
+		FamilyID:  familyID1,
+		FirstName: "Abby",
+		LastName:  "FamilyOne",
+		BirthDate: time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC),
+	}
+	if err := appStore.UpdateChild(ctx, testUserID, childID2, child2); err != nil {
+		t.Fatalf("failed to seed child 2: %v", err)
+	}
+
 	changeDate := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	_, _ = appStore.CreateChildGroupChange(ctx, testUserID, models.ChildGroupChange{
 		Child:       childID1,
@@ -549,6 +564,21 @@ func TestHandleListFamiliesOverview_ProjectionAndScoping(t *testing.T) {
 	// Family 1 child Charlie should have group changes
 	if !strings.Contains(bodyStr, "Charlie") {
 		t.Errorf("expected child Charlie in overview, got: %s", bodyStr)
+	}
+
+	var result []OverviewFamily
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("failed to unmarshal overview response: %v", err)
+	}
+	for _, f := range result {
+		if f.ID == familyID1 {
+			if len(f.Children) < 2 {
+				t.Fatalf("expected at least 2 children for family 1, got %d", len(f.Children))
+			}
+			if f.Children[0].FirstName != "Abby" || f.Children[1].FirstName != "Charlie" {
+				t.Errorf("expected children sorted by birthdate (Abby then Charlie), got %s then %s", f.Children[0].FirstName, f.Children[1].FirstName)
+			}
+		}
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -178,8 +179,17 @@ func (s *Server) HandleListFamiliesOverview(w http.ResponseWriter, r *http.Reque
 			})
 		}
 
-		ovChildren := make([]OverviewChild, 0, len(fam.Children))
-		for _, c := range fam.Children {
+		famChildren := make([]models.Child, len(fam.Children))
+		copy(famChildren, fam.Children)
+		sort.SliceStable(famChildren, func(i, j int) bool {
+			if famChildren[i].BirthDate.Equal(famChildren[j].BirthDate) {
+				return famChildren[i].FirstName < famChildren[j].FirstName
+			}
+			return famChildren[i].BirthDate.Before(famChildren[j].BirthDate)
+		})
+
+		ovChildren := make([]OverviewChild, 0, len(famChildren))
+		for _, c := range famChildren {
 			currGrp, isFormer := computeChildOverviewGroupStatus(c.GroupChanges, now)
 			ovc := OverviewChild{
 				ID:           c.ID,
