@@ -55,10 +55,6 @@ func (s *Store) CreateFamilyWithParents(ctx context.Context, userID uuid.UUID, p
 			return err
 		}
 
-		if err := s.recordAudit(ctx, tx, transactionID, &family.ID, "family", family.ID, "INSERT", nil, family, userID); err != nil {
-			return err
-		}
-
 		// 2. Create parents
 		for _, p := range parents {
 			if p.FirstName == "" && p.LastName == "" {
@@ -82,6 +78,11 @@ func (s *Store) CreateFamilyWithParents(ctx context.Context, userID uuid.UUID, p
 			createdParents = append(createdParents, p)
 		}
 
+		family.Parents = createdParents
+		if err := s.recordAudit(ctx, tx, transactionID, &family.ID, "family", family.ID, "INSERT", nil, family, userID); err != nil {
+			return err
+		}
+
 		return nil
 	})
 
@@ -93,19 +94,131 @@ func (s *Store) CreateFamilyWithParents(ctx context.Context, userID uuid.UUID, p
 	return family, nil
 }
 
+func multiValueListEqual(a, b models.MultiValueList) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Value != b[i].Value {
+			return false
+		}
+		if a[i].AddressList != b[i].AddressList {
+			return false
+		}
+		if a[i].IdentifierEmail != b[i].IdentifierEmail {
+			return false
+		}
+	}
+	return true
+}
+
+func parentNonVaccinationChanged(old, new models.Parent) bool {
+	return old.FirstName != new.FirstName ||
+		old.LastName != new.LastName ||
+		old.Address != new.Address ||
+		old.Notes != new.Notes ||
+		!multiValueListEqual(old.Emails, new.Emails) ||
+		!multiValueListEqual(old.Phones, new.Phones)
+}
+
+func childNonVaccinationChanged(old, new models.Child) bool {
+	return old.FirstName != new.FirstName ||
+		old.LastName != new.LastName ||
+		old.BirthDate.Format("2006-01-02") != new.BirthDate.Format("2006-01-02") ||
+		old.Notes != new.Notes
+}
+
+func cleanForAudit(v interface{}) interface{} {
+	if v == nil {
+		return nil
+	}
+	switch e := v.(type) {
+	case models.Parent:
+		e.VaccinationChecks = nil
+		e.VaccinationStatusProtected = nil
+		return e
+	case *models.Parent:
+		if e == nil {
+			return nil
+		}
+		cp := *e
+		cp.VaccinationChecks = nil
+		cp.VaccinationStatusProtected = nil
+		return cp
+	case models.Child:
+		e.VaccinationChecks = nil
+		e.VaccinationStatusProtected = nil
+		return e
+	case *models.Child:
+		if e == nil {
+			return nil
+		}
+		cp := *e
+		cp.VaccinationChecks = nil
+		cp.VaccinationStatusProtected = nil
+		return cp
+	case models.Family:
+		cp := e
+		if cp.Parents != nil {
+			cp.Parents = make([]models.Parent, len(e.Parents))
+			for i := range e.Parents {
+				cp.Parents[i] = e.Parents[i]
+				cp.Parents[i].VaccinationChecks = nil
+				cp.Parents[i].VaccinationStatusProtected = nil
+			}
+		}
+		if cp.Children != nil {
+			cp.Children = make([]models.Child, len(e.Children))
+			for i := range e.Children {
+				cp.Children[i] = e.Children[i]
+				cp.Children[i].VaccinationChecks = nil
+				cp.Children[i].VaccinationStatusProtected = nil
+			}
+		}
+		return cp
+	case *models.Family:
+		if e == nil {
+			return nil
+		}
+		cp := *e
+		if cp.Parents != nil {
+			cp.Parents = make([]models.Parent, len(e.Parents))
+			for i := range e.Parents {
+				cp.Parents[i] = e.Parents[i]
+				cp.Parents[i].VaccinationChecks = nil
+				cp.Parents[i].VaccinationStatusProtected = nil
+			}
+		}
+		if cp.Children != nil {
+			cp.Children = make([]models.Child, len(e.Children))
+			for i := range e.Children {
+				cp.Children[i] = e.Children[i]
+				cp.Children[i].VaccinationChecks = nil
+				cp.Children[i].VaccinationStatusProtected = nil
+			}
+		}
+		return cp
+	default:
+		return v
+	}
+}
+
 func (s *Store) recordAudit(ctx context.Context, tx pgx.Tx, tid uuid.UUID, fid *uuid.UUID, etype string, eid uuid.UUID, op string, before interface{}, after interface{}, userID uuid.UUID) error {
 	var beforePayload, afterPayload []byte
 	var err error
 
-	if before != nil {
-		beforePayload, err = json.Marshal(before)
+	beforeCleaned := cleanForAudit(before)
+	afterCleaned := cleanForAudit(after)
+
+	if beforeCleaned != nil {
+		beforePayload, err = json.Marshal(beforeCleaned)
 		if err != nil {
 			return err
 		}
 	}
 
-	if after != nil {
-		afterPayload, err = json.Marshal(after)
+	if afterCleaned != nil {
+		afterPayload, err = json.Marshal(afterCleaned)
 		if err != nil {
 			return err
 		}
@@ -210,7 +323,13 @@ func (s *Store) ListFamilies(ctx context.Context) ([]models.Family, error) {
 }
 
 func (s *Store) GetHistory(ctx context.Context, entityID uuid.UUID) ([]models.AuditLog, error) {
-	rows, err := s.db.Query(ctx, "SELECT id, transaction_id, family_id, entity_type, entity_id, operation, before_snapshot, after_snapshot, changed_by, created_at FROM audit_log WHERE entity_id = $1 ORDER BY created_at DESC", entityID)
+	rows, err := s.db.Query(ctx, `
+		SELECT a.id, a.transaction_id, a.family_id, a.entity_type, a.entity_id, a.operation, a.before_snapshot, a.after_snapshot, a.changed_by, COALESCE(u.email, ''), a.created_at
+		FROM audit_log a
+		LEFT JOIN users u ON a.changed_by = u.id
+		WHERE a.entity_id = $1
+		ORDER BY a.created_at DESC
+	`, entityID)
 	if err != nil {
 		return nil, err
 	}
@@ -219,10 +338,13 @@ func (s *Store) GetHistory(ctx context.Context, entityID uuid.UUID) ([]models.Au
 	var logs []models.AuditLog
 	for rows.Next() {
 		var l models.AuditLog
-		if err := rows.Scan(&l.ID, &l.TransactionID, &l.FamilyID, &l.EntityType, &l.EntityID, &l.Operation, &l.BeforeSnapshot, &l.AfterSnapshot, &l.ChangedBy, &l.CreatedAt); err != nil {
+		if err := rows.Scan(&l.ID, &l.TransactionID, &l.FamilyID, &l.EntityType, &l.EntityID, &l.Operation, &l.BeforeSnapshot, &l.AfterSnapshot, &l.ChangedBy, &l.ChangedByEmail, &l.CreatedAt); err != nil {
 			return nil, err
 		}
 		logs = append(logs, l)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return logs, nil
 }
@@ -274,9 +396,15 @@ func (s *Store) GetFamilyIDByIdentifierEmail(ctx context.Context, email string) 
 func (s *Store) UpdateFamilyParents(ctx context.Context, userID uuid.UUID, familyID uuid.UUID, parents []models.Parent) error {
 	transactionID := uuid.New()
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, "INSERT INTO families (id) VALUES ($1) ON CONFLICT (id) DO NOTHING", familyID)
+		res, err := tx.Exec(ctx, "INSERT INTO families (id) VALUES ($1) ON CONFLICT (id) DO NOTHING", familyID)
 		if err != nil {
 			return err
+		}
+		if res.RowsAffected() > 0 {
+			fam := models.Family{ID: familyID}
+			if err := s.recordAudit(ctx, tx, transactionID, &familyID, "family", familyID, "INSERT", nil, fam, userID); err != nil {
+				return err
+			}
 		}
 		for _, p := range parents {
 			p.Emails = sanitizeSlice(p.Emails)
@@ -313,8 +441,10 @@ func (s *Store) UpdateFamilyParents(ctx context.Context, userID uuid.UUID, famil
 					return err
 				}
 			} else {
-				if err := s.recordAudit(ctx, tx, transactionID, &familyID, "parent", p.ID, "UPDATE", oldParent, p, userID); err != nil {
-					return err
+				if parentNonVaccinationChanged(oldParent, p) {
+					if err := s.recordAudit(ctx, tx, transactionID, &familyID, "parent", p.ID, "UPDATE", oldParent, p, userID); err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -326,9 +456,15 @@ func (s *Store) UpdateChild(ctx context.Context, userID uuid.UUID, childID uuid.
 	transactionID := uuid.New()
 
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, "INSERT INTO families (id) VALUES ($1) ON CONFLICT (id) DO NOTHING", child.FamilyID)
+		res, err := tx.Exec(ctx, "INSERT INTO families (id) VALUES ($1) ON CONFLICT (id) DO NOTHING", child.FamilyID)
 		if err != nil {
 			return err
+		}
+		if res.RowsAffected() > 0 {
+			fam := models.Family{ID: child.FamilyID}
+			if err := s.recordAudit(ctx, tx, transactionID, &child.FamilyID, "family", child.FamilyID, "INSERT", nil, fam, userID); err != nil {
+				return err
+			}
 		}
 
 		var oldChild models.Child
@@ -341,7 +477,7 @@ func (s *Store) UpdateChild(ctx context.Context, userID uuid.UUID, childID uuid.
 			child.VaccinationStatusProtected = oldChild.VaccinationStatusProtected
 		}
 
-		res, err := tx.Exec(ctx,
+		res, err = tx.Exec(ctx,
 			"UPDATE children SET first_name = $1, last_name = $2, birth_date = $3, notes = $4, vaccination_status_protected = $5, updated_at = NOW() WHERE id = $6",
 			child.FirstName, child.LastName, child.BirthDate, child.Notes, child.VaccinationStatusProtected, childID)
 		if err != nil {
@@ -375,7 +511,10 @@ func (s *Store) UpdateChild(ctx context.Context, userID uuid.UUID, childID uuid.
 			}
 			return s.recordAudit(ctx, tx, transactionID, &child.FamilyID, "child", child.ID, "INSERT", nil, child, userID)
 		} else {
-			return s.recordAudit(ctx, tx, transactionID, &child.FamilyID, "child", childID, "UPDATE", oldChild, child, userID)
+			if childNonVaccinationChanged(oldChild, child) {
+				return s.recordAudit(ctx, tx, transactionID, &child.FamilyID, "child", childID, "UPDATE", oldChild, child, userID)
+			}
+			return nil
 		}
 	})
 }
@@ -385,6 +524,9 @@ func (s *Store) DeleteFamily(ctx context.Context, userID uuid.UUID, familyID uui
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
 		var family models.Family
 		family.ID = familyID
+		parents, _ := s.GetParentsByFamilyID(ctx, familyID)
+		family.Parents = parents
+
 		if err := s.recordAudit(ctx, tx, transactionID, &familyID, "family", familyID, "DELETE", family, nil, userID); err != nil {
 			return err
 		}
@@ -576,7 +718,12 @@ func (s *Store) UpdateHygieneEvent(ctx context.Context, userID uuid.UUID, eventI
 			return err
 		}
 
-		return s.recordAudit(ctx, tx, transactionID, &familyID, "hygiene_event", eventID, "UPDATE", oldEvent, updated, userID)
+		if oldEvent.EventType != updated.EventType ||
+			oldEvent.Documentation != updated.Documentation ||
+			oldEvent.EventDate.Format("2006-01-02") != updated.EventDate.Format("2006-01-02") {
+			return s.recordAudit(ctx, tx, transactionID, &familyID, "hygiene_event", eventID, "UPDATE", oldEvent, updated, userID)
+		}
+		return nil
 	})
 
 	if err != nil {
@@ -726,7 +873,20 @@ func (s *Store) UpdateTHMembership(ctx context.Context, userID uuid.UUID, member
 			return err
 		}
 
-		return s.recordAudit(ctx, tx, transactionID, &familyID, "th_membership", membershipID, "UPDATE", oldMembership, updated, userID)
+		oldEndStr := ""
+		if oldMembership.EndDate != nil {
+			oldEndStr = oldMembership.EndDate.Format("2006-01-02")
+		}
+		newEndStr := ""
+		if updated.EndDate != nil {
+			newEndStr = updated.EndDate.Format("2006-01-02")
+		}
+		if oldMembership.MembershipType != updated.MembershipType ||
+			oldMembership.StartDate.Format("2006-01-02") != updated.StartDate.Format("2006-01-02") ||
+			oldEndStr != newEndStr {
+			return s.recordAudit(ctx, tx, transactionID, &familyID, "th_membership", membershipID, "UPDATE", oldMembership, updated, userID)
+		}
+		return nil
 	})
 	return updated, err
 }
@@ -832,7 +992,10 @@ func (s *Store) UpdateChildGroupChange(ctx context.Context, userID uuid.UUID, ch
 			return err
 		}
 
-		return s.recordAudit(ctx, tx, transactionID, &familyID, "child_group_change", changeID, "UPDATE", oldChange, updated, userID)
+		if oldChange.TargetGroup != updated.TargetGroup || oldChange.ChangeDate.Format("2006-01-02") != updated.ChangeDate.Format("2006-01-02") {
+			return s.recordAudit(ctx, tx, transactionID, &familyID, "child_group_change", changeID, "UPDATE", oldChange, updated, userID)
+		}
+		return nil
 	})
 	return updated, err
 }
