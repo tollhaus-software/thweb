@@ -399,7 +399,7 @@ export function DataTable<TData>({
                           {item.summaryText}
                         </span>
                         <span className="overview-parents-toggle-badge">
-                          {t('parents')}
+                          {t('overviewParentsBadge')}
                         </span>
                       </button>
                     </td>
