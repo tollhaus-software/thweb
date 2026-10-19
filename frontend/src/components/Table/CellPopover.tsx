@@ -1,5 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { MOBILE_BREAKPOINT } from '../../constants/breakpoints';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 export interface CellPopoverProps {
   isOpen: boolean;
@@ -53,20 +55,10 @@ export const CellPopover: React.FC<CellPopoverProps> = ({
     return null;
   }, [anchorEl]);
 
-  const [isMobile, setIsMobile] = useState<boolean>(() => {
-    return typeof window !== 'undefined' ? window.innerWidth <= 768 : false;
-  });
-
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth <= 768);
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  const isMobile = useIsMobile();
 
   const getPositionStyle = useCallback((): React.CSSProperties | null => {
-    if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+    if (typeof window !== 'undefined' && window.innerWidth <= MOBILE_BREAKPOINT) {
       return {
         position: 'fixed',
         left: 0,
@@ -131,7 +123,7 @@ export const CellPopover: React.FC<CellPopoverProps> = ({
     if (!isOpen) return;
 
     const updatePosition = () => {
-      if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+      if (typeof window !== 'undefined' && window.innerWidth <= MOBILE_BREAKPOINT) {
         const pos = getPositionStyle();
         if (pos) setPositionStyle(pos);
         return;

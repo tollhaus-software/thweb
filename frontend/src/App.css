@@ -47,6 +47,21 @@ header {
   padding-bottom: 0.5rem;
 }
 
+.header-brand {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+}
+
+.app-header-logo {
+  height: 40px;
+  max-height: 48px;
+  width: auto;
+  max-width: 240px;
+  object-fit: contain;
+  display: block;
+}
+
 .user-info {
   display: flex;
   align-items: center;
@@ -64,6 +79,79 @@ header {
 
 .user-info button:hover {
   background: var(--bg-subtle);
+}
+
+.header-signout-desktop {
+  display: inline-flex;
+  align-items: center;
+}
+
+.header-overflow-mobile {
+  display: none !important;
+}
+
+.header-overflow-menu-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.header-overflow-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: var(--bg-surface) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 6px !important;
+  padding: 0.4rem !important;
+  cursor: pointer !important;
+  line-height: 1 !important;
+  transition: background-color 0.15s, border-color 0.15s !important;
+}
+
+.header-overflow-btn:hover,
+.header-overflow-btn:focus-visible {
+  background: var(--bg-hover) !important;
+  border-color: var(--border-strong) !important;
+}
+
+.header-overflow-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 140px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  padding: 0.35rem 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+}
+
+.header-overflow-menu-item {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+  width: 100% !important;
+  padding: 0.6rem 1rem !important;
+  background: transparent !important;
+  color: var(--text) !important;
+  border: none !important;
+  border-radius: 0 !important;
+  font-size: 0.95rem !important;
+  font-family: inherit !important;
+  text-align: left !important;
+  cursor: pointer !important;
+  transition: background-color 0.15s, color 0.15s !important;
+}
+
+.header-overflow-menu-item:hover,
+.header-overflow-menu-item:focus-visible {
+  background: var(--bg-hover) !important;
+  color: var(--text-h) !important;
 }
 
 .primary-button {
@@ -862,8 +950,33 @@ tr.family-group-row td {
   display: inline-flex;
 }
 
-/* Adaptive Card Layout for familiesOverview on smaller screens (<= 768px) */
-@media (max-width: 768px) {
+/* Adaptive Card Layout for familiesOverview on smaller screens (<= __MOBILE_BREAKPOINT__) */
+@media (max-width: __MOBILE_BREAKPOINT__) {
+  .header-signout-desktop {
+    display: none !important;
+  }
+
+  .header-overflow-mobile {
+    display: inline-flex !important;
+  }
+
+  .app-header-logo {
+    height: 32px;
+    max-height: 36px;
+    max-width: 160px;
+  }
+
+  .header-brand h1 {
+    font-size: 1.25rem !important;
+  }
+
+  .user-info span {
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .dashboard-container {
     padding: 0.75rem !important;
   }

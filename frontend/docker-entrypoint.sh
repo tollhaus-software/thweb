@@ -1,13 +1,55 @@
 #!/bin/sh
 set -e
 
+# Detect injected logo if APP_LOGO_URL is not set
+if [ -z "${APP_LOGO_URL}" ]; then
+  if [ -n "${APP_LOGO_FILE}" ] && [ -f "${APP_LOGO_FILE}" ]; then
+    EXT="${APP_LOGO_FILE##*.}"
+    cp "${APP_LOGO_FILE}" "/usr/share/nginx/html/logo.${EXT}"
+    APP_LOGO_URL="/logo.${EXT}"
+  elif [ -f "/etc/thweb/logo.svg" ]; then
+    cp /etc/thweb/logo.svg /usr/share/nginx/html/logo.svg
+    APP_LOGO_URL="/logo.svg"
+  elif [ -f "/etc/thweb/logo.png" ]; then
+    cp /etc/thweb/logo.png /usr/share/nginx/html/logo.png
+    APP_LOGO_URL="/logo.png"
+  elif [ -f "/usr/share/nginx/html/logo.svg" ]; then
+    APP_LOGO_URL="/logo.svg"
+  elif [ -f "/usr/share/nginx/html/logo.png" ]; then
+    APP_LOGO_URL="/logo.png"
+  elif [ -f "/usr/share/nginx/html/logo.webp" ]; then
+    APP_LOGO_URL="/logo.webp"
+  fi
+fi
+
+# Update index.html title tag if APP_TITLE is set
+if [ -n "${APP_TITLE}" ]; then
+  ESCAPED_TITLE=$(printf '%s\n' "${APP_TITLE}" | sed -e 's/[\\/&]/\\&/g')
+  sed -i "s/<title>.*<\/title>/<title>${ESCAPED_TITLE}<\/title>/g" /usr/share/nginx/html/index.html
+fi
+
+SAFE_APP_TITLE=$(printf '%s' "${APP_TITLE:-}" | sed 's/\\/\\\\/g; s/"/\\"/g')
+SAFE_APP_LOGO_URL=$(printf '%s' "${APP_LOGO_URL:-}" | sed 's/\\/\\\\/g; s/"/\\"/g')
+
 # Generate runtime env-config.js from container environment variables
 cat <<EOF > /usr/share/nginx/html/env-config.js
-window.ENV = {
+window.ENV = Object.assign({
   GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-mock}",
   GOOGLE_PROTECTED_DATA_CLIENT_ID: "${GOOGLE_PROTECTED_DATA_CLIENT_ID:-mock-protected-data}"
-};
+}, window.ENV || {});
 EOF
+
+if [ -n "${SAFE_APP_TITLE}" ]; then
+  cat <<EOF >> /usr/share/nginx/html/env-config.js
+window.ENV.APP_TITLE = "${SAFE_APP_TITLE}";
+EOF
+fi
+
+if [ -n "${SAFE_APP_LOGO_URL}" ]; then
+  cat <<EOF >> /usr/share/nginx/html/env-config.js
+window.ENV.APP_LOGO_URL = "${SAFE_APP_LOGO_URL}";
+EOF
+fi
 
 # Select Nginx template based on USE_TLS
 DOMAIN_NAME="${DOMAIN_NAME:-localhost}"
@@ -22,4 +64,3 @@ fi
 
 # Execute original Nginx CMD
 exec "$@"
-

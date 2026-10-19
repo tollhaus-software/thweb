@@ -24,6 +24,8 @@ declare global {
     ENV?: {
       GOOGLE_CLIENT_ID?: string;
       GOOGLE_PROTECTED_DATA_CLIENT_ID?: string;
+      APP_TITLE?: string;
+      APP_LOGO_URL?: string;
     };
   }
 }
