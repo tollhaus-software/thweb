@@ -1,47 +1,41 @@
 #!/bin/sh
 set -e
 
-# Detect injected logo if APP_LOGO_URL is not set
-if [ -z "${APP_LOGO_URL}" ]; then
-  if [ -n "${APP_LOGO_FILE}" ] && [ -f "${APP_LOGO_FILE}" ]; then
-    EXT="${APP_LOGO_FILE##*.}"
-    cp "${APP_LOGO_FILE}" "/usr/share/nginx/html/logo.${EXT}"
-    APP_LOGO_URL="/logo.${EXT}"
-  elif [ -f "/etc/thweb/logo.svg" ]; then
-    cp /etc/thweb/logo.svg /usr/share/nginx/html/logo.svg
-    APP_LOGO_URL="/logo.svg"
-  elif [ -f "/etc/thweb/logo.png" ]; then
-    cp /etc/thweb/logo.png /usr/share/nginx/html/logo.png
-    APP_LOGO_URL="/logo.png"
-  elif [ -f "/usr/share/nginx/html/logo.svg" ]; then
-    APP_LOGO_URL="/logo.svg"
-  elif [ -f "/usr/share/nginx/html/logo.png" ]; then
-    APP_LOGO_URL="/logo.png"
-  elif [ -f "/usr/share/nginx/html/logo.webp" ]; then
-    APP_LOGO_URL="/logo.webp"
-  fi
+# Detect injected logo file
+APP_LOGO_URL=""
+if [ -n "${APP_LOGO_FILE}" ] && [ -f "${APP_LOGO_FILE}" ]; then
+  EXT="${APP_LOGO_FILE##*.}"
+  cp "${APP_LOGO_FILE}" "/usr/share/nginx/html/logo.${EXT}"
+  APP_LOGO_URL="/logo.${EXT}"
+elif [ -f "/etc/thweb/logo.svg" ]; then
+  cp /etc/thweb/logo.svg /usr/share/nginx/html/logo.svg
+  APP_LOGO_URL="/logo.svg"
+elif [ -f "/etc/thweb/logo.png" ]; then
+  cp /etc/thweb/logo.png /usr/share/nginx/html/logo.png
+  APP_LOGO_URL="/logo.png"
+elif [ -f "/usr/share/nginx/html/logo.svg" ]; then
+  APP_LOGO_URL="/logo.svg"
+elif [ -f "/usr/share/nginx/html/logo.png" ]; then
+  APP_LOGO_URL="/logo.png"
+elif [ -f "/usr/share/nginx/html/logo.webp" ]; then
+  APP_LOGO_URL="/logo.webp"
 fi
 
-# Detect injected favicon if APP_FAVICON_URL is not set
-if [ -z "${APP_FAVICON_URL}" ]; then
-  if [ -n "${APP_FAVICON_FILE}" ] && [ -f "${APP_FAVICON_FILE}" ]; then
-    EXT="${APP_FAVICON_FILE##*.}"
-    cp "${APP_FAVICON_FILE}" "/usr/share/nginx/html/favicon.${EXT}"
-    APP_FAVICON_URL="/favicon.${EXT}"
-  elif [ -f "/etc/thweb/favicon.svg" ]; then
-    cp /etc/thweb/favicon.svg /usr/share/nginx/html/favicon.svg
-    APP_FAVICON_URL="/favicon.svg"
-  elif [ -f "/etc/thweb/favicon.ico" ]; then
-    cp /etc/thweb/favicon.ico /usr/share/nginx/html/favicon.ico
-    APP_FAVICON_URL="/favicon.ico"
-  elif [ -f "/etc/thweb/favicon.png" ]; then
-    cp /etc/thweb/favicon.png /usr/share/nginx/html/favicon.png
-    APP_FAVICON_URL="/favicon.png"
-  elif [ -f "/usr/share/nginx/html/favicon.ico" ]; then
-    APP_FAVICON_URL="/favicon.ico"
-  elif [ -f "/usr/share/nginx/html/favicon.png" ]; then
-    APP_FAVICON_URL="/favicon.png"
-  fi
+# Detect injected favicon file
+APP_FAVICON_URL=""
+if [ -n "${APP_FAVICON_FILE}" ] && [ -f "${APP_FAVICON_FILE}" ]; then
+  EXT="${APP_FAVICON_FILE##*.}"
+  cp "${APP_FAVICON_FILE}" "/usr/share/nginx/html/favicon.${EXT}"
+  APP_FAVICON_URL="/favicon.${EXT}"
+elif [ -f "/etc/thweb/favicon.svg" ]; then
+  cp /etc/thweb/favicon.svg /usr/share/nginx/html/favicon.svg
+  APP_FAVICON_URL="/favicon.svg"
+elif [ -f "/etc/thweb/favicon.ico" ]; then
+  cp /etc/thweb/favicon.ico /usr/share/nginx/html/favicon.ico
+  APP_FAVICON_URL="/favicon.ico"
+elif [ -f "/etc/thweb/favicon.png" ]; then
+  cp /etc/thweb/favicon.png /usr/share/nginx/html/favicon.png
+  APP_FAVICON_URL="/favicon.png"
 fi
 
 # Update index.html title tag if APP_TITLE is set
@@ -57,8 +51,8 @@ if [ -n "${APP_FAVICON_URL}" ]; then
 fi
 
 SAFE_APP_TITLE=$(printf '%s' "${APP_TITLE:-}" | sed 's/\\/\\\\/g; s/"/\\"/g')
-SAFE_APP_LOGO_URL=$(printf '%s' "${APP_LOGO_URL:-}" | sed 's/\\/\\\\/g; s/"/\\"/g')
-SAFE_APP_FAVICON_URL=$(printf '%s' "${APP_FAVICON_URL:-}" | sed 's/\\/\\\\/g; s/"/\\"/g')
+SAFE_APP_LOGO_URL=$(printf '%s' "${APP_LOGO_URL}" | sed 's/\\/\\\\/g; s/"/\\"/g')
+SAFE_APP_FAVICON_URL=$(printf '%s' "${APP_FAVICON_URL}" | sed 's/\\/\\\\/g; s/"/\\"/g')
 
 # Generate runtime env-config.js from container environment variables
 cat <<EOF > /usr/share/nginx/html/env-config.js
