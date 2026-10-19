@@ -211,6 +211,8 @@ test.describe('Test Case 4: Childcare Fees Tooltips & Translations', () => {
     // Open Betreuungsgebühren tab
     await page.getByRole('button', { name: 'Betreuungsgebühren' }).click();
     await expect(page.getByRole('heading', { name: 'Monatliche Gebühren pro Familie' })).toBeVisible();
+    await expect(page.locator('.fees-month-range-row')).toContainText('Von');
+    await expect(page.locator('.fees-month-range-row')).toContainText('Bis');
 
     // Desktop multi-family checklist must NOT be visible on mobile
     await expect(page.getByRole('button', { name: /Familien auswählen/i })).toHaveCount(0);
