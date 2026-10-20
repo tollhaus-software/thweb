@@ -1555,6 +1555,16 @@ tr.family-group-row td {
     padding: 0.75rem 0.9rem !important;
   }
 
+  /* In members-table mobile cards */
+  .data-table.members-table tr:not(.empty-sub-row) {
+    gap: 0.2rem !important;
+    padding: 0.65rem 0.85rem !important;
+  }
+
+  .data-table.members-table tr:not(.empty-sub-row) td[data-column-id="name"] {
+    display: none !important;
+  }
+
   /* Align left, remove border-bottom and adjust padding for child card fields in families-table */
   .data-table.families-table tr:not(.family-group-row):not(.empty-sub-row) td[data-column-id="child_name"],
   .data-table.families-table tr:not(.family-group-row):not(.empty-sub-row) td[data-column-id="birth_date"],

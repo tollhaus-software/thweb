@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS roles (
     name TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     permissions JSONB NOT NULL DEFAULT '[]',
+    deny_permissions JSONB NOT NULL DEFAULT '[]',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -169,14 +170,6 @@ CREATE TRIGGER update_children_group_changes_updated_at BEFORE UPDATE ON childre
 
 CREATE INDEX IF NOT EXISTS idx_children_group_changes_child ON children_group_changes(child);
 
--- Default roles
-INSERT INTO roles (id, name, description, permissions) VALUES
-    ('admin', 'Administrator', 'Full system access', '["*"]'),
-    ('viewer', 'Viewer', 'Read-only access', '["families.all.read", "fees.self.read", "audit.all.read"]'),
-    ('treasurer', 'Treasurer', 'Fee calculation and membership management', '["families.all.read", "fees.all.read", "memberships.all.write"]'),
-    ('caregiver', 'Caregiver', 'Child and hygiene tracking', '["families.all.read", "children.all.write", "hygiene.all.write"]'),
-    ('mga', 'MGA', 'Masernschutzgesetz (Vaccination status management)', '["families.all.read", "families.all.write", "children.all.write", "vaccination.status.manage"]')
-ON CONFLICT (id) DO NOTHING;
 
 -- Yellow bag days table
 CREATE TABLE IF NOT EXISTS yellow_bag_days (

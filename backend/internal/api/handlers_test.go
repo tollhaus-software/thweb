@@ -35,7 +35,7 @@ func TestHandleListAuditLogs_Permission(t *testing.T) {
 			wantStatus: http.StatusForbidden,
 		},
 		{
-			name: "user without audit.all.read",
+			name: "user without audit.view",
 			user: &models.UserWithPermissions{
 				Email:                "developer@example.com",
 				EffectivePermissions: []string{"families.all.read", "children.all.write"},
@@ -816,3 +816,61 @@ func TestComputeChildOverviewGroupStatus(t *testing.T) {
 		t.Errorf("expected nil, true for former child; got %v, %v", cg, isFormer)
 	}
 }
+
+func TestHandleListMembers_Permissions(t *testing.T) {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := store.NewStore(pool)
+	s := &Server{Store: appStore}
+	handler := auth.RequirePermission("memberships.all.read")(http.HandlerFunc(s.HandleListMembers))
+
+	// 1. Without permission -> 403 Forbidden
+	req := httptest.NewRequest("GET", "/api/members", nil)
+	uForbidden := &models.UserWithPermissions{
+		Email:                "caregiver@example.com",
+		EffectivePermissions: []string{"families.all.read"},
+	}
+	ctxReq := context.WithValue(req.Context(), auth.UserContextKey, uForbidden)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req.WithContext(ctxReq))
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("expected 403 Forbidden without memberships.all.read, got %d", rec.Code)
+	}
+
+	// 2. With memberships.all.read -> 200 OK
+	uAllowed := &models.UserWithPermissions{
+		Email:                "finanz@example.com",
+		EffectivePermissions: []string{"memberships.all.read"},
+	}
+	ctxReq2 := context.WithValue(req.Context(), auth.UserContextKey, uAllowed)
+	rec2 := httptest.NewRecorder()
+	handler.ServeHTTP(rec2, req.WithContext(ctxReq2))
+	if rec2.Code != http.StatusOK {
+		t.Errorf("expected 200 OK with memberships.all.read, got %d", rec2.Code)
+	}
+
+	// 3. Implied via memberships.all.write -> 200 OK
+	uWrite := &models.UserWithPermissions{
+		Email:                "treasurer@example.com",
+		EffectivePermissions: []string{"memberships.all.write"},
+	}
+	ctxReq3 := context.WithValue(req.Context(), auth.UserContextKey, uWrite)
+	rec3 := httptest.NewRecorder()
+	handler.ServeHTTP(rec3, req.WithContext(ctxReq3))
+	if rec3.Code != http.StatusOK {
+		t.Errorf("expected 200 OK with implied memberships.all.write, got %d", rec3.Code)
+	}
+}
+

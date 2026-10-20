@@ -1,0 +1,80 @@
+# ==============================================================================
+# Tollhaus Web Portal (thweb) - Default Role & Permission Definitions
+# ==============================================================================
+# Roles are synchronized to the PostgreSQL 'roles' table upon backend startup.
+# The 'auto_grant_on' field declares conditions under which a role is dynamically
+# or automatically granted. Supported triggers:
+#   - mock_auth: Seeded for developer@example.com when ALLOW_MOCK_AUTH=true
+#   - kiosk_cert: Granted to requests authenticated via mTLS client certificates
+#   - identifier_email: Granted to parents logging in via verified contact emails
+# ==============================================================================
+
+roles:
+  - id: admin
+    name: Administrator
+    description: Full system access
+    auto_grant_on:
+      - mock_auth
+    permissions:
+      - "*"
+
+  - id: viewer
+    name: Viewer
+    description: Read-only access
+    permissions:
+      - families.all.read
+      - fees.self.read
+      - audit.view
+
+  - id: treasurer
+    name: Treasurer
+    description: Fee calculation and membership management
+    permissions:
+      - families.all.read
+      - fees.all.read
+      - memberships.all.write
+
+  - id: finanzausschuss
+    name: Finanzausschuss
+    description: Membership fee auditing and financial review
+    permissions:
+      - fees.all.read
+      - memberships.all.read
+
+  - id: caregiver
+    name: Caregiver
+    description: Child and hygiene tracking
+    permissions:
+      - families.all.read
+      - children.all.write
+      - hygiene.all.write
+    deny_permissions:
+      - fees.self.read
+
+  - id: mga
+    name: MGA
+    description: Masernschutzgesetz (Vaccination status management)
+    permissions:
+      - families.all.read
+      - families.all.write
+      - children.all.write
+      - vaccination.status.manage
+
+  - id: kiosk
+    name: Kiosk
+    description: Read-only dashboard access for mTLS hardware kiosk terminals
+    auto_grant_on:
+      - kiosk_cert
+    permissions:
+      - dashboard.read
+
+  - id: restricted
+    name: Restricted Parent
+    description: Scoped self-service access for parents matching verified identifier emails
+    auto_grant_on:
+      - identifier_email
+    permissions:
+      - families.all.restrictedread
+      - fees.self.read
+      - families.self.selfservice
+      - memberships.self.read

@@ -44,6 +44,12 @@ func (s *UserWithPermissions) HasPermission(perm string) bool {
 		if perm == "fees.self.read" && (p == "fees.all.read" || p == "*") {
 			return true
 		}
+		if perm == "memberships.self.read" && (p == "memberships.all.read" || p == "memberships.all.write" || p == "*") {
+			return true
+		}
+		if perm == "memberships.all.read" && (p == "memberships.all.write" || p == "*") {
+			return true
+		}
 	}
 	return false
 }
@@ -55,6 +61,8 @@ func (s *UserWithPermissions) IsSelfFamily(familyID uuid.UUID) bool {
 func (s *UserWithPermissions) EnsureImpliedPermissions() {
 	hasFamiliesAll := false
 	hasFeesAll := false
+	hasMembershipsWrite := false
+	hasMembershipsAll := false
 	permSet := make(map[string]bool)
 	for _, p := range s.EffectivePermissions {
 		permSet[p] = true
@@ -64,6 +72,12 @@ func (s *UserWithPermissions) EnsureImpliedPermissions() {
 		if p == "*" || p == "fees.all.read" {
 			hasFeesAll = true
 		}
+		if p == "*" || p == "memberships.all.write" {
+			hasMembershipsWrite = true
+		}
+		if p == "*" || p == "memberships.all.read" {
+			hasMembershipsAll = true
+		}
 	}
 	if hasFamiliesAll {
 		permSet["families.all.restrictedread"] = true
@@ -71,10 +85,35 @@ func (s *UserWithPermissions) EnsureImpliedPermissions() {
 	if hasFeesAll {
 		permSet["fees.self.read"] = true
 	}
+	if hasMembershipsWrite {
+		permSet["memberships.all.read"] = true
+		hasMembershipsAll = true
+	}
+	if hasMembershipsAll {
+		permSet["memberships.self.read"] = true
+	}
 	s.EffectivePermissions = make([]string, 0, len(permSet))
 	for p := range permSet {
 		s.EffectivePermissions = append(s.EffectivePermissions, p)
 	}
+}
+
+// RemovePermissions removes the specified permissions from EffectivePermissions.
+func (s *UserWithPermissions) RemovePermissions(denied []string) {
+	if len(denied) == 0 || len(s.EffectivePermissions) == 0 {
+		return
+	}
+	denyMap := make(map[string]bool, len(denied))
+	for _, d := range denied {
+		denyMap[d] = true
+	}
+	filtered := make([]string, 0, len(s.EffectivePermissions))
+	for _, p := range s.EffectivePermissions {
+		if !denyMap[p] {
+			filtered = append(filtered, p)
+		}
+	}
+	s.EffectivePermissions = filtered
 }
 
 // NormalizeEmail trims surrounding whitespace and converts the email address to lowercase,
@@ -271,5 +310,18 @@ type DailyBriefResponse struct {
 	WhoIsCooking   string   `json:"who_is_cooking"`
 	MealComponents []string `json:"meal_components"`
 	TasksAndInfo   []string `json:"tasks_and_info"`
+}
+
+// MemberRow represents an active member displayed in the "Members" (Vereinsmitglieder) tab.
+type MemberRow struct {
+	ID                    uuid.UUID      `json:"id"`
+	FamilyID              uuid.UUID      `json:"family_id"`
+	FamilyName            string         `json:"family_name,omitempty"`
+	FirstName             string         `json:"first_name"`
+	LastName              string         `json:"last_name"`
+	MembershipType        string         `json:"membership_type"`
+	FirstBecameMemberDate time.Time      `json:"first_became_member_date"`
+	LastTypeChangeDate    *time.Time     `json:"last_type_change_date,omitempty"`
+	Memberships           []THMembership `json:"memberships"`
 }
 

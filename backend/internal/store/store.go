@@ -900,6 +900,103 @@ func (s *Store) UpdateTHMembership(ctx context.Context, userID uuid.UUID, member
 	return updated, err
 }
 
+func (s *Store) ListMembers(ctx context.Context) ([]models.MemberRow, error) {
+	query := `
+		SELECT 
+			p.id, 
+			p.family_id,
+			COALESCE(p.first_name, ''), 
+			COALESCE(p.last_name, ''),
+			COALESCE((
+				SELECT 'Familie ' || string_agg(p2.first_name || ' ' || p2.last_name, ' & ' ORDER BY p2.id)
+				FROM parents p2 
+				WHERE p2.family_id = p.family_id
+			), 'Familie (ohne Eltern)'),
+			COALESCE((
+				SELECT json_agg(json_build_object(
+					'id', m.id,
+					'parent_id', m.parent_id,
+					'start_date', m.start_date::timestamptz,
+					'end_date', m.end_date::timestamptz,
+					'membership_type', m.membership_type,
+					'created_at', m.created_at,
+					'updated_at', m.updated_at
+				) ORDER BY m.start_date ASC)
+				FROM th_memberships m WHERE m.parent_id = p.id
+			), '[]') as memberships
+		FROM parents p
+		WHERE EXISTS (
+			SELECT 1 FROM th_memberships m2 
+			WHERE m2.parent_id = p.id 
+			  AND m2.start_date <= CURRENT_DATE 
+			  AND (m2.end_date IS NULL OR m2.end_date >= CURRENT_DATE)
+		)
+		ORDER BY p.last_name ASC, p.first_name ASC
+	`
+
+	rows, err := s.db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+
+	var members []models.MemberRow
+	for rows.Next() {
+		var r models.MemberRow
+		var membershipsJSON []byte
+		if err := rows.Scan(&r.ID, &r.FamilyID, &r.FirstName, &r.LastName, &r.FamilyName, &membershipsJSON); err != nil {
+			return nil, err
+		}
+
+		if len(membershipsJSON) > 0 {
+			_ = json.Unmarshal(membershipsJSON, &r.Memberships)
+		}
+		if r.Memberships == nil {
+			r.Memberships = []models.THMembership{}
+		}
+
+		// Calculate current membership type, first became member date, and last type change date
+		if len(r.Memberships) > 0 {
+			var activeMembership *models.THMembership
+			for i := range r.Memberships {
+				m := &r.Memberships[i]
+				mStart := time.Date(m.StartDate.Year(), m.StartDate.Month(), m.StartDate.Day(), 0, 0, 0, 0, time.UTC)
+				var mEnd *time.Time
+				if m.EndDate != nil {
+					e := time.Date(m.EndDate.Year(), m.EndDate.Month(), m.EndDate.Day(), 23, 59, 59, 0, time.UTC)
+					mEnd = &e
+				}
+
+				if !mStart.After(today) && (mEnd == nil || !mEnd.Before(today)) {
+					activeMembership = m
+				}
+			}
+
+			if activeMembership != nil {
+				r.MembershipType = activeMembership.MembershipType
+			} else {
+				r.MembershipType = r.Memberships[len(r.Memberships)-1].MembershipType
+			}
+
+			r.FirstBecameMemberDate = r.Memberships[0].StartDate
+
+			for i := 1; i < len(r.Memberships); i++ {
+				if r.Memberships[i].MembershipType != r.Memberships[i-1].MembershipType {
+					changeDate := r.Memberships[i].StartDate
+					r.LastTypeChangeDate = &changeDate
+				}
+			}
+		}
+
+		members = append(members, r)
+	}
+
+	return members, rows.Err()
+}
+
 func (s *Store) CreateChildGroupChange(ctx context.Context, userID uuid.UUID, gc models.ChildGroupChange) (models.ChildGroupChange, error) {
 	transactionID := uuid.New()
 	var created models.ChildGroupChange
@@ -1155,7 +1252,8 @@ func (s *Store) GetUserWithPermissionsByEmail(ctx context.Context, email string)
 			u.created_at,
 			u.updated_at,
 			COALESCE(array_agg(r.id) FILTER (WHERE r.id IS NOT NULL), '{}') as roles,
-			COALESCE(jsonb_agg(r.permissions) FILTER (WHERE r.permissions IS NOT NULL), '[]'::jsonb) as role_permissions
+			COALESCE(jsonb_agg(r.permissions) FILTER (WHERE r.permissions IS NOT NULL), '[]'::jsonb) as role_permissions,
+			COALESCE(jsonb_agg(r.deny_permissions) FILTER (WHERE r.deny_permissions IS NOT NULL), '[]'::jsonb) as role_deny_permissions
 		FROM users u
 		LEFT JOIN user_roles ur ON u.id = ur.user_id
 		LEFT JOIN roles r ON ur.role_id = r.id
@@ -1164,10 +1262,10 @@ func (s *Store) GetUserWithPermissionsByEmail(ctx context.Context, email string)
 	`
 
 	var u models.UserWithPermissions
-	var userPermissionsJSON, rolePermissionsJSON []byte
+	var userPermissionsJSON, rolePermissionsJSON, roleDenyPermissionsJSON []byte
 
 	err := s.db.QueryRow(ctx, query, email).Scan(
-		&u.ID, &u.Email, &userPermissionsJSON, &u.LastLogin, &u.CreatedAt, &u.UpdatedAt, &u.Roles, &rolePermissionsJSON,
+		&u.ID, &u.Email, &userPermissionsJSON, &u.LastLogin, &u.CreatedAt, &u.UpdatedAt, &u.Roles, &rolePermissionsJSON, &roleDenyPermissionsJSON,
 	)
 	if err != nil {
 		return nil, err
@@ -1185,6 +1283,11 @@ func (s *Store) GetUserWithPermissionsByEmail(ctx context.Context, email string)
 		_ = json.Unmarshal(rolePermissionsJSON, &rolePermsList)
 	}
 
+	var roleDenyPermsList [][]string
+	if len(roleDenyPermissionsJSON) > 0 {
+		_ = json.Unmarshal(roleDenyPermissionsJSON, &roleDenyPermsList)
+	}
+
 	permMap := make(map[string]bool)
 	for _, p := range u.Permissions {
 		permMap[p] = true
@@ -1192,6 +1295,11 @@ func (s *Store) GetUserWithPermissionsByEmail(ctx context.Context, email string)
 	for _, rPerms := range rolePermsList {
 		for _, p := range rPerms {
 			permMap[p] = true
+		}
+	}
+	for _, rDeny := range roleDenyPermsList {
+		for _, p := range rDeny {
+			delete(permMap, p)
 		}
 	}
 
@@ -1213,7 +1321,8 @@ func (s *Store) ListUsers(ctx context.Context) ([]models.UserWithPermissions, er
 			u.created_at,
 			u.updated_at,
 			COALESCE(array_agg(r.id) FILTER (WHERE r.id IS NOT NULL), '{}') as roles,
-			COALESCE(jsonb_agg(r.permissions) FILTER (WHERE r.permissions IS NOT NULL), '[]'::jsonb) as role_permissions
+			COALESCE(jsonb_agg(r.permissions) FILTER (WHERE r.permissions IS NOT NULL), '[]'::jsonb) as role_permissions,
+			COALESCE(jsonb_agg(r.deny_permissions) FILTER (WHERE r.deny_permissions IS NOT NULL), '[]'::jsonb) as role_deny_permissions
 		FROM users u
 		LEFT JOIN user_roles ur ON u.id = ur.user_id
 		LEFT JOIN roles r ON ur.role_id = r.id
@@ -1229,9 +1338,9 @@ func (s *Store) ListUsers(ctx context.Context) ([]models.UserWithPermissions, er
 	var users []models.UserWithPermissions
 	for rows.Next() {
 		var u models.UserWithPermissions
-		var userPermissionsJSON, rolePermissionsJSON []byte
+		var userPermissionsJSON, rolePermissionsJSON, roleDenyPermissionsJSON []byte
 
-		err := rows.Scan(&u.ID, &u.Email, &userPermissionsJSON, &u.LastLogin, &u.CreatedAt, &u.UpdatedAt, &u.Roles, &rolePermissionsJSON)
+		err := rows.Scan(&u.ID, &u.Email, &userPermissionsJSON, &u.LastLogin, &u.CreatedAt, &u.UpdatedAt, &u.Roles, &rolePermissionsJSON, &roleDenyPermissionsJSON)
 		if err != nil {
 			return nil, err
 		}
@@ -1248,6 +1357,11 @@ func (s *Store) ListUsers(ctx context.Context) ([]models.UserWithPermissions, er
 			_ = json.Unmarshal(rolePermissionsJSON, &rolePermsList)
 		}
 
+		var roleDenyPermsList [][]string
+		if len(roleDenyPermissionsJSON) > 0 {
+			_ = json.Unmarshal(roleDenyPermissionsJSON, &roleDenyPermsList)
+		}
+
 		permMap := make(map[string]bool)
 		for _, p := range u.Permissions {
 			permMap[p] = true
@@ -1255,6 +1369,11 @@ func (s *Store) ListUsers(ctx context.Context) ([]models.UserWithPermissions, er
 		for _, rPerms := range rolePermsList {
 			for _, p := range rPerms {
 				permMap[p] = true
+			}
+		}
+		for _, rDeny := range roleDenyPermsList {
+			for _, p := range rDeny {
+				delete(permMap, p)
 			}
 		}
 

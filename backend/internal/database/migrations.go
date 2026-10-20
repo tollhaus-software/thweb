@@ -13,7 +13,7 @@ import (
 //go:embed migrations/*.sql
 var embedMigrations embed.FS
 
-func ApplySchemaMigrations(ctx context.Context, dbURL string, allowMockAuth bool) {
+func ApplySchemaMigrations(ctx context.Context, dbURL string) {
 	db, err := sql.Open("pgx", dbURL)
 	if err != nil {
 		log.Printf("[MIGRATION ERROR] Failed to connect to database for migrations: %v", err)
@@ -34,22 +34,4 @@ func ApplySchemaMigrations(ctx context.Context, dbURL string, allowMockAuth bool
 		return
 	}
 	log.Printf("[MIGRATION SUCCESS] Database schema is up to date.")
-
-	if allowMockAuth {
-		log.Println("[MIGRATION] Seeding mock users for local testing...")
-		_, err := db.ExecContext(ctx, `
-			INSERT INTO users (email) VALUES ('developer@example.com') ON CONFLICT (email) DO NOTHING;
-			INSERT INTO user_roles (user_id, role_id)
-			SELECT id, 'admin' FROM users WHERE email = 'developer@example.com'
-			ON CONFLICT (user_id, role_id) DO NOTHING;
-
-			INSERT INTO users (email) VALUES ('caregiver@example.com') ON CONFLICT (email) DO NOTHING;
-			INSERT INTO user_roles (user_id, role_id)
-			SELECT id, 'caregiver' FROM users WHERE email = 'caregiver@example.com'
-			ON CONFLICT (user_id, role_id) DO NOTHING;
-		`)
-		if err != nil {
-			log.Printf("[MIGRATION ERROR] Failed to seed mock user: %v", err)
-		}
-	}
 }

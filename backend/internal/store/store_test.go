@@ -549,7 +549,7 @@ func TestListAuditLogsForUser_PermissionsAndVisibility(t *testing.T) {
 	// 2. Caregiver User without families.all.read / memberships.all.write
 	caregiverUser := &models.UserWithPermissions{
 		Email:                "caregiver@example.com",
-		EffectivePermissions: []string{"children.all.write", "hygiene.all.write", "audit.all.read"},
+		EffectivePermissions: []string{"children.all.write", "hygiene.all.write", "audit.view"},
 	}
 	caregiverLogs, err := appStore.ListAuditLogsForUser(ctx, caregiverUser)
 	if err != nil {
@@ -570,7 +570,7 @@ func TestListAuditLogsForUser_PermissionsAndVisibility(t *testing.T) {
 	// 3. Treasurer User without hygiene.all.write / children.all.write
 	treasurerUser := &models.UserWithPermissions{
 		Email:                "treasurer@example.com",
-		EffectivePermissions: []string{"fees.all.read", "memberships.all.write", "audit.all.read"},
+		EffectivePermissions: []string{"fees.all.read", "memberships.all.write", "audit.view"},
 	}
 	treasurerLogs, err := appStore.ListAuditLogsForUser(ctx, treasurerUser)
 	if err != nil {
@@ -589,7 +589,7 @@ func TestListAuditLogsForUser_PermissionsAndVisibility(t *testing.T) {
 	selfParentUser := &models.UserWithPermissions{
 		Email:                "parent1@example.com",
 		FamilyID:             &fam1.ID,
-		EffectivePermissions: []string{"families.self.selfservice", "audit.all.read"},
+		EffectivePermissions: []string{"families.self.selfservice", "audit.view"},
 	}
 	selfParentLogs, err := appStore.ListAuditLogsForUser(ctx, selfParentUser)
 	if err != nil {

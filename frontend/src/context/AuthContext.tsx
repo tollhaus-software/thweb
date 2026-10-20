@@ -154,6 +154,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (perm === 'fees.self.read' && user.effective_permissions.includes('fees.all.read')) {
       return true;
     }
+    if (perm === 'memberships.all.read' && user.effective_permissions.includes('memberships.all.write')) {
+      return true;
+    }
+    if (
+      perm === 'memberships.self.read' &&
+      (user.effective_permissions.includes('memberships.all.read') || user.effective_permissions.includes('memberships.all.write'))
+    ) {
+      return true;
+    }
     return false;
   };
 

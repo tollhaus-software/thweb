@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/pavolmarko/thweb-backend/internal/models"
+	"github.com/pavolmarko/thweb-backend/internal/roles"
 	"github.com/pavolmarko/thweb-backend/internal/store"
 	"google.golang.org/api/idtoken"
 )
@@ -24,13 +25,21 @@ type Authenticator struct {
 	AllowMockAuth     bool
 	ProxySharedSecret string
 	Store             *store.Store
+	RolesConfig       *roles.Config
 }
 
-func NewAuthenticator(clientID string, allowMockAuth bool, store *store.Store) *Authenticator {
+func NewAuthenticator(clientID string, allowMockAuth bool, store *store.Store, rolesConfig ...*roles.Config) *Authenticator {
+	var rc *roles.Config
+	if len(rolesConfig) > 0 && rolesConfig[0] != nil {
+		rc = rolesConfig[0]
+	} else {
+		rc = roles.LoadDefault()
+	}
 	return &Authenticator{
 		GoogleClientID: clientID,
 		AllowMockAuth:  allowMockAuth,
 		Store:          store,
+		RolesConfig:    rc,
 	}
 }
 
@@ -60,11 +69,22 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 			if dn != "" {
 				kioskEmail = "kiosk+" + dn + "@internal"
 			}
+			kioskRoles, kioskPerms := a.RolesConfig.RolesForTrigger(roles.AutoGrantKioskCert)
+			if len(kioskRoles) == 0 {
+				kioskRoles = []string{"kiosk"}
+			}
+			if len(kioskPerms) == 0 {
+				kioskPerms = []string{"dashboard.read"}
+			}
 			kioskUser := &models.UserWithPermissions{
 				Email:                kioskEmail,
-				Roles:                []string{"kiosk"},
-				Permissions:          []string{"dashboard.read"},
-				EffectivePermissions: []string{"dashboard.read"},
+				Roles:                kioskRoles,
+				Permissions:          kioskPerms,
+				EffectivePermissions: kioskPerms,
+			}
+			if a.RolesConfig != nil && len(kioskUser.Roles) > 0 {
+				denied := a.RolesConfig.DeniedPermissionsForRoles(kioskUser.Roles)
+				kioskUser.RemovePermissions(denied)
 			}
 			ctx := context.WithValue(r.Context(), UserContextKey, kioskUser)
 			ctx = context.WithValue(ctx, AccessTokenContextKey, rawAccessToken)
@@ -142,16 +162,23 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 						})
 						return
 					}
-					user = &models.UserWithPermissions{
-						Email:                email,
-						Roles:                []string{"restricted"},
-						Permissions:          []string{},
-						EffectivePermissions: []string{
+					identRoles, identPerms := a.RolesConfig.RolesForTrigger(roles.AutoGrantIdentifierEmail)
+					if len(identRoles) == 0 {
+						identRoles = []string{"restricted"}
+					}
+					if len(identPerms) == 0 {
+						identPerms = []string{
 							"families.all.restrictedread",
 							"fees.self.read",
 							"families.self.selfservice",
-						},
-						FamilyID: familyID,
+						}
+					}
+					user = &models.UserWithPermissions{
+						Email:                email,
+						Roles:                identRoles,
+						Permissions:          identPerms,
+						EffectivePermissions: identPerms,
+						FamilyID:             familyID,
 					}
 				} else {
 					log.Printf("[AUTH ERROR] Failed to fetch user %q from database: %v", email, err)
@@ -162,10 +189,25 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 				familyID, pErr := a.Store.GetFamilyIDByIdentifierEmail(r.Context(), email)
 				if pErr == nil && familyID != nil {
 					user.FamilyID = familyID
-					implicitPerms := []string{
-						"families.all.restrictedread",
-						"fees.self.read",
-						"families.self.selfservice",
+					identRoles, implicitPerms := a.RolesConfig.RolesForTrigger(roles.AutoGrantIdentifierEmail)
+					if len(implicitPerms) == 0 {
+						implicitPerms = []string{
+							"families.all.restrictedread",
+							"fees.self.read",
+							"families.self.selfservice",
+						}
+					}
+					for _, ir := range identRoles {
+						found := false
+						for _, r := range user.Roles {
+							if r == ir {
+								found = true
+								break
+							}
+						}
+						if !found {
+							user.Roles = append(user.Roles, ir)
+						}
 					}
 					permSet := make(map[string]bool)
 					for _, p := range user.EffectivePermissions {
@@ -187,6 +229,11 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 		}
 
 		user.EnsureImpliedPermissions()
+
+		if a.RolesConfig != nil && len(user.Roles) > 0 {
+			denied := a.RolesConfig.DeniedPermissionsForRoles(user.Roles)
+			user.RemovePermissions(denied)
+		}
 
 		ctx := context.WithValue(r.Context(), UserContextKey, user)
 		ctx = context.WithValue(ctx, AccessTokenContextKey, rawAccessToken)
