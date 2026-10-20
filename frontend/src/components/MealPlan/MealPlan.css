@@ -1,0 +1,542 @@
+/* Meal Plan Page & Preview Styles */
+
+.meal-plan-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* Controls Header (Screen Only) */
+.meal-plan-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 0.875rem 1.25rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.meal-plan-week-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  user-select: none;
+}
+
+.meal-plan-nav-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-h);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.meal-plan-nav-arrow:hover {
+  background: var(--bg-hover);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.meal-plan-nav-arrow:active {
+  transform: scale(0.96);
+}
+
+.meal-plan-week-label {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-h);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.meal-plan-annotation {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--primary);
+  background: var(--accent-bg);
+  padding: 0.15rem 0.55rem;
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+
+.meal-plan-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.meal-plan-print-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+/* Meal Plan Sheet / Card Grid */
+.meal-plan-sheet {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.25rem;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-sizing: border-box;
+}
+
+.meal-plan-sheet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  border-bottom: 2px solid var(--primary);
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.meal-plan-sheet-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #000000 !important;
+  letter-spacing: -0.01em;
+}
+
+.meal-plan-sheet-week-info {
+  text-align: right;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+/* 5-Column Landscape Grid for Desktop / Print */
+.meal-plan-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.85rem;
+  width: 100%;
+}
+
+.meal-plan-day-col {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-subtle);
+  overflow: hidden;
+  min-height: 280px;
+}
+
+.meal-plan-day-header {
+  background: var(--bg-hover);
+  border-bottom: 1px solid var(--border);
+  padding: 0.6rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.meal-plan-day-name {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.meal-plan-day-date {
+  font-size: 0.825rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.meal-plan-day-body {
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.meal-plan-cook-box {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.85rem;
+}
+
+.meal-plan-cook-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.2rem;
+}
+
+.meal-plan-cook-name {
+  font-weight: 600;
+  color: var(--text-h);
+  word-break: break-word;
+}
+
+.meal-plan-meals-box {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.6rem 0.65rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.meal-plan-meals-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.1rem;
+}
+
+.meal-plan-component-item {
+  font-size: 0.9rem;
+  line-height: 1.35;
+  color: var(--text-h);
+  padding: 0.25rem 0;
+  border-bottom: 1px dashed var(--border);
+}
+
+.meal-plan-component-item:last-child {
+  border-bottom: none;
+}
+
+.meal-plan-empty-text {
+  font-size: 0.85rem;
+  font-style: italic;
+  color: var(--text-muted);
+  padding: 0.5rem 0;
+}
+
+.meal-plan-sheet-footer {
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  padding-top: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+/* Loading & Empty states */
+.meal-plan-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 3rem;
+  font-size: 1rem;
+  color: var(--text-muted);
+}
+
+/* Mobile Breakpoint (< 768px): Stack days vertically under each other on screen */
+@media screen and (max-width: 768px) {
+  .meal-plan-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .meal-plan-day-col {
+    min-height: auto;
+  }
+
+  .meal-plan-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .meal-plan-week-selector {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .meal-plan-print-action-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .meal-plan-sheet-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .meal-plan-sheet-week-info {
+    text-align: left;
+  }
+}
+
+/* Standalone Print View (opened in new tab) */
+.meal-plan-standalone-page {
+  min-height: 100vh;
+  background: #f1f5f9;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.meal-plan-print-toolbar {
+  width: 100%;
+  max-width: 1050px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1.25rem;
+  background: white;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+  margin-bottom: 1.5rem;
+  box-sizing: border-box;
+}
+
+.meal-plan-toolbar-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #000000 !important;
+}
+
+.meal-plan-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.meal-plan-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.meal-plan-toolbar-btn.primary {
+  background: #2563eb;
+  color: white;
+}
+
+.meal-plan-toolbar-btn.primary:hover {
+  background: #1d4ed8;
+}
+
+.meal-plan-toolbar-btn.secondary {
+  background: #f8fafc;
+  color: #475569;
+  border-color: #cbd5e1;
+}
+
+.meal-plan-toolbar-btn.secondary:hover {
+  background: #e2e8f0;
+}
+
+/* Landscape A4 Print Sheet Container */
+.meal-plan-standalone-page .meal-plan-sheet {
+  width: 100%;
+  max-width: 1050px;
+  background: white;
+  color: #0f172a;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  border: 1px solid #cbd5e1;
+}
+
+.meal-plan-standalone-page .meal-plan-day-col {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.meal-plan-standalone-page .meal-plan-day-header {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.meal-plan-standalone-page .meal-plan-day-name {
+  color: #0f172a;
+}
+
+.meal-plan-standalone-page .meal-plan-day-date {
+  color: #64748b;
+}
+
+.meal-plan-standalone-page .meal-plan-cook-box,
+.meal-plan-standalone-page .meal-plan-meals-box {
+  background: white;
+  border-color: #e2e8f0;
+}
+
+.meal-plan-standalone-page .meal-plan-cook-name,
+.meal-plan-standalone-page .meal-plan-component-item {
+  color: #0f172a;
+}
+
+/* =========================================================
+   A4 Landscape Print Styles
+   ========================================================= */
+@page {
+  size: A4 landscape;
+  margin: 8mm;
+}
+
+@media print {
+  /* Hide all non-printable elements */
+  .no-print,
+  .meal-plan-controls,
+  .meal-plan-print-toolbar,
+  header,
+  nav,
+  .tabs-wrapper,
+  .easy-edit-button {
+    display: none !important;
+  }
+
+  /* Reset document for clean printing */
+  html,
+  body,
+  #root,
+  .meal-plan-standalone-page,
+  .meal-plan-container {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-height: auto !important;
+    height: auto !important;
+    box-shadow: none !important;
+  }
+
+  /* Force print background graphics (colors, borders) */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* The printable sheet on A4 landscape */
+  .meal-plan-sheet {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0.5rem 0.75rem !important;
+    margin: 0 !important;
+    border: 1px solid #64748b !important;
+    box-shadow: none !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
+
+  .meal-plan-sheet-header {
+    border-bottom: 2px solid #0f172a !important;
+    padding-bottom: 0.4rem !important;
+    margin-bottom: 0.4rem !important;
+  }
+
+  .meal-plan-sheet-title {
+    font-size: 1.4rem !important;
+    color: #000000 !important;
+  }
+
+  .meal-plan-sheet-week-info {
+    font-size: 1.05rem !important;
+    color: #000000 !important;
+  }
+
+  /* Force 5 columns side-by-side in print even if mobile was active */
+  .meal-plan-grid {
+    display: grid !important;
+    grid-template-columns: repeat(5, 1fr) !important;
+    gap: 0.5rem !important;
+    width: 100% !important;
+  }
+
+  .meal-plan-day-col {
+    background: #f8fafc !important;
+    border: 1px solid #94a3b8 !important;
+    border-radius: 4px !important;
+    min-height: 480px !important;
+  }
+
+  .meal-plan-day-header {
+    background: #e2e8f0 !important;
+    border-bottom: 1px solid #94a3b8 !important;
+    padding: 0.4rem 0.5rem !important;
+  }
+
+  .meal-plan-day-name {
+    font-size: 0.95rem !important;
+    color: #000000 !important;
+  }
+
+  .meal-plan-day-date {
+    font-size: 0.75rem !important;
+    color: #334155 !important;
+  }
+
+  .meal-plan-day-body {
+    padding: 0.5rem !important;
+    gap: 0.5rem !important;
+  }
+
+  .meal-plan-meals-box {
+    background: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    padding: 0.4rem 0.5rem !important;
+  }
+
+  .meal-plan-meals-label {
+    font-size: 0.65rem !important;
+    color: #475569 !important;
+  }
+
+  .meal-plan-component-item {
+    font-size: 0.85rem !important;
+    color: #000000 !important;
+    padding: 0.2rem 0 !important;
+    border-bottom: 1px dashed #cbd5e1 !important;
+  }
+
+  .meal-plan-sheet-footer {
+    font-size: 0.75rem !important;
+    color: #475569 !important;
+    border-top: 1px solid #cbd5e1 !important;
+    padding-top: 0.35rem !important;
+    margin-top: 0.25rem !important;
+  }
+}
