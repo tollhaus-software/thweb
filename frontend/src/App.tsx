@@ -1369,6 +1369,7 @@ const ALL_AVAILABLE_PERMISSIONS = [
   'memberships.all.write',
   'memberships.all.read',
   'memberships.self.read',
+  'mealplan.view',
   'audit.view',
   'users.all.manage',
   'vaccination.status.manage'
@@ -1732,11 +1733,11 @@ const AdminView: React.FC = () => {
       {/* User Modal */}
       {userModalOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'var(--bg-surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '8px', padding: '1.5rem', width: '500px', maxWidth: '90vw', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3 style={{ color: 'var(--text-h)' }}>{editingUser ? t('editUser') : t('addUser')}</h3>
+          <div style={{ background: 'var(--bg-surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '8px', padding: '1.5rem', width: '500px', maxWidth: '90vw', maxHeight: '90vh', overflowY: 'auto', textAlign: 'left' }}>
+            <h3 style={{ color: 'var(--text-h)', marginTop: 0, textAlign: 'left' }}>{editingUser ? t('editUser') : t('addUser')}</h3>
             <form onSubmit={handleUserSubmit}>
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.25rem', color: 'var(--text-secondary)' }}>E-Mail Address</label>
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.25rem', color: 'var(--text-secondary)', textAlign: 'left' }}>E-Mail Address</label>
                 <input
                   type="email"
                   value={userEmail}
@@ -1748,32 +1749,37 @@ const AdminView: React.FC = () => {
               </div>
 
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>{t('assignedRoles')}</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--text-secondary)', textAlign: 'left' }}>{t('assignedRoles')}</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', textAlign: 'left' }}>
                   {roles.map(r => (
-                    <label key={r.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem' }}>
+                    <label key={r.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem', textAlign: 'left' }}>
                       <input
                         type="checkbox"
                         checked={selectedUserRoles.includes(r.id)}
                         onChange={() => toggleUserRole(r.id)}
+                        style={{ marginTop: '0.2rem', flexShrink: 0 }}
                       />
-                      <span><strong>{r.name}</strong> ({r.id})</span>
+                      <span style={{ textAlign: 'left', wordBreak: 'break-word' }}>
+                        <strong>{r.name}</strong>{' '}
+                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>({r.id})</span>
+                      </span>
                     </label>
                   ))}
                 </div>
               </div>
 
               <div style={{ marginBottom: '1.5rem' }}>
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>{t('customPermissions')} (Direct Overrides)</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.35rem', maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border)', background: 'var(--bg-subtle)', padding: '0.5rem', borderRadius: '4px' }}>
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--text-secondary)', textAlign: 'left' }}>{t('customPermissions')} (Direct Overrides)</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.35rem', maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border)', background: 'var(--bg-subtle)', padding: '0.5rem', borderRadius: '4px', textAlign: 'left' }}>
                   {ALL_AVAILABLE_PERMISSIONS.map(p => (
-                    <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontFamily: 'monospace' }}>
+                    <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontFamily: 'monospace', textAlign: 'left' }}>
                       <input
                         type="checkbox"
                         checked={selectedUserPerms.includes(p)}
                         onChange={() => toggleUserPerm(p)}
+                        style={{ flexShrink: 0 }}
                       />
-                      <span>{p}</span>
+                      <span style={{ textAlign: 'left' }}>{p}</span>
                     </label>
                   ))}
                 </div>
@@ -1795,11 +1801,11 @@ const AdminView: React.FC = () => {
       {/* Role Modal */}
       {roleModalOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'var(--bg-surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '8px', padding: '1.5rem', width: '500px', maxWidth: '90vw', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3 style={{ color: 'var(--text-h)' }}>{editingRole ? t('editRole') : t('addRole')}</h3>
+          <div style={{ background: 'var(--bg-surface)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '8px', padding: '1.5rem', width: '500px', maxWidth: '90vw', maxHeight: '90vh', overflowY: 'auto', textAlign: 'left' }}>
+            <h3 style={{ color: 'var(--text-h)', marginTop: 0, textAlign: 'left' }}>{editingRole ? t('editRole') : t('addRole')}</h3>
             <form onSubmit={handleRoleSubmit}>
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.25rem', color: 'var(--text-secondary)' }}>{t('roleId')}</label>
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.25rem', color: 'var(--text-secondary)', textAlign: 'left' }}>{t('roleId')}</label>
                 <input
                   type="text"
                   value={roleId}
@@ -1812,7 +1818,7 @@ const AdminView: React.FC = () => {
               </div>
 
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.25rem', color: 'var(--text-secondary)' }}>{t('roleName')}</label>
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.25rem', color: 'var(--text-secondary)', textAlign: 'left' }}>{t('roleName')}</label>
                 <input
                   type="text"
                   value={roleName}
@@ -1824,7 +1830,7 @@ const AdminView: React.FC = () => {
               </div>
 
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.25rem', color: 'var(--text-secondary)' }}>Beschreibung</label>
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.25rem', color: 'var(--text-secondary)', textAlign: 'left' }}>Beschreibung</label>
                 <input
                   type="text"
                   value={roleDesc}
@@ -1835,16 +1841,17 @@ const AdminView: React.FC = () => {
               </div>
 
               <div style={{ marginBottom: '1.5rem' }}>
-                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--text-secondary)' }}>{t('permissions')}</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.35rem', maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border)', background: 'var(--bg-subtle)', padding: '0.5rem', borderRadius: '4px' }}>
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--text-secondary)', textAlign: 'left' }}>{t('permissions')}</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.35rem', maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border)', background: 'var(--bg-subtle)', padding: '0.5rem', borderRadius: '4px', textAlign: 'left' }}>
                   {ALL_AVAILABLE_PERMISSIONS.map(p => (
-                    <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontFamily: 'monospace' }}>
+                    <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontFamily: 'monospace', textAlign: 'left' }}>
                       <input
                         type="checkbox"
                         checked={selectedRolePerms.includes(p)}
                         onChange={() => toggleRolePerm(p)}
+                        style={{ flexShrink: 0 }}
                       />
-                      <span>{p}</span>
+                      <span style={{ textAlign: 'left' }}>{p}</span>
                     </label>
                   ))}
                 </div>
