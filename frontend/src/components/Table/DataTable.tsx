@@ -29,6 +29,7 @@ interface DataTableProps<TData> {
   highlightedRowId?: string | null;
   className?: string;
   getCardHeader?: (item: any) => React.ReactNode;
+  getCardActions?: (item: any) => React.ReactNode;
   stickyFirstColumn?: boolean;
 }
 
@@ -47,6 +48,7 @@ export function DataTable<TData>({
   highlightedRowId,
   className,
   getCardHeader,
+  getCardActions,
   stickyFirstColumn = false,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -427,17 +429,26 @@ export function DataTable<TData>({
                     if (!isMobile || !getCardHeader) return null;
                     const headerContent = getCardHeader(row.original);
                     if (!headerContent) return null;
+                    const headerActions = getCardActions?.(row.original);
                     return (
                       <td className="card-person-header" data-card-header="true">
                         <div className="card-person-header-content">
                           {headerContent}
                         </div>
+                        {headerActions && (
+                          <div className="card-person-header-actions">
+                            {headerActions}
+                          </div>
+                        )}
                       </td>
                     );
                   })()}
                   {row.getVisibleCells().map((cell) => {
                     const meta = cell.column.columnDef.meta as any;
                     if (meta?.skipCell?.(row.original)) {
+                      return null;
+                    }
+                    if (isMobile && cell.column.id === 'actions' && meta?.hideOnMobile) {
                       return null;
                     }
                     const colSpan = meta?.getColSpan?.(row.original) ?? 1;

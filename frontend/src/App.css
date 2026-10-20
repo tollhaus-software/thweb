@@ -1432,7 +1432,7 @@ tr.family-group-row td {
   /* Card person header at top of person card */
   .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td.card-person-header {
     display: flex !important;
-    justify-content: flex-start !important;
+    justify-content: space-between !important;
     align-items: center !important;
     width: 100% !important;
     font-size: 1.05rem !important;
@@ -1452,6 +1452,17 @@ tr.family-group-row td {
     font-weight: 700 !important;
     color: var(--text-h) !important;
     text-align: left !important;
+    flex: 1 !important;
+    min-width: 0 !important;
+  }
+
+  .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td.card-person-header .card-person-header-actions {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    margin-left: auto !important;
+    padding-left: 0.5rem !important;
+    flex-shrink: 0 !important;
   }
 
   .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td.sticky-col {
@@ -1765,5 +1776,80 @@ tr.family-group-row td {
     min-width: 0;
   }
 }
+
+/* Row Actions Menu & Popover */
+.row-actions-popover {
+  padding: 4px;
+}
+
+.row-actions-menu-list {
+  display: flex;
+  flex-direction: column;
+  padding: 2px;
+}
+
+.row-action-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.row-action-menu-item.row-action-delete {
+  color: #ef4444;
+}
+
+.row-action-menu-item.row-action-delete:hover:not(:disabled) {
+  background-color: #fef2f2;
+  color: #dc2626;
+}
+
+.row-action-menu-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.row-actions-sheet-header {
+  padding: 4px 16px 12px 16px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+
+.row-actions-sheet-name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+@media (max-width: 768px) {
+  .row-actions-popover.cell-popover-bottom-sheet {
+    padding: 8px 16px 28px 16px;
+  }
+
+  .row-action-menu-item {
+    padding: 14px 16px;
+    font-size: 1rem;
+    font-weight: 500;
+    border-radius: 8px;
+  }
+
+  .row-action-menu-item svg {
+    width: 18px;
+    height: 18px;
+  }
+}
+
 
 

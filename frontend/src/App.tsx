@@ -7,7 +7,7 @@ import './App.css';
 import { DataTable } from './components/Table/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import EasyEdit, { Types } from './components/InlineEdit';
-import { Pencil, Trash, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, ArrowUpRight, X, Clock, AlertCircle, ChevronLeft, ChevronRight, Plus, ArrowUpDown, Check } from 'lucide-react';
+import { Pencil, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, ArrowUpRight, X, Clock, AlertCircle, ChevronLeft, ChevronRight, Plus, ArrowUpDown, Check } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { MultiValueListEditor, type MultiValueFlagConfig, type MultiValueEntry, type MultiValueItem, getEntryValue, isFlagActive } from './components/Table/MultiValueListEditor';
 import { NotesEditor } from './components/Table/NotesEditor';
@@ -24,6 +24,8 @@ import { KioskProvisioning } from './components/Admin/KioskProvisioning';
 import { getAppConfig } from './config/appConfig';
 import { HeaderOverflowMenu } from './components/Header/HeaderOverflowMenu';
 import { CellPopover } from './components/Table/CellPopover';
+import { RowActionsMenu } from './components/Table/RowActionsMenu';
+import { ConfirmDeleteModal } from './components/Table/ConfirmDeleteModal';
 import { t, CURRENT_LOCALE, formatDisplayDate, parseInputDate, calculateYearsAndMonths, formatTollhausEmail, compareBirthDates } from './utils/i18n';
 
 const EasyEditComponent = EasyEdit;
@@ -1909,6 +1911,7 @@ const Dashboard: React.FC = () => {
   const canReadOverview = hasPermission('families.all.restrictedread');
   const canReadFamiliesAll = hasPermission('families.all.read');
   const canReadFees = hasPermission('fees.all.read') || hasPermission('fees.self.read');
+  const canWriteParents = hasPermission('families.all.write');
   const canWriteChildren = hasPermission('children.all.write');
   const canWriteHygiene = hasPermission('hygiene.all.write');
   const canViewMealPlan = hasPermission('mealplan.view');
@@ -2282,11 +2285,15 @@ const Dashboard: React.FC = () => {
 
   const [confirmDelete, setConfirmDelete] = React.useState<{
     isOpen: boolean;
+    title?: string;
     message: string;
+    expectedName?: string;
     onConfirm: () => void;
   }>({
     isOpen: false,
+    title: '',
     message: '',
+    expectedName: '',
     onConfirm: () => {},
   });
 
@@ -3845,7 +3852,9 @@ const Dashboard: React.FC = () => {
 
     setConfirmDelete({
       isOpen: true,
+      title: t('deleteParent'),
       message: t('deleteParentConfirm'),
+      expectedName: (parent.first_name || '').trim(),
       onConfirm: () => {
         fetch(`/api/parents/${parentId}`, {
           method: 'DELETE',
@@ -3872,7 +3881,9 @@ const Dashboard: React.FC = () => {
 
     setConfirmDelete({
       isOpen: true,
+      title: t('deleteChild'),
       message: t('deleteChildConfirm'),
+      expectedName: (child.first_name || '').trim(),
       onConfirm: () => {
         fetch(`/api/children/${childId}`, {
           method: 'DELETE',
@@ -4742,48 +4753,25 @@ function formatParentsSummary(parents: any[]): string {
       {
         id: 'actions',
         header: '',
-        size: 60,
+        size: 50,
+        meta: { hideOnMobile: true },
         cell: (info) => {
           const parent = info.row.original;
           return (
             <div style={{ display: 'flex', justifyContent: 'flex-end', paddingRight: '0.25rem' }}>
-              <button
-                type="button"
-                className="easy-edit-button"
-                style={{
-                  padding: '0.25rem',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: '1px solid var(--border)',
-                  color: '#64748b',
-                  background: 'transparent',
-                  height: '28px',
-                  width: '28px',
-                }}
-                onClick={() => handleDeleteParent(parent.id)}
-                title={t('delete')}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.color = '#ef4444';
-                  e.currentTarget.style.borderColor = '#fecaca';
-                  e.currentTarget.style.backgroundColor = '#fef2f2';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.color = '#64748b';
-                  e.currentTarget.style.borderColor = 'var(--border)';
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }}
-              >
-                <Trash size={14} />
-              </button>
+              <RowActionsMenu
+                onDelete={() => handleDeleteParent(parent.id)}
+                deleteLabel={t('deleteParent')}
+                disabled={!canWriteParents}
+                disabledTooltip={!canWriteParents ? t('permissionRequired') : undefined}
+                entityName={`${parent.first_name || ''} ${parent.last_name || ''}`.trim()}
+              />
             </div>
           );
         }
       }
     ],
-    [families, handleSaveParentField, handleSaveFamilyParents, handleDeleteParent, isVaccinationUnlocked, handleRequestKmsAuth, hasPermission, user?.email, membershipPopoverAnchor, targetParentMemberships, openManageMemberships, multiValuePopoverAnchor, activeParentForMultiValue, activeMultiValueField, openManageMultiValue, vaccinationPopoverAnchor, targetVaccinationPerson, openManageVaccination]
+    [families, handleSaveParentField, handleSaveFamilyParents, handleDeleteParent, canWriteParents, isVaccinationUnlocked, handleRequestKmsAuth, hasPermission, user?.email, membershipPopoverAnchor, targetParentMemberships, openManageMemberships, multiValuePopoverAnchor, activeParentForMultiValue, activeMultiValueField, openManageMultiValue, vaccinationPopoverAnchor, targetVaccinationPerson, openManageVaccination]
   );
 
   const childGroupColumn = React.useMemo<ColumnDef<any>>(
@@ -4948,42 +4936,19 @@ function formatParentsSummary(parents: any[]): string {
       {
         id: 'actions',
         header: '',
-        size: 60,
+        size: 50,
+        meta: { hideOnMobile: true },
         cell: (info) => {
           const child = info.row.original;
           return (
             <div style={{ display: 'flex', justifyContent: 'flex-end', paddingRight: '0.25rem' }}>
-              <button
-                type="button"
-                className="easy-edit-button"
-                style={{
-                  padding: '0.25rem',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: '1px solid var(--border)',
-                  color: '#64748b',
-                  background: 'transparent',
-                  height: '28px',
-                  width: '28px',
-                }}
-                onClick={() => handleDeleteChild(child.id)}
-                title={t('delete')}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.color = '#ef4444';
-                  e.currentTarget.style.borderColor = '#fecaca';
-                  e.currentTarget.style.backgroundColor = '#fef2f2';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.color = '#64748b';
-                  e.currentTarget.style.borderColor = 'var(--border)';
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }}
-              >
-                <Trash size={14} />
-              </button>
+              <RowActionsMenu
+                onDelete={() => handleDeleteChild(child.id)}
+                deleteLabel={t('deleteChild')}
+                disabled={!canWriteChildren}
+                disabledTooltip={!canWriteChildren ? t('permissionRequired') : undefined}
+                entityName={`${child.first_name || ''} ${child.last_name || ''}`.trim()}
+              />
             </div>
           );
         }
@@ -4993,6 +4958,7 @@ function formatParentsSummary(parents: any[]): string {
       families,
       handleSaveChildField,
       handleDeleteChild,
+      canWriteChildren,
       openManageGroupChanges,
       groupPopoverAnchor,
       targetChildGroupChanges,
@@ -6075,6 +6041,15 @@ function formatParentsSummary(parents: any[]): string {
             jumpToFamilyTitle={t('jumpToFamilyInChildren')}
             highlightedRowId={highlightedRowId}
             getCardHeader={(parent: any) => `${parent.first_name || ''} ${parent.last_name || ''}`.trim() || '-'}
+            getCardActions={(parent: any) => (
+              <RowActionsMenu
+                onDelete={() => handleDeleteParent(parent.id)}
+                deleteLabel={t('deleteParent')}
+                disabled={!canWriteParents}
+                disabledTooltip={!canWriteParents ? t('permissionRequired') : undefined}
+                entityName={`${parent.first_name || ''} ${parent.last_name || ''}`.trim()}
+              />
+            )}
           />
         ) : activeTab === 'children' ? (
           <DataTable
@@ -6089,6 +6064,15 @@ function formatParentsSummary(parents: any[]): string {
             emptySubRowsText={t('noChildrenYet')}
             highlightedRowId={highlightedRowId}
             getCardHeader={(child: any) => `${child.first_name || ''} ${child.last_name || ''}`.trim() || '-'}
+            getCardActions={(child: any) => (
+              <RowActionsMenu
+                onDelete={() => handleDeleteChild(child.id)}
+                deleteLabel={t('deleteChild')}
+                disabled={!canWriteChildren}
+                disabledTooltip={!canWriteChildren ? t('permissionRequired') : undefined}
+                entityName={`${child.first_name || ''} ${child.last_name || ''}`.trim()}
+              />
+            )}
           />
         ) : activeTab === 'families' ? (
           <DataTable
@@ -6417,33 +6401,14 @@ function formatParentsSummary(parents: any[]): string {
       )}
 
       {/* Confirm Delete Modal */}
-      {confirmDelete.isOpen && (
-        <div className="modal-overlay">
-          <div className="modal-container" style={{ maxWidth: '400px', textAlign: 'center' }}>
-            <h2 style={{ color: '#ef4444' }}>{t('delete')}</h2>
-            <p style={{ color: '#475569', fontSize: '0.95rem', marginBottom: '1.5rem', lineHeight: '1.4' }}>
-              {confirmDelete.message}
-            </p>
-            <div className="modal-actions" style={{ justifyContent: 'center' }}>
-              <button
-                type="button"
-                className="cancel-btn"
-                onClick={() => setConfirmDelete(prev => ({ ...prev, isOpen: false }))}
-              >
-                {t('cancel')}
-              </button>
-              <button
-                type="button"
-                className="submit-btn"
-                style={{ backgroundColor: '#ef4444' }}
-                onClick={confirmDelete.onConfirm}
-              >
-                {t('delete')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDeleteModal
+        isOpen={confirmDelete.isOpen}
+        title={confirmDelete.title}
+        message={confirmDelete.message}
+        expectedName={confirmDelete.expectedName}
+        onConfirm={confirmDelete.onConfirm}
+        onClose={() => setConfirmDelete(prev => ({ ...prev, isOpen: false }))}
+      />
 
         {/* Manage Memberships Popover */}
         <MembershipsModal
