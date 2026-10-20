@@ -64,6 +64,18 @@ interface Parent {
   family_name?: string;
 }
 
+interface MemberRow {
+  id: string;
+  family_id: string;
+  family_name?: string;
+  first_name: string;
+  last_name: string;
+  membership_type: 'full_member' | 'supporting_member';
+  first_became_member_date: string;
+  last_type_change_date?: string | null;
+  memberships: THMembership[];
+}
+
 interface ChildGroupChange {
   id: string;
   child: string;
@@ -445,6 +457,7 @@ interface OverviewParent {
   emails?: MultiValueEntry[];
   phones?: MultiValueEntry[];
   address?: string;
+  memberships?: THMembership[];
 }
 
 interface OverviewChild {
@@ -1354,7 +1367,9 @@ const ALL_AVAILABLE_PERMISSIONS = [
   'fees.self.read',
   'hygiene.all.write',
   'memberships.all.write',
-  'audit.all.read',
+  'memberships.all.read',
+  'memberships.self.read',
+  'audit.view',
   'users.all.manage',
   'vaccination.status.manage'
 ];
@@ -1881,7 +1896,7 @@ const Dashboard: React.FC = () => {
     return h;
   }, [token, kmsAccessToken]);
 
-  const canReadAudit = hasPermission('audit.all.read');
+  const canReadAudit = hasPermission('audit.view');
   const canManageUsers = hasPermission('users.all.manage') || hasPermission('*');
   const canProvisionKiosk = hasPermission('provision.kiosk.cert') || hasPermission('*');
   const canReadOverview = hasPermission('families.all.restrictedread');
@@ -1890,6 +1905,9 @@ const Dashboard: React.FC = () => {
   const canWriteChildren = hasPermission('children.all.write');
   const canWriteHygiene = hasPermission('hygiene.all.write');
   const canViewMealPlan = hasPermission('mealplan.view');
+  const canReadMembers = hasPermission('memberships.all.read');
+  const canWriteMemberships = hasPermission('memberships.all.write');
+  const canReadOwnMemberships = hasPermission('memberships.self.read');
 
   const [families, setFamilies] = React.useState<Family[]>([]);
   const [overviewFamilies, setOverviewFamilies] = React.useState<OverviewFamily[]>([]);
@@ -1939,7 +1957,7 @@ const Dashboard: React.FC = () => {
 
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [activeTab, setActiveTab] = React.useState<
-    'familiesOverview' | 'families' | 'parents' | 'children' | 'childcareFees' | 'hygieneBelehrung' | 'mealPlan' | 'audit' | 'admin' | 'kiosk' | 'dashboard'
+    'familiesOverview' | 'families' | 'parents' | 'children' | 'members' | 'childcareFees' | 'hygieneBelehrung' | 'mealPlan' | 'audit' | 'admin' | 'kiosk' | 'dashboard'
   >(() => {
     const rawHash = window.location.hash.replace('#', '');
     const hash = rawHash.split('?')[0];
@@ -1949,6 +1967,7 @@ const Dashboard: React.FC = () => {
       (hash === 'families' && canReadFamiliesAll) ||
       (hash === 'parents' && canReadFamiliesAll) ||
       (hash === 'children' && canReadFamiliesAll) ||
+      (hash === 'members' && canReadMembers) ||
       (hash === 'childcareFees' && canReadFees) ||
       (hash === 'hygieneBelehrung' && (canReadFamiliesAll || hasPermission('hygiene.all.write'))) ||
       (hash === 'mealPlan' && canViewMealPlan) ||
@@ -1966,6 +1985,7 @@ const Dashboard: React.FC = () => {
       (saved === 'families' && canReadFamiliesAll) ||
       (saved === 'parents' && canReadFamiliesAll) ||
       (saved === 'children' && canReadFamiliesAll) ||
+      (saved === 'members' && canReadMembers) ||
       (saved === 'childcareFees' && canReadFees) ||
       (saved === 'hygieneBelehrung' && (canReadFamiliesAll || hasPermission('hygiene.all.write'))) ||
       (saved === 'mealPlan' && canViewMealPlan) ||
@@ -1985,6 +2005,9 @@ const Dashboard: React.FC = () => {
     if (canReadFees) {
       return 'childcareFees';
     }
+    if (canReadMembers) {
+      return 'members';
+    }
     return 'familiesOverview';
   });
 
@@ -2001,6 +2024,14 @@ const Dashboard: React.FC = () => {
       } else if (canReadFees) {
         setActiveTab('childcareFees');
       }
+    } else if (activeTab === 'members' && !canReadMembers) {
+      if (canReadOverview) {
+        setActiveTab('familiesOverview');
+      } else if (canReadFees) {
+        setActiveTab('childcareFees');
+      } else if (canReadFamiliesAll) {
+        setActiveTab('families');
+      }
     } else if (activeTab === 'mealPlan' && !canViewMealPlan) {
       if (canReadOverview) {
         setActiveTab('familiesOverview');
@@ -2010,7 +2041,7 @@ const Dashboard: React.FC = () => {
         setActiveTab('families');
       }
     }
-  }, [activeTab, canReadFamiliesAll, canReadOverview, canReadFees, canViewMealPlan]);
+  }, [activeTab, canReadFamiliesAll, canReadOverview, canReadFees, canReadMembers, canViewMealPlan]);
 
   // Navigation & Highlighting state (Patterns 2 & 3)
   const [highlightTarget, setHighlightTarget] = React.useState<{ id: string; key: number } | null>(null);
@@ -2019,7 +2050,7 @@ const Dashboard: React.FC = () => {
     familyId: string;
     familyName: string;
     type: 'parent' | 'child' | 'family';
-    fromTab?: 'families' | 'familiesOverview' | 'parents' | 'children';
+    fromTab?: 'families' | 'familiesOverview' | 'parents' | 'children' | 'members';
   } | null>(null);
 
   const handleJumpToParent = React.useCallback(
@@ -2027,7 +2058,7 @@ const Dashboard: React.FC = () => {
       parentId: string,
       familyId: string,
       familyName: string,
-      fromTab: 'families' | 'familiesOverview' = 'families'
+      fromTab: 'families' | 'familiesOverview' | 'members' = 'families'
     ) => {
       setGlobalFilter('');
       setActiveTab('parents');
@@ -2050,7 +2081,7 @@ const Dashboard: React.FC = () => {
       childId: string,
       familyId: string,
       familyName: string,
-      fromTab: 'families' | 'familiesOverview' = 'families'
+      fromTab: 'families' | 'familiesOverview' | 'members' = 'families'
     ) => {
       setGlobalFilter('');
       setActiveTab('children');
@@ -2693,14 +2724,37 @@ const Dashboard: React.FC = () => {
       .catch((err) => console.error(err));
   }, [getAuthHeaders]);
 
+  const [members, setMembers] = React.useState<MemberRow[]>([]);
+  const fetchMembers = React.useCallback(() => {
+    if (!canReadMembers) return Promise.resolve([]);
+    return fetch('/api/members', {
+      headers: getAuthHeaders(),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch members');
+        return res.json();
+      })
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setMembers(data);
+        }
+        return data;
+      })
+      .catch((err) => console.error(err));
+  }, [canReadMembers, getAuthHeaders]);
+
   React.useEffect(() => {
     if (canReadFamiliesAll) {
       fetchFamilies();
+    if (canReadMembers) fetchMembers();
     }
     if (canReadOverview) {
       fetchOverviewFamilies();
     }
-  }, [canReadFamiliesAll, canReadOverview, fetchFamilies, fetchOverviewFamilies]);
+    if (canReadMembers) {
+      fetchMembers();
+    }
+  }, [canReadFamiliesAll, canReadOverview, canReadMembers, fetchFamilies, fetchOverviewFamilies, fetchMembers]);
 
   const applyKmsToken = React.useCallback(async (tokenToApply: string) => {
     try {
@@ -2842,13 +2896,14 @@ const Dashboard: React.FC = () => {
       const fromFamily = searchParams.get('fromFamily');
       const familyName = searchParams.get('familyName');
       const type = searchParams.get('type') as 'parent' | 'child' | 'family' | null;
-      const fromTab = searchParams.get('fromTab') as 'families' | 'familiesOverview' | 'parents' | 'children' | null;
+      const fromTab = searchParams.get('fromTab') as 'families' | 'familiesOverview' | 'parents' | 'children' | 'members' | null;
 
       if (
         (hash === 'familiesOverview' && canReadOverview) ||
         (hash === 'parents' && canReadFamiliesAll) ||
         (hash === 'children' && canReadFamiliesAll) ||
         (hash === 'families' && canReadFamiliesAll) ||
+        (hash === 'members' && canReadMembers) ||
         (hash === 'childcareFees' && canReadFees) ||
         (hash === 'hygieneBelehrung' && (canReadFamiliesAll || hasPermission('hygiene.all.write'))) ||
         (hash === 'mealPlan' && canViewMealPlan) ||
@@ -2905,7 +2960,7 @@ const Dashboard: React.FC = () => {
       handleHashChange();
     }
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [canReadAudit, canManageUsers, canProvisionKiosk, canReadOverview, canReadFamiliesAll, canReadFees, canViewMealPlan, hasPermission]);
+  }, [canReadAudit, canManageUsers, canProvisionKiosk, canReadOverview, canReadFamiliesAll, canReadFees, canReadMembers, canViewMealPlan, hasPermission]);
 
   useRealtime(React.useCallback((message: any) => {
     if (
@@ -2915,12 +2970,16 @@ const Dashboard: React.FC = () => {
     ) {
       if (canReadFamiliesAll) {
         fetchFamilies();
+    if (canReadMembers) fetchMembers();
       }
       if (canReadOverview) {
         fetchOverviewFamilies();
       }
+      if (canReadMembers) {
+        fetchMembers();
+      }
     }
-  }, [fetchFamilies, fetchOverviewFamilies, canReadFamiliesAll, canReadOverview]));
+  }, [fetchFamilies, fetchOverviewFamilies, fetchMembers, canReadFamiliesAll, canReadOverview, canReadMembers]));
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -3000,6 +3059,7 @@ const Dashboard: React.FC = () => {
           }
         });
         fetchFamilies();
+    if (canReadMembers) fetchMembers();
         setAddParentOpen(false);
         setNewParentTollhausEmail('');
         setIsTollhausEmailDirty(false);
@@ -3055,6 +3115,7 @@ const Dashboard: React.FC = () => {
           }
         });
         fetchFamilies();
+    if (canReadMembers) fetchMembers();
         setAddChildOpen(false);
       })
       .catch((err) => alert(err.message));
@@ -3113,6 +3174,7 @@ const Dashboard: React.FC = () => {
       },
     });
     fetchFamilies();
+    if (canReadMembers) fetchMembers();
     if (targetParentMemberships && targetParentMemberships.id === parentId) {
       const existing = targetParentMemberships.memberships || [];
       const updatedMemberships = [...existing, created].sort(
@@ -3171,6 +3233,7 @@ const Dashboard: React.FC = () => {
       });
     }
     fetchFamilies();
+    if (canReadMembers) fetchMembers();
     if (targetParentMemberships) {
       const existing = targetParentMemberships.memberships || [];
       const updatedMemberships = existing
@@ -3193,6 +3256,7 @@ const Dashboard: React.FC = () => {
     }
     purgeActionsForEntity(membershipId);
     fetchFamilies();
+    if (canReadMembers) fetchMembers();
     const updatedMemberships = (targetParentMemberships.memberships || []).filter((m) => m.id !== membershipId);
     setTargetParentMemberships({ ...targetParentMemberships, memberships: updatedMemberships });
   };
@@ -3340,6 +3404,7 @@ const Dashboard: React.FC = () => {
       }
     });
     fetchFamilies();
+    if (canReadMembers) fetchMembers();
     if (targetChildGroupChanges && targetChildGroupChanges.id === childId) {
       const existing = targetChildGroupChanges.group_changes || [];
       const filtered = existing.filter((c) => c.change_date !== created.change_date);
@@ -3361,6 +3426,7 @@ const Dashboard: React.FC = () => {
     }
     purgeActionsForEntity(changeId);
     fetchFamilies();
+    if (canReadMembers) fetchMembers();
     if (targetChildGroupChanges) {
       const updatedChanges = (targetChildGroupChanges.group_changes || []).filter((c) => c.id !== changeId);
       setTargetChildGroupChanges({ ...targetChildGroupChanges, group_changes: updatedChanges });
@@ -3404,6 +3470,7 @@ const Dashboard: React.FC = () => {
       });
     }
     fetchFamilies();
+    if (canReadMembers) fetchMembers();
     if (targetChildGroupChanges) {
       const existing = targetChildGroupChanges.group_changes || [];
       const updatedChanges = existing
@@ -3620,6 +3687,7 @@ const Dashboard: React.FC = () => {
           }
         });
         fetchFamilies();
+    if (canReadMembers) fetchMembers();
         setAddFamilyOpen(false);
       })
       .catch((err) => alert(err.message));
@@ -3713,6 +3781,7 @@ const Dashboard: React.FC = () => {
           }
         });
         fetchFamilies();
+    if (canReadMembers) fetchMembers();
       })
       .catch((err) => alert(err.message));
   };
@@ -3779,6 +3848,7 @@ const Dashboard: React.FC = () => {
             if (!res.ok) throw new Error('Failed to delete parent');
             purgeActionsForEntity(parentId);
             fetchFamilies();
+    if (canReadMembers) fetchMembers();
             setConfirmDelete(prev => ({ ...prev, isOpen: false }));
           })
           .catch((err) => {
@@ -3805,6 +3875,7 @@ const Dashboard: React.FC = () => {
             if (!res.ok) throw new Error('Failed to delete child');
             purgeActionsForEntity(childId);
             fetchFamilies();
+    if (canReadMembers) fetchMembers();
             setConfirmDelete(prev => ({ ...prev, isOpen: false }));
           })
           .catch((err) => {
@@ -5041,9 +5112,35 @@ function formatParentsSummary(parents: any[]): string {
             );
           }
           const fullName = `${item.first_name || ''} ${item.last_name || ''}`.trim() || '-';
+          const membershipStatus = item.memberships ? getMembershipStatus(item.memberships) : null;
           return (
             <span className="overview-person-name" style={isIndented ? { paddingLeft: '1.25rem', display: 'inline-block' } : undefined}>
               {fullName}
+              {membershipStatus && membershipStatus.text && (
+                <span
+                  className="overview-membership-badge"
+                  style={{
+                    marginLeft: '0.5rem',
+                    fontSize: '0.75rem',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    border: '1px solid var(--border)',
+                    backgroundColor: 'var(--bg-subtle)',
+                    color: membershipStatus.color,
+                    fontWeight: (membershipStatus as any).fontWeight || 'normal',
+                    cursor: (canReadOwnMemberships || canReadMembers) ? 'pointer' : 'default',
+                  }}
+                  onClick={(e) => {
+                    if (canReadOwnMemberships || canReadMembers) {
+                      e.stopPropagation();
+                      openManageMemberships(item, e.currentTarget);
+                    }
+                  }}
+                  title={t('th_membership')}
+                >
+                  {membershipStatus.text}
+                </span>
+              )}
               {canReadFamiliesAll && (
                 <button
                   type="button"
@@ -5219,10 +5316,166 @@ function formatParentsSummary(parents: any[]): string {
         },
       },
     ],
-    [canReadFamiliesAll, handleJumpToChild, handleJumpToParent]
+    [canReadFamiliesAll, canReadOwnMemberships, canReadMembers, handleJumpToChild, handleJumpToParent, openManageMemberships]
   );
 
-  const isTableTab = activeTab === 'familiesOverview' || activeTab === 'parents' || activeTab === 'children' || activeTab === 'families' || activeTab === 'hygieneBelehrung';
+  const memberColumns = React.useMemo<ColumnDef<MemberRow>[]>(
+    () => [
+      {
+        id: 'name',
+        accessorFn: (row: MemberRow) => `${row.first_name || ''} ${row.last_name || ''}`.trim(),
+        header: t('name') || 'Name',
+        size: 240,
+        cell: (info) => {
+          const row = info.row.original;
+          const fullName = `${row.first_name || ''} ${row.last_name || ''}`.trim() || '-';
+          return (
+            <div
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
+            >
+              <span style={{ fontWeight: 600 }}>{fullName}</span>
+              {canReadFamiliesAll && row.family_id && (
+                <button
+                  type="button"
+                  className="family-parent-link overview-mga-link"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleJumpToParent(row.id, row.family_id, row.family_name || '', 'members');
+                  }}
+                  title={t('jumpToParent')}
+                >
+                  <span>{t('mgaViewLink')}</span>
+                  <ArrowUpRight size={11} className="family-link-icon" />
+                </button>
+              )}
+            </div>
+          );
+        },
+      },
+      {
+        id: 'membership_type',
+        accessorKey: 'membership_type',
+        header: t('memberType'),
+        meta: { cardLabel: t('memberType') },
+        size: 200,
+        cell: (info) => {
+          const row = info.row.original;
+          const label = row.membership_type === 'full_member' ? t('full_member') : t('supporting_member');
+          const cellId = `cell-member-type-${row.id}`;
+          return (
+            <div
+              id={cellId}
+              className="membership-cell-wrapper"
+              onClick={(e) => {
+                e.stopPropagation();
+                openManageMemberships(row as any, e.currentTarget);
+              }}
+              style={{
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                width: '100%',
+              }}
+              title={t('manageMemberships')}
+            >
+              <span style={{ fontWeight: 600, color: 'var(--text-h)' }}>{label}</span>
+              <Pencil size={13} className="cell-edit-pencil-btn" style={{ marginLeft: 'auto', opacity: 0.7 }} />
+            </div>
+          );
+        },
+      },
+      {
+        id: 'first_became_member_date',
+        accessorKey: 'first_became_member_date',
+        header: t('firstBecameMember'),
+        meta: { cardLabel: t('firstBecameMember') },
+        size: 180,
+        cell: (info) => {
+          const row = info.row.original;
+          const displayDate = row.first_became_member_date ? formatDisplayDate(row.first_became_member_date) : '-';
+          const cellId = `cell-member-first-${row.id}`;
+          return (
+            <div
+              id={cellId}
+              className="membership-cell-wrapper"
+              onClick={(e) => {
+                e.stopPropagation();
+                openManageMemberships(row as any, e.currentTarget);
+              }}
+              style={{
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                width: '100%',
+              }}
+              title={t('manageMemberships')}
+            >
+              <span>{displayDate}</span>
+              <Pencil size={13} className="cell-edit-pencil-btn" style={{ marginLeft: 'auto', opacity: 0.7 }} />
+            </div>
+          );
+        },
+      },
+      {
+        id: 'last_type_change_date',
+        accessorKey: 'last_type_change_date',
+        header: t('lastTypeChange'),
+        meta: { cardLabel: t('lastTypeChangeShort') || 'Letzte Änderung' },
+        size: 200,
+        cell: (info) => {
+          const row = info.row.original;
+          const displayDate = row.last_type_change_date ? formatDisplayDate(row.last_type_change_date) : '-';
+          const cellId = `cell-member-change-${row.id}`;
+          return (
+            <div
+              id={cellId}
+              className="membership-cell-wrapper"
+              onClick={(e) => {
+                e.stopPropagation();
+                openManageMemberships(row as any, e.currentTarget);
+              }}
+              style={{
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                width: '100%',
+              }}
+              title={t('manageMemberships')}
+            >
+              <span style={{ color: row.last_type_change_date ? 'var(--text)' : 'var(--text-muted)' }}>
+                {displayDate}
+              </span>
+              <Pencil size={13} className="cell-edit-pencil-btn" style={{ marginLeft: 'auto', opacity: 0.7 }} />
+            </div>
+          );
+        },
+      },
+    ],
+    [canReadFamiliesAll, openManageMemberships]
+  );
+
+  const filteredMembers = React.useMemo(() => {
+    if (!globalFilter.trim()) return members;
+    const q = globalFilter.toLowerCase();
+    return members.filter((m) => {
+      const name = `${m.first_name || ''} ${m.last_name || ''}`.toLowerCase();
+      const typeLabel = m.membership_type === 'full_member' ? t('full_member').toLowerCase() : t('supporting_member').toLowerCase();
+      const firstDate = m.first_became_member_date ? formatDisplayDate(m.first_became_member_date).toLowerCase() : '';
+      const changeDate = m.last_type_change_date ? formatDisplayDate(m.last_type_change_date).toLowerCase() : '';
+      return name.includes(q) || typeLabel.includes(q) || firstDate.includes(q) || changeDate.includes(q);
+    });
+  }, [members, globalFilter]);
+
+  const isTableTab = activeTab === 'familiesOverview' || activeTab === 'parents' || activeTab === 'children' || activeTab === 'families' || activeTab === 'hygieneBelehrung' || activeTab === 'members';
 
   return (
     <div className={`dashboard-container ${isTableTab ? 'table-view-active' : ''}`}>
@@ -5316,6 +5569,16 @@ function formatParentsSummary(parents: any[]): string {
                 data-active={activeTab === 'childcareFees'}
               >
                 {t('childcareFees')}
+              </button>
+            )}
+            {canReadMembers && (
+              <button 
+                type="button"
+                onClick={() => handleTabClick('members')}
+                className={`tab-btn ${activeTab === 'members' ? 'active' : ''}`}
+                data-active={activeTab === 'members'}
+              >
+                {t('members')}
               </button>
             )}
             {(canReadFamiliesAll || hasPermission('hygiene.all.write')) && (
@@ -5430,7 +5693,15 @@ function formatParentsSummary(parents: any[]): string {
                 value={globalFilter ?? ''}
                 onChange={(e) => setGlobalFilter(e.target.value)}
                 className="search-input"
-                placeholder={activeTab === 'families' || activeTab === 'familiesOverview' ? t('searchFamilies') : activeTab === 'children' ? t('searchChildren') : t('searchParents')}
+                placeholder={
+                  activeTab === 'members'
+                    ? t('searchMembers')
+                    : activeTab === 'families' || activeTab === 'familiesOverview'
+                    ? t('searchFamilies')
+                    : activeTab === 'children'
+                    ? t('searchChildren')
+                    : t('searchParents')
+                }
                 style={{ marginBottom: 0 }}
               />
 
@@ -5831,6 +6102,36 @@ function formatParentsSummary(parents: any[]): string {
             getSubRows={(row: any) => row.parents}
             highlightedRowId={highlightedRowId}
           />
+        ) : activeTab === 'members' && canReadMembers ? (
+          <DataTable
+            className="card-table members-table"
+            data={filteredMembers}
+            columns={memberColumns}
+            emptySubRowsText={t('noMembersYet')}
+            highlightedRowId={highlightedRowId}
+            getCardHeader={(member: any) => {
+              const fullName = `${member.first_name || ''} ${member.last_name || ''}`.trim() || '-';
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                  <span>{fullName}</span>
+                  {canReadFamiliesAll && member.family_id && (
+                    <button
+                      type="button"
+                      className="family-parent-link overview-mga-link"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleJumpToParent(member.id, member.family_id, member.family_name || '', 'members');
+                      }}
+                      title={t('jumpToParent')}
+                    >
+                      <span>{t('mgaViewLink')}</span>
+                      <ArrowUpRight size={11} className="family-link-icon" />
+                    </button>
+                  )}
+                </div>
+              );
+            }}
+          />
         ) : activeTab === 'audit' && canReadAudit ? (
           <AuditLogView logs={auditLogs} loading={auditLoading} families={families.length > 0 ? families : (overviewFamilies as any)} />
         ) : activeTab === 'admin' && canManageUsers ? (
@@ -6145,6 +6446,7 @@ function formatParentsSummary(parents: any[]): string {
           onClose={closeManageMemberships}
           parent={activeParentForMemberships}
           family={activeFamilyForMemberships}
+          readOnly={!canWriteMemberships}
           onAddMembership={handleAddMembership}
           onUpdateMembership={handleUpdateMembership}
           onDeleteMembership={handleDeleteMembership}

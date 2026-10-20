@@ -11,6 +11,7 @@ import (
 	"github.com/pavolmarko/thweb-backend/internal/auth"
 	"github.com/pavolmarko/thweb-backend/internal/crypto"
 	"github.com/pavolmarko/thweb-backend/internal/database"
+	"github.com/pavolmarko/thweb-backend/internal/roles"
 	"github.com/pavolmarko/thweb-backend/internal/store"
 )
 
@@ -55,10 +56,29 @@ func main() {
 	}
 
 	// Automatically run database migrations on startup
-	database.ApplySchemaMigrations(ctx, dbURL, allowMockAuth)
+	database.ApplySchemaMigrations(ctx, dbURL)
+
+	// Load roles configuration from deployment file (or fallback to embedded default)
+	rolesFilePath := os.Getenv("ROLES_FILE")
+	rolesConfig, err := roles.LoadConfig(rolesFilePath)
+	if err != nil {
+		log.Fatalf("Failed to load roles configuration: %v\n", err)
+	}
+
+	// Synchronize roles into PostgreSQL
+	if err := database.SyncRoles(ctx, pool, rolesConfig); err != nil {
+		log.Fatalf("Failed to synchronize roles to database: %v\n", err)
+	}
+
+	// If mock auth is enabled, seed mock accounts based on roles with auto_grant_on containing mock_auth
+	if allowMockAuth {
+		if err := database.SeedMockUsers(ctx, pool, rolesConfig); err != nil {
+			log.Printf("[WARNING] Failed to seed mock users: %v\n", err)
+		}
+	}
 
 	appStore := store.NewStore(pool)
-	authenticator := auth.NewAuthenticator(googleClientID, allowMockAuth, appStore)
+	authenticator := auth.NewAuthenticator(googleClientID, allowMockAuth, appStore, rolesConfig)
 	if proxySecret := os.Getenv("PROXY_SHARED_SECRET"); proxySecret != "" {
 		authenticator.ProxySharedSecret = proxySecret
 		log.Println("[INFO] Proxy shared secret verification enabled.")

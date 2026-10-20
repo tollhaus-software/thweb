@@ -45,7 +45,7 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		r.Get("/api/me", server.HandleGetMe)
 		r.With(auth.RequirePermission("families.all.restrictedread")).Get("/api/families/overview", server.HandleListFamiliesOverview)
 		r.With(auth.RequirePermission("families.all.read")).Get("/api/families", server.HandleListFamilies)
-		r.With(auth.RequirePermission("audit.all.read")).Get("/api/audit-logs", server.HandleListAuditLogs)
+		r.With(auth.RequirePermission("audit.view")).Get("/api/audit-logs", server.HandleListAuditLogs)
 
 		// Admin - Role Management
 		r.Get("/api/admin/roles", server.HandleListRoles)
@@ -86,6 +86,7 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		r.With(auth.RequirePermission("hygiene.all.write")).Delete("/api/hygiene-events/{id}", server.HandleDeleteHygieneEvent)
 
 		// TH Membership
+		r.With(auth.RequirePermission("memberships.all.read")).Get("/api/members", server.HandleListMembers)
 		r.With(auth.RequirePermission("memberships.all.write")).Post("/api/memberships", server.HandleCreateTHMembership)
 		r.With(auth.RequirePermission("memberships.all.write")).Post("/api/parents/{id}/memberships", server.HandleCreateTHMembership)
 		r.With(auth.RequirePermission("memberships.all.write")).Put("/api/memberships/{id}", server.HandleUpdateTHMembership)

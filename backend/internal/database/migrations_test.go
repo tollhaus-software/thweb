@@ -41,7 +41,7 @@ func TestApplySchemaMigrations(t *testing.T) {
 		t.Fatalf("failed to enable uuid-ossp extension: %v", err)
 	}
 
-	ApplySchemaMigrations(context.Background(), testDBURL, false)
+	ApplySchemaMigrations(context.Background(), testDBURL)
 
 	var cookNameCol string
 	err = testDB.QueryRow(`
@@ -80,6 +80,33 @@ func TestApplySchemaMigrations(t *testing.T) {
 	}
 	if addressCol != "address" {
 		t.Errorf("expected column_name 'address', got %q", addressCol)
+	}
+
+	var denyPermsCol string
+	err = testDB.QueryRow(`
+		SELECT column_name 
+		FROM information_schema.columns 
+		WHERE table_name = 'roles' AND column_name = 'deny_permissions';
+	`).Scan(&denyPermsCol)
+	if err != nil {
+		t.Fatalf("expected deny_permissions column to exist in roles: %v", err)
+	}
+	if denyPermsCol != "deny_permissions" {
+		t.Errorf("expected column_name 'deny_permissions', got %q", denyPermsCol)
+	}
+
+	// Test rollback of migration 00012
+	if err := goose.DownContext(context.Background(), testDB, "migrations"); err != nil {
+		t.Fatalf("failed to roll back migration 00012: %v", err)
+	}
+
+	err = testDB.QueryRow(`
+		SELECT column_name 
+		FROM information_schema.columns 
+		WHERE table_name = 'roles' AND column_name = 'deny_permissions';
+	`).Scan(&denyPermsCol)
+	if err != sql.ErrNoRows {
+		t.Errorf("expected deny_permissions column to be dropped after rolling back migration 00012, got err: %v", err)
 	}
 
 	// Test rollback of migration 00011
@@ -175,7 +202,7 @@ func TestApplySchemaMigrations_ExistingTable(t *testing.T) {
 		t.Fatalf("failed to pre-create table: %v", err)
 	}
 
-	ApplySchemaMigrations(context.Background(), testDBURL, false)
+	ApplySchemaMigrations(context.Background(), testDBURL)
 
 	var cookNameCol string
 	err = testDB.QueryRow(`

@@ -49,6 +49,30 @@ func TestUserWithPermissions_HasPermission(t *testing.T) {
 			want:        true,
 		},
 		{
+			name:        "memberships.all.write implies memberships.all.read",
+			effective:   []string{"memberships.all.write"},
+			permToCheck: "memberships.all.read",
+			want:        true,
+		},
+		{
+			name:        "memberships.all.write implies memberships.self.read",
+			effective:   []string{"memberships.all.write"},
+			permToCheck: "memberships.self.read",
+			want:        true,
+		},
+		{
+			name:        "memberships.all.read implies memberships.self.read",
+			effective:   []string{"memberships.all.read"},
+			permToCheck: "memberships.self.read",
+			want:        true,
+		},
+		{
+			name:        "memberships.self.read does not imply memberships.all.read",
+			effective:   []string{"memberships.self.read"},
+			permToCheck: "memberships.all.read",
+			want:        false,
+		},
+		{
 			name:        "restricted read does not imply families.all.read",
 			effective:   []string{"families.all.restrictedread"},
 			permToCheck: "families.all.read",
@@ -72,6 +96,46 @@ func TestUserWithPermissions_HasPermission(t *testing.T) {
 				t.Errorf("HasPermission(%q) = %v, want %v", tt.permToCheck, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestUserWithPermissions_EnsureImpliedPermissions(t *testing.T) {
+	u := &UserWithPermissions{
+		EffectivePermissions: []string{"memberships.all.write"},
+	}
+	u.EnsureImpliedPermissions()
+
+	if !u.HasPermission("memberships.all.read") {
+		t.Error("expected memberships.all.write to imply memberships.all.read in EnsureImpliedPermissions")
+	}
+	if !u.HasPermission("memberships.self.read") {
+		t.Error("expected memberships.all.write to imply memberships.self.read in EnsureImpliedPermissions")
+	}
+}
+
+func TestUserWithPermissions_RemovePermissions(t *testing.T) {
+	u := &UserWithPermissions{
+		EffectivePermissions: []string{
+			"families.all.read",
+			"children.all.write",
+			"fees.self.read",
+			"families.self.selfservice",
+		},
+	}
+
+	u.RemovePermissions([]string{"fees.self.read"})
+
+	if u.HasPermission("fees.self.read") {
+		t.Error("expected fees.self.read to be removed")
+	}
+	if !u.HasPermission("families.all.read") {
+		t.Error("expected families.all.read to still be present")
+	}
+	if !u.HasPermission("children.all.write") {
+		t.Error("expected children.all.write to still be present")
+	}
+	if !u.HasPermission("families.self.selfservice") {
+		t.Error("expected families.self.selfservice to still be present")
 	}
 }
 

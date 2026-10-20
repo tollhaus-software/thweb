@@ -132,13 +132,6 @@ CREATE TABLE IF NOT EXISTS th_memberships (
 DROP TRIGGER IF EXISTS update_th_memberships_updated_at ON th_memberships;
 CREATE TRIGGER update_th_memberships_updated_at BEFORE UPDATE ON th_memberships FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
--- Default roles
-INSERT INTO roles (id, name, description, permissions) VALUES
-    ('admin', 'Administrator', 'Full system access', '["*"]'),
-    ('viewer', 'Viewer', 'Read-only access', '["families.all.read", "fees.self.read", "audit.all.read"]'),
-    ('treasurer', 'Treasurer', 'Fee calculation and membership management', '["families.all.read", "fees.all.read", "memberships.all.write"]'),
-    ('caregiver', 'Caregiver', 'Child and hygiene tracking', '["families.all.read", "children.all.write", "hygiene.all.write"]')
-ON CONFLICT (id) DO NOTHING;
 
 -- +goose Down
 DROP TABLE IF EXISTS th_memberships CASCADE;

@@ -150,8 +150,10 @@ var AuditRegistry = map[string]EntityPolicy{
 	"th_membership": {
 		CanUserView: func(user *models.UserWithPermissions, familyID *uuid.UUID) bool {
 			return user.HasPermission("families.all.read") ||
+				user.HasPermission("memberships.all.read") ||
 				user.HasPermission("memberships.all.write") ||
-				user.HasPermission("fees.all.read")
+				user.HasPermission("fees.all.read") ||
+				(familyID != nil && user.IsSelfFamily(*familyID) && user.HasPermission("memberships.self.read"))
 		},
 		SanitizeSnapshot: func(user *models.UserWithPermissions, snapshot map[string]interface{}) map[string]interface{} {
 			return snapshot

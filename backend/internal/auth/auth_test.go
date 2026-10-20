@@ -8,7 +8,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/pavolmarko/thweb-backend/internal/database"
 	"github.com/pavolmarko/thweb-backend/internal/models"
+	"github.com/pavolmarko/thweb-backend/internal/roles"
 	"github.com/pavolmarko/thweb-backend/internal/store"
 )
 
@@ -75,8 +77,8 @@ func TestRequirePermission_VaccinationStatusManage(t *testing.T) {
 	}
 }
 
-func TestRequirePermission_AuditAllRead(t *testing.T) {
-	middleware := RequirePermission("audit.all.read")
+func TestRequirePermission_AuditView(t *testing.T) {
+	middleware := RequirePermission("audit.view")
 	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))
@@ -90,10 +92,10 @@ func TestRequirePermission_AuditAllRead(t *testing.T) {
 		wantStatus int
 	}{
 		{
-			name: "allowed with explicit audit.all.read permission",
+			name: "allowed with explicit audit.view permission",
 			user: &models.UserWithPermissions{
 				Email:                "auditor@example.com",
-				EffectivePermissions: []string{"audit.all.read"},
+				EffectivePermissions: []string{"audit.view"},
 			},
 			wantStatus: http.StatusOK,
 		},
@@ -106,7 +108,7 @@ func TestRequirePermission_AuditAllRead(t *testing.T) {
 			wantStatus: http.StatusOK,
 		},
 		{
-			name: "forbidden without audit.all.read permission",
+			name: "forbidden without audit.view permission",
 			user: &models.UserWithPermissions{
 				Email:                "developer@example.com",
 				EffectivePermissions: []string{"families.all.read", "children.all.write"},
@@ -635,4 +637,182 @@ func TestAuthenticator_Middleware_RestrictedUser(t *testing.T) {
 		t.Errorf("expected 403 Forbidden for unknown user, got %d", recUnknown.Code)
 	}
 }
+
+func TestAuthenticator_AutoGrantFromRolesConfig(t *testing.T) {
+	customYAML := `
+roles:
+  - id: custom_kiosk
+    name: Custom Kiosk
+    description: Custom kiosk display
+    auto_grant_on:
+      - kiosk_cert
+    permissions:
+      - dashboard.read
+      - mealplan.view
+`
+	cfg, err := roles.LoadFromBytes([]byte(customYAML))
+	if err != nil {
+		t.Fatalf("failed to load custom roles: %v", err)
+	}
+
+	authenticator := NewAuthenticator("test-client", false, nil, cfg)
+
+	var recordedUser *models.UserWithPermissions
+	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recordedUser = GetUser(r.Context())
+		w.WriteHeader(http.StatusOK)
+	})
+
+	handler := authenticator.Middleware(testHandler)
+
+	req := httptest.NewRequest("GET", "/api/dashboard/daily-brief", nil)
+	req.Header.Set("X-Client-Verified", "SUCCESS")
+	req.Header.Set("X-Client-DN", "CN=kiosk-1")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", rec.Code)
+	}
+	if recordedUser == nil {
+		t.Fatal("expected recorded user")
+	}
+	if len(recordedUser.Roles) != 1 || recordedUser.Roles[0] != "custom_kiosk" {
+		t.Errorf("expected role custom_kiosk, got %v", recordedUser.Roles)
+	}
+	if !recordedUser.HasPermission("mealplan.view") {
+		t.Errorf("expected permission mealplan.view from custom kiosk role")
+	}
+}
+
+func TestAuthenticator_DenyPermissions_CaregiverOrErzieher(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+	database.ApplySchemaMigrations(ctx, dbURL)
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	customYAML := `
+roles:
+  - id: erzieher
+    name: ErzieherInnenTeam
+    description: Erzieher/Erzieherinnen
+    permissions:
+      - families.all.restrictedread
+      - mealplan.view
+    deny_permissions:
+      - fees.self.read
+
+  - id: restricted
+    name: Restricted Parent
+    auto_grant_on:
+      - identifier_email
+    permissions:
+      - families.all.restrictedread
+      - fees.self.read
+      - families.self.selfservice
+      - memberships.self.read
+`
+	cfg, err := roles.LoadFromBytes([]byte(customYAML))
+	if err != nil {
+		t.Fatalf("failed to parse custom roles: %v", err)
+	}
+
+	appStore := store.NewStore(pool)
+	authenticator := NewAuthenticator("test-client", false, appStore, cfg)
+	authenticator.ProxySharedSecret = "secret123"
+
+	// Create user with role erzieher
+	erzieherEmail := "erzieher." + uuid.New().String() + "@example.com"
+	erzieherID := uuid.New()
+
+	// Ensure role exists in roles table
+	if _, err := pool.Exec(ctx, "INSERT INTO roles (id, name, permissions, deny_permissions) VALUES ('erzieher', 'Erzieher', '[\"families.all.restrictedread\", \"mealplan.view\"]'::jsonb, '[\"fees.self.read\"]'::jsonb) ON CONFLICT (id) DO UPDATE SET deny_permissions = '[\"fees.self.read\"]'::jsonb"); err != nil {
+		t.Fatalf("failed to insert erzieher role: %v", err)
+	}
+
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2)", erzieherID, erzieherEmail)
+	if err != nil {
+		t.Fatalf("failed to insert user: %v", err)
+	}
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM user_roles WHERE user_id = $1", erzieherID)
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", erzieherID)
+	}()
+
+	_, err = pool.Exec(ctx, "INSERT INTO user_roles (user_id, role_id) VALUES ($1, 'erzieher')", erzieherID)
+	if err != nil {
+		t.Fatalf("failed to assign role: %v", err)
+	}
+
+	// Create a family where this erzieher is also a parent with identifier email!
+	familyID := uuid.New()
+	parent := models.Parent{
+		ID:        uuid.New(),
+		FamilyID:  familyID,
+		FirstName: "Educator",
+		LastName:  "Parent",
+		Emails: models.MultiValueList{
+			{Value: erzieherEmail, IdentifierEmail: true, AddressList: true},
+		},
+		Phones: models.MultiValueList{},
+	}
+	if err := appStore.UpdateFamilyParents(ctx, erzieherID, familyID, []models.Parent{parent}); err != nil {
+		t.Fatalf("failed to seed parent: %v", err)
+	}
+	defer func() {
+		_ = appStore.DeleteFamily(ctx, erzieherID, familyID)
+	}()
+
+	var recordedUser *models.UserWithPermissions
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recordedUser = GetUser(r.Context())
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := authenticator.Middleware(next)
+
+	req := httptest.NewRequest("GET", "/api/families/overview", nil)
+	req.Header.Set("X-Proxy-Secret", "secret123")
+	req.Header.Set("X-Forwarded-Email", erzieherEmail)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	if recordedUser == nil {
+		t.Fatal("expected recorded user")
+	}
+
+	// Verify FamilyID is set (matched identifier email)
+	if recordedUser.FamilyID == nil || *recordedUser.FamilyID != familyID {
+		t.Errorf("expected FamilyID %s, got %v", familyID, recordedUser.FamilyID)
+	}
+
+	// Verify parent self-service permissions from restricted role are present
+	if !recordedUser.HasPermission("families.self.selfservice") {
+		t.Error("expected user to have families.self.selfservice")
+	}
+	if !recordedUser.HasPermission("memberships.self.read") {
+		t.Error("expected user to have memberships.self.read")
+	}
+
+	// Verify role permissions from erzieher role are present
+	if !recordedUser.HasPermission("mealplan.view") {
+		t.Error("expected user to have mealplan.view")
+	}
+
+	// Verify fees.self.read is DENIED because of erzieher deny_permissions!
+	if recordedUser.HasPermission("fees.self.read") {
+		t.Errorf("expected fees.self.read to be DENIED for erzieher, but user has it in effective_permissions: %v", recordedUser.EffectivePermissions)
+	}
+}
+
 

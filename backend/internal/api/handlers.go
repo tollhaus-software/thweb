@@ -118,12 +118,13 @@ func computeChildOverviewGroupStatus(changes []models.ChildGroupChange, now time
 }
 
 type OverviewParent struct {
-	ID        uuid.UUID             `json:"id"`
-	FirstName string                `json:"first_name"`
-	LastName  string                `json:"last_name"`
-	Emails    models.MultiValueList `json:"emails"`
-	Phones    models.MultiValueList `json:"phones"`
-	Address   string                `json:"address"`
+	ID          uuid.UUID              `json:"id"`
+	FirstName   string                 `json:"first_name"`
+	LastName    string                 `json:"last_name"`
+	Emails      models.MultiValueList  `json:"emails"`
+	Phones      models.MultiValueList  `json:"phones"`
+	Address     string                 `json:"address"`
+	Memberships *[]models.THMembership `json:"memberships,omitempty"`
 }
 
 type OverviewFamily struct {
@@ -148,6 +149,7 @@ func (s *Server) HandleListFamiliesOverview(w http.ResponseWriter, r *http.Reque
 	for _, fam := range families {
 		isOwnFamily := user != nil && user.IsSelfFamily(fam.ID)
 		canViewGroupChanges := (isOwnFamily && hasSelfService) || hasFamiliesAll
+		canViewMemberships := (isOwnFamily && user != nil && user.HasPermission("memberships.self.read")) || (user != nil && user.HasPermission("memberships.all.read"))
 
 		ovParents := make([]OverviewParent, 0, len(fam.Parents))
 		for _, p := range fam.Parents {
@@ -169,13 +171,19 @@ func (s *Server) HandleListFamiliesOverview(w http.ResponseWriter, r *http.Reque
 			if filteredPhones == nil {
 				filteredPhones = models.MultiValueList{}
 			}
+			var pMemberships *[]models.THMembership
+			if canViewMemberships {
+				mCopy := p.Memberships
+				pMemberships = &mCopy
+			}
 			ovParents = append(ovParents, OverviewParent{
-				ID:        p.ID,
-				FirstName: p.FirstName,
-				LastName:  p.LastName,
-				Emails:    filteredEmails,
-				Phones:    filteredPhones,
-				Address:   p.Address,
+				ID:          p.ID,
+				FirstName:   p.FirstName,
+				LastName:    p.LastName,
+				Emails:      filteredEmails,
+				Phones:      filteredPhones,
+				Address:     p.Address,
+				Memberships: pMemberships,
 			})
 		}
 
@@ -328,7 +336,7 @@ func (s *Server) HandleListFamilies(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) HandleListAuditLogs(w http.ResponseWriter, r *http.Request) {
 	user := auth.GetUser(r.Context())
-	if user == nil || !user.HasPermission("audit.all.read") {
+	if user == nil || !user.HasPermission("audit.view") {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Forbidden"})
@@ -985,6 +993,18 @@ func (s *Server) HandleUpdateHygieneEvent(w http.ResponseWriter, r *http.Request
 	}
 
 	jsonResponse(w, updated)
+}
+
+func (s *Server) HandleListMembers(w http.ResponseWriter, r *http.Request) {
+	members, err := s.Store.ListMembers(r.Context())
+	if err != nil {
+		httpErrorLog(w, r, "Failed to list members", http.StatusInternalServerError, err)
+		return
+	}
+	if members == nil {
+		members = []models.MemberRow{}
+	}
+	jsonResponse(w, members)
 }
 
 func (s *Server) HandleCreateTHMembership(w http.ResponseWriter, r *http.Request) {

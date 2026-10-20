@@ -44,6 +44,7 @@ export interface MembershipsModalProps {
   parent: ParentWithMemberships | null;
   family?: FamilyWithChildren | null;
   defaultStartDate?: string | null;
+  readOnly?: boolean;
   onAddMembership: (
     parentId: string,
     startDate: string,
@@ -79,6 +80,7 @@ export const MembershipsModal: React.FC<MembershipsModalProps> = ({
   parent,
   family,
   defaultStartDate,
+  readOnly = false,
   onAddMembership,
   onUpdateMembership,
   onDeleteMembership,
@@ -137,11 +139,11 @@ export const MembershipsModal: React.FC<MembershipsModalProps> = ({
     return CURRENT_LOCALE === 'de' ? formatDisplayDate(today) : today.toISOString().split('T')[0];
   };
 
-  const [isAddingRow, setIsAddingRow] = useState(isInitiallyEmpty);
+  const [isAddingRow, setIsAddingRow] = useState(!readOnly && isInitiallyEmpty);
   const [newMembershipType, setNewMembershipType] = useState<'full_member' | 'supporting_member'>('full_member');
   const [newStartDate, setNewStartDate] = useState<string>(getInitialNewStartDate);
   const [newEndDate, setNewEndDate] = useState<string>('');
-  const [isStartCalendarOpen, setIsStartCalendarOpen] = useState(isInitiallyEmpty);
+  const [isStartCalendarOpen, setIsStartCalendarOpen] = useState(!readOnly && isInitiallyEmpty);
   const [isEndCalendarOpen, setIsEndCalendarOpen] = useState(false);
 
   const startDateInputRef = useRef<HTMLInputElement>(null);
@@ -344,7 +346,7 @@ export const MembershipsModal: React.FC<MembershipsModalProps> = ({
                 <th style={{ padding: '6px 8px', textAlign: 'left', width: '130px' }}>{t('membershipType')}</th>
                 <th style={{ padding: '6px 8px', textAlign: 'left', width: '150px' }}>{t('startDateLabel')}</th>
                 <th style={{ padding: '6px 8px', textAlign: 'left', width: '150px' }}>{t('endDateLabel')}</th>
-                <th style={{ padding: '6px 8px', width: '36px', textAlign: 'center' }}></th>
+                {!readOnly && <th style={{ padding: '6px 8px', width: '36px', textAlign: 'center' }}></th>}
               </tr>
             </thead>
             <tbody>
@@ -354,6 +356,24 @@ export const MembershipsModal: React.FC<MembershipsModalProps> = ({
 
                 const initialEndDate = m.end_date ? m.end_date.split('T')[0] : '';
                 const endDateDisplayValue = initialEndDate ? (CURRENT_LOCALE === 'de' ? formatDisplayDate(initialEndDate) : initialEndDate) : '';
+
+                if (readOnly) {
+                  return (
+                    <tr key={m.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td style={{ padding: '6px 8px' }}>
+                        <span style={{ fontWeight: 600 }}>
+                          {m.membership_type === 'full_member' ? t('full_member') : t('supporting_member')}
+                        </span>
+                      </td>
+                      <td style={{ padding: '6px 8px' }}>
+                        <span>{formatDisplayDate(m.start_date)}</span>
+                      </td>
+                      <td style={{ padding: '6px 8px' }}>
+                        <span>{m.end_date ? formatDisplayDate(m.end_date) : '-'}</span>
+                      </td>
+                    </tr>
+                  );
+                }
 
                 return (
                   <tr key={m.id} style={{ borderBottom: '1px solid var(--border)' }}>
@@ -721,7 +741,7 @@ export const MembershipsModal: React.FC<MembershipsModalProps> = ({
         </div>
 
         {/* Centered neutral '+' button under the existing rows */}
-        {!isAddingRow && (
+        {!isAddingRow && !readOnly && (
           <div
             style={{
               display: 'flex',
