@@ -18,6 +18,8 @@ import { VaccinationStatusPopover, VaccinationStatusCell, type VaccinationCheck 
 import { HygieneEventsPopover, HygieneCell, type ParentWithHygiene } from './components/Table/HygieneEventsPopover';
 import { ChildcareFeesCalculator } from './components/ChildcareFeesCalculator';
 import { KioskDashboard } from './components/Dashboard/KioskDashboard';
+import { MealPlanTab } from './components/MealPlan/MealPlanTab';
+import { MealPlanPrintView } from './components/MealPlan/MealPlanPrintView';
 import { KioskProvisioning } from './components/Admin/KioskProvisioning';
 import { getAppConfig } from './config/appConfig';
 import { HeaderOverflowMenu } from './components/Header/HeaderOverflowMenu';
@@ -1887,6 +1889,7 @@ const Dashboard: React.FC = () => {
   const canReadFees = hasPermission('fees.all.read') || hasPermission('fees.self.read');
   const canWriteChildren = hasPermission('children.all.write');
   const canWriteHygiene = hasPermission('hygiene.all.write');
+  const canViewMealPlan = hasPermission('mealplan.view');
 
   const [families, setFamilies] = React.useState<Family[]>([]);
   const [overviewFamilies, setOverviewFamilies] = React.useState<OverviewFamily[]>([]);
@@ -1936,7 +1939,7 @@ const Dashboard: React.FC = () => {
 
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [activeTab, setActiveTab] = React.useState<
-    'familiesOverview' | 'families' | 'parents' | 'children' | 'childcareFees' | 'hygieneBelehrung' | 'audit' | 'admin' | 'kiosk' | 'dashboard'
+    'familiesOverview' | 'families' | 'parents' | 'children' | 'childcareFees' | 'hygieneBelehrung' | 'mealPlan' | 'audit' | 'admin' | 'kiosk' | 'dashboard'
   >(() => {
     const rawHash = window.location.hash.replace('#', '');
     const hash = rawHash.split('?')[0];
@@ -1948,6 +1951,7 @@ const Dashboard: React.FC = () => {
       (hash === 'children' && canReadFamiliesAll) ||
       (hash === 'childcareFees' && canReadFees) ||
       (hash === 'hygieneBelehrung' && (canReadFamiliesAll || hasPermission('hygiene.all.write'))) ||
+      (hash === 'mealPlan' && canViewMealPlan) ||
       (hash === 'audit' && canReadAudit) ||
       (hash === 'admin' && canManageUsers) ||
       (hash === 'kiosk' && canProvisionKiosk) ||
@@ -1964,6 +1968,7 @@ const Dashboard: React.FC = () => {
       (saved === 'children' && canReadFamiliesAll) ||
       (saved === 'childcareFees' && canReadFees) ||
       (saved === 'hygieneBelehrung' && (canReadFamiliesAll || hasPermission('hygiene.all.write'))) ||
+      (saved === 'mealPlan' && canViewMealPlan) ||
       (saved === 'audit' && canReadAudit) ||
       (saved === 'admin' && canManageUsers) ||
       (saved === 'kiosk' && canProvisionKiosk) ||
@@ -1996,8 +2001,16 @@ const Dashboard: React.FC = () => {
       } else if (canReadFees) {
         setActiveTab('childcareFees');
       }
+    } else if (activeTab === 'mealPlan' && !canViewMealPlan) {
+      if (canReadOverview) {
+        setActiveTab('familiesOverview');
+      } else if (canReadFees) {
+        setActiveTab('childcareFees');
+      } else if (canReadFamiliesAll) {
+        setActiveTab('families');
+      }
     }
-  }, [activeTab, canReadFamiliesAll, canReadOverview, canReadFees]);
+  }, [activeTab, canReadFamiliesAll, canReadOverview, canReadFees, canViewMealPlan]);
 
   // Navigation & Highlighting state (Patterns 2 & 3)
   const [highlightTarget, setHighlightTarget] = React.useState<{ id: string; key: number } | null>(null);
@@ -2838,6 +2851,7 @@ const Dashboard: React.FC = () => {
         (hash === 'families' && canReadFamiliesAll) ||
         (hash === 'childcareFees' && canReadFees) ||
         (hash === 'hygieneBelehrung' && (canReadFamiliesAll || hasPermission('hygiene.all.write'))) ||
+        (hash === 'mealPlan' && canViewMealPlan) ||
         (hash === 'audit' && canReadAudit) ||
         (hash === 'admin' && canManageUsers) ||
         (hash === 'kiosk' && canProvisionKiosk) ||
@@ -2874,7 +2888,7 @@ const Dashboard: React.FC = () => {
         setActiveTab(fallback as any);
         localStorage.setItem('thweb_active_tab', fallback);
         window.location.hash = fallback;
-      } else if (hash === 'audit' || hash === 'admin' || hash === 'kiosk') {
+      } else if (hash === 'audit' || hash === 'admin' || hash === 'kiosk' || hash === 'mealPlan') {
         const fallback = canReadFamiliesAll ? 'families' : canReadOverview ? 'familiesOverview' : 'childcareFees';
         setActiveTab(fallback as any);
         localStorage.setItem('thweb_active_tab', fallback);
@@ -2891,7 +2905,7 @@ const Dashboard: React.FC = () => {
       handleHashChange();
     }
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [canReadAudit, canManageUsers, canProvisionKiosk, canReadOverview, canReadFamiliesAll, canReadFees, hasPermission]);
+  }, [canReadAudit, canManageUsers, canProvisionKiosk, canReadOverview, canReadFamiliesAll, canReadFees, canViewMealPlan, hasPermission]);
 
   useRealtime(React.useCallback((message: any) => {
     if (
@@ -5313,6 +5327,15 @@ function formatParentsSummary(parents: any[]): string {
                 {t('hygieneBelehrung')}
               </button>
             )}
+            {canViewMealPlan && (
+              <button 
+                onClick={() => handleTabClick('mealPlan')}
+                className={`tab-btn ${activeTab === 'mealPlan' ? 'active' : ''}`}
+                data-active={activeTab === 'mealPlan'}
+              >
+                {t('mealPlan')}
+              </button>
+            )}
             {canReadAudit && (
               <button 
                 onClick={() => handleTabClick('audit')}
@@ -5400,7 +5423,7 @@ function formatParentsSummary(parents: any[]): string {
           </div>
         )}
 
-        {activeTab !== 'childcareFees' && activeTab !== 'audit' && activeTab !== 'admin' && activeTab !== 'kiosk' && activeTab !== 'dashboard' && (
+        {activeTab !== 'childcareFees' && activeTab !== 'audit' && activeTab !== 'admin' && activeTab !== 'kiosk' && activeTab !== 'dashboard' && activeTab !== 'mealPlan' && (
           <div className="controls-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <div className="controls-left" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
               <input
@@ -5814,6 +5837,8 @@ function formatParentsSummary(parents: any[]): string {
           <AdminView />
         ) : activeTab === 'kiosk' && canProvisionKiosk ? (
           <KioskProvisioning token={token} />
+        ) : activeTab === 'mealPlan' && canViewMealPlan ? (
+          <MealPlanTab />
         ) : activeTab === 'dashboard' ? (
           <KioskDashboard embedded={true} />
         ) : (
@@ -6185,10 +6210,17 @@ function formatParentsSummary(parents: any[]): string {
 };
 
 const AppContent: React.FC = () => {
-  const { user, loading } = useAuth();
+  const { user, loading, hasPermission } = useAuth();
+  const [currentHash, setCurrentHash] = React.useState(() => window.location.hash);
   const appConfig = getAppConfig();
   const appTitle = appConfig.title || t('title');
   const faviconUrl = appConfig.faviconUrl;
+
+  React.useEffect(() => {
+    const handleHash = () => setCurrentHash(window.location.hash);
+    window.addEventListener('hashchange', handleHash);
+    return () => window.removeEventListener('hashchange', handleHash);
+  }, []);
 
   React.useEffect(() => {
     if (appTitle) {
@@ -6219,6 +6251,15 @@ const AppContent: React.FC = () => {
 
   if (!user) {
     return <LandingPage />;
+  }
+
+  // Standalone print view for meal plan (opened in a new tab)
+  const rawHash = currentHash.replace('#', '');
+  if (rawHash.startsWith('mealPlanPrint')) {
+    if (!hasPermission('mealplan.view')) {
+      return <Dashboard />;
+    }
+    return <MealPlanPrintView />;
   }
 
   return <Dashboard />;
