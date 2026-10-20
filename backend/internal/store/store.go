@@ -1538,6 +1538,7 @@ func (s *Store) ResetTestData(ctx context.Context) error {
 			families, 
 			audit_log 
 		CASCADE;
+		DELETE FROM users WHERE email NOT IN ('developer@example.com', 'caregiver@example.com');
 	`)
 	return err
 }
