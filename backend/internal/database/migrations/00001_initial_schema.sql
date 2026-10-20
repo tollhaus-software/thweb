@@ -5,11 +5,17 @@ CREATE TABLE IF NOT EXISTS roles (
     name TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     permissions JSONB NOT NULL DEFAULT '[]',
+    deny_permissions JSONB NOT NULL DEFAULT '[]',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Users table (Allow-list for Google Auth)
+-- (users of the application)
+-- Currently the system is matching against e-mail.
+-- Emails are stored normalized in lowercase (preserving dots).
+-- For Google Auth it could be better to match against "sub"
+-- (subject id) to support user e-mail changes.
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email TEXT UNIQUE NOT NULL,
@@ -19,9 +25,6 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Incremental column migrations for existing databases
-ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions JSONB NOT NULL DEFAULT '[]';
-
 -- User-Roles junction table
 CREATE TABLE IF NOT EXISTS user_roles (
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -30,6 +33,8 @@ CREATE TABLE IF NOT EXISTS user_roles (
 );
 
 -- Families table
+-- Note a family doesn't have a name at the moment - how it's displayed on the
+-- UI is currently defined by the `parents` that belong to that family.
 CREATE TABLE IF NOT EXISTS families (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -41,9 +46,11 @@ CREATE TABLE IF NOT EXISTS parents (
     family_id UUID NOT NULL REFERENCES families(id) ON DELETE CASCADE,
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
-    emails TEXT[] NOT NULL DEFAULT '{}',
-    phones TEXT[] NOT NULL DEFAULT '{}',
+    emails JSONB NOT NULL DEFAULT '[]'::jsonb,
+    phones JSONB NOT NULL DEFAULT '[]'::jsonb,
+    address TEXT NOT NULL DEFAULT '',
     notes TEXT NOT NULL DEFAULT '',
+    vaccination_status_protected BYTEA,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -55,12 +62,8 @@ CREATE TABLE IF NOT EXISTS children (
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
     birth_date DATE NOT NULL,
-    start_date DATE,
-    group2_start_date DATE,
-    hort_start_date DATE,
-    exit_date DATE,
-    start_group INTEGER,
     notes TEXT NOT NULL DEFAULT '',
+    vaccination_status_protected BYTEA,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -70,21 +73,24 @@ CREATE TABLE IF NOT EXISTS audit_log (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     transaction_id UUID NOT NULL,
     family_id UUID REFERENCES families(id) ON DELETE SET NULL,
-    entity_type TEXT NOT NULL,
+    entity_type TEXT NOT NULL, -- 'family', 'parent', 'child', 'hygiene_event', 'th_membership', 'child_group_change'
     entity_id UUID NOT NULL,
-    operation TEXT NOT NULL,
+    operation TEXT NOT NULL, -- 'INSERT', 'UPDATE', 'DELETE'
+    -- JSON snapshot of the entity model:
+    --   INSERT: before = null, after = new state
+    --   UPDATE: before = old state, after = new state
+    --   DELETE: before = old state, after = null
     before_snapshot JSONB,
     after_snapshot JSONB,
     changed_by UUID REFERENCES users(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS before_snapshot JSONB;
-ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS after_snapshot JSONB;
-
+-- Indexes for history lookup
 CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log (entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_audit_log_family ON audit_log (family_id);
 
+-- Trigger function to update updated_at timestamp
 -- +goose StatementBegin
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -132,8 +138,48 @@ CREATE TABLE IF NOT EXISTS th_memberships (
 DROP TRIGGER IF EXISTS update_th_memberships_updated_at ON th_memberships;
 CREATE TRIGGER update_th_memberships_updated_at BEFORE UPDATE ON th_memberships FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
+-- Children group changes table
+-- Target group: 0 = exit, 1 = Kleine Gruppe, 2 = Grosse Gruppe, 3 = Hort
+CREATE TABLE IF NOT EXISTS children_group_changes (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    child UUID NOT NULL REFERENCES children(id) ON DELETE CASCADE,
+    change_date DATE NOT NULL,
+    target_group INTEGER NOT NULL, -- 0 = exit, 1 = Kleine Gruppe, 2 = Grosse Gruppe, 3 = Hort
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_children_group_changes_child_date UNIQUE (child, change_date)
+);
+
+DROP TRIGGER IF EXISTS update_children_group_changes_updated_at ON children_group_changes;
+CREATE TRIGGER update_children_group_changes_updated_at BEFORE UPDATE ON children_group_changes FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+
+CREATE INDEX IF NOT EXISTS idx_children_group_changes_child ON children_group_changes(child);
+
+-- Yellow bag days table
+CREATE TABLE IF NOT EXISTS yellow_bag_days (
+    date DATE PRIMARY KEY,
+    fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE OR REPLACE VIEW yellow_bag_dates AS SELECT * FROM yellow_bag_days;
+
+-- Meal plan from sheets table
+CREATE TABLE IF NOT EXISTS meal_plan_from_sheets (
+    date DATE PRIMARY KEY,
+    fetched_at TIMESTAMPTZ NOT NULL,
+    cook_name TEXT NOT NULL DEFAULT '',
+    food_component_1 TEXT NOT NULL DEFAULT '',
+    food_component_2 TEXT NOT NULL DEFAULT '',
+    food_component_3 TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_meal_plan_from_sheets_date ON meal_plan_from_sheets (date);
 
 -- +goose Down
+DROP VIEW IF EXISTS yellow_bag_dates CASCADE;
+DROP TABLE IF EXISTS yellow_bag_days CASCADE;
+DROP TABLE IF EXISTS meal_plan_from_sheets CASCADE;
+DROP TABLE IF EXISTS children_group_changes CASCADE;
 DROP TABLE IF EXISTS th_memberships CASCADE;
 DROP TABLE IF EXISTS hygiene_belehrung_events CASCADE;
 DROP TABLE IF EXISTS audit_log CASCADE;
@@ -143,3 +189,4 @@ DROP TABLE IF EXISTS families CASCADE;
 DROP TABLE IF EXISTS user_roles CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS roles CASCADE;
+DROP FUNCTION IF EXISTS update_updated_at_column CASCADE;

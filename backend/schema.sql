@@ -29,9 +29,6 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Incremental column migrations for existing databases
-ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions JSONB NOT NULL DEFAULT '[]';
-
 -- User-Roles junction table
 CREATE TABLE IF NOT EXISTS user_roles (
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -53,16 +50,14 @@ CREATE TABLE IF NOT EXISTS parents (
     family_id UUID NOT NULL REFERENCES families(id) ON DELETE CASCADE,
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
-    emails TEXT[] NOT NULL DEFAULT '{}',
-    phones TEXT[] NOT NULL DEFAULT '{}',
+    emails JSONB NOT NULL DEFAULT '[]'::jsonb,
+    phones JSONB NOT NULL DEFAULT '[]'::jsonb,
     address TEXT NOT NULL DEFAULT '',
     notes TEXT NOT NULL DEFAULT '',
+    vaccination_status_protected BYTEA,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
--- Incremental column migrations for parents
-ALTER TABLE parents ADD COLUMN IF NOT EXISTS vaccination_status_protected BYTEA;
 
 -- Children table
 CREATE TABLE IF NOT EXISTS children (
@@ -76,9 +71,6 @@ CREATE TABLE IF NOT EXISTS children (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
--- Incremental column migrations for children
-ALTER TABLE children ADD COLUMN IF NOT EXISTS vaccination_status_protected BYTEA;
 
 -- Audit Log table for history tracking
 CREATE TABLE IF NOT EXISTS audit_log (
@@ -98,16 +90,11 @@ CREATE TABLE IF NOT EXISTS audit_log (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Incremental column migrations for audit_log
--- TODO: Remove this
-ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS before_snapshot JSONB;
-ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS after_snapshot JSONB;
-
--- Index for history lookup
+-- Indexes for history lookup
 CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log (entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_audit_log_family ON audit_log (family_id);
 
--- Trigger to update updated_at timestamp
+-- Trigger function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -170,15 +157,11 @@ CREATE TRIGGER update_children_group_changes_updated_at BEFORE UPDATE ON childre
 
 CREATE INDEX IF NOT EXISTS idx_children_group_changes_child ON children_group_changes(child);
 
-
 -- Yellow bag days table
 CREATE TABLE IF NOT EXISTS yellow_bag_days (
     date DATE PRIMARY KEY,
-    fetched_at TIMESTAMPTZ NOT NULL
+    fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
--- Incremental column migrations for existing databases
-ALTER TABLE yellow_bag_days ADD COLUMN IF NOT EXISTS fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
 CREATE OR REPLACE VIEW yellow_bag_dates AS SELECT * FROM yellow_bag_days;
 
@@ -191,8 +174,5 @@ CREATE TABLE IF NOT EXISTS meal_plan_from_sheets (
     food_component_2 TEXT NOT NULL DEFAULT '',
     food_component_3 TEXT NOT NULL DEFAULT ''
 );
-
--- Incremental column migrations for existing databases
-ALTER TABLE meal_plan_from_sheets ADD COLUMN IF NOT EXISTS cook_name TEXT NOT NULL DEFAULT '';
 
 CREATE INDEX IF NOT EXISTS idx_meal_plan_from_sheets_date ON meal_plan_from_sheets (date);
