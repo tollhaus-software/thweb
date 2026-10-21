@@ -30,7 +30,7 @@ import { HeaderOverflowMenu } from './components/Header/HeaderOverflowMenu';
 import { CellPopover } from './components/Table/CellPopover';
 import { RowActionsMenu } from './components/Table/RowActionsMenu';
 import { ConfirmDeleteModal } from './components/Table/ConfirmDeleteModal';
-import { t, CURRENT_LOCALE, formatDisplayDate, parseInputDate, calculateYearsAndMonths, formatTollhausEmail, compareBirthDates } from './utils/i18n';
+import { t, CURRENT_LOCALE, formatDisplayDate, parseInputDate, formatTollhausEmail, compareBirthDates } from './utils/i18n';
 import { getFamilyName } from './utils/family';
 
 const EasyEditComponent = EasyEdit;
@@ -141,7 +141,7 @@ interface ChildGroupInfo {
   groupName?: string;
   sinceText?: string;
   futureDateText?: string;
-  durationStr?: string;
+  nextChangeText?: string;
 }
 
 const getChildGroupInfo = (changes: ChildGroupChange[] | undefined): ChildGroupInfo => {
@@ -219,20 +219,40 @@ const getChildGroupInfo = (changes: ChildGroupChange[] | undefined): ChildGroupI
   }
 
   // Case 3: Otherwise (the child is currently in a group), it should contain the group name,
-  // suffixed with "since <date> (<duration>)".
+  // suffixed with "since <date>" and next planned group change if any:
+  // - if there is no next planned group change, leave it empty there
+  // - if the next planned group change is a non-exit change, write there (-> <group name> ab <next group change date>)
+  // - if the next planned group change is an exit, write (-> bis <exit group change date>)
   const groupName = getGroupShortLabel(latest.target_group);
   const changeDateStr = formatDisplayDate(latest.change_date);
-  const { years, months } = calculateYearsAndMonths(latest.change_date, now);
-  const durationStr = CURRENT_LOCALE === 'de' ? `(${years}J ${months}M)` : `(${years}y ${months}m)`;
   const sinceWord = CURRENT_LOCALE === 'de' ? 'seit' : 'since';
   const sinceText = `${sinceWord} ${changeDateStr}`;
 
+  const futureChanges = sorted.filter((c) => c.change_date.split('T')[0] > todayStr);
+  const nextChange = futureChanges.length > 0 ? futureChanges[0] : null;
+  let nextChangeText = '';
+  if (nextChange) {
+    const nextDateStr = formatDisplayDate(nextChange.change_date);
+    if (nextChange.target_group > 0) {
+      const nextGroupName = getGroupShortLabel(nextChange.target_group);
+      const abWord = CURRENT_LOCALE === 'de' ? 'ab' : 'from';
+      nextChangeText = `(-> ${nextGroupName} ${abWord} ${nextDateStr})`;
+    } else {
+      const bisWord = CURRENT_LOCALE === 'de' ? 'bis' : 'until';
+      nextChangeText = `(-> ${bisWord} ${nextDateStr})`;
+    }
+  }
+
+  const groupLabel = nextChangeText
+    ? `${groupName} ${sinceText} ${nextChangeText}`
+    : `${groupName} ${sinceText}`;
+
   return {
     currentGroup: latest.target_group,
-    groupLabel: `${groupName} ${sinceText} ${durationStr}`,
+    groupLabel,
     groupName,
     sinceText,
-    durationStr,
+    nextChangeText,
     startDate,
     exitDate: null,
     isExited: false,
@@ -374,7 +394,7 @@ const ChildGroupCell: React.FC<ChildGroupCellProps> = ({
       >
         <span className="child-group-compact-view">
           {groupInfo.groupName && groupInfo.sinceText ? (
-            `${groupInfo.groupName} (${groupInfo.sinceText})`
+            `${groupInfo.groupName} (${groupInfo.sinceText})${groupInfo.nextChangeText ? ` ${groupInfo.nextChangeText}` : ''}`
           ) : groupInfo.isFuture && groupInfo.groupName && groupInfo.futureDateText ? (
             `${groupInfo.groupName} (${groupInfo.futureDateText})`
           ) : (
@@ -438,15 +458,17 @@ const ChildGroupCell: React.FC<ChildGroupCellProps> = ({
               >
                 {groupInfo.sinceText}
               </span>
-              <span
-                style={{
-                  display: 'inline-block',
-                  flexShrink: 0,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {groupInfo.durationStr}
-              </span>
+              {groupInfo.nextChangeText ? (
+                <span
+                  style={{
+                    display: 'inline-block',
+                    flexShrink: 0,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {groupInfo.nextChangeText}
+                </span>
+              ) : null}
             </span>
           ) : (
             <span>{groupInfo.groupLabel}</span>
@@ -5073,7 +5095,7 @@ function formatParentsSummary(parents: any[]): string {
     () => ({
       header: t('group'),
       id: 'group',
-      size: 340,
+      size: 440,
       minSize: 320,
       cell: (info) => {
         const child = info.row.original;
