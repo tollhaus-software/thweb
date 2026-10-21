@@ -53,6 +53,9 @@ func (s *UserWithPermissions) HasPermission(perm string) bool {
 		if perm == "memberships.all.read" && (p == "memberships.all.write" || p == "*") {
 			return true
 		}
+		if perm == "employees.all.read" && (p == "employees.all.write" || p == "*") {
+			return true
+		}
 	}
 	return false
 }
@@ -66,6 +69,7 @@ func (s *UserWithPermissions) EnsureImpliedPermissions() {
 	hasFeesAll := false
 	hasMembershipsWrite := false
 	hasMembershipsAll := false
+	hasEmployeesWrite := false
 	permSet := make(map[string]bool)
 	for _, p := range s.EffectivePermissions {
 		permSet[p] = true
@@ -81,6 +85,9 @@ func (s *UserWithPermissions) EnsureImpliedPermissions() {
 		if p == "*" || p == "memberships.all.read" {
 			hasMembershipsAll = true
 		}
+		if p == "*" || p == "employees.all.write" {
+			hasEmployeesWrite = true
+		}
 	}
 	if hasFamiliesAll {
 		permSet["families.all.restrictedread"] = true
@@ -94,6 +101,9 @@ func (s *UserWithPermissions) EnsureImpliedPermissions() {
 	}
 	if hasMembershipsAll {
 		permSet["memberships.self.read"] = true
+	}
+	if hasEmployeesWrite {
+		permSet["employees.all.read"] = true
 	}
 	s.EffectivePermissions = make([]string, 0, len(permSet))
 	for p := range permSet {
@@ -172,6 +182,8 @@ var AllKnownPermissions = []string{
 	"memberships.all.write",
 	"memberships.all.read",
 	"memberships.self.read",
+	"employees.all.write",
+	"employees.all.read",
 	"mealplan.view",
 	"audit.view",
 	"users.all.manage",
@@ -433,4 +445,62 @@ type MemberRow struct {
 	LastTypeChangeDate    *time.Time     `json:"last_type_change_date,omitempty"`
 	Memberships           []THMembership `json:"memberships"`
 }
+
+type Employee struct {
+	ID                         uuid.UUID      `json:"id"`
+	FirstName                  string         `json:"first_name"`
+	LastName                   string         `json:"last_name"`
+	EmployeeType               string         `json:"employee_type"` // "caregiver", "cook", "bufdi"
+	Emails                     MultiValueList `json:"emails"`
+	Phones                     MultiValueList `json:"phones"`
+	Address                    string         `json:"address"`
+	IsKinderschutzbeauftragter bool           `json:"is_kinderschutzbeauftragter"`
+	CreatedAt                  time.Time      `json:"created_at"`
+	UpdatedAt                  time.Time      `json:"updated_at"`
+}
+
+func (e *Employee) UnmarshalJSON(data []byte) error {
+	type Alias Employee
+	var aux struct {
+		Alias
+		GivenName                  *string `json:"given_name"`
+		Surname                    *string `json:"surname"`
+		Type                       *string `json:"type"`
+		IsKinderschutzbeauftragter *bool   `json:"is_kinderschutzbeauftragter"`
+		IsChildProtectionOfficer   *bool   `json:"is_child_protection_officer"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	*e = Employee(aux.Alias)
+	if aux.GivenName != nil && e.FirstName == "" {
+		e.FirstName = *aux.GivenName
+	}
+	if aux.Surname != nil && e.LastName == "" {
+		e.LastName = *aux.Surname
+	}
+	if aux.Type != nil && e.EmployeeType == "" {
+		e.EmployeeType = *aux.Type
+	}
+	if aux.IsKinderschutzbeauftragter != nil {
+		e.IsKinderschutzbeauftragter = *aux.IsKinderschutzbeauftragter
+	} else if aux.IsChildProtectionOfficer != nil {
+		e.IsKinderschutzbeauftragter = *aux.IsChildProtectionOfficer
+	}
+	return nil
+}
+
+func (e Employee) MarshalJSON() ([]byte, error) {
+	type Alias Employee
+	return json.Marshal(&struct {
+		Alias
+		Type                     string `json:"type"`
+		IsChildProtectionOfficer bool   `json:"is_child_protection_officer"`
+	}{
+		Alias:                    Alias(e),
+		Type:                     e.EmployeeType,
+		IsChildProtectionOfficer: e.IsKinderschutzbeauftragter,
+	})
+}
+
 

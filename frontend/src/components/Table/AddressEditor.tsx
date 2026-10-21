@@ -6,17 +6,17 @@ import { combineAddressesToShared } from '../../utils/address';
 
 export interface AddressEditorParent {
   id: string;
-  first_name: string;
-  last_name: string;
+  first_name?: string;
+  last_name?: string;
   address?: string;
-  [key: string]: unknown;
 }
 
 export interface AddressEditorProps<T extends AddressEditorParent = AddressEditorParent> {
   parent: T;
-  familyParents: T[];
+  familyParents?: T[];
   onSave: (updatedParents: T[]) => void;
   placeholder?: string;
+  canEdit?: boolean;
 }
 
 export const AddressEditor = <T extends AddressEditorParent>({
@@ -24,6 +24,7 @@ export const AddressEditor = <T extends AddressEditorParent>({
   familyParents,
   onSave,
   placeholder,
+  canEdit = true,
 }: AddressEditorProps<T>) => {
   const [isEditing, setIsEditing] = useState(false);
   const [mode, setMode] = useState<'shared' | 'individual'>('shared');
@@ -34,6 +35,8 @@ export const AddressEditor = <T extends AddressEditorParent>({
   const sharedInputRef = useRef<HTMLInputElement>(null);
   const indInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const lastComputedSharedRef = useRef<string>('');
+
+  const list = familyParents && familyParents.length > 0 ? familyParents : [parent];
 
   const getInitialState = useCallback(() => {
     const list = familyParents && familyParents.length > 0 ? familyParents : [parent];
@@ -172,6 +175,7 @@ export const AddressEditor = <T extends AddressEditorParent>({
       <div
         className="address-cell-wrapper"
         onDoubleClick={(e) => {
+          if (!canEdit) return;
           e.stopPropagation();
           window.getSelection()?.removeAllRanges();
           if (!isEditing) {
@@ -206,23 +210,25 @@ export const AddressEditor = <T extends AddressEditorParent>({
         >
           {currentDisplayAddress || placeholder || t('addAddress')}
         </span>
-        <div className="cell-edit-pencil-btn-wrapper" style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto' }}>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (isEditing) {
-                handleSave();
-              } else {
-                startEditing();
-              }
-            }}
-            className="cell-edit-pencil-btn"
-            title={t('editAddress')}
-          >
-            <Pencil size={13} />
-          </button>
-        </div>
+        {canEdit && (
+          <div className="cell-edit-pencil-btn-wrapper" style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto' }}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (isEditing) {
+                  handleSave();
+                } else {
+                  startEditing();
+                }
+              }}
+              className="cell-edit-pencil-btn"
+              title={t('editAddress')}
+            >
+              <Pencil size={13} />
+            </button>
+          </div>
+        )}
       </div>
 
       <CellPopover
@@ -255,61 +261,63 @@ export const AddressEditor = <T extends AddressEditorParent>({
           <span style={{ fontWeight: 'normal', opacity: 0.7 }}>(Enter to save)</span>
         </div>
 
-        {/* Radio Buttons on Top */}
-        <div
-          style={{
-            display: 'flex',
-            gap: '16px',
-            padding: '2px 0',
-          }}
-        >
-          <label
-            htmlFor={`address-mode-shared-${parent.id}`}
+        {/* Radio Buttons on Top (only if multiple parents in family) */}
+        {list.length > 1 && (
+          <div
             style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              cursor: 'pointer',
-              fontSize: '0.875rem',
-              color: 'var(--text)',
-              userSelect: 'none',
+              display: 'flex',
+              gap: '16px',
+              padding: '2px 0',
             }}
           >
-            <input
-              type="radio"
-              id={`address-mode-shared-${parent.id}`}
-              name={`address-mode-${parent.id}`}
-              value="shared"
-              checked={mode === 'shared'}
-              onChange={() => handleModeChange('shared')}
-              style={{ cursor: 'pointer' }}
-            />
-            <span>{t('sharedAddress')}</span>
-          </label>
-          <label
-            htmlFor={`address-mode-individual-${parent.id}`}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              cursor: 'pointer',
-              fontSize: '0.875rem',
-              color: 'var(--text)',
-              userSelect: 'none',
-            }}
-          >
-            <input
-              type="radio"
-              id={`address-mode-individual-${parent.id}`}
-              name={`address-mode-${parent.id}`}
-              value="individual"
-              checked={mode === 'individual'}
-              onChange={() => handleModeChange('individual')}
-              style={{ cursor: 'pointer' }}
-            />
-            <span>{t('individualAddresses')}</span>
-          </label>
-        </div>
+            <label
+              htmlFor={`address-mode-shared-${parent.id}`}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+                color: 'var(--text)',
+                userSelect: 'none',
+              }}
+            >
+              <input
+                type="radio"
+                id={`address-mode-shared-${parent.id}`}
+                name={`address-mode-${parent.id}`}
+                value="shared"
+                checked={mode === 'shared'}
+                onChange={() => handleModeChange('shared')}
+                style={{ cursor: 'pointer' }}
+              />
+              <span>{t('sharedAddress')}</span>
+            </label>
+            <label
+              htmlFor={`address-mode-individual-${parent.id}`}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
+                color: 'var(--text)',
+                userSelect: 'none',
+              }}
+            >
+              <input
+                type="radio"
+                id={`address-mode-individual-${parent.id}`}
+                name={`address-mode-${parent.id}`}
+                value="individual"
+                checked={mode === 'individual'}
+                onChange={() => handleModeChange('individual')}
+                style={{ cursor: 'pointer' }}
+              />
+              <span>{t('individualAddresses')}</span>
+            </label>
+          </div>
+        )}
 
         {/* Form Inputs based on Mode */}
         {mode === 'shared' ? (
@@ -317,7 +325,7 @@ export const AddressEditor = <T extends AddressEditorParent>({
             <input
               ref={sharedInputRef}
               type="text"
-              aria-label={t('sharedAddress')}
+              aria-label={list.length > 1 ? t('sharedAddress') : (t('address') || 'Adresse')}
               value={sharedAddress}
               onChange={(e) => setSharedAddress(e.target.value)}
               onKeyDown={handleKeyDown}

@@ -159,6 +159,14 @@ var AuditRegistry = map[string]EntityPolicy{
 			return snapshot
 		},
 	},
+	"employee": {
+		CanUserView: func(user *models.UserWithPermissions, familyID *uuid.UUID) bool {
+			return user.HasPermission("employees.all.read") || user.HasPermission("employees.all.write")
+		},
+		SanitizeSnapshot: func(user *models.UserWithPermissions, snapshot map[string]interface{}) map[string]interface{} {
+			return snapshot
+		},
+	},
 }
 
 // CanUserViewEntity returns true if the user is authorized to view audit records of the specified entity type.

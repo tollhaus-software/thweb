@@ -178,6 +178,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     ) {
       return true;
     }
+    if (perm === 'employees.all.read' && user.effective_permissions.includes('employees.all.write')) {
+      return true;
+    }
     return false;
   };
 

@@ -49,6 +49,30 @@ func TestUserWithPermissions_HasPermission(t *testing.T) {
 			want:        true,
 		},
 		{
+			name:        "employees.all.read directly",
+			effective:   []string{"employees.all.read"},
+			permToCheck: "employees.all.read",
+			want:        true,
+		},
+		{
+			name:        "employees.all.write implies employees.all.read",
+			effective:   []string{"employees.all.write"},
+			permToCheck: "employees.all.read",
+			want:        true,
+		},
+		{
+			name:        "employees.all.read does not imply employees.all.write",
+			effective:   []string{"employees.all.read"},
+			permToCheck: "employees.all.write",
+			want:        false,
+		},
+		{
+			name:        "admin * implies employees.all.read and employees.all.write",
+			effective:   []string{"*"},
+			permToCheck: "employees.all.write",
+			want:        true,
+		},
+		{
 			name:        "memberships.all.write implies memberships.all.read",
 			effective:   []string{"memberships.all.write"},
 			permToCheck: "memberships.all.read",
@@ -264,3 +288,53 @@ func TestMultiValueList_JSONAndSQL(t *testing.T) {
 		t.Errorf("unexpected list4[1]: %+v", list4[1])
 	}
 }
+
+func TestEmployee_JSONSerialization(t *testing.T) {
+	// Test alias unmarshaling (given_name, surname, type, is_child_protection_officer)
+	raw := `{
+		"given_name": "Maria",
+		"surname": "Schmidt",
+		"type": "caregiver",
+		"is_child_protection_officer": true,
+		"address": "Sonnenallee 12",
+		"emails": [{"value": "maria@example.com", "identifier_email": true}],
+		"phones": [{"value": "123456"}]
+	}`
+
+	var emp Employee
+	if err := json.Unmarshal([]byte(raw), &emp); err != nil {
+		t.Fatalf("failed to unmarshal Employee JSON: %v", err)
+	}
+
+	if emp.FirstName != "Maria" || emp.LastName != "Schmidt" {
+		t.Errorf("expected Maria Schmidt, got %s %s", emp.FirstName, emp.LastName)
+	}
+	if emp.EmployeeType != "caregiver" {
+		t.Errorf("expected caregiver, got %s", emp.EmployeeType)
+	}
+	if !emp.IsKinderschutzbeauftragter {
+		t.Errorf("expected IsKinderschutzbeauftragter=true")
+	}
+	if len(emp.Emails) != 1 || !emp.Emails[0].IdentifierEmail {
+		t.Errorf("unexpected emails: %+v", emp.Emails)
+	}
+
+	// Test marshaling produces both employee_type and type, and both is_kinderschutzbeauftragter and is_child_protection_officer
+	data, err := json.Marshal(emp)
+	if err != nil {
+		t.Fatalf("failed to marshal Employee: %v", err)
+	}
+
+	var m map[string]interface{}
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("failed to unmarshal marshaled employee: %v", err)
+	}
+
+	if m["type"] != "caregiver" || m["employee_type"] != "caregiver" {
+		t.Errorf("expected type and employee_type to be caregiver, got %+v", m)
+	}
+	if m["is_kinderschutzbeauftragter"] != true || m["is_child_protection_officer"] != true {
+		t.Errorf("expected protection officer flags to be true, got %+v", m)
+	}
+}
+

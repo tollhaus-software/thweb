@@ -135,9 +135,9 @@ func TestApplySchemaMigrations(t *testing.T) {
 		t.Fatalf("expected yellow_bag_dates view to exist: %v", err)
 	}
 
-	// Test rollback of initial migration
-	if err := goose.DownContext(context.Background(), testDB, "migrations"); err != nil {
-		t.Fatalf("failed to roll back migration 00001: %v", err)
+	// Test rollback of all migrations
+	if err := goose.ResetContext(context.Background(), testDB, "migrations"); err != nil {
+		t.Fatalf("failed to roll back migrations: %v", err)
 	}
 
 	var rolesTable string

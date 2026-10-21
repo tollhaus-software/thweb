@@ -225,9 +225,14 @@ func (s *Store) recordAudit(ctx context.Context, tx pgx.Tx, tid uuid.UUID, fid *
 		}
 	}
 
+	var changedBy *uuid.UUID
+	if userID != uuid.Nil {
+		changedBy = &userID
+	}
+
 	_, err = tx.Exec(ctx,
 		"INSERT INTO audit_log (transaction_id, family_id, entity_type, entity_id, operation, before_snapshot, after_snapshot, changed_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-		tid, fid, etype, eid, op, beforePayload, afterPayload, userID)
+		tid, fid, etype, eid, op, beforePayload, afterPayload, changedBy)
 	return err
 }
 
@@ -1571,9 +1576,249 @@ func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*model
 	return resp, nil
 }
 
+func (s *Store) ListEmployees(ctx context.Context) ([]models.Employee, error) {
+	query := `
+		SELECT id, first_name, last_name, employee_type, emails, phones, address, is_kinderschutzbeauftragter, created_at, updated_at
+		FROM employees
+		ORDER BY last_name ASC, first_name ASC, created_at ASC
+	`
+	rows, err := s.db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	employees := []models.Employee{}
+	for rows.Next() {
+		var emp models.Employee
+		var emailsRaw, phonesRaw []byte
+		if err := rows.Scan(
+			&emp.ID,
+			&emp.FirstName,
+			&emp.LastName,
+			&emp.EmployeeType,
+			&emailsRaw,
+			&phonesRaw,
+			&emp.Address,
+			&emp.IsKinderschutzbeauftragter,
+			&emp.CreatedAt,
+			&emp.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		if len(emailsRaw) > 0 {
+			_ = json.Unmarshal(emailsRaw, &emp.Emails)
+		}
+		if len(phonesRaw) > 0 {
+			_ = json.Unmarshal(phonesRaw, &emp.Phones)
+		}
+		emp.Emails = sanitizeSlice(emp.Emails)
+		emp.Phones = sanitizeSlice(emp.Phones)
+		employees = append(employees, emp)
+	}
+	return employees, rows.Err()
+}
+
+func (s *Store) GetEmployeeByID(ctx context.Context, id uuid.UUID) (*models.Employee, error) {
+	query := `
+		SELECT id, first_name, last_name, employee_type, emails, phones, address, is_kinderschutzbeauftragter, created_at, updated_at
+		FROM employees
+		WHERE id = $1
+	`
+	var emp models.Employee
+	var emailsRaw, phonesRaw []byte
+	err := s.db.QueryRow(ctx, query, id).Scan(
+		&emp.ID,
+		&emp.FirstName,
+		&emp.LastName,
+		&emp.EmployeeType,
+		&emailsRaw,
+		&phonesRaw,
+		&emp.Address,
+		&emp.IsKinderschutzbeauftragter,
+		&emp.CreatedAt,
+		&emp.UpdatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if len(emailsRaw) > 0 {
+		_ = json.Unmarshal(emailsRaw, &emp.Emails)
+	}
+	if len(phonesRaw) > 0 {
+		_ = json.Unmarshal(phonesRaw, &emp.Phones)
+	}
+	emp.Emails = sanitizeSlice(emp.Emails)
+	emp.Phones = sanitizeSlice(emp.Phones)
+	return &emp, nil
+}
+
+func (s *Store) CreateEmployee(ctx context.Context, userID uuid.UUID, emp models.Employee) (models.Employee, error) {
+	emp.FirstName = strings.TrimSpace(emp.FirstName)
+	emp.LastName = strings.TrimSpace(emp.LastName)
+	emp.EmployeeType = strings.TrimSpace(emp.EmployeeType)
+	emp.Address = strings.TrimSpace(emp.Address)
+
+	if emp.FirstName == "" || emp.LastName == "" {
+		return models.Employee{}, fmt.Errorf("given name and surname are required")
+	}
+	if emp.EmployeeType != "caregiver" && emp.EmployeeType != "cook" && emp.EmployeeType != "bufdi" {
+		return models.Employee{}, fmt.Errorf("invalid employee type: must be caregiver, cook, or bufdi")
+	}
+	if emp.EmployeeType != "caregiver" {
+		emp.IsKinderschutzbeauftragter = false
+	}
+
+	emp.Emails = sanitizeSlice(emp.Emails)
+	emp.Phones = sanitizeSlice(emp.Phones)
+	emailsJSON, _ := json.Marshal(emp.Emails)
+	phonesJSON, _ := json.Marshal(emp.Phones)
+
+	transactionID := uuid.New()
+	var created models.Employee
+
+	err := s.WithTx(ctx, func(tx pgx.Tx) error {
+		var emailsRaw, phonesRaw []byte
+		err := tx.QueryRow(ctx, `
+			INSERT INTO employees (first_name, last_name, employee_type, emails, phones, address, is_kinderschutzbeauftragter)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			RETURNING id, first_name, last_name, employee_type, emails, phones, address, is_kinderschutzbeauftragter, created_at, updated_at
+		`, emp.FirstName, emp.LastName, emp.EmployeeType, emailsJSON, phonesJSON, emp.Address, emp.IsKinderschutzbeauftragter).Scan(
+			&created.ID,
+			&created.FirstName,
+			&created.LastName,
+			&created.EmployeeType,
+			&emailsRaw,
+			&phonesRaw,
+			&created.Address,
+			&created.IsKinderschutzbeauftragter,
+			&created.CreatedAt,
+			&created.UpdatedAt,
+		)
+		if err != nil {
+			return err
+		}
+		if len(emailsRaw) > 0 {
+			_ = json.Unmarshal(emailsRaw, &created.Emails)
+		}
+		if len(phonesRaw) > 0 {
+			_ = json.Unmarshal(phonesRaw, &created.Phones)
+		}
+		created.Emails = sanitizeSlice(created.Emails)
+		created.Phones = sanitizeSlice(created.Phones)
+
+		return s.recordAudit(ctx, tx, transactionID, nil, "employee", created.ID, "INSERT", nil, created, userID)
+	})
+
+	return created, err
+}
+
+func (s *Store) UpdateEmployee(ctx context.Context, userID uuid.UUID, emp models.Employee) (models.Employee, error) {
+	emp.FirstName = strings.TrimSpace(emp.FirstName)
+	emp.LastName = strings.TrimSpace(emp.LastName)
+	emp.EmployeeType = strings.TrimSpace(emp.EmployeeType)
+	emp.Address = strings.TrimSpace(emp.Address)
+
+	if emp.FirstName == "" || emp.LastName == "" {
+		return models.Employee{}, fmt.Errorf("given name and surname are required")
+	}
+	if emp.EmployeeType != "caregiver" && emp.EmployeeType != "cook" && emp.EmployeeType != "bufdi" {
+		return models.Employee{}, fmt.Errorf("invalid employee type: must be caregiver, cook, or bufdi")
+	}
+	if emp.EmployeeType != "caregiver" {
+		emp.IsKinderschutzbeauftragter = false
+	}
+
+	emp.Emails = sanitizeSlice(emp.Emails)
+	emp.Phones = sanitizeSlice(emp.Phones)
+	emailsJSON, _ := json.Marshal(emp.Emails)
+	phonesJSON, _ := json.Marshal(emp.Phones)
+
+	transactionID := uuid.New()
+	var updated models.Employee
+
+	err := s.WithTx(ctx, func(tx pgx.Tx) error {
+		oldEmp, err := s.GetEmployeeByID(ctx, emp.ID)
+		if err != nil {
+			return err
+		}
+		if oldEmp == nil {
+			return fmt.Errorf("employee not found")
+		}
+
+		var emailsRaw, phonesRaw []byte
+		err = tx.QueryRow(ctx, `
+			UPDATE employees
+			SET first_name = $1,
+			    last_name = $2,
+			    employee_type = $3,
+			    emails = $4,
+			    phones = $5,
+			    address = $6,
+			    is_kinderschutzbeauftragter = $7,
+			    updated_at = NOW()
+			WHERE id = $8
+			RETURNING id, first_name, last_name, employee_type, emails, phones, address, is_kinderschutzbeauftragter, created_at, updated_at
+		`, emp.FirstName, emp.LastName, emp.EmployeeType, emailsJSON, phonesJSON, emp.Address, emp.IsKinderschutzbeauftragter, emp.ID).Scan(
+			&updated.ID,
+			&updated.FirstName,
+			&updated.LastName,
+			&updated.EmployeeType,
+			&emailsRaw,
+			&phonesRaw,
+			&updated.Address,
+			&updated.IsKinderschutzbeauftragter,
+			&updated.CreatedAt,
+			&updated.UpdatedAt,
+		)
+		if err != nil {
+			return err
+		}
+		if len(emailsRaw) > 0 {
+			_ = json.Unmarshal(emailsRaw, &updated.Emails)
+		}
+		if len(phonesRaw) > 0 {
+			_ = json.Unmarshal(phonesRaw, &updated.Phones)
+		}
+		updated.Emails = sanitizeSlice(updated.Emails)
+		updated.Phones = sanitizeSlice(updated.Phones)
+
+		return s.recordAudit(ctx, tx, transactionID, nil, "employee", updated.ID, "UPDATE", oldEmp, updated, userID)
+	})
+
+	return updated, err
+}
+
+func (s *Store) DeleteEmployee(ctx context.Context, userID uuid.UUID, empID uuid.UUID) error {
+	transactionID := uuid.New()
+	return s.WithTx(ctx, func(tx pgx.Tx) error {
+		oldEmp, err := s.GetEmployeeByID(ctx, empID)
+		if err != nil {
+			return err
+		}
+		if oldEmp == nil {
+			return fmt.Errorf("employee not found")
+		}
+
+		cmd, err := tx.Exec(ctx, "DELETE FROM employees WHERE id = $1", empID)
+		if err != nil {
+			return err
+		}
+		if cmd.RowsAffected() == 0 {
+			return fmt.Errorf("employee not found")
+		}
+
+		return s.recordAudit(ctx, tx, transactionID, nil, "employee", empID, "DELETE", oldEmp, nil, userID)
+	})
+}
+
 func (s *Store) ResetTestData(ctx context.Context) error {
 	_, err := s.db.Exec(ctx, `
 		TRUNCATE TABLE 
+			employees,
 			th_memberships, 
 			hygiene_belehrung_events, 
 			children_group_changes, 
