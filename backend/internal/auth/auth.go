@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -235,6 +237,44 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 			user.RemovePermissions(denied)
 		}
 
+		// 4. Check if role/permissions simulation is active
+		simCfg := ExtractSimulationConfig(r)
+		if simCfg != nil && simCfg.Active {
+			if user.HasPermission("permissions.simulate") {
+				simUser, err := a.ResolveSimulatedUser(r.Context(), *simCfg)
+				if err == nil && simUser != nil {
+					intersected := models.IntersectPermissions(user.EffectivePermissions, simUser.EffectivePermissions)
+					activeUser := &models.UserWithPermissions{
+						ID:                   user.ID,
+						Email:                user.Email,
+						Roles:                simUser.Roles,
+						Permissions:          simUser.Permissions,
+						EffectivePermissions: intersected,
+						FamilyID:             simUser.FamilyID,
+						LastLogin:            user.LastLogin,
+						CreatedAt:            user.CreatedAt,
+						UpdatedAt:            user.UpdatedAt,
+						ActualUser:           user,
+						Simulation: &models.SimulationInfo{
+							Active:                       true,
+							Mode:                         simCfg.Mode,
+							SimulatedUser:                simCfg.UserEmail,
+							SimulatedRoles:               simUser.Roles,
+							SimulatedPermissions:         simUser.Permissions,
+							OriginalEmail:                user.Email,
+							OriginalRoles:                user.Roles,
+							OriginalEffectivePermissions: user.EffectivePermissions,
+						},
+					}
+					user = activeUser
+				} else {
+					log.Printf("[AUTH WARNING] Failed to resolve simulated user: %v", err)
+				}
+			} else {
+				log.Printf("[AUTH WARNING] Simulation requested by %q without permissions.simulate; ignoring simulation", user.Email)
+			}
+		}
+
 		ctx := context.WithValue(r.Context(), UserContextKey, user)
 		ctx = context.WithValue(ctx, AccessTokenContextKey, rawAccessToken)
 		next.ServeHTTP(w, r.WithContext(ctx))
@@ -242,10 +282,220 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 	})
 }
 
+// ExtractSimulationConfig extracts simulation parameters from cookie or request headers.
+func ExtractSimulationConfig(r *http.Request) *models.SimulationConfig {
+	// 1. Try Cookie "thweb_sim"
+	if cookie, err := r.Cookie("thweb_sim"); err == nil && cookie.Value != "" {
+		val := cookie.Value
+		if unescaped, err := url.QueryUnescape(val); err == nil {
+			val = unescaped
+		}
+		var cfg models.SimulationConfig
+		if err := json.Unmarshal([]byte(val), &cfg); err == nil && cfg.Active {
+			return &cfg
+		}
+	}
+
+	// 2. Try Header "X-Simulation"
+	if h := r.Header.Get("X-Simulation"); h != "" {
+		var cfg models.SimulationConfig
+		if err := json.Unmarshal([]byte(h), &cfg); err == nil && cfg.Active {
+			return &cfg
+		}
+	}
+
+	// 3. Try individual headers
+	if mode := strings.TrimSpace(r.Header.Get("X-Simulation-Mode")); mode != "" {
+		cfg := &models.SimulationConfig{
+			Active:    true,
+			Mode:      mode,
+			UserEmail: strings.TrimSpace(r.Header.Get("X-Simulation-User")),
+		}
+		if rolesH := strings.TrimSpace(r.Header.Get("X-Simulation-Roles")); rolesH != "" {
+			for _, r := range strings.Split(rolesH, ",") {
+				if trimmed := strings.TrimSpace(r); trimmed != "" {
+					cfg.Roles = append(cfg.Roles, trimmed)
+				}
+			}
+		}
+		if permsH := strings.TrimSpace(r.Header.Get("X-Simulation-Permissions")); permsH != "" {
+			for _, p := range strings.Split(permsH, ",") {
+				if trimmed := strings.TrimSpace(p); trimmed != "" {
+					cfg.Permissions = append(cfg.Permissions, trimmed)
+				}
+			}
+		}
+		return cfg
+	}
+
+	return nil
+}
+
+// ResolveSimulatedUser determines the roles, permissions, and family ID for a simulated target.
+func (a *Authenticator) ResolveSimulatedUser(ctx context.Context, cfg models.SimulationConfig) (*models.UserWithPermissions, error) {
+	if cfg.Mode == "user" {
+		email := models.NormalizeEmail(cfg.UserEmail)
+		if email == "" {
+			return nil, fmt.Errorf("user email is required for user simulation")
+		}
+
+		var simUser *models.UserWithPermissions
+		if a.Store != nil {
+			u, err := a.Store.GetUserWithPermissionsByEmail(ctx, email)
+			if err == nil {
+				simUser = u
+			} else if err != pgx.ErrNoRows {
+				return nil, err
+			}
+
+			familyID, pErr := a.Store.GetFamilyIDByIdentifierEmail(ctx, email)
+			if pErr != nil {
+				return nil, pErr
+			}
+
+			if simUser == nil && familyID == nil {
+				return nil, fmt.Errorf("user %q not found in known users or identifying emails", email)
+			}
+
+			if simUser == nil {
+				// Pure identifying parent
+				identRoles, identPerms := a.RolesConfig.RolesForTrigger(roles.AutoGrantIdentifierEmail)
+				if len(identRoles) == 0 {
+					identRoles = []string{"restricted"}
+				}
+				if len(identPerms) == 0 {
+					identPerms = []string{
+						"families.all.restrictedread",
+						"fees.self.read",
+						"families.self.selfservice",
+						"memberships.self.read",
+					}
+				}
+				simUser = &models.UserWithPermissions{
+					Email:                email,
+					Roles:                identRoles,
+					Permissions:          identPerms,
+					EffectivePermissions: identPerms,
+					FamilyID:             familyID,
+				}
+			} else if familyID != nil {
+				simUser.FamilyID = familyID
+				identRoles, implicitPerms := a.RolesConfig.RolesForTrigger(roles.AutoGrantIdentifierEmail)
+				if len(implicitPerms) == 0 {
+					implicitPerms = []string{
+						"families.all.restrictedread",
+						"fees.self.read",
+						"families.self.selfservice",
+						"memberships.self.read",
+					}
+				}
+				for _, ir := range identRoles {
+					found := false
+					for _, r := range simUser.Roles {
+						if r == ir {
+							found = true
+							break
+						}
+					}
+					if !found {
+						simUser.Roles = append(simUser.Roles, ir)
+					}
+				}
+				permSet := make(map[string]bool)
+				for _, p := range simUser.EffectivePermissions {
+					permSet[p] = true
+				}
+				for _, p := range implicitPerms {
+					permSet[p] = true
+				}
+				simUser.EffectivePermissions = make([]string, 0, len(permSet))
+				for p := range permSet {
+					simUser.EffectivePermissions = append(simUser.EffectivePermissions, p)
+				}
+			}
+		} else {
+			simUser = &models.UserWithPermissions{Email: email}
+		}
+
+		simUser.EnsureImpliedPermissions()
+		if a.RolesConfig != nil && len(simUser.Roles) > 0 {
+			denied := a.RolesConfig.DeniedPermissionsForRoles(simUser.Roles)
+			simUser.RemovePermissions(denied)
+		}
+		return simUser, nil
+	}
+
+	// Mode: custom (anonymous roles / direct permissions)
+	permSet := make(map[string]bool)
+	for _, p := range cfg.Permissions {
+		if strings.TrimSpace(p) != "" {
+			permSet[strings.TrimSpace(p)] = true
+		}
+	}
+
+	if a.Store != nil {
+		for _, roleID := range cfg.Roles {
+			r, err := a.Store.GetRole(ctx, roleID)
+			if err == nil && r != nil {
+				for _, p := range r.Permissions {
+					permSet[p] = true
+				}
+			} else if a.RolesConfig != nil {
+				for _, rc := range a.RolesConfig.Roles {
+					if rc.ID == roleID {
+						for _, p := range rc.Permissions {
+							permSet[p] = true
+						}
+					}
+				}
+			}
+		}
+	} else if a.RolesConfig != nil {
+		for _, roleID := range cfg.Roles {
+			for _, rc := range a.RolesConfig.Roles {
+				if rc.ID == roleID {
+					for _, p := range rc.Permissions {
+						permSet[p] = true
+					}
+				}
+			}
+		}
+	}
+
+	perms := make([]string, 0, len(permSet))
+	for p := range permSet {
+		perms = append(perms, p)
+	}
+
+	simUser := &models.UserWithPermissions{
+		Roles:                cfg.Roles,
+		Permissions:          cfg.Permissions,
+		EffectivePermissions: perms,
+	}
+	simUser.EnsureImpliedPermissions()
+	if a.RolesConfig != nil && len(cfg.Roles) > 0 {
+		denied := a.RolesConfig.DeniedPermissionsForRoles(cfg.Roles)
+		simUser.RemovePermissions(denied)
+	}
+	return simUser, nil
+}
+
 func GetUser(ctx context.Context) *models.UserWithPermissions {
 	user, ok := ctx.Value(UserContextKey).(*models.UserWithPermissions)
 	if !ok {
 		return nil
+	}
+	return user
+}
+
+// GetActualUser returns the real authenticated user before any permission simulation was applied.
+func GetActualUser(ctx context.Context) *models.UserWithPermissions {
+	user := GetUser(ctx)
+	if user == nil {
+		return nil
+	}
+	if user.ActualUser != nil {
+		return user.ActualUser
 	}
 	return user
 }

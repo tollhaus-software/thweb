@@ -1,15 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MoreVertical, LogOut } from 'lucide-react';
+import { MoreVertical, LogOut, Eye } from 'lucide-react';
 import { t } from '../../utils/i18n';
 
 export interface HeaderOverflowMenuProps {
   onLogout: () => void;
   className?: string;
+  canSimulate?: boolean;
+  onOpenSimulator?: () => void;
 }
 
 export const HeaderOverflowMenu: React.FC<HeaderOverflowMenuProps> = ({
   onLogout,
   className = '',
+  canSimulate = false,
+  onOpenSimulator,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -47,12 +51,18 @@ export const HeaderOverflowMenu: React.FC<HeaderOverflowMenuProps> = ({
     onLogout();
   };
 
+  const handleSimulateClick = () => {
+    setIsOpen(false);
+    onOpenSimulator?.();
+  };
+
   return (
     <div ref={menuRef} className={`header-overflow-menu-container ${className}`}>
       <button
         ref={buttonRef}
         type="button"
         className="header-overflow-btn"
+        data-testid="header-overflow-btn"
         onClick={() => setIsOpen((prev) => !prev)}
         aria-label="More options"
         aria-haspopup="menu"
@@ -63,10 +73,24 @@ export const HeaderOverflowMenu: React.FC<HeaderOverflowMenuProps> = ({
 
       {isOpen && (
         <div className="header-overflow-dropdown" role="menu" aria-orientation="vertical">
+          {canSimulate && (
+            <button
+              type="button"
+              role="menuitem"
+              className="header-overflow-menu-item"
+              data-testid="overflow-simulate-button"
+              onClick={handleSimulateClick}
+            >
+              <Eye size={16} />
+              <span>{t('simulatePermissions')}</span>
+            </button>
+          )}
+
           <button
             type="button"
             role="menuitem"
-            className="header-overflow-menu-item"
+            className="header-overflow-menu-item header-overflow-signout"
+            data-testid="overflow-signout-button"
             onClick={handleLogoutClick}
           >
             <LogOut size={16} />

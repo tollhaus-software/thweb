@@ -128,8 +128,14 @@ func (h *Hub) Run() {
 }
 
 func (h *Hub) Broadcast(message interface{}) {
+	if h == nil {
+		return
+	}
 	data, _ := json.Marshal(message)
-	h.broadcast <- data
+	select {
+	case h.broadcast <- data:
+	default:
+	}
 }
 
 // ServeHTTP is the websocket handler

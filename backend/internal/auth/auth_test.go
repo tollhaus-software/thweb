@@ -2,8 +2,10 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/google/uuid"
@@ -13,6 +15,20 @@ import (
 	"github.com/pavolmarko/thweb-backend/internal/roles"
 	"github.com/pavolmarko/thweb-backend/internal/store"
 )
+
+func getTestPool(t *testing.T) *pgxpool.Pool {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+	return pool
+}
 
 func TestRequirePermission_VaccinationStatusManage(t *testing.T) {
 	middleware := RequirePermission("vaccination.status.manage")
@@ -812,6 +828,215 @@ roles:
 	// Verify fees.self.read is DENIED because of erzieher deny_permissions!
 	if recordedUser.HasPermission("fees.self.read") {
 		t.Errorf("expected fees.self.read to be DENIED for erzieher, but user has it in effective_permissions: %v", recordedUser.EffectivePermissions)
+	}
+}
+
+func TestAuthenticator_Simulation_UserMode(t *testing.T) {
+	pool := getTestPool(t)
+	defer pool.Close()
+	appStore := store.NewStore(pool)
+	ctx := context.Background()
+
+	adminUser, err := appStore.GetUserWithPermissionsByEmail(ctx, "developer@example.com")
+	if err != nil {
+		t.Fatalf("failed to get developer user: %v", err)
+	}
+
+	familyID := uuid.New()
+	parentID := uuid.New()
+	parentEmail := "simulated.parent@example.com"
+	parent := models.Parent{
+		ID:        parentID,
+		FamilyID:  familyID,
+		FirstName: "Simulated",
+		LastName:  "Parent",
+		Emails: models.MultiValueList{
+			{Value: parentEmail, IdentifierEmail: true, AddressList: true},
+		},
+		Phones: models.MultiValueList{},
+	}
+	if err := appStore.UpdateFamilyParents(ctx, adminUser.ID, familyID, []models.Parent{parent}); err != nil {
+		t.Fatalf("failed to seed parent: %v", err)
+	}
+	defer func() {
+		_ = appStore.DeleteFamily(ctx, adminUser.ID, familyID)
+	}()
+
+	rolesCfg := roles.LoadDefault()
+	authenticator := NewAuthenticator("mock", true, appStore, rolesCfg)
+
+	var recordedUser *models.UserWithPermissions
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recordedUser = GetUser(r.Context())
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := authenticator.Middleware(next)
+
+	simCfg := models.SimulationConfig{
+		Active:    true,
+		Mode:      "user",
+		UserEmail: parentEmail,
+	}
+	simBytes, _ := json.Marshal(simCfg)
+
+	req := httptest.NewRequest("GET", "/api/families/overview", nil)
+	req.Header.Set("Authorization", "Bearer developer@example.com")
+	req.AddCookie(&http.Cookie{
+		Name:  "thweb_sim",
+		Value: url.QueryEscape(string(simBytes)),
+	})
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	if recordedUser == nil {
+		t.Fatal("expected recorded user")
+	}
+
+	// 1. Must still be in real user's name/email/ID
+	if recordedUser.Email != "developer@example.com" {
+		t.Errorf("expected Email %q, got %q", "developer@example.com", recordedUser.Email)
+	}
+	if recordedUser.ID != adminUser.ID {
+		t.Errorf("expected ID %v, got %v", adminUser.ID, recordedUser.ID)
+	}
+
+	// 2. Simulation info attached
+	if recordedUser.Simulation == nil || !recordedUser.Simulation.Active {
+		t.Fatal("expected active simulation info")
+	}
+	if recordedUser.Simulation.SimulatedUser != parentEmail {
+		t.Errorf("expected simulated user %q, got %q", parentEmail, recordedUser.Simulation.SimulatedUser)
+	}
+
+	// 3. Simulated FamilyID applied
+	if recordedUser.FamilyID == nil || *recordedUser.FamilyID != familyID {
+		t.Errorf("expected FamilyID %s, got %v", familyID, recordedUser.FamilyID)
+	}
+
+	// 4. Effective permissions are intersection
+	if !recordedUser.HasPermission("families.all.restrictedread") {
+		t.Error("expected user to have simulated families.all.restrictedread")
+	}
+	if !recordedUser.HasPermission("fees.self.read") {
+		t.Error("expected user to have simulated fees.self.read")
+	}
+	// Superadmin wildcard should NOT be in effective permissions since simulated parent doesn't have it
+	for _, p := range recordedUser.EffectivePermissions {
+		if p == "*" {
+			t.Error("wildcard * should NOT be in effective permissions during parent simulation")
+		}
+	}
+	if recordedUser.HasPermission("families.all.write") {
+		t.Error("families.all.write should NOT be permitted for simulated parent")
+	}
+}
+
+func TestAuthenticator_Simulation_CustomMode(t *testing.T) {
+	pool := getTestPool(t)
+	defer pool.Close()
+	appStore := store.NewStore(pool)
+
+	rolesCfg := roles.LoadDefault()
+	authenticator := NewAuthenticator("mock", true, appStore, rolesCfg)
+
+	var recordedUser *models.UserWithPermissions
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recordedUser = GetUser(r.Context())
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := authenticator.Middleware(next)
+
+	simCfg := models.SimulationConfig{
+		Active:      true,
+		Mode:        "custom",
+		Roles:       []string{"viewer"},
+		Permissions: []string{"mealplan.view"},
+	}
+	simBytes, _ := json.Marshal(simCfg)
+
+	req := httptest.NewRequest("GET", "/api/families", nil)
+	req.Header.Set("Authorization", "Bearer developer@example.com")
+	req.AddCookie(&http.Cookie{
+		Name:  "thweb_sim",
+		Value: url.QueryEscape(string(simBytes)),
+	})
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	if recordedUser == nil {
+		t.Fatal("expected recorded user")
+	}
+
+	if !recordedUser.HasPermission("families.all.read") {
+		t.Error("expected viewer permission families.all.read")
+	}
+	if !recordedUser.HasPermission("mealplan.view") {
+		t.Error("expected direct custom permission mealplan.view")
+	}
+	if recordedUser.HasPermission("families.all.write") {
+		t.Error("families.all.write should NOT be permitted")
+	}
+}
+
+func TestAuthenticator_Simulation_DeniedForNonAdmin(t *testing.T) {
+	pool := getTestPool(t)
+	defer pool.Close()
+	appStore := store.NewStore(pool)
+	ctx := context.Background()
+
+	viewerEmail := "test.viewer.simulation@example.com"
+	created, err := appStore.CreateUser(ctx, viewerEmail, []string{"viewer"}, nil)
+	if err != nil {
+		t.Fatalf("failed to create viewer user: %v", err)
+	}
+	defer func() {
+		_ = appStore.DeleteUser(ctx, created.ID)
+	}()
+
+	rolesCfg := roles.LoadDefault()
+	authenticator := NewAuthenticator("mock", true, appStore, rolesCfg)
+
+	var recordedUser *models.UserWithPermissions
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recordedUser = GetUser(r.Context())
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := authenticator.Middleware(next)
+
+	// Viewer tries to simulate admin
+	simCfg := models.SimulationConfig{
+		Active:      true,
+		Mode:        "custom",
+		Roles:       []string{"admin"},
+		Permissions: []string{"*"},
+	}
+	simBytes, _ := json.Marshal(simCfg)
+
+	req := httptest.NewRequest("GET", "/api/families", nil)
+	req.Header.Set("Authorization", "Bearer "+viewerEmail)
+	req.AddCookie(&http.Cookie{
+		Name:  "thweb_sim",
+		Value: url.QueryEscape(string(simBytes)),
+	})
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", rec.Code)
+	}
+
+	// Simulation must NOT be active because viewer lacks permissions.simulate!
+	if recordedUser.Simulation != nil && recordedUser.Simulation.Active {
+		t.Error("simulation must NOT be active for user without permissions.simulate")
+	}
+	if recordedUser.HasPermission("families.all.write") {
+		t.Error("viewer must not gain families.all.write through unauthorized simulation")
 	}
 }
 

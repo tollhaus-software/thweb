@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"github.com/pavolmarko/thweb-backend/internal/crypto"
 	"github.com/pavolmarko/thweb-backend/internal/kioskcert"
 	"github.com/pavolmarko/thweb-backend/internal/models"
+	"github.com/pavolmarko/thweb-backend/internal/roles"
 	"github.com/pavolmarko/thweb-backend/internal/store"
 )
 
@@ -71,7 +73,229 @@ func (s *Server) HandleGetMe(w http.ResponseWriter, r *http.Request) {
 	if user.FamilyID != nil {
 		resp["family_id"] = user.FamilyID.String()
 	}
+	if user.Simulation != nil {
+		resp["simulation"] = user.Simulation
+	}
 	jsonResponse(w, resp)
+}
+
+func (s *Server) HandleGetSimulationOptions(w http.ResponseWriter, r *http.Request) {
+	actualUser := auth.GetActualUser(r.Context())
+	if actualUser == nil || !actualUser.HasPermission("permissions.simulate") {
+		http.Error(w, "Forbidden: permissions.simulate required", http.StatusForbidden)
+		return
+	}
+
+	users, err := s.Store.ListUsers(r.Context())
+	if err != nil {
+		httpErrorLog(w, r, "Failed to list users", http.StatusInternalServerError, err)
+		return
+	}
+
+	identEmails, err := s.Store.ListIdentifyingEmails(r.Context())
+	if err != nil {
+		httpErrorLog(w, r, "Failed to list identifying emails", http.StatusInternalServerError, err)
+		return
+	}
+
+	candidatesMap := make(map[string]*models.SimulationCandidate)
+
+	for _, u := range users {
+		norm := models.NormalizeEmail(u.Email)
+		cand := &models.SimulationCandidate{
+			Email:                norm,
+			Source:               "user",
+			Roles:                u.Roles,
+			Permissions:          u.Permissions,
+			EffectivePermissions: u.EffectivePermissions,
+		}
+
+		if famID, ok := identEmails[norm]; ok {
+			cand.Source = "both"
+			cand.FamilyID = &famID
+			identRoles, implicitPerms := s.Authenticator.RolesConfig.RolesForTrigger(roles.AutoGrantIdentifierEmail)
+			if len(implicitPerms) == 0 {
+				implicitPerms = []string{
+					"families.all.restrictedread",
+					"fees.self.read",
+					"families.self.selfservice",
+					"memberships.self.read",
+				}
+			}
+			for _, ir := range identRoles {
+				found := false
+				for _, r := range cand.Roles {
+					if r == ir {
+						found = true
+						break
+					}
+				}
+				if !found {
+					cand.Roles = append(cand.Roles, ir)
+				}
+			}
+			permSet := make(map[string]bool)
+			for _, p := range cand.EffectivePermissions {
+				permSet[p] = true
+			}
+			for _, p := range implicitPerms {
+				permSet[p] = true
+			}
+			cand.EffectivePermissions = make([]string, 0, len(permSet))
+			for p := range permSet {
+				cand.EffectivePermissions = append(cand.EffectivePermissions, p)
+			}
+		}
+
+		// Ensure implied permissions & strip denied
+		uModel := &models.UserWithPermissions{
+			Roles:                cand.Roles,
+			Permissions:          cand.Permissions,
+			EffectivePermissions: cand.EffectivePermissions,
+		}
+		uModel.EnsureImpliedPermissions()
+		if s.Authenticator.RolesConfig != nil && len(uModel.Roles) > 0 {
+			denied := s.Authenticator.RolesConfig.DeniedPermissionsForRoles(uModel.Roles)
+			uModel.RemovePermissions(denied)
+		}
+		cand.EffectivePermissions = uModel.EffectivePermissions
+		candidatesMap[norm] = cand
+	}
+
+	for email, famID := range identEmails {
+		norm := models.NormalizeEmail(email)
+		if _, exists := candidatesMap[norm]; !exists {
+			identRoles, identPerms := s.Authenticator.RolesConfig.RolesForTrigger(roles.AutoGrantIdentifierEmail)
+			if len(identRoles) == 0 {
+				identRoles = []string{"restricted"}
+			}
+			if len(identPerms) == 0 {
+				identPerms = []string{
+					"families.all.restrictedread",
+					"fees.self.read",
+					"families.self.selfservice",
+					"memberships.self.read",
+				}
+			}
+			fid := famID
+			uModel := &models.UserWithPermissions{
+				Email:                norm,
+				Roles:                identRoles,
+				Permissions:          identPerms,
+				EffectivePermissions: identPerms,
+				FamilyID:             &fid,
+			}
+			uModel.EnsureImpliedPermissions()
+			if s.Authenticator.RolesConfig != nil && len(uModel.Roles) > 0 {
+				denied := s.Authenticator.RolesConfig.DeniedPermissionsForRoles(uModel.Roles)
+				uModel.RemovePermissions(denied)
+			}
+			candidatesMap[norm] = &models.SimulationCandidate{
+				Email:                norm,
+				Source:               "identifier_email",
+				Roles:                uModel.Roles,
+				Permissions:          uModel.Permissions,
+				EffectivePermissions: uModel.EffectivePermissions,
+				FamilyID:             &fid,
+			}
+		}
+	}
+
+	candidates := make([]models.SimulationCandidate, 0, len(candidatesMap))
+	for _, c := range candidatesMap {
+		candidates = append(candidates, *c)
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].Email < candidates[j].Email
+	})
+
+	allRoles, err := s.Store.ListRoles(r.Context())
+	if err != nil {
+		allRoles = []models.Role{}
+	}
+
+	jsonResponse(w, map[string]interface{}{
+		"users":       candidates,
+		"roles":       allRoles,
+		"permissions": models.AllKnownPermissions,
+	})
+}
+
+func (s *Server) HandleStartSimulation(w http.ResponseWriter, r *http.Request) {
+	actualUser := auth.GetActualUser(r.Context())
+	if actualUser == nil || !actualUser.HasPermission("permissions.simulate") {
+		http.Error(w, "Forbidden: permissions.simulate required", http.StatusForbidden)
+		return
+	}
+
+	var req models.SimulationConfig
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request payload: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if req.Mode != "user" && req.Mode != "custom" {
+		http.Error(w, "Mode must be 'user' or 'custom'", http.StatusBadRequest)
+		return
+	}
+
+	if req.Mode == "user" {
+		req.UserEmail = models.NormalizeEmail(req.UserEmail)
+		if req.UserEmail == "" {
+			http.Error(w, "User email is required for user simulation", http.StatusBadRequest)
+			return
+		}
+	}
+
+	req.Active = true
+
+	simUser, err := s.Authenticator.ResolveSimulatedUser(r.Context(), req)
+	if err != nil {
+		http.Error(w, "Failed to resolve simulation target: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	cookieBytes, err := json.Marshal(req)
+	if err != nil {
+		http.Error(w, "Failed to encode simulation cookie: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "thweb_sim",
+		Value:    url.QueryEscape(string(cookieBytes)),
+		Path:     "/",
+		MaxAge:   86400,
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	intersected := models.IntersectPermissions(actualUser.EffectivePermissions, simUser.EffectivePermissions)
+
+	jsonResponse(w, map[string]interface{}{
+		"status":                 "ok",
+		"simulation":             req,
+		"simulated_roles":        simUser.Roles,
+		"simulated_permissions":  simUser.EffectivePermissions,
+		"effective_permissions":  intersected,
+	})
+}
+
+func (s *Server) HandleLeaveSimulation(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	actualUser := auth.GetActualUser(r.Context())
+	if (user != nil && user.Simulation != nil && user.Simulation.Active) || (actualUser != nil && actualUser.HasPermission("permissions.simulate")) {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "thweb_sim",
+			Value:    "",
+			Path:     "/",
+			MaxAge:   -1,
+			SameSite: http.SameSiteLaxMode,
+		})
+		jsonResponse(w, map[string]string{"status": "ok"})
+		return
+	}
+
+	http.Error(w, "Forbidden", http.StatusForbidden)
 }
 
 type OverviewChild struct {

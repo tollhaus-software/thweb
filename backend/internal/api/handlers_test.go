@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -871,6 +872,194 @@ func TestHandleListMembers_Permissions(t *testing.T) {
 	handler.ServeHTTP(rec3, req.WithContext(ctxReq3))
 	if rec3.Code != http.StatusOK {
 		t.Errorf("expected 200 OK with implied memberships.all.write, got %d", rec3.Code)
+	}
+}
+
+func getTestDBPool(t *testing.T) *pgxpool.Pool {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+	return pool
+}
+
+func TestHandleSimulation_LifecycleAndModifyingActions(t *testing.T) {
+	pool := getTestDBPool(t)
+	defer pool.Close()
+	appStore := store.NewStore(pool)
+	ctx := context.Background()
+
+	adminUser, err := appStore.GetUserWithPermissionsByEmail(ctx, "developer@example.com")
+	if err != nil {
+		t.Fatalf("failed to load developer user: %v", err)
+	}
+
+	authn := auth.NewAuthenticator("mock", true, appStore)
+	server := &Server{
+		Store:         appStore,
+		Authenticator: authn,
+	}
+
+	// 1. GET /api/simulation/options as Admin
+	reqOptions := httptest.NewRequest("GET", "/api/simulation/options", nil)
+	ctxOptions := context.WithValue(reqOptions.Context(), auth.UserContextKey, adminUser)
+	recOptions := httptest.NewRecorder()
+	server.HandleGetSimulationOptions(recOptions, reqOptions.WithContext(ctxOptions))
+	if recOptions.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for options, got %d", recOptions.Code)
+	}
+
+	var optionsResp struct {
+		Users       []models.SimulationCandidate `json:"users"`
+		Roles       []models.Role                `json:"roles"`
+		Permissions []string                     `json:"permissions"`
+	}
+	if err := json.Unmarshal(recOptions.Body.Bytes(), &optionsResp); err != nil {
+		t.Fatalf("failed to decode options: %v", err)
+	}
+	if len(optionsResp.Users) == 0 {
+		t.Error("expected candidate users to be populated")
+	}
+	if len(optionsResp.Permissions) == 0 {
+		t.Error("expected permissions to be populated")
+	}
+
+	// 2. Start simulation (Mode: user, parent email)
+	familyID := uuid.New()
+	parentID := uuid.New()
+	parentEmail := "test.sim.parent@example.com"
+	parent := models.Parent{
+		ID:        parentID,
+		FamilyID:  familyID,
+		FirstName: "Simulated",
+		LastName:  "Parent",
+		Emails: models.MultiValueList{
+			{Value: parentEmail, IdentifierEmail: true, AddressList: true},
+		},
+		Phones: models.MultiValueList{},
+	}
+	if err := appStore.UpdateFamilyParents(ctx, adminUser.ID, familyID, []models.Parent{parent}); err != nil {
+		t.Fatalf("failed to seed parent: %v", err)
+	}
+	defer func() {
+		_ = appStore.DeleteFamily(ctx, adminUser.ID, familyID)
+	}()
+
+	startBody := fmt.Sprintf(`{"mode":"user","user_email":"%s"}`, parentEmail)
+	reqStart := httptest.NewRequest("POST", "/api/simulation", bytes.NewBufferString(startBody))
+	ctxStart := context.WithValue(reqStart.Context(), auth.UserContextKey, adminUser)
+	recStart := httptest.NewRecorder()
+	server.HandleStartSimulation(recStart, reqStart.WithContext(ctxStart))
+	if recStart.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for start simulation, got %d (%s)", recStart.Code, recStart.Body.String())
+	}
+
+	// Check cookie was set
+	cookies := recStart.Result().Cookies()
+	var simCookie *http.Cookie
+	for _, c := range cookies {
+		if c.Name == "thweb_sim" {
+			simCookie = c
+			break
+		}
+	}
+	if simCookie == nil {
+		t.Fatal("expected thweb_sim cookie to be set")
+	}
+
+	// 3. Test modifying action through router with simulation active
+	hub := NewHub()
+	router := SetupRouter(appStore, authn, hub, nil)
+
+	// Attempt write action that parent CANNOT do (e.g. POST /api/families to create a new family requires families.all.write)
+	newFamBody := `{"parents":[{"first_name":"Unauthorized","last_name":"Parent"}]}`
+	reqWriteDenied := httptest.NewRequest("POST", "/api/families", bytes.NewBufferString(newFamBody))
+	reqWriteDenied.Header.Set("Authorization", "Bearer developer@example.com")
+	reqWriteDenied.AddCookie(simCookie)
+	recWriteDenied := httptest.NewRecorder()
+	router.ServeHTTP(recWriteDenied, reqWriteDenied)
+	if recWriteDenied.Code != http.StatusForbidden {
+		t.Errorf("expected 403 Forbidden for families.all.write under parent simulation, got %d", recWriteDenied.Code)
+	}
+
+	// Now switch simulation to role that HAS write permissions (custom role with families.all.write)
+	startWriteBody := `{"mode":"custom","roles":["admin"],"permissions":["families.all.write"]}`
+	reqStartWrite := httptest.NewRequest("POST", "/api/simulation", bytes.NewBufferString(startWriteBody))
+	ctxStartWrite := context.WithValue(reqStartWrite.Context(), auth.UserContextKey, adminUser)
+	recStartWrite := httptest.NewRecorder()
+	server.HandleStartSimulation(recStartWrite, reqStartWrite.WithContext(ctxStartWrite))
+	if recStartWrite.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", recStartWrite.Code)
+	}
+
+	var writeSimCookie *http.Cookie
+	for _, c := range recStartWrite.Result().Cookies() {
+		if c.Name == "thweb_sim" {
+			writeSimCookie = c
+			break
+		}
+	}
+
+	// Modifying action: update parent in existing family
+	updateParentBody := fmt.Sprintf(`{"parents":[{"id":"%s","family_id":"%s","first_name":"UpdatedSim","last_name":"Parent","emails":[{"value":"%s","identifier_email":true}]}]}`, parentID, familyID, parentEmail)
+	reqUpdate := httptest.NewRequest("PUT", fmt.Sprintf("/api/families/%s", familyID), bytes.NewBufferString(updateParentBody))
+	reqUpdate.Header.Set("Authorization", "Bearer developer@example.com")
+	reqUpdate.AddCookie(writeSimCookie)
+	recUpdate := httptest.NewRecorder()
+	router.ServeHTTP(recUpdate, reqUpdate)
+	if recUpdate.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for updating family parents, got %d (%s)", recUpdate.Code, recUpdate.Body.String())
+	}
+
+	// 4. Verify audit log: MUST BE RECORDED IN REAL USER'S NAME (developer@example.com)!
+	logs, err := appStore.ListAuditLogs(ctx)
+	if err != nil {
+		t.Fatalf("failed to query audit logs: %v", err)
+	}
+	var foundLog bool
+	for _, l := range logs {
+		if l.EntityID == parentID && l.Operation == "UPDATE" {
+			foundLog = true
+			if l.ChangedBy == nil || *l.ChangedBy != adminUser.ID {
+				t.Errorf("expected ChangedBy to be actual user ID %v, got %v", adminUser.ID, l.ChangedBy)
+			}
+			if l.ChangedByEmail != "developer@example.com" {
+				t.Errorf("expected ChangedByEmail to be %q, got %q", "developer@example.com", l.ChangedByEmail)
+			}
+			break
+		}
+	}
+	if !foundLog {
+		t.Error("expected to find audit log for the update operation")
+	}
+
+	// 5. Leave simulation
+	reqLeave := httptest.NewRequest("DELETE", "/api/simulation", nil)
+	ctxLeave := context.WithValue(reqLeave.Context(), auth.UserContextKey, adminUser)
+	recLeave := httptest.NewRecorder()
+	server.HandleLeaveSimulation(recLeave, reqLeave.WithContext(ctxLeave))
+	if recLeave.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for leaving simulation, got %d", recLeave.Code)
+	}
+	leaveCookies := recLeave.Result().Cookies()
+	var clearedCookie *http.Cookie
+	for _, c := range leaveCookies {
+		if c.Name == "thweb_sim" {
+			clearedCookie = c
+			break
+		}
+	}
+	if clearedCookie == nil || clearedCookie.MaxAge > 0 {
+		t.Error("expected thweb_sim cookie to be cleared with MaxAge <= 0")
 	}
 }
 

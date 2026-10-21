@@ -402,6 +402,33 @@ func (s *Store) GetFamilyIDByIdentifierEmail(ctx context.Context, email string) 
 	return &familyID, nil
 }
 
+func (s *Store) ListIdentifyingEmails(ctx context.Context) (map[string]uuid.UUID, error) {
+	query := `
+		SELECT lower(trim(elem->>'value')) AS email, p.family_id
+		FROM parents p, jsonb_array_elements(p.emails) AS elem
+		WHERE elem->>'identifier_email' = 'true'
+		  AND lower(trim(elem->>'value')) <> ''
+	`
+	rows, err := s.db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	identEmails := make(map[string]uuid.UUID)
+	for rows.Next() {
+		var email string
+		var familyID uuid.UUID
+		if err := rows.Scan(&email, &familyID); err != nil {
+			return nil, err
+		}
+		if email != "" {
+			identEmails[email] = familyID
+		}
+	}
+	return identEmails, rows.Err()
+}
+
 func (s *Store) UpdateFamilyParents(ctx context.Context, userID uuid.UUID, familyID uuid.UUID, parents []models.Parent) error {
 	transactionID := uuid.New()
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
@@ -1202,6 +1229,23 @@ func (s *Store) ListRoles(ctx context.Context) ([]models.Role, error) {
 		roles = append(roles, r)
 	}
 	return roles, nil
+}
+
+func (s *Store) GetRole(ctx context.Context, id string) (*models.Role, error) {
+	var r models.Role
+	var permsJSON []byte
+	err := s.db.QueryRow(ctx, "SELECT id, name, description, permissions, created_at, updated_at FROM roles WHERE id = $1", id).
+		Scan(&r.ID, &r.Name, &r.Description, &permsJSON, &r.CreatedAt, &r.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	if len(permsJSON) > 0 {
+		_ = json.Unmarshal(permsJSON, &r.Permissions)
+	}
+	if r.Permissions == nil {
+		r.Permissions = []string{}
+	}
+	return &r, nil
 }
 
 func (s *Store) CreateRole(ctx context.Context, role models.Role) (*models.Role, error) {
