@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/pavolmarko/thweb-backend/internal/models"
 	"github.com/pavolmarko/thweb-backend/internal/roles"
@@ -154,7 +155,14 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 						writeJSONError(w, "Database error: "+pErr.Error(), http.StatusInternalServerError)
 						return
 					}
-					if familyID == nil {
+					empTypes, eErr := a.Store.GetEmployeeTypesByIdentifierEmail(r.Context(), email)
+					if eErr != nil {
+						log.Printf("[AUTH ERROR] Failed to check employee identifier email %q: %v", email, eErr)
+						writeJSONError(w, "Database error: "+eErr.Error(), http.StatusInternalServerError)
+						return
+					}
+					triggers := a.TriggersForIdentifierEmail(familyID, empTypes)
+					if len(triggers) == 0 {
 						log.Printf("[AUTH WARNING] User email %q not found in allow-list or identifier emails", email)
 						w.Header().Set("Content-Type", "application/json")
 						w.WriteHeader(http.StatusForbidden)
@@ -164,17 +172,7 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 						})
 						return
 					}
-					identRoles, identPerms := a.RolesConfig.RolesForTrigger(roles.AutoGrantIdentifierEmail)
-					if len(identRoles) == 0 {
-						identRoles = []string{"restricted"}
-					}
-					if len(identPerms) == 0 {
-						identPerms = []string{
-							"families.all.restrictedread",
-							"fees.self.read",
-							"families.self.selfservice",
-						}
-					}
+					identRoles, identPerms := a.RolesAndPermissionsForTriggers(triggers)
 					user = &models.UserWithPermissions{
 						Email:                email,
 						Roles:                identRoles,
@@ -191,14 +189,11 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 				familyID, pErr := a.Store.GetFamilyIDByIdentifierEmail(r.Context(), email)
 				if pErr == nil && familyID != nil {
 					user.FamilyID = familyID
-					identRoles, implicitPerms := a.RolesConfig.RolesForTrigger(roles.AutoGrantIdentifierEmail)
-					if len(implicitPerms) == 0 {
-						implicitPerms = []string{
-							"families.all.restrictedread",
-							"fees.self.read",
-							"families.self.selfservice",
-						}
-					}
+				}
+				empTypes, _ := a.Store.GetEmployeeTypesByIdentifierEmail(r.Context(), email)
+				triggers := a.TriggersForIdentifierEmail(familyID, empTypes)
+				if len(triggers) > 0 {
+					identRoles, implicitPerms := a.RolesAndPermissionsForTriggers(triggers)
 					for _, ir := range identRoles {
 						found := false
 						for _, r := range user.Roles {
@@ -331,6 +326,68 @@ func ExtractSimulationConfig(r *http.Request) *models.SimulationConfig {
 	return nil
 }
 
+// TriggersForIdentifierEmail returns all auto-grant triggers applicable to the given parent and employee identifiers.
+func (a *Authenticator) TriggersForIdentifierEmail(familyID *uuid.UUID, empTypes []string) []string {
+	var triggers []string
+	if familyID != nil {
+		triggers = append(triggers, roles.AutoGrantParentIdentifierEmail)
+	}
+	for _, t := range empTypes {
+		tr := roles.EmployeeTypeToTrigger(t)
+		if tr != "" {
+			triggers = append(triggers, tr)
+		}
+	}
+	return triggers
+}
+
+// RolesAndPermissionsForTriggers resolves configured (or fallback) roles and deduplicated permissions for the given triggers.
+func (a *Authenticator) RolesAndPermissionsForTriggers(triggers []string) ([]string, []string) {
+	var allRoles []string
+	seenRoles := make(map[string]bool)
+	permSet := make(map[string]bool)
+
+	for _, trigger := range triggers {
+		var rIDs, perms []string
+		if a.RolesConfig != nil {
+			rIDs, perms = a.RolesConfig.RolesForTrigger(trigger)
+		}
+		if len(rIDs) == 0 {
+			switch trigger {
+			case roles.AutoGrantParentIdentifierEmail:
+				rIDs = []string{"parent_default"}
+				perms = []string{
+					"families.all.restrictedread",
+					"fees.self.read",
+					"families.self.selfservice",
+					"memberships.self.read",
+				}
+			case roles.AutoGrantCaregiverIdentifierEmail:
+				rIDs = []string{"caregiver_default"}
+				perms = []string{
+					"families.all.restrictedread",
+					"mealplan.view",
+				}
+			}
+		}
+		for _, r := range rIDs {
+			if !seenRoles[r] {
+				seenRoles[r] = true
+				allRoles = append(allRoles, r)
+			}
+		}
+		for _, p := range perms {
+			permSet[p] = true
+		}
+	}
+
+	allPerms := make([]string, 0, len(permSet))
+	for p := range permSet {
+		allPerms = append(allPerms, p)
+	}
+	return allRoles, allPerms
+}
+
 // ResolveSimulatedUser determines the roles, permissions, and family ID for a simulated target.
 func (a *Authenticator) ResolveSimulatedUser(ctx context.Context, cfg models.SimulationConfig) (*models.UserWithPermissions, error) {
 	if cfg.Mode == "user" {
@@ -352,25 +409,19 @@ func (a *Authenticator) ResolveSimulatedUser(ctx context.Context, cfg models.Sim
 			if pErr != nil {
 				return nil, pErr
 			}
+			empTypes, eErr := a.Store.GetEmployeeTypesByIdentifierEmail(ctx, email)
+			if eErr != nil {
+				return nil, eErr
+			}
+			triggers := a.TriggersForIdentifierEmail(familyID, empTypes)
 
-			if simUser == nil && familyID == nil {
+			if simUser == nil && len(triggers) == 0 {
 				return nil, fmt.Errorf("user %q not found in known users or identifying emails", email)
 			}
 
 			if simUser == nil {
-				// Pure identifying parent
-				identRoles, identPerms := a.RolesConfig.RolesForTrigger(roles.AutoGrantIdentifierEmail)
-				if len(identRoles) == 0 {
-					identRoles = []string{"restricted"}
-				}
-				if len(identPerms) == 0 {
-					identPerms = []string{
-						"families.all.restrictedread",
-						"fees.self.read",
-						"families.self.selfservice",
-						"memberships.self.read",
-					}
-				}
+				// Pure identifying parent or employee
+				identRoles, identPerms := a.RolesAndPermissionsForTriggers(triggers)
 				simUser = &models.UserWithPermissions{
 					Email:                email,
 					Roles:                identRoles,
@@ -378,17 +429,11 @@ func (a *Authenticator) ResolveSimulatedUser(ctx context.Context, cfg models.Sim
 					EffectivePermissions: identPerms,
 					FamilyID:             familyID,
 				}
-			} else if familyID != nil {
-				simUser.FamilyID = familyID
-				identRoles, implicitPerms := a.RolesConfig.RolesForTrigger(roles.AutoGrantIdentifierEmail)
-				if len(implicitPerms) == 0 {
-					implicitPerms = []string{
-						"families.all.restrictedread",
-						"fees.self.read",
-						"families.self.selfservice",
-						"memberships.self.read",
-					}
+			} else if len(triggers) > 0 {
+				if familyID != nil {
+					simUser.FamilyID = familyID
 				}
+				identRoles, implicitPerms := a.RolesAndPermissionsForTriggers(triggers)
 				for _, ir := range identRoles {
 					found := false
 					for _, r := range simUser.Roles {

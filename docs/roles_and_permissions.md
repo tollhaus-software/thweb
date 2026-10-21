@@ -52,16 +52,25 @@ roles:
     permissions:
       - dashboard.read
 
-  - id: restricted
-    name: Restricted Parent
+  - id: parent_default
+    name: Parent (default)
     description: Scoped self-service access for parents matching verified identifier emails
     auto_grant_on:
-      - identifier_email
+      - parent_identifier_email
     permissions:
       - families.all.restrictedread
       - fees.self.read
       - families.self.selfservice
       - memberships.self.read
+
+  - id: caregiver_default
+    name: Caregiver (default)
+    description: Default access for caregivers logging in via identifier email
+    auto_grant_on:
+      - caregiver_identifier_email
+    permissions:
+      - families.all.restrictedread
+      - mealplan.view
 ```
 
 ### Auto-Grant Triggers (`auto_grant_on`)
@@ -70,7 +79,10 @@ roles:
 | :--- | :--- | :--- |
 | `mock_auth` | Local development mode (`ALLOW_MOCK_AUTH=true`) | Seeded to `developer@example.com` on container startup |
 | `kiosk_cert` | Hardware kiosks with verified mTLS certificates | Dynamically assigned to requests with `X-Client-Verified: SUCCESS` on kiosk endpoints |
-| `identifier_email` | Verified parent contact emails not in `users` table | Dynamically assigned with scoped family ID for self-service access |
+| `parent_identifier_email` | Verified parent contact emails not in `users` table | Dynamically assigned with scoped family ID for self-service access |
+| `caregiver_identifier_email` | Verified caregiver contact emails not in `users` table | Dynamically assigned for caregiver access |
+| `cook_identifier_email` | Verified cook contact emails not in `users` table | Dynamically assigned for cook access |
+| `bufdi_identifier_email` | Verified bufdi contact emails not in `users` table | Dynamically assigned for bufdi access |
 
 ---
 

@@ -39,12 +39,20 @@ func TestLoadDefault(t *testing.T) {
 		t.Errorf("expected kiosk_cert trigger to return dashboard.read permission, got %v", kioskPerms)
 	}
 
-	identRoles, identPerms := cfg.RolesForTrigger(AutoGrantIdentifierEmail)
-	if len(identRoles) == 0 || identRoles[0] != "restricted" {
-		t.Errorf("expected identifier_email trigger to return restricted role, got %v", identRoles)
+	identRoles, identPerms := cfg.RolesForTrigger(AutoGrantParentIdentifierEmail)
+	if len(identRoles) == 0 || identRoles[0] != "parent_default" {
+		t.Errorf("expected parent_identifier_email trigger to return parent_default role, got %v", identRoles)
 	}
 	if len(identPerms) != 4 {
-		t.Errorf("expected 4 permissions for identifier_email trigger, got %d (%v)", len(identPerms), identPerms)
+		t.Errorf("expected 4 permissions for parent_identifier_email trigger, got %d (%v)", len(identPerms), identPerms)
+	}
+
+	caregiverRoles, caregiverPerms := cfg.RolesForTrigger(AutoGrantCaregiverIdentifierEmail)
+	if len(caregiverRoles) == 0 || caregiverRoles[0] != "caregiver_default" {
+		t.Errorf("expected caregiver_identifier_email trigger to return caregiver_default role, got %v", caregiverRoles)
+	}
+	if len(caregiverPerms) != 2 {
+		t.Errorf("expected 2 permissions for caregiver_identifier_email trigger, got %d (%v)", len(caregiverPerms), caregiverPerms)
 	}
 }
 

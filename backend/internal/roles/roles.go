@@ -11,10 +11,27 @@ import (
 
 // Supported auto-grant triggers
 const (
-	AutoGrantMockAuth        = "mock_auth"
-	AutoGrantKioskCert       = "kiosk_cert"
-	AutoGrantIdentifierEmail = "identifier_email"
+	AutoGrantMockAuth                 = "mock_auth"
+	AutoGrantKioskCert                = "kiosk_cert"
+	AutoGrantParentIdentifierEmail    = "parent_identifier_email"
+	AutoGrantCaregiverIdentifierEmail = "caregiver_identifier_email"
+	AutoGrantCookIdentifierEmail      = "cook_identifier_email"
+	AutoGrantBufdiIdentifierEmail     = "bufdi_identifier_email"
 )
+
+// EmployeeTypeToTrigger returns the auto-grant trigger for the given employee type.
+func EmployeeTypeToTrigger(empType string) string {
+	switch empType {
+	case "caregiver":
+		return AutoGrantCaregiverIdentifierEmail
+	case "cook":
+		return AutoGrantCookIdentifierEmail
+	case "bufdi":
+		return AutoGrantBufdiIdentifierEmail
+	default:
+		return ""
+	}
+}
 
 //go:embed default_roles.yaml
 var defaultRolesYAML []byte
@@ -79,7 +96,7 @@ func LoadConfig(filePath string) (*Config, error) {
 }
 
 // RolesForTrigger returns all role IDs and deduplicated permissions configured
-// to be auto-granted on the given trigger (e.g. mock_auth, kiosk_cert, identifier_email).
+// to be auto-granted on the given trigger (e.g. mock_auth, kiosk_cert, parent_identifier_email, caregiver_identifier_email, cook_identifier_email, bufdi_identifier_email).
 func (c *Config) RolesForTrigger(trigger string) (roleIDs []string, permissions []string) {
 	if c == nil {
 		return nil, nil

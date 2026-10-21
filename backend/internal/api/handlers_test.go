@@ -522,7 +522,7 @@ func TestHandleListFamiliesOverview_ProjectionAndScoping(t *testing.T) {
 	// User representing Family 1 with self-service
 	restrictedUser := &models.UserWithPermissions{
 		Email:                "alice.public@example.com",
-		Roles:                []string{"restricted"},
+		Roles:                []string{"parent_default"},
 		EffectivePermissions: []string{"families.all.restrictedread", "fees.self.read", "families.self.selfservice"},
 		FamilyID:             &familyID1,
 	}
