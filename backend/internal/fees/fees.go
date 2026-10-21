@@ -37,14 +37,14 @@ type FeeChangeResult struct {
 }
 
 type FeeType struct {
-	Group  int
-	IsHalf bool
+	Group        int
+	IsHalf       bool
+	Familiencard bool
 }
 
 type FeeRelevantData struct {
 	childrenFeeTypes map[string]FeeType
 	childrenUnder18  map[string]struct{}
-	familiencard     bool
 }
 
 func firstDayOfMonth(d time.Time) time.Time {
@@ -57,10 +57,19 @@ func DetermineFeeRelevantData(children []models.Child, month time.Time) FeeRelev
 		childrenUnder18:  make(map[string]struct{}),
 	}
 	firstDayOfNextMonth := month.AddDate(0, 1, 0)
+	monthYear := month.Year()
 
 	for _, child := range children {
 		if month.After(child.BirthDate) && child.BirthDate.AddDate(18, 0, 0).After(firstDayOfNextMonth) {
 			res.childrenUnder18[child.FirstName] = struct{}{}
+		}
+
+		hasFamiliencard := false
+		for _, yr := range child.Familiencards {
+			if yr == monthYear {
+				hasFamiliencard = true
+				break
+			}
 		}
 
 		// Ensure group changes are sorted chronologically (older come first)
@@ -109,8 +118,9 @@ func DetermineFeeRelevantData(children []models.Child, month time.Time) FeeRelev
 				}
 			}
 			res.childrenFeeTypes[child.FirstName] = FeeType{
-				Group:  group,
-				IsHalf: false,
+				Group:        group,
+				IsHalf:       false,
+				Familiencard: hasFamiliencard,
 			}
 		} else {
 			// Currently active
@@ -120,8 +130,9 @@ func DetermineFeeRelevantData(children []models.Child, month time.Time) FeeRelev
 				isHalf = true
 			}
 			res.childrenFeeTypes[child.FirstName] = FeeType{
-				Group:  group,
-				IsHalf: isHalf,
+				Group:        group,
+				IsHalf:       isHalf,
+				Familiencard: hasFamiliencard,
 			}
 		}
 	}
@@ -138,7 +149,7 @@ func DetermineFee(month time.Time, data FeeRelevantData) (float64, string) {
 	var parts []string
 
 	for child, feeType := range data.childrenFeeTypes {
-		fee, descPart := LookupFee(month, len(data.childrenUnder18), feeType, data.familiencard)
+		fee, descPart := LookupFee(month, len(data.childrenUnder18), feeType)
 		desc := child + " (" + descPart + "): " + formatEur(fee)
 		parts = append(parts, desc)
 
@@ -171,12 +182,6 @@ func describeFee(ft FeeType) string {
 func DetermineChange(month time.Time, prevData FeeRelevantData, curData FeeRelevantData) string {
 	var parts []string
 
-	if prevData.familiencard && !curData.familiencard {
-		parts = append(parts, "Keine Familiencard mehr")
-	} else if !prevData.familiencard && curData.familiencard {
-		parts = append(parts, "Neue Familiencard")
-	}
-
 	allChildren := make(map[string]struct{})
 	for child := range prevData.childrenFeeTypes {
 		allChildren[child] = struct{}{}
@@ -185,7 +190,13 @@ func DetermineChange(month time.Time, prevData FeeRelevantData, curData FeeRelev
 		allChildren[child] = struct{}{}
 	}
 
+	sortedChildren := make([]string, 0, len(allChildren))
 	for child := range allChildren {
+		sortedChildren = append(sortedChildren, child)
+	}
+	sort.Strings(sortedChildren)
+
+	for _, child := range sortedChildren {
 		prevFeeType, isInPrev := prevData.childrenFeeTypes[child]
 		curFeeType, isInCur := curData.childrenFeeTypes[child]
 
@@ -195,8 +206,15 @@ func DetermineChange(month time.Time, prevData FeeRelevantData, curData FeeRelev
 		if isInPrev && !isInCur {
 			parts = append(parts, child+": Betreuung endet")
 		}
-		if isInPrev && isInCur && prevFeeType != curFeeType {
-			parts = append(parts, child+": "+describeFee(prevFeeType)+" -> "+describeFee(curFeeType))
+		if isInPrev && isInCur {
+			if prevFeeType.Group != curFeeType.Group || prevFeeType.IsHalf != curFeeType.IsHalf {
+				parts = append(parts, child+": "+describeFee(prevFeeType)+" -> "+describeFee(curFeeType))
+			}
+			if !prevFeeType.Familiencard && curFeeType.Familiencard {
+				parts = append(parts, child+": Neue Familiencard")
+			} else if prevFeeType.Familiencard && !curFeeType.Familiencard {
+				parts = append(parts, child+": Keine Familiencard mehr")
+			}
 		}
 	}
 
@@ -208,7 +226,13 @@ func DetermineChange(month time.Time, prevData FeeRelevantData, curData FeeRelev
 		allChildrenInHaushalt[child] = struct{}{}
 	}
 
+	sortedChildrenInHaushalt := make([]string, 0, len(allChildrenInHaushalt))
 	for child := range allChildrenInHaushalt {
+		sortedChildrenInHaushalt = append(sortedChildrenInHaushalt, child)
+	}
+	sort.Strings(sortedChildrenInHaushalt)
+
+	for _, child := range sortedChildrenInHaushalt {
 		_, isInPrev := prevData.childrenUnder18[child]
 		_, isInCur := curData.childrenUnder18[child]
 		if !isInPrev && isInCur {
@@ -232,7 +256,7 @@ var Gr3Familiencard = [...]float64{163, 147, 130, 114}
 var FeesAsOf2025Regular = [][]float64{Gr1Regular[:], Gr2Regular[:], Gr3Regular[:]}
 var FeesAsOf2025Familiencard = [][]float64{Gr1Familiencard[:], Gr2Familiencard[:], Gr3Familiencard[:]}
 
-func LookupFee(month time.Time, numChildrenUnder18 int, feeType FeeType, familiencard bool) (float64, string) {
+func LookupFee(month time.Time, numChildrenUnder18 int, feeType FeeType) (float64, string) {
 	indexInArray := numChildrenUnder18 - 1
 	if indexInArray < 0 {
 		indexInArray = 0
@@ -251,7 +275,7 @@ func LookupFee(month time.Time, numChildrenUnder18 int, feeType FeeType, familie
 
 	var fee float64
 	var desc string
-	if !familiencard {
+	if !feeType.Familiencard {
 		fee = FeesAsOf2025Regular[groupIndex][indexInArray]
 		desc = fmt.Sprintf("Gruppe %d, %s im Haushalt", feeType.Group, formatNumChildren(numChildrenUnder18))
 	} else {

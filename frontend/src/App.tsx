@@ -14,6 +14,7 @@ import { MultiValueCell } from './components/Table/MultiValueCell';
 import { NotesEditor } from './components/Table/NotesEditor';
 import { AddressEditor } from './components/Table/AddressEditor';
 import { GroupChangesPopover } from './components/Table/GroupChangesPopover';
+import { FamiliencardsPopover } from './components/Table/FamiliencardsPopover';
 import { MembershipsModal } from './components/Table/MembershipsModal';
 import { VaccinationStatusPopover, VaccinationStatusCell, type VaccinationCheck } from './components/Table/VaccinationStatusEditor';
 import { HygieneEventsPopover, HygieneCell, type ParentWithHygiene } from './components/Table/HygieneEventsPopover';
@@ -113,6 +114,7 @@ interface Child {
   vaccination_checks?: VaccinationCheck[];
   family_name?: string;
   group_changes?: ChildGroupChange[];
+  familiencards?: number[];
 }
 
 const getGroupShortLabel = (targetGroup: number): string => {
@@ -460,6 +462,122 @@ const ChildGroupCell: React.FC<ChildGroupCellProps> = ({
             onOpenManage(child, cellEl);
           }}
           title={t('manageGroupChanges')}
+        >
+          <Pencil size={13} />
+        </button>
+      )}
+    </div>
+  );
+};
+
+export interface FamiliencardSummary {
+  text: string;
+  color: string;
+  status: 'valid' | 'expired' | 'none';
+}
+
+export function getFamiliencardSummary(cards: number[] | undefined | null, overrideCurrentYear?: number): FamiliencardSummary {
+  if (!cards || cards.length === 0) {
+    return { text: '', color: 'inherit', status: 'none' };
+  }
+
+  const currentYear = overrideCurrentYear ?? new Date().getFullYear();
+  const hasCurrent = cards.includes(currentYear);
+  const futureYears = cards.filter((y) => y > currentYear).sort((a, b) => a - b);
+
+  if (hasCurrent) {
+    if (futureYears.length > 0) {
+      return {
+        text: `ja (${currentYear}+)`,
+        color: 'black',
+        status: 'valid',
+      };
+    }
+    return {
+      text: `ja (${currentYear})`,
+      color: 'black',
+      status: 'valid',
+    };
+  }
+
+  if (futureYears.length > 0) {
+    return {
+      text: `ja (ab ${futureYears[0]})`,
+      color: 'black',
+      status: 'valid',
+    };
+  }
+
+  const latestPastYear = Math.max(...cards);
+  return {
+    text: `abgelaufen (${latestPastYear})`,
+    color: 'gray',
+    status: 'expired',
+  };
+}
+
+interface ChildFamiliencardCellProps {
+  child: Child;
+  isActive: boolean;
+  onOpenManage: (child: Child, anchor: HTMLElement | string) => void;
+  readOnly?: boolean;
+}
+
+const ChildFamiliencardCell: React.FC<ChildFamiliencardCellProps> = ({
+  child,
+  isActive,
+  onOpenManage,
+  readOnly = false,
+}) => {
+  const summary = getFamiliencardSummary(child.familiencards);
+  const cellId = `cell-familiencard-${child.id}`;
+
+  return (
+    <div
+      id={cellId}
+      className="familiencard-cell-wrapper"
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        window.getSelection()?.removeAllRanges();
+        const cellEl = document.getElementById(cellId) || e.currentTarget;
+        onOpenManage(child, cellEl);
+      }}
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        width: '100%',
+        gap: '0.25rem',
+        minHeight: '28px',
+        borderRadius: '4px',
+        padding: '2px 4px',
+        backgroundColor: isActive ? 'var(--accent-bg)' : 'transparent',
+        transition: 'background-color 0.15s ease-in-out',
+        fontWeight: 'normal',
+      }}
+      title={readOnly ? t('viewFamiliencards') : t('manageFamiliencards')}
+    >
+      <span
+        style={{
+          color: summary.color,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          fontSize: '0.875rem',
+        }}
+      >
+        {summary.text}
+      </span>
+      {!readOnly && (
+        <button
+          type="button"
+          className="cell-edit-pencil-btn child-familiencard-manage-btn"
+          onClick={(e) => {
+            e.stopPropagation();
+            const cellEl = document.getElementById(cellId) || e.currentTarget;
+            onOpenManage(child, cellEl);
+          }}
+          title={t('manageFamiliencards')}
         >
           <Pencil size={13} />
         </button>
@@ -867,6 +985,12 @@ const diffChildSnapshots = (before: any, after: any): string[] => {
     changes.push(`${t('notes')}: "${before.notes || ''}" → "${after.notes || ''}"`);
   }
 
+  const beforeFc = getFamiliencardSummary(before.familiencards);
+  const afterFc = getFamiliencardSummary(after.familiencards);
+  if (beforeFc.text !== afterFc.text) {
+    changes.push(`${t('familiencard')}: "${beforeFc.text || '-'}" → "${afterFc.text || '-'}"`);
+  }
+
   return changes;
 };
 
@@ -1015,6 +1139,10 @@ const formatSnapshotDetails = (log: AuditLog, families: Family[] = []) => {
     }
     if (data.notes) {
       parts.push(`${t('notes')}: ${data.notes}`);
+    }
+    const fc = getFamiliencardSummary(data.familiencards);
+    if (fc.text) {
+      parts.push(`${t('familiencard')}: ${fc.text}`);
     }
   }
 
@@ -2247,6 +2375,10 @@ const Dashboard: React.FC = () => {
   // Group Change popover state
   const [targetChildGroupChanges, setTargetChildGroupChanges] = React.useState<Child | null>(null);
   const [groupPopoverAnchor, setGroupPopoverAnchor] = React.useState<HTMLElement | string | null>(null);
+
+  // Familiencard popover state
+  const [targetChildFamiliencards, setTargetChildFamiliencards] = React.useState<Child | null>(null);
+  const [familiencardPopoverAnchor, setFamiliencardPopoverAnchor] = React.useState<HTMLElement | string | null>(null);
 
   // MultiValue (Emails/Phones) popover state
   const [targetParentMultiValue, setTargetParentMultiValue] = React.useState<Parent | null>(null);
@@ -3564,6 +3696,40 @@ const Dashboard: React.FC = () => {
     return targetChildGroupChanges;
   }, [families, overviewFamilies, targetChildGroupChanges]);
 
+  const openManageFamiliencards = (child: Child, anchor: HTMLElement | string) => {
+    setTargetChildFamiliencards(child);
+    setFamiliencardPopoverAnchor(anchor);
+  };
+
+  const closeManageFamiliencards = () => {
+    setFamiliencardPopoverAnchor(null);
+    setTargetChildFamiliencards(null);
+  };
+
+  const handleSaveFamiliencards = async (childId: string, updatedCards: number[]) => {
+    const child = families.flatMap(f => f.children || []).find(c => c.id === childId)
+      || (targetChildFamiliencards && targetChildFamiliencards.id === childId ? targetChildFamiliencards : null);
+    if (!child) return;
+
+    await handleSaveChildField(child, 'familiencards', updatedCards);
+    if (targetChildFamiliencards && targetChildFamiliencards.id === childId) {
+      setTargetChildFamiliencards({ ...targetChildFamiliencards, familiencards: updatedCards });
+    }
+  };
+
+  const activeChildForFamiliencards = React.useMemo(() => {
+    if (!targetChildFamiliencards) return null;
+    for (const f of families) {
+      const found = (f.children || []).find((c) => c.id === targetChildFamiliencards.id);
+      if (found) return found;
+    }
+    for (const f of overviewFamilies) {
+      const found = (f.children || []).find((c) => c.id === targetChildFamiliencards.id);
+      if (found) return found as Child;
+    }
+    return targetChildFamiliencards;
+  }, [families, overviewFamilies, targetChildFamiliencards]);
+
   const activeParentForHygiene = React.useMemo(() => {
     if (!targetParent) return null;
     for (const f of families) {
@@ -4263,10 +4429,12 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
         const bdMatch = bdFormatted.includes(query) || bdRaw.includes(query);
         const groupInfo = getChildGroupInfo(c.group_changes);
         const groupMatch = groupInfo.groupLabel.toLowerCase().includes(query);
+        const fcSummary = getFamiliencardSummary(c.familiencards);
+        const fcMatch = fcSummary.text.toLowerCase().includes(query);
         const familyNameMatch = familyName.toLowerCase().includes(query);
         const parentMatch = parentNames.toLowerCase().includes(query);
         const notesMatch = (c.notes || '').toLowerCase().includes(query);
-        return fnMatch || lnMatch || fullName.includes(query) || bdMatch || groupMatch || familyNameMatch || parentMatch || notesMatch;
+        return fnMatch || lnMatch || fullName.includes(query) || bdMatch || groupMatch || fcMatch || familyNameMatch || parentMatch || notesMatch;
       });
 
       const familyMatch = familyName.toLowerCase().includes(query) || parentNames.toLowerCase().includes(query);
@@ -4980,6 +5148,27 @@ function formatParentsSummary(parents: any[]): string {
       },
       childGroupColumn,
       {
+        header: t('familiencard'),
+        id: 'familiencard',
+        size: 190,
+        minSize: 160,
+        meta: {
+          cardLabel: t('familiencard'),
+        },
+        cell: (info) => {
+          const child = info.row.original;
+          const isCurrentActive = Boolean(familiencardPopoverAnchor && targetChildFamiliencards?.id === child.id);
+          return (
+            <ChildFamiliencardCell
+              child={child}
+              isActive={isCurrentActive}
+              onOpenManage={openManageFamiliencards}
+              readOnly={!canWriteChildren}
+            />
+          );
+        }
+      },
+      {
         header: t('notes'),
         accessorKey: 'notes',
         size: 260,
@@ -5049,6 +5238,9 @@ function formatParentsSummary(parents: any[]): string {
       groupPopoverAnchor,
       targetChildGroupChanges,
       childGroupColumn,
+      openManageFamiliencards,
+      familiencardPopoverAnchor,
+      targetChildFamiliencards,
       isVaccinationUnlocked,
       handleRequestKmsAuth,
       hasPermission,
@@ -7066,6 +7258,17 @@ function formatParentsSummary(parents: any[]): string {
           onAddGroupChange={handleAddGroupChange}
           onUpdateGroupChange={handleUpdateGroupChange}
           onDeleteGroupChange={handleDeleteGroupChange}
+          readOnly={!canWriteChildren}
+        />
+
+        {/* Manage Familiencards Popover */}
+        <FamiliencardsPopover
+          key={activeChildForFamiliencards?.id || 'familiencard-popover'}
+          isOpen={Boolean(familiencardPopoverAnchor && activeChildForFamiliencards)}
+          anchorEl={familiencardPopoverAnchor}
+          onClose={closeManageFamiliencards}
+          child={activeChildForFamiliencards}
+          onSaveFamiliencards={handleSaveFamiliencards}
           readOnly={!canWriteChildren}
         />
 

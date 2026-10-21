@@ -1473,6 +1473,7 @@ tr.family-group-row td {
   .data-table.card-table .membership-cell-wrapper,
   .data-table.card-table .startdatum-cell-wrapper,
   .data-table.card-table .child-group-cell-wrapper,
+  .data-table.card-table .familiencard-cell-wrapper,
   .data-table.card-table .vaccination-cell-wrapper,
   .data-table.card-table .multi-value-cell-wrapper,
   .data-table.card-table .emails-cell-wrapper,
@@ -1483,7 +1484,8 @@ tr.family-group-row td {
   .data-table.card-table .cell-edit-pencil-btn,
   .data-table.card-table .easy-edit-view-button-wrapper,
   .data-table.card-table .cell-edit-pencil-btn-wrapper,
-  .data-table.card-table .child-group-manage-btn {
+  .data-table.card-table .child-group-manage-btn,
+  .data-table.card-table .child-familiencard-manage-btn {
     opacity: 0.85 !important;
     margin-left: auto !important;
     margin-right: 0 !important;
