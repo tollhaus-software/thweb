@@ -129,7 +129,7 @@ test.describe('Test Case 18: Employees Tab and Permissions', () => {
     await expect(page.locator('tr', { hasText: 'Temp' }).filter({ hasText: 'Employee' })).toBeVisible();
 
     // Click Undo (back arrow button)
-    const undoBtn = page.locator('button[title="Undo (Ctrl+Z)"]');
+    const undoBtn = page.locator('button[title="Undo"]');
     await undoBtn.click();
     // Temp Employee should be cleanly undone with no 500 or failed to sync alert
     await expect(page.locator('tr', { hasText: 'Temp' }).filter({ hasText: 'Employee' })).toHaveCount(0);

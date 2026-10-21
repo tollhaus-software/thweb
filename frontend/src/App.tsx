@@ -2805,31 +2805,6 @@ const Dashboard: React.FC = () => {
     saveStacks([...undoStackRef.current, action], nextRedo);
   };
 
-  const undoRef = React.useRef(handleUndo);
-  const redoRef = React.useRef(handleRedo);
-
-  React.useEffect(() => {
-    undoRef.current = handleUndo;
-    redoRef.current = handleRedo;
-  });
-
-  React.useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const isMod = e.ctrlKey || e.metaKey;
-      if (isMod && !e.shiftKey) {
-        if (e.key.toLowerCase() === 'z') {
-          e.preventDefault();
-          undoRef.current();
-        } else if (e.key.toLowerCase() === 'y') {
-          e.preventDefault();
-          redoRef.current();
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
   const fetchFamilies = React.useCallback((explicitKmsToken?: string) => {
     return fetch('/api/families', {
       headers: getAuthHeaders({}, explicitKmsToken),
@@ -6489,7 +6464,7 @@ function formatParentsSummary(parents: any[]): string {
                     background: 'transparent',
                     color: 'var(--text)',
                   }}
-                  title="Undo (Ctrl+Z)"
+                  title="Undo"
                 >
                   <Undo size={16} />
                 </button>
@@ -6510,7 +6485,7 @@ function formatParentsSummary(parents: any[]): string {
                     background: 'transparent',
                     color: 'var(--text)',
                   }}
-                  title="Redo (Ctrl+Y)"
+                  title="Redo"
                 >
                   <Redo size={16} />
                 </button>
