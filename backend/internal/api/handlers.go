@@ -360,9 +360,10 @@ type OverviewParent struct {
 }
 
 type OverviewFamily struct {
-	ID       uuid.UUID        `json:"id"`
-	Parents  []OverviewParent `json:"parents"`
-	Children []OverviewChild  `json:"children"`
+	ID         uuid.UUID        `json:"id"`
+	FamilyName string           `json:"family_name,omitempty"`
+	Parents    []OverviewParent `json:"parents"`
+	Children   []OverviewChild  `json:"children"`
 }
 
 func (s *Server) HandleListFamiliesOverview(w http.ResponseWriter, r *http.Request) {
@@ -445,9 +446,10 @@ func (s *Server) HandleListFamiliesOverview(w http.ResponseWriter, r *http.Reque
 		}
 
 		overview = append(overview, OverviewFamily{
-			ID:       fam.ID,
-			Parents:  ovParents,
-			Children: ovChildren,
+			ID:         fam.ID,
+			FamilyName: fam.GetFamilyName(),
+			Parents:    ovParents,
+			Children:   ovChildren,
 		})
 	}
 

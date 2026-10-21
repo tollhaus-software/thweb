@@ -31,6 +31,7 @@ import { CellPopover } from './components/Table/CellPopover';
 import { RowActionsMenu } from './components/Table/RowActionsMenu';
 import { ConfirmDeleteModal } from './components/Table/ConfirmDeleteModal';
 import { t, CURRENT_LOCALE, formatDisplayDate, parseInputDate, calculateYearsAndMonths, formatTollhausEmail, compareBirthDates } from './utils/i18n';
+import { getFamilyName } from './utils/family';
 
 const EasyEditComponent = EasyEdit;
 const EasyEditTypes = Types;
@@ -4263,8 +4264,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
   const parentsFamilyData = React.useMemo(() => {
     const query = (globalFilter || '').trim().toLowerCase();
     const mapped = families.map(f => {
-      const lastNames = Array.from(new Set((f.parents || []).map(p => p.last_name).filter(Boolean)));
-      const familyName = lastNames.join(' / ') || 'New Family';
+      const familyName = getFamilyName(f);
 
       const sortedParents = [...(f.parents || [])].sort((a, b) => {
         const cmp = (a.first_name || '').localeCompare(b.first_name || '', CURRENT_LOCALE);
@@ -4327,8 +4327,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
   const childrenFamilyData = React.useMemo(() => {
     const query = (globalFilter || '').trim().toLowerCase();
     const mapped = families.map(f => {
-      const lastNames = Array.from(new Set((f.parents || []).map(p => p.last_name).filter(Boolean)));
-      const familyName = lastNames.join(' / ') || 'New Family';
+      const familyName = getFamilyName(f);
 
       const sortedChildren = [...(f.children || [])].sort((a, b) => {
         const cmp = compareBirthDates(a.birth_date, b.birth_date);
@@ -4350,7 +4349,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
         const groupInfo = getChildGroupInfo(c.group_changes);
         const groupMatch = groupInfo.groupLabel.toLowerCase().includes(query);
         const startMatch = groupInfo.startDate ? formatDisplayDate(groupInfo.startDate).toLowerCase().includes(query) : false;
-        const familyLastNameMatch = lastNames.some(ln => ln.toLowerCase().includes(query));
+        const familyLastNameMatch = (f.parents || []).some(p => (p.last_name || '').toLowerCase().includes(query));
         return fnMatch || lnMatch || groupMatch || startMatch || familyLastNameMatch;
       });
 
@@ -4392,8 +4391,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
   const familiesTabData = React.useMemo(() => {
     const query = (globalFilter || '').trim().toLowerCase();
     const mapped = families.map(f => {
-      const lastNames = Array.from(new Set((f.parents || []).map(p => p.last_name).filter(Boolean)));
-      const familyName = lastNames.join(' / ') || 'New Family';
+      const familyName = getFamilyName(f);
 
       const sortedParents = [...(f.parents || [])].sort((a, b) => {
         const cmp = (a.first_name || '').localeCompare(b.first_name || '', CURRENT_LOCALE);
@@ -4590,8 +4588,7 @@ function formatParentsSummary(parents: any[]): string {
           );
           if (childrenInBucket.length === 0) return;
 
-          const lastNames = Array.from(new Set((f.parents || []).map((p) => p.last_name).filter(Boolean)));
-          const familyName = lastNames.join(' / ') || 'Familie';
+          const familyName = getFamilyName(f);
           const parentNames = (f.parents || [])
             .map((p) => `${p.first_name || ''} ${p.last_name || ''}`.trim())
             .filter(Boolean)
@@ -4699,8 +4696,7 @@ function formatParentsSummary(parents: any[]): string {
     }
 
     const mapped = overviewFamilies.map((f) => {
-      const lastNames = Array.from(new Set((f.parents || []).map((p) => p.last_name).filter(Boolean)));
-      const familyName = lastNames.join(' / ') || 'Familie';
+      const familyName = getFamilyName(f);
 
       const sortedParents = [...(f.parents || [])].sort((a, b) => {
         const cmp = (a.first_name || '').localeCompare(b.first_name || '', CURRENT_LOCALE);

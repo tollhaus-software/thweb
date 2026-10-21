@@ -338,3 +338,74 @@ func TestEmployee_JSONSerialization(t *testing.T) {
 	}
 }
 
+func TestFormatFamilyName(t *testing.T) {
+	tests := []struct {
+		name     string
+		parents  []Parent
+		fallback []string
+		want     string
+	}{
+		{
+			name:    "empty parents default fallback",
+			parents: []Parent{},
+			want:    "Familie",
+		},
+		{
+			name:     "empty parents custom fallback",
+			parents:  []Parent{},
+			fallback: []string{"New Family"},
+			want:     "New Family",
+		},
+		{
+			name: "single parent",
+			parents: []Parent{
+				{FirstName: "Anna", LastName: "Müller"},
+			},
+			want: "Müller",
+		},
+		{
+			name: "multiple parents same last name deduplicated",
+			parents: []Parent{
+				{FirstName: "Anna", LastName: "Müller"},
+				{FirstName: "Bob", LastName: "Müller"},
+			},
+			want: "Müller",
+		},
+		{
+			name: "multiple parents alphabetical sorting",
+			parents: []Parent{
+				{FirstName: "Zachary", LastName: "Zimmermann"},
+				{FirstName: "Anna", LastName: "Aalberg"},
+				{FirstName: "Bob", LastName: "Müller"},
+			},
+			want: "Aalberg / Müller / Zimmermann",
+		},
+		{
+			name: "case-insensitive sorting with trimming",
+			parents: []Parent{
+				{FirstName: "Zachary", LastName: "  smith  "},
+				{FirstName: "Anna", LastName: "Adams"},
+			},
+			want: "Adams / smith",
+		},
+		{
+			name: "parents with empty or whitespace last names ignored",
+			parents: []Parent{
+				{FirstName: "NoLastName", LastName: "   "},
+				{FirstName: "Anna", LastName: "Bauer"},
+			},
+			want: "Bauer",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := FormatFamilyName(tc.parents, tc.fallback...)
+			if got != tc.want {
+				t.Errorf("FormatFamilyName() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+

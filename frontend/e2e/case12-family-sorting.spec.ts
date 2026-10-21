@@ -1,4 +1,52 @@
 import { test, expect } from '@playwright/test';
+import { formatFamilyName, getFamilyName } from '../src/utils/family';
+
+test.describe('formatFamilyName & getFamilyName helper unit tests', () => {
+  test('handles empty parents or empty last names with default or custom fallback', () => {
+    expect(formatFamilyName([])).toBe('Familie');
+    expect(formatFamilyName(null)).toBe('Familie');
+    expect(formatFamilyName(undefined)).toBe('Familie');
+    expect(formatFamilyName([], 'New Family')).toBe('New Family');
+    expect(formatFamilyName([{ last_name: '' }, { last_name: '   ' }])).toBe('Familie');
+  });
+
+  test('deduplicates identical parent surnames', () => {
+    expect(formatFamilyName([{ last_name: 'Müller' }, { last_name: 'Müller' }])).toBe('Müller');
+  });
+
+  test('sorts multiple different surnames alphabetically before joining with " / "', () => {
+    // Zachary Zimmermann and Benjamin Aalberg should be sorted Aalberg / Zimmermann
+    expect(
+      formatFamilyName([
+        { last_name: 'Zimmermann' },
+        { last_name: 'Aalberg' },
+      ])
+    ).toBe('Aalberg / Zimmermann');
+
+    // Case-insensitive alphabetical sorting
+    expect(
+      formatFamilyName([
+        { last_name: 'smith' },
+        { last_name: 'Adams' },
+      ])
+    ).toBe('Adams / smith');
+
+    // Three parents out of order
+    expect(
+      formatFamilyName([
+        { last_name: 'Zimmermann' },
+        { last_name: 'Aalberg' },
+        { last_name: 'Müller' },
+      ])
+    ).toBe('Aalberg / Müller / Zimmermann');
+  });
+
+  test('getFamilyName prioritizes existing family_name or falls back to formatted parents', () => {
+    expect(getFamilyName({ family_name: 'Custom / Family' })).toBe('Custom / Family');
+    expect(getFamilyName({ parents: [{ last_name: 'Becker' }, { last_name: 'Adams' }] })).toBe('Adams / Becker');
+    expect(getFamilyName(null)).toBe('Familie');
+  });
+});
 
 test.describe('Test Case 12: Family Sorting across MGA Tabs', () => {
   test.beforeEach(async ({ request, page }) => {

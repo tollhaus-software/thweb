@@ -45,7 +45,11 @@ func (s *Store) WithTx(ctx context.Context, fn func(pgx.Tx) error) error {
 }
 
 func (s *Store) CreateFamilyWithParents(ctx context.Context, userID uuid.UUID, parents []models.Parent) (*models.Family, error) {
-	family := &models.Family{ID: uuid.New()}
+	family := &models.Family{
+		ID:         uuid.New(),
+		Parents:    parents,
+		FamilyName: models.FormatFamilyName(parents),
+	}
 	transactionID := uuid.New()
 	createdParents := make([]models.Parent, 0, len(parents))
 
@@ -336,6 +340,7 @@ func (s *Store) ListFamilies(ctx context.Context) ([]models.Family, error) {
 		if err := json.Unmarshal(childrenJSON, &f.Children); err != nil {
 			return nil, err
 		}
+		f.FamilyName = f.GetFamilyName()
 		families = append(families, f)
 	}
 

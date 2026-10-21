@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMe
 import { createPortal } from 'react-dom';
 import { CheckSquare, Square, Info, ChevronDown, ChevronRight, ChevronLeft } from 'lucide-react';
 import { t, CURRENT_LOCALE } from '../utils/i18n';
+import { getFamilyName as formatFamilyNameHelper } from '../utils/family';
 import { useAuth } from '../context/AuthContext';
 import { useIsMobile } from '../hooks/useIsMobile';
 
@@ -375,10 +376,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
 
   // Helper to format family names
   const getFamilyName = useCallback((f: Family) => {
-    const lastNames = Array.from(
-      new Set((f.parents || []).map((p) => p.last_name).filter(Boolean))
-    );
-    return lastNames.join(' / ') || 'New Family';
+    return formatFamilyNameHelper(f);
   }, []);
 
   const mobileSelectableFamilies = useMemo(() => {
