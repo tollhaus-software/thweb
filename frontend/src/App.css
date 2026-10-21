@@ -170,7 +170,19 @@ header {
   padding: 0.4rem 0.6rem;
   text-align: left;
   border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
   color: var(--text);
+}
+
+.data-table th:last-child,
+.data-table td:last-child {
+  border-right: none;
+}
+
+tr.family-group-row td,
+tr.empty-sub-row td,
+tr.overview-parents-toggle-row td {
+  border-right: none;
 }
 
 .data-table th {
