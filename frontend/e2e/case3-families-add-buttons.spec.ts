@@ -110,6 +110,13 @@ test.describe('Test Case 3: Families View Add Buttons (+ Kind and + Elternteil)'
     await expect(childrenAddChildBtn).toHaveClass(/family-action-button/);
     await expect(childrenAddChildBtn).toHaveClass(/family-add-child-button/);
 
+    // --- Step 7: Switch to Familien (familiesOverview) and verify data is fetched and updates are present ---
+    const overviewTab = page.getByRole('button', { name: 'Familien', exact: true });
+    await overviewTab.click();
+    await expect(overviewTab).toHaveClass(/active/);
+    await expect(page.getByText('Mustermann', { exact: true }).first()).toBeVisible();
+    await expect(page.locator('text=Felix').first()).toBeVisible();
+
     // Take a screenshot of the families view for visual verification
     await page.getByRole('button', { name: 'Familien(MGA)', exact: true }).click();
     await page.screenshot({ path: 'test-results/families-view-buttons.png' });
