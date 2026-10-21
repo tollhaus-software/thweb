@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pencil } from 'lucide-react';
 import { t } from '../../utils/i18n';
-import { getEntryValue, isFlagActive, type MultiValueItem } from './MultiValueListEditor';
+import { getEntryValue, isFlagActive, getPhoneTypeSymbol, getPhoneTypeLabel, type MultiValueItem } from './MultiValueListEditor';
 
 export interface MultiValueCellProps {
   id: string;
@@ -55,6 +55,9 @@ export const MultiValueCell: React.FC<MultiValueCellProps> = ({
             const val = getEntryValue(v);
             const isAddressList = isFlagActive(v, 'address_list', true);
             const isIdentifier = isFlagActive(v, 'identifier_email', false);
+            const phoneType = field === 'phones' ? ((typeof v === 'object' && v !== null && (v as any).type) ? (v as any).type : 'mobile') : undefined;
+            const phoneSymbol = field === 'phones' ? getPhoneTypeSymbol(phoneType) : undefined;
+            const phoneLabel = field === 'phones' ? getPhoneTypeLabel(phoneType) : undefined;
             return (
               <div
                 key={i}
@@ -75,9 +78,28 @@ export const MultiValueCell: React.FC<MultiValueCellProps> = ({
                     whiteSpace: 'nowrap',
                     flex: 1,
                     minWidth: 0,
+                    display: 'inline-flex',
+                    alignItems: 'center',
                   }}
                 >
-                  {val}
+                  {field === 'phones' && (
+                    <span
+                      className="phone-type-symbol"
+                      title={phoneLabel}
+                      style={{
+                        marginRight: '6px',
+                        fontSize: '0.9rem',
+                        lineHeight: 1,
+                        flexShrink: 0,
+                        userSelect: 'none',
+                      }}
+                    >
+                      {phoneSymbol}
+                    </span>
+                  )}
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {val}
+                  </span>
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0, marginLeft: 'auto' }}>
                   {field === 'emails' && (

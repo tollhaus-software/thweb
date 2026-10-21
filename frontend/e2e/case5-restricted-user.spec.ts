@@ -185,7 +185,8 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     // Verify Hans Schmidt's 4 columns: Name, 📞 Phone(s) newline-separated, 📧 Email(s) newline-separated, 🏠 Address
     await expect(hansRow.locator('td').nth(0)).toHaveText('Hans Schmidt');
     await expect(hansRow.locator('td').nth(1)).toContainText('📞');
-    await expect(hansRow.locator('td').nth(1)).toContainText('0171 1234567\n0711 998877');
+    await expect(hansRow.locator('td').nth(1)).toContainText('0171 1234567');
+    await expect(hansRow.locator('td').nth(1)).toContainText('0711 998877');
     await expect(hansRow.locator('td').nth(2)).toContainText('📧');
     await expect(hansRow.locator('td').nth(2)).toContainText('hans.schmidt@tollhaus-stuttgart.de\nhans.second@example.com');
     // Secret non-address-list email must NOT be shown

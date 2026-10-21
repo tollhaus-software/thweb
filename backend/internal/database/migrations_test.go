@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"testing"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -147,6 +148,66 @@ func TestApplySchemaMigrations(t *testing.T) {
 	`).Scan(&yellowBagView)
 	if err != nil {
 		t.Fatalf("expected yellow_bag_dates view to exist: %v", err)
+	}
+
+	// Verify migration 00004: test phone number type defaulting to "mobile"
+	// Roll back to migration 3, insert untyped phones, then migrate up to 4
+	if err := goose.DownToContext(context.Background(), testDB, "migrations", 3); err != nil {
+		t.Fatalf("failed to down to migration 3: %v", err)
+	}
+
+	var famID string
+	err = testDB.QueryRow(`INSERT INTO families DEFAULT VALUES RETURNING id`).Scan(&famID)
+	if err != nil {
+		t.Fatalf("failed to insert test family: %v", err)
+	}
+
+	var parentID string
+	err = testDB.QueryRow(`
+		INSERT INTO parents (family_id, first_name, last_name, phones)
+		VALUES ($1, 'Hans', 'Muster', '[{"value": "123456", "address_list": true}, {"value": "789012", "type": "landline"}]'::jsonb)
+		RETURNING id
+	`, famID).Scan(&parentID)
+	if err != nil {
+		t.Fatalf("failed to insert test parent: %v", err)
+	}
+
+	var empID string
+	err = testDB.QueryRow(`
+		INSERT INTO employees (first_name, last_name, employee_type, phones)
+		VALUES ('Lisa', 'Muster', 'caregiver', '[{"value": "555666", "address_list": false}, "999888"]'::jsonb)
+		RETURNING id
+	`).Scan(&empID)
+	if err != nil {
+		t.Fatalf("failed to insert test employee: %v", err)
+	}
+
+	// Run migration 4
+	if err := goose.UpToContext(context.Background(), testDB, "migrations", 4); err != nil {
+		t.Fatalf("failed to run migration 4: %v", err)
+	}
+
+	// Verify parent phones migrated
+	var parentPhonesJSON string
+	err = testDB.QueryRow(`SELECT phones::text FROM parents WHERE id = $1`, parentID).Scan(&parentPhonesJSON)
+	if err != nil {
+		t.Fatalf("failed to query parent phones: %v", err)
+	}
+	if !strings.Contains(parentPhonesJSON, `"type": "mobile"`) {
+		t.Errorf("expected parent untyped phone to get mobile type, got %s", parentPhonesJSON)
+	}
+	if !strings.Contains(parentPhonesJSON, `"type": "landline"`) {
+		t.Errorf("expected parent landline phone to preserve type, got %s", parentPhonesJSON)
+	}
+
+	// Verify employee phones migrated
+	var empPhonesJSON string
+	err = testDB.QueryRow(`SELECT phones::text FROM employees WHERE id = $1`, empID).Scan(&empPhonesJSON)
+	if err != nil {
+		t.Fatalf("failed to query employee phones: %v", err)
+	}
+	if !strings.Contains(empPhonesJSON, `"type": "mobile"`) {
+		t.Errorf("expected employee untyped phone to get mobile type, got %s", empPhonesJSON)
 	}
 
 	// Test rollback of all migrations

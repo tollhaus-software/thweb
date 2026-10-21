@@ -12,8 +12,41 @@ export interface MultiValueFlagConfig {
   defaultValue?: boolean;   // default for newly added items (defaults to true)
 }
 
+export type PhoneType = 'mobile' | 'landline' | 'work';
+
+export interface MultiValueTypeConfig {
+  key: string;              // 'mobile' | 'landline' | 'work'
+  label: string;            // 'Mobil' | 'Festnetz' | 'Job'
+  symbol: string;           // '📱' | '☏' | '💼'
+}
+
+export const PHONE_TYPE_SYMBOLS: Record<PhoneType, string> = {
+  mobile: '📱',
+  landline: '☏',
+  work: '💼',
+};
+
+export const getPhoneTypeSymbol = (type?: string): string => {
+  if (type === 'landline') return PHONE_TYPE_SYMBOLS.landline;
+  if (type === 'work') return PHONE_TYPE_SYMBOLS.work;
+  return PHONE_TYPE_SYMBOLS.mobile;
+};
+
+export const getPhoneTypeLabel = (type?: string): string => {
+  if (type === 'landline') return t('phoneTypeLandline') || 'Festnetz';
+  if (type === 'work') return t('phoneTypeWork') || 'Job';
+  return t('phoneTypeMobile') || 'Mobil';
+};
+
+export const PHONE_TYPES: MultiValueTypeConfig[] = [
+  { key: 'mobile', label: t('phoneTypeMobile') || 'Mobil', symbol: '📱' },
+  { key: 'landline', label: t('phoneTypeLandline') || 'Festnetz', symbol: '☏' },
+  { key: 'work', label: t('phoneTypeWork') || 'Job', symbol: '💼' },
+];
+
 export interface MultiValueEntry {
   value: string;
+  type?: string;
   address_list?: boolean;
   identifier_email?: boolean;
   [key: string]: any;
@@ -28,6 +61,8 @@ export interface MultiValueListEditorProps<T extends MultiValueItem = MultiValue
   values: T[];
   onSave: (newValues: T[]) => void;
   flags?: MultiValueFlagConfig[];
+  types?: MultiValueTypeConfig[];
+  requireTypeSelection?: boolean;
   placeholder?: string;
   title?: string;
   canEditItem?: (item: T, idx: number) => boolean;
@@ -55,6 +90,8 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
   values = [],
   onSave,
   flags,
+  types,
+  requireTypeSelection = false,
   placeholder = '',
   title,
   canEditItem,
@@ -64,8 +101,11 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
 }) => {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [editType, setEditType] = useState<string>('mobile');
   const [isAdding, setIsAdding] = useState(false);
   const [addValue, setAddValue] = useState('');
+  const [addType, setAddType] = useState<string>('');
+  const [addTypeError, setAddTypeError] = useState(false);
   const [addFlags, setAddFlags] = useState<Record<string, boolean>>({});
 
   const editInputRef = useRef<HTMLInputElement>(null);
@@ -74,13 +114,18 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
   const addWrapperRef = useRef<HTMLDivElement>(null);
 
   const editValueRef = useRef(editValue);
+  const editTypeRef = useRef(editType);
   const addValueRef = useRef(addValue);
+  const addTypeRef = useRef(addType);
+  const addTypeErrorRef = useRef(addTypeError);
   const addFlagsRef = useRef(addFlags);
   const isAddingRef = useRef(isAdding);
   const editingIndexRef = useRef(editingIndex);
   const valuesRef = useRef(values);
   const onSaveRef = useRef(onSave);
   const flagsRef = useRef(flags);
+  const typesRef = useRef(types);
+  const requireTypeSelectionRef = useRef(requireTypeSelection);
   const canEditItemRef = useRef(canEditItem);
   const canDeleteItemRef = useRef(canDeleteItem);
   const canToggleFlagRef = useRef(canToggleFlag);
@@ -90,8 +135,20 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
   }, [editValue]);
 
   useEffect(() => {
+    editTypeRef.current = editType;
+  }, [editType]);
+
+  useEffect(() => {
     addValueRef.current = addValue;
   }, [addValue]);
+
+  useEffect(() => {
+    addTypeRef.current = addType;
+  }, [addType]);
+
+  useEffect(() => {
+    addTypeErrorRef.current = addTypeError;
+  }, [addTypeError]);
 
   useEffect(() => {
     addFlagsRef.current = addFlags;
@@ -118,6 +175,14 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
   }, [flags]);
 
   useEffect(() => {
+    typesRef.current = types;
+  }, [types]);
+
+  useEffect(() => {
+    requireTypeSelectionRef.current = requireTypeSelection;
+  }, [requireTypeSelection]);
+
+  useEffect(() => {
     canEditItemRef.current = canEditItem;
   }, [canEditItem]);
 
@@ -137,6 +202,10 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
         isAddingRef.current = true;
         setAddValue('');
         addValueRef.current = '';
+        setAddType('');
+        addTypeRef.current = '';
+        setAddTypeError(false);
+        addTypeErrorRef.current = false;
         const initialFlags: Record<string, boolean> = {};
         for (const f of flagsRef.current || []) {
           initialFlags[f.key] = f.defaultValue ?? true;
@@ -145,11 +214,17 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
       } else {
         setIsAdding(false);
         isAddingRef.current = false;
+        setAddType('');
+        addTypeRef.current = '';
+        setAddTypeError(false);
+        addTypeErrorRef.current = false;
       }
       setEditingIndex(null);
       editingIndexRef.current = null;
       setEditValue('');
       editValueRef.current = '';
+      setEditType('mobile');
+      editTypeRef.current = 'mobile';
     }
   }, [isOpen]);
 
@@ -200,6 +275,8 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
     editingIndexRef.current = null;
     setEditValue('');
     editValueRef.current = '';
+    setEditType('mobile');
+    editTypeRef.current = 'mobile';
   }, []);
 
   const commitEdit = useCallback(
@@ -218,6 +295,9 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
       }
 
       const currentVal = getEntryValue(existingItem).trim();
+      const existingType = (typeof existingItem === 'object' && existingItem !== null) ? (existingItem.type || 'mobile') : undefined;
+      const newType = (typesRef.current && typesRef.current.length > 0) ? (editTypeRef.current || 'mobile') : undefined;
+      const typeChanged = Boolean(typesRef.current && typesRef.current.length > 0 && existingType !== newType);
 
       if (trimmed === '') {
         if (canDeleteItemRef.current && !canDeleteItemRef.current(existingItem, idx)) {
@@ -228,18 +308,18 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
         return;
       }
 
-      if (trimmed !== currentVal) {
+      if (trimmed !== currentVal || typeChanged) {
         let updatedItem: MultiValueItem;
         if (typeof existingItem === 'object' && existingItem !== null) {
-          updatedItem = { ...existingItem, value: trimmed };
+          updatedItem = { ...existingItem, value: trimmed, ...(newType ? { type: newType } : {}) };
         } else if (flagsRef.current && flagsRef.current.length > 0) {
-          const itemObj: Record<string, any> = { value: trimmed };
+          const itemObj: Record<string, any> = { value: trimmed, ...(newType ? { type: newType } : {}) };
           for (const f of flagsRef.current) {
             itemObj[f.key] = f.defaultValue ?? true;
           }
           updatedItem = itemObj as MultiValueEntry;
         } else {
-          updatedItem = trimmed;
+          updatedItem = newType ? { value: trimmed, type: newType } : trimmed;
         }
 
         const newValues = [...currentValues];
@@ -257,6 +337,10 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
     isAddingRef.current = false;
     setAddValue('');
     addValueRef.current = '';
+    setAddType('');
+    addTypeRef.current = '';
+    setAddTypeError(false);
+    addTypeErrorRef.current = false;
   }, []);
 
   const commitAdd = useCallback(
@@ -266,17 +350,28 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
         cancelAdd();
         return;
       }
+      if (typesRef.current && typesRef.current.length > 0 && requireTypeSelectionRef.current && !addTypeRef.current) {
+        setAddTypeError(true);
+        addTypeErrorRef.current = true;
+        return;
+      }
       const currentValues = valuesRef.current || [];
+      const itemType = addTypeRef.current || (typesRef.current && typesRef.current.length > 0 ? 'mobile' : undefined);
 
       let newItem: MultiValueItem;
       if (flagsRef.current && flagsRef.current.length > 0) {
         const itemObj: Record<string, any> = { value: trimmed };
+        if (itemType) {
+          itemObj.type = itemType;
+        }
         for (const f of flagsRef.current) {
           itemObj[f.key] = addFlagsRef.current[f.key] ?? f.defaultValue ?? true;
         }
         newItem = itemObj as MultiValueEntry;
       } else {
-        if (currentValues.length > 0 && typeof currentValues[0] === 'object' && currentValues[0] !== null) {
+        if (itemType) {
+          newItem = { value: trimmed, type: itemType };
+        } else if (currentValues.length > 0 && typeof currentValues[0] === 'object' && currentValues[0] !== null) {
           newItem = { value: trimmed };
         } else {
           newItem = trimmed;
@@ -323,7 +418,11 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
 
   const handleClosePopover = useCallback(() => {
     if (isAddingRef.current && addValueRef.current.trim()) {
-      commitAdd(addValueRef.current);
+      if (typesRef.current && typesRef.current.length > 0 && requireTypeSelectionRef.current && !addTypeRef.current) {
+        cancelAdd();
+      } else {
+        commitAdd(addValueRef.current);
+      }
     } else if (editingIndexRef.current !== null) {
       commitEdit(editingIndexRef.current, editValueRef.current);
     }
@@ -331,8 +430,10 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
     setIsAdding(false);
     setEditValue('');
     setAddValue('');
+    setAddType('');
+    setAddTypeError(false);
     onClose();
-  }, [commitAdd, commitEdit, onClose]);
+  }, [commitAdd, commitEdit, cancelAdd, onClose]);
 
   const startEdit = (idx: number, currentVal: string) => {
     const currentValues = valuesRef.current || [];
@@ -341,6 +442,9 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
       if (canEditItemRef.current && !canEditItemRef.current(item, idx)) {
         return;
       }
+      const initialType = (typeof item === 'object' && item !== null && item.type) ? item.type : 'mobile';
+      setEditType(initialType);
+      editTypeRef.current = initialType;
     }
     setIsAdding(false);
     isAddingRef.current = false;
@@ -374,6 +478,10 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
     isAddingRef.current = true;
     setAddValue('');
     addValueRef.current = '';
+    setAddType('');
+    addTypeRef.current = '';
+    setAddTypeError(false);
+    addTypeErrorRef.current = false;
     const initialFlags: Record<string, boolean> = {};
     for (const f of flagsRef.current || []) {
       initialFlags[f.key] = f.defaultValue ?? true;
@@ -395,6 +503,12 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
     if (related && addWrapperRef.current?.contains(related)) {
       return;
     }
+    if (typesRef.current && typesRef.current.length > 0 && requireTypeSelectionRef.current && !addTypeRef.current) {
+      if (!addValueRef.current.trim()) {
+        cancelAdd();
+      }
+      return;
+    }
     commitAdd(addValueRef.current);
   };
 
@@ -406,8 +520,8 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
       onClose={handleClosePopover}
       anchorEl={anchorEl}
       className="glass-popup multivalue-popover"
-      width={340}
-      minWidth={280}
+      width={360}
+      minWidth={300}
       style={{
         padding: '10px',
         display: 'flex',
@@ -481,132 +595,189 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
                       <div
                         ref={editWrapperRef}
                         className="easy-edit-inline-wrapper"
-                        style={{ display: 'flex', alignItems: 'center', gap: '4px', width: '100%' }}
+                        style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' }}
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <input
-                          ref={editInputRef}
-                          type="text"
-                          value={editValue}
-                          onChange={(e) => {
-                            setEditValue(e.target.value);
-                            editValueRef.current = e.target.value;
-                          }}
-                          onKeyDown={(e) => handleEditKeyDown(e, idx)}
-                          onBlur={(e) => handleEditBlur(e, idx)}
-                          autoFocus
-                          style={{
-                            flex: 1,
-                            minWidth: 0,
-                            padding: '3px 6px',
-                            fontSize: '0.85rem',
-                            border: '1px solid var(--primary)',
-                            borderRadius: '4px',
-                            background: 'var(--input-bg)',
-                            color: 'var(--input-text)',
-                            outline: 'none',
-                            boxSizing: 'border-box',
-                          }}
-                        />
-                        {flags && flags.length > 0 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', width: '100%' }}>
+                          <input
+                            ref={editInputRef}
+                            type="text"
+                            value={editValue}
+                            onChange={(e) => {
+                              setEditValue(e.target.value);
+                              editValueRef.current = e.target.value;
+                            }}
+                            onKeyDown={(e) => handleEditKeyDown(e, idx)}
+                            onBlur={(e) => handleEditBlur(e, idx)}
+                            autoFocus
+                            style={{
+                              flex: 1,
+                              minWidth: 0,
+                              padding: '3px 6px',
+                              fontSize: '0.85rem',
+                              border: '1px solid var(--primary)',
+                              borderRadius: '4px',
+                              background: 'var(--input-bg)',
+                              color: 'var(--input-text)',
+                              outline: 'none',
+                              boxSizing: 'border-box',
+                            }}
+                          />
+                          {flags && flags.length > 0 && (
+                            <div
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {flags.map((flag) => {
+                                const isActive = isFlagActive(item, flag.key, flag.defaultValue ?? true);
+                                const canToggle = !canToggleFlag || canToggleFlag(item, flag.key, idx);
+                                const flagDisabledTitle = disabledReason?.(item, 'toggle', flag.key);
+                                const titleText = !canToggle && flagDisabledTitle
+                                  ? flagDisabledTitle
+                                  : (isActive
+                                      ? flag.titleActive || `${flag.label || flag.key}: Ein`
+                                      : flag.titleInactive || `${flag.label || flag.key}: Aus`);
+                                return (
+                                  <button
+                                    key={flag.key}
+                                    type="button"
+                                    className={`multivalue-flag-btn flag-${flag.key}`}
+                                    disabled={!canToggle}
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      if (canToggle) {
+                                        handleToggleFlag(idx, flag.key);
+                                      }
+                                    }}
+                                    title={titleText}
+                                    style={{
+                                      background: 'transparent',
+                                      border: 'none',
+                                      cursor: canToggle ? 'pointer' : 'not-allowed',
+                                      padding: '2px 4px',
+                                      fontSize: '0.95rem',
+                                      lineHeight: 1,
+                                      opacity: canToggle ? (isActive ? 1 : 0.25) : (isActive ? 0.6 : 0.15),
+                                      filter: isActive ? 'none' : 'grayscale(100%)',
+                                      transition: 'opacity 0.15s ease, filter 0.15s ease, transform 0.1s ease',
+                                      borderRadius: '4px',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      if (canToggle) e.currentTarget.style.transform = 'scale(1.15)';
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      if (canToggle) e.currentTarget.style.transform = 'scale(1)';
+                                    }}
+                                  >
+                                    {flag.icon}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
+                            <button
+                              type="button"
+                              className="easy-edit-button save-edit-btn"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                commitEdit(idx, editValueRef.current);
+                              }}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                commitEdit(idx, editValueRef.current);
+                              }}
+                              title={t('save') || 'Speichern'}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: '3px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                color: 'var(--primary)',
+                                borderRadius: '4px',
+                              }}
+                            >
+                              <Check size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              className="easy-edit-button cancel-edit-btn"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                cancelEdit();
+                              }}
+                              title={t('cancel') || 'Abbrechen'}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: '3px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                color: '#94a3b8',
+                                borderRadius: '4px',
+                              }}
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        </div>
+
+                        {types && types.length > 0 && (
                           <div
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}
-                            onClick={(e) => e.stopPropagation()}
+                            className="multivalue-type-selector"
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              fontSize: '0.8rem',
+                              paddingLeft: '2px',
+                            }}
                           >
-                            {flags.map((flag) => {
-                              const isActive = isFlagActive(item, flag.key, flag.defaultValue ?? true);
-                              const canToggle = !canToggleFlag || canToggleFlag(item, flag.key, idx);
-                              const flagDisabledTitle = disabledReason?.(item, 'toggle', flag.key);
-                              const titleText = !canToggle && flagDisabledTitle
-                                ? flagDisabledTitle
-                                : (isActive
-                                    ? flag.titleActive || `${flag.label || flag.key}: Ein`
-                                    : flag.titleInactive || `${flag.label || flag.key}: Aus`);
-                              return (
-                                <button
-                                  key={flag.key}
-                                  type="button"
-                                  className={`multivalue-flag-btn flag-${flag.key}`}
-                                  disabled={!canToggle}
-                                  onMouseDown={(e) => {
-                                    e.preventDefault();
-                                    if (canToggle) {
-                                      handleToggleFlag(idx, flag.key);
-                                    }
-                                  }}
-                                  title={titleText}
-                                  style={{
-                                    background: 'transparent',
-                                    border: 'none',
-                                    cursor: canToggle ? 'pointer' : 'not-allowed',
-                                    padding: '2px 4px',
-                                    fontSize: '0.95rem',
-                                    lineHeight: 1,
-                                    opacity: canToggle ? (isActive ? 1 : 0.25) : (isActive ? 0.6 : 0.15),
-                                    filter: isActive ? 'none' : 'grayscale(100%)',
-                                    transition: 'opacity 0.15s ease, filter 0.15s ease, transform 0.1s ease',
-                                    borderRadius: '4px',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                  }}
-                                  onMouseEnter={(e) => {
-                                    if (canToggle) e.currentTarget.style.transform = 'scale(1.15)';
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    if (canToggle) e.currentTarget.style.transform = 'scale(1)';
-                                  }}
-                                >
-                                  {flag.icon}
-                                </button>
-                              );
-                            })}
+                            <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>
+                              {t('phoneTypeSelect') || 'Typ'}:
+                            </span>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              {types.map((typeOption) => {
+                                const isSelected = editType === typeOption.key;
+                                return (
+                                  <button
+                                    key={typeOption.key}
+                                    type="button"
+                                    className={`type-select-btn type-btn-${typeOption.key} ${isSelected ? 'active' : ''}`}
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => {
+                                      setEditType(typeOption.key);
+                                      editTypeRef.current = typeOption.key;
+                                    }}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      padding: '2px 8px',
+                                      borderRadius: '4px',
+                                      fontSize: '0.78rem',
+                                      cursor: 'pointer',
+                                      border: isSelected ? '1px solid var(--primary)' : '1px solid var(--border)',
+                                      backgroundColor: isSelected ? 'var(--accent-bg, rgba(37, 99, 235, 0.1))' : 'var(--bg-subtle, transparent)',
+                                      color: isSelected ? 'var(--primary)' : 'var(--text-muted, #64748b)',
+                                      fontWeight: isSelected ? 600 : 400,
+                                      transition: 'all 0.15s ease',
+                                    }}
+                                  >
+                                    <span>{typeOption.symbol}</span>
+                                    <span>{typeOption.label}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
                         )}
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
-                          <button
-                            type="button"
-                            className="easy-edit-button"
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              commitEdit(idx, editValueRef.current);
-                            }}
-                            title={t('save') || 'Speichern'}
-                            style={{
-                              background: 'transparent',
-                              border: 'none',
-                              cursor: 'pointer',
-                              padding: '3px',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              color: 'var(--primary)',
-                              borderRadius: '4px',
-                            }}
-                          >
-                            <Check size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            className="easy-edit-button"
-                            onMouseDown={(e) => {
-                              e.preventDefault();
-                              cancelEdit();
-                            }}
-                            title={t('cancel') || 'Abbrechen'}
-                            style={{
-                              background: 'transparent',
-                              border: 'none',
-                              cursor: 'pointer',
-                              padding: '3px',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              color: '#94a3b8',
-                              borderRadius: '4px',
-                            }}
-                          >
-                            <X size={14} />
-                          </button>
-                        </div>
                       </div>
                     </td>
                   </tr>
@@ -632,6 +803,7 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
                     const canDelete = !canDeleteItem || canDeleteItem(item, idx);
                     const editDisabledTitle = disabledReason?.(item, 'edit');
                     const deleteDisabledTitle = disabledReason?.(item, 'delete');
+                    const itemType = (typeof item === 'object' && item !== null && item.type) ? item.type : 'mobile';
                     return (
                       <>
                         <td
@@ -646,6 +818,20 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
                           title={canEdit ? (t('edit') || 'Doppelklick zum Bearbeiten') : (editDisabledTitle || undefined)}
                         >
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            {types && types.length > 0 && (
+                              <span
+                                className="phone-type-symbol"
+                                title={types.find((t) => t.key === itemType)?.label || getPhoneTypeLabel(itemType)}
+                                style={{
+                                  fontSize: '0.95rem',
+                                  lineHeight: 1,
+                                  userSelect: 'none',
+                                  flexShrink: 0,
+                                }}
+                              >
+                                {types.find((t) => t.key === itemType)?.symbol || getPhoneTypeSymbol(itemType)}
+                              </span>
+                            )}
                             <span style={{ color: 'var(--text-h)', flex: 1, minWidth: 0 }}>{val}</span>
                             {flags && flags.length > 0 && (
                               <div
@@ -763,136 +949,216 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
                   <div
                     ref={addWrapperRef}
                     className="easy-edit-inline-wrapper"
-                    style={{ display: 'flex', alignItems: 'center', gap: '4px', width: '100%' }}
+                    style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' }}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <input
-                      ref={addInputRef}
-                      type="text"
-                      value={addValue}
-                      onChange={(e) => {
-                        setAddValue(e.target.value);
-                        addValueRef.current = e.target.value;
-                      }}
-                      onKeyDown={handleAddKeyDown}
-                      onBlur={handleAddBlur}
-                      autoFocus
-                      placeholder={t('newItem') || 'Neuer Eintrag...'}
-                      style={{
-                        flex: 1,
-                        minWidth: 0,
-                        padding: '3px 6px',
-                        fontSize: '0.85rem',
-                        border: '1px solid var(--primary)',
-                        borderRadius: '4px',
-                        background: 'var(--input-bg)',
-                        color: 'var(--input-text)',
-                        outline: 'none',
-                        boxSizing: 'border-box',
-                      }}
-                    />
-                    {flags && flags.length > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', width: '100%' }}>
+                      <input
+                        ref={addInputRef}
+                        type="text"
+                        value={addValue}
+                        onChange={(e) => {
+                          setAddValue(e.target.value);
+                          addValueRef.current = e.target.value;
+                        }}
+                        onKeyDown={handleAddKeyDown}
+                        onBlur={handleAddBlur}
+                        autoFocus
+                        placeholder={placeholder || (t('newItem') || 'Neuer Eintrag...')}
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          padding: '3px 6px',
+                          fontSize: '0.85rem',
+                          border: addTypeError ? '1px solid #ef4444' : '1px solid var(--primary)',
+                          borderRadius: '4px',
+                          background: 'var(--input-bg)',
+                          color: 'var(--input-text)',
+                          outline: 'none',
+                          boxSizing: 'border-box',
+                        }}
+                      />
+                      {flags && flags.length > 0 && (
+                        <div
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {flags.map((flag) => {
+                            const isActive = addFlags[flag.key] ?? flag.defaultValue ?? true;
+                            const canToggle = !canToggleFlag || canToggleFlag(null as any, flag.key, -1);
+                            const flagDisabledTitle = disabledReason?.(null as any, 'toggle', flag.key);
+                            const titleText = !canToggle && flagDisabledTitle
+                              ? flagDisabledTitle
+                              : (isActive
+                                  ? flag.titleActive || `${flag.label || flag.key}: Ein`
+                                  : flag.titleInactive || `${flag.label || flag.key}: Aus`);
+                            return (
+                              <button
+                                key={flag.key}
+                                type="button"
+                                className={`multivalue-flag-btn flag-${flag.key}`}
+                                disabled={!canToggle}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  if (canToggle) {
+                                    setAddFlags((prev) => ({
+                                      ...prev,
+                                      [flag.key]: !(prev[flag.key] ?? flag.defaultValue ?? true),
+                                    }));
+                                  }
+                                }}
+                                title={titleText}
+                                style={{
+                                  background: 'transparent',
+                                  border: 'none',
+                                  cursor: canToggle ? 'pointer' : 'not-allowed',
+                                  padding: '2px 4px',
+                                  fontSize: '0.95rem',
+                                  lineHeight: 1,
+                                  opacity: canToggle ? (isActive ? 1 : 0.25) : (isActive ? 0.6 : 0.15),
+                                  filter: isActive ? 'none' : 'grayscale(100%)',
+                                  transition: 'opacity 0.15s ease, filter 0.15s ease, transform 0.1s ease',
+                                  borderRadius: '4px',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                }}
+                                onMouseEnter={(e) => {
+                                  if (canToggle) e.currentTarget.style.transform = 'scale(1.15)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  if (canToggle) e.currentTarget.style.transform = 'scale(1)';
+                                }}
+                              >
+                                {flag.icon}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
+                        <button
+                          type="button"
+                          className="easy-edit-button save-add-btn"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            commitAdd(addValueRef.current);
+                          }}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            commitAdd(addValueRef.current);
+                          }}
+                          title={t('save') || 'Speichern'}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            cursor: 'pointer',
+                            padding: '3px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            color: 'var(--primary)',
+                            borderRadius: '4px',
+                          }}
+                        >
+                          <Check size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          className="easy-edit-button cancel-add-btn"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            cancelAdd();
+                          }}
+                          title={t('cancel') || 'Abbrechen'}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            cursor: 'pointer',
+                            padding: '3px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            color: '#94a3b8',
+                            borderRadius: '4px',
+                          }}
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {types && types.length > 0 && (
                       <div
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}
-                        onClick={(e) => e.stopPropagation()}
+                        className="multivalue-type-selector"
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '2px',
+                          paddingLeft: '2px',
+                        }}
                       >
-                        {flags.map((flag) => {
-                          const isActive = addFlags[flag.key] ?? flag.defaultValue ?? true;
-                          const canToggle = !canToggleFlag || canToggleFlag(null as any, flag.key, -1);
-                          const flagDisabledTitle = disabledReason?.(null as any, 'toggle', flag.key);
-                          const titleText = !canToggle && flagDisabledTitle
-                            ? flagDisabledTitle
-                            : (isActive
-                                ? flag.titleActive || `${flag.label || flag.key}: Ein`
-                                : flag.titleInactive || `${flag.label || flag.key}: Aus`);
-                          return (
-                            <button
-                              key={flag.key}
-                              type="button"
-                              className={`multivalue-flag-btn flag-${flag.key}`}
-                              disabled={!canToggle}
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                if (canToggle) {
-                                  setAddFlags((prev) => ({
-                                    ...prev,
-                                    [flag.key]: !(prev[flag.key] ?? flag.defaultValue ?? true),
-                                  }));
-                                }
-                              }}
-                              title={titleText}
-                              style={{
-                                background: 'transparent',
-                                border: 'none',
-                                cursor: canToggle ? 'pointer' : 'not-allowed',
-                                padding: '2px 4px',
-                                fontSize: '0.95rem',
-                                lineHeight: 1,
-                                opacity: canToggle ? (isActive ? 1 : 0.25) : (isActive ? 0.6 : 0.15),
-                                filter: isActive ? 'none' : 'grayscale(100%)',
-                                transition: 'opacity 0.15s ease, filter 0.15s ease, transform 0.1s ease',
-                                borderRadius: '4px',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                              }}
-                              onMouseEnter={(e) => {
-                                if (canToggle) e.currentTarget.style.transform = 'scale(1.15)';
-                              }}
-                              onMouseLeave={(e) => {
-                                if (canToggle) e.currentTarget.style.transform = 'scale(1)';
-                              }}
-                            >
-                              {flag.icon}
-                            </button>
-                          );
-                        })}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span
+                            style={{
+                              color: addTypeError ? '#ef4444' : 'var(--text-secondary)',
+                              fontSize: '0.75rem',
+                              fontWeight: addTypeError ? 600 : 500,
+                            }}
+                          >
+                            {t('phoneTypeSelect') || 'Typ'}:
+                          </span>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            {types.map((typeOption) => {
+                              const isSelected = addType === typeOption.key;
+                              return (
+                                <button
+                                  key={typeOption.key}
+                                  type="button"
+                                  className={`type-select-btn type-btn-${typeOption.key} ${isSelected ? 'active' : ''}`}
+                                  onMouseDown={(e) => e.preventDefault()}
+                                  onClick={() => {
+                                    setAddType(typeOption.key);
+                                    addTypeRef.current = typeOption.key;
+                                    setAddTypeError(false);
+                                    addTypeErrorRef.current = false;
+                                  }}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    padding: '2px 8px',
+                                    borderRadius: '4px',
+                                    fontSize: '0.78rem',
+                                    cursor: 'pointer',
+                                    border: isSelected
+                                      ? '1px solid var(--primary)'
+                                      : addTypeError
+                                      ? '1px solid #fca5a5'
+                                      : '1px solid var(--border)',
+                                    backgroundColor: isSelected
+                                      ? 'var(--accent-bg, rgba(37, 99, 235, 0.1))'
+                                      : 'var(--bg-subtle, transparent)',
+                                    color: isSelected ? 'var(--primary)' : 'var(--text-muted, #64748b)',
+                                    fontWeight: isSelected ? 600 : 400,
+                                    transition: 'all 0.15s ease',
+                                  }}
+                                >
+                                  <span>{typeOption.symbol}</span>
+                                  <span>{typeOption.label}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        {addTypeError && (
+                          <span
+                            className="phone-type-required-error"
+                            style={{ color: '#ef4444', fontSize: '0.72rem', marginTop: '2px' }}
+                          >
+                            {t('phoneTypeRequired') || 'Bitte Typ auswählen'}
+                          </span>
+                        )}
                       </div>
                     )}
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
-                      <button
-                        type="button"
-                        className="easy-edit-button"
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          commitAdd(addValueRef.current);
-                        }}
-                        title={t('save') || 'Speichern'}
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          cursor: 'pointer',
-                          padding: '3px',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          color: 'var(--primary)',
-                          borderRadius: '4px',
-                        }}
-                      >
-                        <Check size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        className="easy-edit-button"
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          cancelAdd();
-                        }}
-                        title={t('cancel') || 'Abbrechen'}
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          cursor: 'pointer',
-                          padding: '3px',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          color: '#94a3b8',
-                          borderRadius: '4px',
-                        }}
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
                   </div>
                 </td>
               </tr>
