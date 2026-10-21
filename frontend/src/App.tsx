@@ -9,7 +9,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import EasyEdit, { Types } from './components/InlineEdit';
 import { Pencil, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, ArrowUpRight, X, Clock, AlertCircle, ChevronLeft, ChevronRight, Plus, ArrowUpDown, Check, Eye } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
-import { MultiValueListEditor, type MultiValueFlagConfig, type MultiValueEntry, type MultiValueItem, getEntryValue, isFlagActive } from './components/Table/MultiValueListEditor';
+import { MultiValueListEditor, type MultiValueFlagConfig, type MultiValueEntry, type MultiValueItem, getEntryValue, isFlagActive, PHONE_TYPES, getPhoneTypeSymbol, getPhoneTypeLabel } from './components/Table/MultiValueListEditor';
 import { MultiValueCell } from './components/Table/MultiValueCell';
 import { NotesEditor } from './components/Table/NotesEditor';
 import { AddressEditor } from './components/Table/AddressEditor';
@@ -864,6 +864,12 @@ const formatMultiValueItem = (item: any, field: 'emails' | 'phones'): string => 
   const isIdentifier = field === 'emails' ? isFlagActive(item, 'identifier_email', false) : false;
 
   const flagParts: string[] = [];
+  if (field === 'phones') {
+    const pType = (typeof item === 'object' && item !== null && item.type) ? item.type : 'mobile';
+    const sym = getPhoneTypeSymbol(pType);
+    const lbl = getPhoneTypeLabel(pType);
+    flagParts.push(`${sym} ${lbl}`);
+  }
   if (isIdentifier) {
     flagParts.push('🆔');
   }
@@ -977,6 +983,16 @@ const diffParentSnapshots = (before: any, after: any): string[] => {
           const aId = isFlagActive(aItem, 'identifier_email', false);
           if (bId !== aId) {
             changes.push(`${val}: ${aId ? t('identifierEmailSet') : t('identifierEmailUnset')}`);
+          }
+        }
+
+        if (field === 'phones') {
+          const bType = (typeof bItem === 'object' && bItem !== null && bItem.type) ? bItem.type : 'mobile';
+          const aType = (typeof aItem === 'object' && aItem !== null && aItem.type) ? aItem.type : 'mobile';
+          if (bType !== aType) {
+            const bLbl = `${getPhoneTypeSymbol(bType)} ${getPhoneTypeLabel(bType)}`;
+            const aLbl = `${getPhoneTypeSymbol(aType)} ${getPhoneTypeLabel(aType)}`;
+            changes.push(`${val}: ${t('phoneTypeChanged') || 'Telefontyp geändert'}: ${bLbl} → ${aLbl}`);
           }
         }
       }
@@ -5485,9 +5501,7 @@ function formatParentsSummary(parents: any[]): string {
           const item = info.row.original;
           if (item._rowType === 'parent') {
             const phones = (item.phones || [])
-              .filter((ph: any) => isFlagActive(ph, 'address_list', true))
-              .map((ph: any) => getEntryValue(ph).trim())
-              .filter(Boolean);
+              .filter((ph: any) => isFlagActive(ph, 'address_list', true));
             return (
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
                 <span
@@ -5507,18 +5521,30 @@ function formatParentsSummary(parents: any[]): string {
                   <span style={{ color: 'var(--text-muted)' }}>-</span>
                 ) : (
                   <span style={{ whiteSpace: 'pre-line', minWidth: 0 }}>
-                    {phones.map((phone: string, idx: number) => (
-                      <React.Fragment key={idx}>
-                        {idx > 0 && '\n'}
-                        <a
-                          href={formatTelHref(phone)}
-                          className="overview-contact-link"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {phone}
-                        </a>
-                      </React.Fragment>
-                    ))}
+                    {phones.map((phoneEntry: any, idx: number) => {
+                      const phoneVal = getEntryValue(phoneEntry).trim();
+                      const phoneType = (typeof phoneEntry === 'object' && phoneEntry !== null && phoneEntry.type) ? phoneEntry.type : 'mobile';
+                      const symbol = getPhoneTypeSymbol(phoneType);
+                      return (
+                        <React.Fragment key={idx}>
+                          {idx > 0 && '\n'}
+                          <span
+                            className="phone-type-symbol"
+                            title={getPhoneTypeLabel(phoneType)}
+                            style={{ marginRight: '4px', userSelect: 'none' }}
+                          >
+                            {symbol}
+                          </span>
+                          <a
+                            href={formatTelHref(phoneVal)}
+                            className="overview-contact-link"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {phoneVal}
+                          </a>
+                        </React.Fragment>
+                      );
+                    })}
                   </span>
                 )}
               </div>
@@ -7347,6 +7373,8 @@ function formatParentsSummary(parents: any[]): string {
           onClose={closeManageMultiValue}
           values={activeMultiValueValues}
           flags={activeMultiValueFlags}
+          types={activeMultiValueField === 'phones' ? PHONE_TYPES : undefined}
+          requireTypeSelection={activeMultiValueField === 'phones'}
           title={activeMultiValueTitle}
           placeholder={activeMultiValuePlaceholder}
           onSave={handleSaveActiveMultiValue}

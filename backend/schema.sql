@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS parents (
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
     emails JSONB NOT NULL DEFAULT '[]'::jsonb,
+    -- phones: JSONB array of objects [{ "value": "...", "type": "mobile"|"landline"|"work", "address_list": bool }]
     phones JSONB NOT NULL DEFAULT '[]'::jsonb,
     address TEXT NOT NULL DEFAULT '',
     notes TEXT NOT NULL DEFAULT '',
@@ -185,6 +186,7 @@ CREATE TABLE IF NOT EXISTS employees (
     last_name TEXT NOT NULL,
     employee_type TEXT NOT NULL CHECK (employee_type IN ('caregiver', 'cook', 'bufdi')),
     emails JSONB NOT NULL DEFAULT '[]'::jsonb,
+    -- phones: JSONB array of objects [{ "value": "...", "type": "mobile"|"landline"|"work", "address_list": bool }]
     phones JSONB NOT NULL DEFAULT '[]'::jsonb,
     address TEXT NOT NULL DEFAULT '',
     is_kinderschutzbeauftragter BOOLEAN NOT NULL DEFAULT FALSE,

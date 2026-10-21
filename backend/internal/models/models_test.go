@@ -408,4 +408,42 @@ func TestFormatFamilyName(t *testing.T) {
 	}
 }
 
+func TestMultiValueEntry_Type(t *testing.T) {
+	// JSON with type
+	jsonStr := `{"value":"0170123456","type":"landline","address_list":true}`
+	var entry MultiValueEntry
+	if err := json.Unmarshal([]byte(jsonStr), &entry); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+	if entry.Type != "landline" {
+		t.Errorf("expected type 'landline', got %q", entry.Type)
+	}
+
+	// Marshaling preserves type
+	b, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+	var roundTrip MultiValueEntry
+	if err := json.Unmarshal(b, &roundTrip); err != nil {
+		t.Fatalf("failed to unmarshal roundtrip: %v", err)
+	}
+	if roundTrip.Type != "landline" {
+		t.Errorf("expected roundtrip type 'landline', got %q", roundTrip.Type)
+	}
+
+	// String unmarshaling defaults Type to empty string
+	var strEntry MultiValueEntry
+	if err := json.Unmarshal([]byte(`"01511234"`), &strEntry); err != nil {
+		t.Fatalf("failed to unmarshal string: %v", err)
+	}
+	if strEntry.Value != "01511234" {
+		t.Errorf("expected value '01511234', got %q", strEntry.Value)
+	}
+	if strEntry.Type != "" {
+		t.Errorf("expected empty type for plain string, got %q", strEntry.Type)
+	}
+}
+
+
 

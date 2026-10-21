@@ -68,7 +68,7 @@ func (s *Store) CreateFamilyWithParents(ctx context.Context, userID uuid.UUID, p
 			p.ID = uuid.New()
 			p.FamilyID = family.ID
 			p.Emails = sanitizeSlice(p.Emails)
-			p.Phones = sanitizeSlice(p.Phones)
+			p.Phones = sanitizePhones(p.Phones)
 
 			_, err = tx.Exec(ctx,
 				"INSERT INTO parents (id, family_id, first_name, last_name, emails, phones, address, notes, vaccination_status_protected) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
@@ -99,6 +99,18 @@ func (s *Store) CreateFamilyWithParents(ctx context.Context, userID uuid.UUID, p
 	return family, nil
 }
 
+func sanitizePhones(slice models.MultiValueList) models.MultiValueList {
+	if slice == nil {
+		return models.MultiValueList{}
+	}
+	for i := range slice {
+		if slice[i].Type == "" {
+			slice[i].Type = "mobile"
+		}
+	}
+	return slice
+}
+
 func multiValueListEqual(a, b models.MultiValueList) bool {
 	if len(a) != len(b) {
 		return false
@@ -111,6 +123,9 @@ func multiValueListEqual(a, b models.MultiValueList) bool {
 			return false
 		}
 		if a[i].IdentifierEmail != b[i].IdentifierEmail {
+			return false
+		}
+		if a[i].Type != b[i].Type {
 			return false
 		}
 	}
@@ -398,6 +413,7 @@ func (s *Store) GetParentsByFamilyID(ctx context.Context, familyID uuid.UUID) ([
 		if err := rows.Scan(&p.ID, &p.FamilyID, &p.FirstName, &p.LastName, &p.Emails, &p.Phones, &p.Address, &p.Notes, &p.VaccinationStatusProtected, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
+		p.Phones = sanitizePhones(p.Phones)
 		parents = append(parents, p)
 	}
 	return parents, rows.Err()
@@ -533,7 +549,7 @@ func (s *Store) UpdateFamilyParents(ctx context.Context, userID uuid.UUID, famil
 		}
 		for _, p := range parents {
 			p.Emails = sanitizeSlice(p.Emails)
-			p.Phones = sanitizeSlice(p.Phones)
+			p.Phones = sanitizePhones(p.Phones)
 			var oldParent models.Parent
 			err := tx.QueryRow(ctx, "SELECT id, family_id, first_name, last_name, emails, phones, address, notes, vaccination_status_protected FROM parents WHERE id = $1 AND family_id = $2", p.ID, familyID).Scan(
 				&oldParent.ID, &oldParent.FamilyID, &oldParent.FirstName, &oldParent.LastName, &oldParent.Emails, &oldParent.Phones, &oldParent.Address, &oldParent.Notes, &oldParent.VaccinationStatusProtected,
@@ -716,6 +732,7 @@ func (s *Store) DeleteParent(ctx context.Context, userID uuid.UUID, parentID uui
 		if err != nil {
 			return err
 		}
+		oldParent.Phones = sanitizePhones(oldParent.Phones)
 
 		if err := s.recordAudit(ctx, tx, transactionID, &oldParent.FamilyID, "parent", parentID, "DELETE", oldParent, nil, userID); err != nil {
 			return err
@@ -1700,7 +1717,7 @@ func (s *Store) ListEmployees(ctx context.Context) ([]models.Employee, error) {
 			_ = json.Unmarshal(phonesRaw, &emp.Phones)
 		}
 		emp.Emails = sanitizeSlice(emp.Emails)
-		emp.Phones = sanitizeSlice(emp.Phones)
+		emp.Phones = sanitizePhones(emp.Phones)
 		employees = append(employees, emp)
 	}
 	return employees, rows.Err()
@@ -1739,7 +1756,7 @@ func (s *Store) GetEmployeeByID(ctx context.Context, id uuid.UUID) (*models.Empl
 		_ = json.Unmarshal(phonesRaw, &emp.Phones)
 	}
 	emp.Emails = sanitizeSlice(emp.Emails)
-	emp.Phones = sanitizeSlice(emp.Phones)
+	emp.Phones = sanitizePhones(emp.Phones)
 	return &emp, nil
 }
 
@@ -1760,7 +1777,7 @@ func (s *Store) CreateEmployee(ctx context.Context, userID uuid.UUID, emp models
 	}
 
 	emp.Emails = sanitizeSlice(emp.Emails)
-	emp.Phones = sanitizeSlice(emp.Phones)
+	emp.Phones = sanitizePhones(emp.Phones)
 	emailsJSON, _ := json.Marshal(emp.Emails)
 	phonesJSON, _ := json.Marshal(emp.Phones)
 
@@ -1795,7 +1812,7 @@ func (s *Store) CreateEmployee(ctx context.Context, userID uuid.UUID, emp models
 			_ = json.Unmarshal(phonesRaw, &created.Phones)
 		}
 		created.Emails = sanitizeSlice(created.Emails)
-		created.Phones = sanitizeSlice(created.Phones)
+		created.Phones = sanitizePhones(created.Phones)
 
 		return s.recordAudit(ctx, tx, transactionID, nil, "employee", created.ID, "INSERT", nil, created, userID)
 	})
@@ -1820,7 +1837,7 @@ func (s *Store) UpdateEmployee(ctx context.Context, userID uuid.UUID, emp models
 	}
 
 	emp.Emails = sanitizeSlice(emp.Emails)
-	emp.Phones = sanitizeSlice(emp.Phones)
+	emp.Phones = sanitizePhones(emp.Phones)
 	emailsJSON, _ := json.Marshal(emp.Emails)
 	phonesJSON, _ := json.Marshal(emp.Phones)
 
@@ -1871,7 +1888,7 @@ func (s *Store) UpdateEmployee(ctx context.Context, userID uuid.UUID, emp models
 			_ = json.Unmarshal(phonesRaw, &updated.Phones)
 		}
 		updated.Emails = sanitizeSlice(updated.Emails)
-		updated.Phones = sanitizeSlice(updated.Phones)
+		updated.Phones = sanitizePhones(updated.Phones)
 
 		return s.recordAudit(ctx, tx, transactionID, nil, "employee", updated.ID, "UPDATE", oldEmp, updated, userID)
 	})

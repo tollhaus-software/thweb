@@ -311,6 +311,7 @@ type MultiValueEntry struct {
 	Value           string `json:"value"`
 	AddressList     bool   `json:"address_list"`
 	IdentifierEmail bool   `json:"identifier_email"`
+	Type            string `json:"type,omitempty"`
 }
 
 func (m *MultiValueEntry) UnmarshalJSON(data []byte) error {
@@ -319,13 +320,15 @@ func (m *MultiValueEntry) UnmarshalJSON(data []byte) error {
 		m.Value = str
 		m.AddressList = true
 		m.IdentifierEmail = false
+		m.Type = ""
 		return nil
 	}
 	type Alias MultiValueEntry
 	var alias struct {
 		Alias
-		AddressListCamel     *bool `json:"addressList"`
-		IdentifierEmailCamel *bool `json:"identifierEmail"`
+		AddressListCamel     *bool   `json:"addressList"`
+		IdentifierEmailCamel *bool   `json:"identifierEmail"`
+		TypeCamel            *string `json:"type"`
 	}
 	if err := json.Unmarshal(data, &alias); err != nil {
 		return err
@@ -336,6 +339,9 @@ func (m *MultiValueEntry) UnmarshalJSON(data []byte) error {
 	}
 	if alias.IdentifierEmailCamel != nil {
 		m.IdentifierEmail = *alias.IdentifierEmailCamel
+	}
+	if alias.TypeCamel != nil {
+		m.Type = *alias.TypeCamel
 	}
 	return nil
 }
