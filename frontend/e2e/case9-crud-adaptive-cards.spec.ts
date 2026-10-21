@@ -554,6 +554,54 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
 
     await page.keyboard.press('Escape');
     await expect(fNameInput).toBeHidden();
+
+    // Verify group column rendering of planned group changes (and removal of duration)
+    const dtChildGroupTd = dtChildRow.locator('td[data-column-id="group"]');
+    await expect(dtChildGroupTd).toContainText('Grosse Gr.');
+    await expect(dtChildGroupTd).toContainText('seit');
+    await expect(dtChildGroupTd).not.toContainText(/J.*M/);
+    await expect(dtChildGroupTd).not.toContainText('->');
+
+    // Add a planned non-exit group change in the future (Kleine Gruppe)
+    const addFutureRes = await request.post(`/api/children/${timChildId}/group_changes`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        child_id: timChildId,
+        change_date: '2028-09-01',
+        target_group: 1,
+      },
+    });
+    expect(addFutureRes.ok()).toBeTruthy();
+    const futureGc = await addFutureRes.json();
+
+    // Switch tab to trigger on-demand refetch of fresh data
+    const dtParentsTabBtn = page.getByRole('button', { name: 'Eltern(MGA)', exact: true });
+    const dtChildrenTabBtn = page.getByRole('button', { name: 'Kinder(MGA)', exact: true });
+    await dtParentsTabBtn.click();
+    await dtChildrenTabBtn.click();
+    await page.waitForLoadState('networkidle');
+    const dtChildRowUpdated = page.locator('.children-table tbody tr:not(.family-group-row)', { hasText: 'Tim' });
+    const dtGroupUpdated = dtChildRowUpdated.locator('td[data-column-id="group"]');
+    await expect(dtGroupUpdated).toContainText('(-> Kleine Gr. ab 01.09.2028)');
+    await expect(dtGroupUpdated).not.toContainText(/J.*M/);
+
+    // Update the future group change to exit (target_group: 0)
+    const updateFutureRes = await request.put(`/api/children_group_changes/${futureGc.id}`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        change_date: '2028-09-01',
+        target_group: 0,
+      },
+    });
+    expect(updateFutureRes.ok()).toBeTruthy();
+
+    await dtParentsTabBtn.click();
+    await dtChildrenTabBtn.click();
+    await page.waitForLoadState('networkidle');
+    const dtChildRowExit = page.locator('.children-table tbody tr:not(.family-group-row)', { hasText: 'Tim' });
+    const dtGroupExit = dtChildRowExit.locator('td[data-column-id="group"]');
+    await expect(dtGroupExit).toContainText('(-> bis 01.09.2028)');
+    await expect(dtGroupExit).not.toContainText(/J.*M/);
   });
 });
 
