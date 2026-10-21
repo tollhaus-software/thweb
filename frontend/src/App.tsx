@@ -6785,6 +6785,7 @@ function formatParentsSummary(parents: any[]): string {
             getSubRows={(row: any) => row.subRows}
             hideHeader
             highlightedRowId={highlightedRowId}
+            stickyFirstColumn
           />
         ) : activeTab === 'parents' ? (
           <DataTable
@@ -6797,6 +6798,7 @@ function formatParentsSummary(parents: any[]): string {
             jumpToFamilyLabel={t('jumpToChildrenShort')}
             jumpToFamilyTitle={t('jumpToFamilyInChildren')}
             highlightedRowId={highlightedRowId}
+            stickyFirstColumn
             getCardHeader={(parent: any) => `${parent.first_name || ''} ${parent.last_name || ''}`.trim() || '-'}
             getCardActions={(parent: any) => (
               <RowActionsMenu
@@ -6820,6 +6822,7 @@ function formatParentsSummary(parents: any[]): string {
             jumpToFamilyTitle={t('jumpToFamilyInParents')}
             emptySubRowsText={t('noChildrenYet')}
             highlightedRowId={highlightedRowId}
+            stickyFirstColumn
             getCardHeader={(child: any) => `${child.first_name || ''} ${child.last_name || ''}`.trim() || '-'}
             getCardActions={(child: any) => (
               <RowActionsMenu
@@ -6857,6 +6860,7 @@ function formatParentsSummary(parents: any[]): string {
             columns={memberColumns}
             emptySubRowsText={t('noMembersYet')}
             highlightedRowId={highlightedRowId}
+            stickyFirstColumn
             getCardHeader={(member: any) => {
               const fullName = `${member.first_name || ''} ${member.last_name || ''}`.trim() || '-';
               return (
