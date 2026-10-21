@@ -36,7 +36,7 @@ test.describe('Test Case 13: Audit Log and History Tracking', () => {
     await addrCell.dblclick();
     const popover = page.locator('.glass-popup');
     await expect(popover).toBeVisible();
-    const sharedInput = popover.getByRole('textbox', { name: 'gemeinsame Adresse' });
+    const sharedInput = popover.getByRole('textbox').first();
     await sharedInput.fill('Königstraße 10');
     await popover.getByRole('button', { name: 'Speichern' }).click();
     await expect(popover).toBeHidden();

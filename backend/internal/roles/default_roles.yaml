@@ -6,7 +6,10 @@
 # or automatically granted. Supported triggers:
 #   - mock_auth: Seeded for developer@example.com when ALLOW_MOCK_AUTH=true
 #   - kiosk_cert: Granted to requests authenticated via mTLS client certificates
-#   - identifier_email: Granted to parents logging in via verified contact emails
+#   - parent_identifier_email: Granted to parents logging in via verified contact emails
+#   - caregiver_identifier_email: Granted to caregivers logging in via verified contact emails
+#   - cook_identifier_email: Granted to cooks logging in via verified contact emails
+#   - bufdi_identifier_email: Granted to bufdis logging in via verified contact emails
 # ==============================================================================
 
 roles:
@@ -34,13 +37,22 @@ roles:
     permissions:
       - dashboard.read
 
-  - id: restricted
-    name: Restricted Parent
+  - id: parent_default
+    name: Parent (default)
     description: Scoped self-service access for parents matching verified identifier emails
     auto_grant_on:
-      - identifier_email
+      - parent_identifier_email
     permissions:
       - families.all.restrictedread
       - fees.self.read
       - families.self.selfservice
       - memberships.self.read
+
+  - id: caregiver_default
+    name: Caregiver (default)
+    description: Default access for caregivers logging in via identifier email
+    auto_grant_on:
+      - caregiver_identifier_email
+    permissions:
+      - families.all.restrictedread
+      - mealplan.view

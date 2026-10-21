@@ -94,7 +94,7 @@ test.describe('Test Case 17: Role and Permissions Simulator', () => {
     const rolesModal = page.getByTestId('simulated-roles-modal');
     await expect(rolesModal).toBeVisible();
     await expect(page.getByTestId('simulated-user-display')).toHaveText('hans.schmidt@tollhaus-stuttgart.de');
-    await expect(page.getByTestId('simulated-roles-list')).toContainText('restricted');
+    await expect(page.getByTestId('simulated-roles-list')).toContainText('parent_default');
     await page.getByTestId('close-simulated-roles-modal').click();
     await expect(rolesModal).toHaveCount(0);
 
@@ -279,5 +279,63 @@ test.describe('Test Case 17: Role and Permissions Simulator', () => {
     // 9. Leave simulation
     await page.getByTestId('leave-simulation-button').click();
     await expect(page.getByTestId('simulation-banner')).toHaveCount(0);
+  });
+
+  test('simulates employee identifier email with caregiver_default role', async ({ request, page }) => {
+    const caregiverEmail = `caregiver.${Date.now()}@example.com`;
+    // Seed an employee of type caregiver with an identifier email
+    const createEmpRes = await request.post('/api/employees', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        first_name: 'Employee',
+        last_name: 'Caregiver',
+        employee_type: 'caregiver',
+        emails: [{ value: caregiverEmail, identifier_email: true, address_list: true }],
+        phones: [],
+        address: 'Test Street 42',
+      },
+    });
+    expect(createEmpRes.ok()).toBeTruthy();
+    const createdEmp = await createEmpRes.json();
+
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+    });
+
+    await page.goto('/');
+    const threeDotsBtn = page.locator('button.header-overflow-btn');
+    await threeDotsBtn.click();
+    await page.getByTestId('overflow-simulate-button').click();
+
+    // Verify candidate is present in list with caregiver_default role
+    const candRow = page.locator('.simulator-candidate-item', { hasText: caregiverEmail });
+    await expect(candRow).toBeVisible();
+    await expect(candRow).toContainText('caregiver_default');
+
+    // Select candidate
+    await candRow.click();
+    await page.getByTestId('start-simulation-button').click();
+
+    // Verify simulation active
+    const simBanner = page.getByTestId('simulation-banner');
+    await expect(simBanner).toBeVisible();
+    await expect(simBanner).toContainText(caregiverEmail);
+
+    // Verify roles dialog shows caregiver_default
+    const viewRolesBtn = page.getByTestId('view-simulated-roles-btn');
+    await viewRolesBtn.click();
+    const rolesModal = page.getByTestId('simulated-roles-modal');
+    await expect(rolesModal).toBeVisible();
+    await expect(page.getByTestId('simulated-roles-list')).toContainText('caregiver_default');
+    await page.getByTestId('close-simulated-roles-modal').click();
+
+    // Leave simulation
+    await page.getByTestId('leave-simulation-button').click();
+    await expect(simBanner).toHaveCount(0);
+
+    // Cleanup employee
+    await request.delete(`/api/employees/${createdEmp.id}`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+    });
   });
 });

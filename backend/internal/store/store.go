@@ -434,6 +434,71 @@ func (s *Store) ListIdentifyingEmails(ctx context.Context) (map[string]uuid.UUID
 	return identEmails, rows.Err()
 }
 
+func (s *Store) GetEmployeeTypesByIdentifierEmail(ctx context.Context, email string) ([]string, error) {
+	norm := models.NormalizeEmail(email)
+	if norm == "" {
+		return nil, nil
+	}
+	query := `
+		SELECT DISTINCT e.employee_type
+		FROM employees e, jsonb_array_elements(e.emails) AS elem
+		WHERE elem->>'identifier_email' = 'true'
+		  AND lower(trim(elem->>'value')) = $1
+	`
+	rows, err := s.db.Query(ctx, query, norm)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var types []string
+	for rows.Next() {
+		var t string
+		if err := rows.Scan(&t); err != nil {
+			return nil, err
+		}
+		if t != "" {
+			types = append(types, t)
+		}
+	}
+	return types, rows.Err()
+}
+
+func (s *Store) ListEmployeeIdentifyingEmails(ctx context.Context) (map[string][]string, error) {
+	query := `
+		SELECT lower(trim(elem->>'value')) AS email, e.employee_type
+		FROM employees e, jsonb_array_elements(e.emails) AS elem
+		WHERE elem->>'identifier_email' = 'true'
+		  AND lower(trim(elem->>'value')) <> ''
+	`
+	rows, err := s.db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	identEmails := make(map[string][]string)
+	for rows.Next() {
+		var email, empType string
+		if err := rows.Scan(&email, &empType); err != nil {
+			return nil, err
+		}
+		if email != "" && empType != "" {
+			already := false
+			for _, t := range identEmails[email] {
+				if t == empType {
+					already = true
+					break
+				}
+			}
+			if !already {
+				identEmails[email] = append(identEmails[email], empType)
+			}
+		}
+	}
+	return identEmails, rows.Err()
+}
+
 func (s *Store) UpdateFamilyParents(ctx context.Context, userID uuid.UUID, familyID uuid.UUID, parents []models.Parent) error {
 	transactionID := uuid.New()
 	return s.WithTx(ctx, func(tx pgx.Tx) error {

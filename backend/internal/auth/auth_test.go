@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -726,15 +727,23 @@ roles:
     deny_permissions:
       - fees.self.read
 
-  - id: restricted
-    name: Restricted Parent
+  - id: parent_default
+    name: Parent (default)
     auto_grant_on:
-      - identifier_email
+      - parent_identifier_email
     permissions:
       - families.all.restrictedread
       - fees.self.read
       - families.self.selfservice
       - memberships.self.read
+
+  - id: caregiver_default
+    name: Caregiver (default)
+    auto_grant_on:
+      - caregiver_identifier_email
+    permissions:
+      - families.all.restrictedread
+      - mealplan.view
 `
 	cfg, err := roles.LoadFromBytes([]byte(customYAML))
 	if err != nil {
@@ -828,6 +837,109 @@ roles:
 	// Verify fees.self.read is DENIED because of erzieher deny_permissions!
 	if recordedUser.HasPermission("fees.self.read") {
 		t.Errorf("expected fees.self.read to be DENIED for erzieher, but user has it in effective_permissions: %v", recordedUser.EffectivePermissions)
+	}
+}
+
+func TestAuthenticator_EmployeeIdentifierEmail(t *testing.T) {
+	pool := getTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	caregiverEmail := fmt.Sprintf("caregiver-%s@example.com", uuid.New().String()[:8])
+	cookEmail := fmt.Sprintf("cook-%s@example.com", uuid.New().String()[:8])
+
+	cfg := roles.LoadDefault()
+	appStore := store.NewStore(pool)
+	authenticator := NewAuthenticator("test-client", false, appStore, cfg)
+	authenticator.ProxySharedSecret = "secret123"
+
+	// Insert caregiver employee with identifier email
+	empID := uuid.New()
+	emailsJSON := fmt.Sprintf(`[{"value":"%s","identifier_email":true,"address_list":true}]`, caregiverEmail)
+	_, err := pool.Exec(ctx, `
+		INSERT INTO employees (id, first_name, last_name, employee_type, emails, phones, address, is_kinderschutzbeauftragter)
+		VALUES ($1, 'Care', 'Giver', 'caregiver', $2::jsonb, '[]'::jsonb, 'Street 1', false)
+	`, empID, emailsJSON)
+	if err != nil {
+		t.Fatalf("failed to insert employee: %v", err)
+	}
+
+	// Insert cook employee with identifier email
+	cookID := uuid.New()
+	cookEmailsJSON := fmt.Sprintf(`[{"value":"%s","identifier_email":true,"address_list":true}]`, cookEmail)
+	_, err = pool.Exec(ctx, `
+		INSERT INTO employees (id, first_name, last_name, employee_type, emails, phones, address, is_kinderschutzbeauftragter)
+		VALUES ($1, 'Cookie', 'Monster', 'cook', $2::jsonb, '[]'::jsonb, 'Street 2', false)
+	`, cookID, cookEmailsJSON)
+	if err != nil {
+		t.Fatalf("failed to insert cook: %v", err)
+	}
+
+	var recordedUser *models.UserWithPermissions
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recordedUser = GetUser(r.Context())
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := authenticator.Middleware(next)
+
+	// 1. Request as caregiver identifier email -> 200 OK, caregiver_default role & permissions
+	req := httptest.NewRequest("GET", "/api/families/overview", nil)
+	req.Header.Set("X-Proxy-Secret", "secret123")
+	req.Header.Set("X-Forwarded-Email", caregiverEmail)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for caregiver identifier email, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	if recordedUser == nil {
+		t.Fatal("expected recordedUser in context, got nil")
+	}
+	foundRole := false
+	for _, r := range recordedUser.Roles {
+		if r == "caregiver_default" {
+			foundRole = true
+			break
+		}
+	}
+	if !foundRole {
+		t.Errorf("expected caregiver_default role, got roles: %v", recordedUser.Roles)
+	}
+	if !recordedUser.HasPermission("families.all.restrictedread") {
+		t.Error("expected caregiver to have families.all.restrictedread")
+	}
+	if !recordedUser.HasPermission("mealplan.view") {
+		t.Error("expected caregiver to have mealplan.view")
+	}
+	if recordedUser.HasPermission("fees.self.read") {
+		t.Error("caregiver should not have fees.self.read")
+	}
+
+	// 2. Simulate caregiver identifier email
+	simUser, err := authenticator.ResolveSimulatedUser(ctx, models.SimulationConfig{
+		Active:    true,
+		Mode:      "user",
+		UserEmail: caregiverEmail,
+	})
+	if err != nil {
+		t.Fatalf("failed to resolve simulated caregiver: %v", err)
+	}
+	if simUser == nil {
+		t.Fatal("expected simulated user, got nil")
+	}
+	foundRole = false
+	for _, r := range simUser.Roles {
+		if r == "caregiver_default" {
+			foundRole = true
+			break
+		}
+	}
+	if !foundRole {
+		t.Errorf("expected caregiver_default in simulated roles, got %v", simUser.Roles)
+	}
+	if !simUser.HasPermission("mealplan.view") {
+		t.Error("expected simulated caregiver to have mealplan.view")
 	}
 }
 

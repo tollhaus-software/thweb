@@ -19,7 +19,6 @@ import (
 	"github.com/pavolmarko/thweb-backend/internal/crypto"
 	"github.com/pavolmarko/thweb-backend/internal/kioskcert"
 	"github.com/pavolmarko/thweb-backend/internal/models"
-	"github.com/pavolmarko/thweb-backend/internal/roles"
 	"github.com/pavolmarko/thweb-backend/internal/store"
 )
 
@@ -99,6 +98,12 @@ func (s *Server) HandleGetSimulationOptions(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	empIdentEmails, err := s.Store.ListEmployeeIdentifyingEmails(r.Context())
+	if err != nil {
+		httpErrorLog(w, r, "Failed to list employee identifying emails", http.StatusInternalServerError, err)
+		return
+	}
+
 	candidatesMap := make(map[string]*models.SimulationCandidate)
 
 	for _, u := range users {
@@ -111,18 +116,17 @@ func (s *Server) HandleGetSimulationOptions(w http.ResponseWriter, r *http.Reque
 			EffectivePermissions: u.EffectivePermissions,
 		}
 
+		var famIDPtr *uuid.UUID
 		if famID, ok := identEmails[norm]; ok {
-			cand.Source = "both"
+			famIDPtr = &famID
 			cand.FamilyID = &famID
-			identRoles, implicitPerms := s.Authenticator.RolesConfig.RolesForTrigger(roles.AutoGrantIdentifierEmail)
-			if len(implicitPerms) == 0 {
-				implicitPerms = []string{
-					"families.all.restrictedread",
-					"fees.self.read",
-					"families.self.selfservice",
-					"memberships.self.read",
-				}
-			}
+		}
+		empTypes := empIdentEmails[norm]
+		triggers := s.Authenticator.TriggersForIdentifierEmail(famIDPtr, empTypes)
+
+		if len(triggers) > 0 {
+			cand.Source = "both"
+			identRoles, implicitPerms := s.Authenticator.RolesAndPermissionsForTriggers(triggers)
 			for _, ir := range identRoles {
 				found := false
 				for _, r := range cand.Roles {
@@ -163,28 +167,31 @@ func (s *Server) HandleGetSimulationOptions(w http.ResponseWriter, r *http.Reque
 		candidatesMap[norm] = cand
 	}
 
-	for email, famID := range identEmails {
-		norm := models.NormalizeEmail(email)
+	// Collect all unique identifier emails (parent and employee)
+	allIdentEmails := make(map[string]bool)
+	for email := range identEmails {
+		allIdentEmails[models.NormalizeEmail(email)] = true
+	}
+	for email := range empIdentEmails {
+		allIdentEmails[models.NormalizeEmail(email)] = true
+	}
+
+	for norm := range allIdentEmails {
 		if _, exists := candidatesMap[norm]; !exists {
-			identRoles, identPerms := s.Authenticator.RolesConfig.RolesForTrigger(roles.AutoGrantIdentifierEmail)
-			if len(identRoles) == 0 {
-				identRoles = []string{"restricted"}
+			var famIDPtr *uuid.UUID
+			if fid, ok := identEmails[norm]; ok {
+				famIDPtr = &fid
 			}
-			if len(identPerms) == 0 {
-				identPerms = []string{
-					"families.all.restrictedread",
-					"fees.self.read",
-					"families.self.selfservice",
-					"memberships.self.read",
-				}
-			}
-			fid := famID
+			empTypes := empIdentEmails[norm]
+			triggers := s.Authenticator.TriggersForIdentifierEmail(famIDPtr, empTypes)
+			identRoles, identPerms := s.Authenticator.RolesAndPermissionsForTriggers(triggers)
+
 			uModel := &models.UserWithPermissions{
 				Email:                norm,
 				Roles:                identRoles,
 				Permissions:          identPerms,
 				EffectivePermissions: identPerms,
-				FamilyID:             &fid,
+				FamilyID:             famIDPtr,
 			}
 			uModel.EnsureImpliedPermissions()
 			if s.Authenticator.RolesConfig != nil && len(uModel.Roles) > 0 {
@@ -197,7 +204,7 @@ func (s *Server) HandleGetSimulationOptions(w http.ResponseWriter, r *http.Reque
 				Roles:                uModel.Roles,
 				Permissions:          uModel.Permissions,
 				EffectivePermissions: uModel.EffectivePermissions,
-				FamilyID:             &fid,
+				FamilyID:             famIDPtr,
 			}
 		}
 	}
