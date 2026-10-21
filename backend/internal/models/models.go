@@ -253,21 +253,58 @@ type Role struct {
 }
 
 type Family struct {
-	ID        uuid.UUID `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	Parents   []Parent  `json:"parents,omitempty"`
-	Children  []Child   `json:"children,omitempty"`
+	ID         uuid.UUID `json:"id"`
+	CreatedAt  time.Time `json:"created_at"`
+	FamilyName string    `json:"family_name,omitempty"`
+	Parents    []Parent  `json:"parents,omitempty"`
+	Children   []Child   `json:"children,omitempty"`
+}
+
+// FormatFamilyName formats parents' surnames into a standardized family name:
+// unique non-empty surnames are sorted alphabetically and joined with " / ".
+// If no surnames exist, fallback is returned (defaulting to "Familie").
+func FormatFamilyName(parents []Parent, fallback ...string) string {
+	defaultFallback := "Familie"
+	if len(fallback) > 0 && fallback[0] != "" {
+		defaultFallback = fallback[0]
+	}
+
+	surnamesMap := make(map[string]struct{})
+	for _, p := range parents {
+		trimmed := strings.TrimSpace(p.LastName)
+		if trimmed != "" {
+			surnamesMap[trimmed] = struct{}{}
+		}
+	}
+	if len(surnamesMap) == 0 {
+		return defaultFallback
+	}
+
+	surnames := make([]string, 0, len(surnamesMap))
+	for s := range surnamesMap {
+		surnames = append(surnames, s)
+	}
+
+	sort.Slice(surnames, func(i, j int) bool {
+		lowI, lowJ := strings.ToLower(surnames[i]), strings.ToLower(surnames[j])
+		if lowI != lowJ {
+			return lowI < lowJ
+		}
+		return surnames[i] < surnames[j]
+	})
+
+	return strings.Join(surnames, " / ")
+}
+
+func (f Family) GetFamilyName() string {
+	if f.FamilyName != "" {
+		return f.FamilyName
+	}
+	return FormatFamilyName(f.Parents)
 }
 
 func (f Family) DisplayName() string {
-	if len(f.Parents) == 0 {
-		return "Familie (ohne Eltern)"
-	}
-	names := make([]string, len(f.Parents))
-	for i, p := range f.Parents {
-		names[i] = p.FirstName + " " + p.LastName
-	}
-	return "Familie " + strings.Join(names, " & ")
+	return f.GetFamilyName()
 }
 
 type MultiValueEntry struct {
