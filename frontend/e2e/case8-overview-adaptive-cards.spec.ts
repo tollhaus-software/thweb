@@ -91,8 +91,8 @@ test.describe('Test Case 8: Adaptive Card Layout for familiesOverview Tab', () =
     await expect(overviewTab).toHaveClass(/active/);
 
     // Verify undo/redo buttons are NOT present on familiesOverview tab
-    await expect(page.getByTitle('Undo (Ctrl+Z)')).not.toBeVisible();
-    await expect(page.getByTitle('Redo (Ctrl+Y)')).not.toBeVisible();
+    await expect(page.getByTitle('Undo')).not.toBeVisible();
+    await expect(page.getByTitle('Redo')).not.toBeVisible();
 
     // Check table container does not scroll horizontally
     const tableContainer = page.locator('.overview-table-wrapper .table-container');
