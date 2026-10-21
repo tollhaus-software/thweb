@@ -2894,22 +2894,7 @@ const Dashboard: React.FC = () => {
       .catch((err) => console.error(err));
   }, [canReadEmployees, getAuthHeaders]);
 
-  React.useEffect(() => {
-    if (canReadFamiliesAll) {
-      fetchFamilies();
-      if (canReadMembers) fetchMembers();
-      if (canReadEmployees) fetchEmployees();
-    }
-    if (canReadOverview) {
-      fetchOverviewFamilies();
-    }
-    if (canReadMembers) {
-      fetchMembers();
-    }
-    if (canReadEmployees) {
-      fetchEmployees();
-    }
-  }, [canReadFamiliesAll, canReadOverview, canReadMembers, canReadEmployees, fetchFamilies, fetchOverviewFamilies, fetchMembers, fetchEmployees]);
+
 
   const applyKmsToken = React.useCallback(async (tokenToApply: string) => {
     try {
@@ -2998,17 +2983,75 @@ const Dashboard: React.FC = () => {
       .finally(() => setAuditLoading(false));
   }, [getAuthHeaders]);
 
+  // Fetch data on demand based on the active tab
   React.useEffect(() => {
-    if (activeTab === 'audit') {
-      if (canReadAudit) {
-        fetchAuditLogs();
-      } else {
-        setActiveTab('parents');
-        localStorage.setItem('thweb_active_tab', 'parents');
-        window.location.hash = 'parents';
-      }
+    switch (activeTab) {
+      case 'familiesOverview':
+        if (canReadOverview) {
+          fetchOverviewFamilies();
+        }
+        break;
+      case 'families':
+      case 'parents':
+      case 'children':
+      case 'hygieneBelehrung':
+        if (canReadFamiliesAll) {
+          fetchFamilies();
+        }
+        break;
+      case 'members':
+        if (canReadMembers) {
+          fetchMembers();
+        }
+        break;
+      case 'employees':
+        if (canReadEmployees) {
+          fetchEmployees();
+        }
+        break;
+      case 'childcareFees':
+        if (canReadFamiliesAll) {
+          fetchFamilies();
+        } else if (canReadOverview) {
+          fetchOverviewFamilies();
+        }
+        break;
+      case 'audit':
+        if (canReadAudit) {
+          fetchAuditLogs();
+          if (families.length === 0 && overviewFamilies.length === 0) {
+            if (canReadFamiliesAll) {
+              fetchFamilies();
+            } else if (canReadOverview) {
+              fetchOverviewFamilies();
+            }
+          }
+        } else {
+          const fallback = canReadFamiliesAll ? 'families' : canReadOverview ? 'familiesOverview' : 'childcareFees';
+          setActiveTab(fallback as any);
+          localStorage.setItem('thweb_active_tab', fallback);
+          window.location.hash = fallback;
+        }
+        break;
+      default:
+        // 'admin', 'mealPlan', 'kiosk', 'dashboard' fetch on demand in their own components
+        break;
     }
-  }, [activeTab, fetchAuditLogs, canReadAudit]);
+  }, [
+    activeTab,
+    canReadOverview,
+    canReadFamiliesAll,
+    canReadMembers,
+    canReadEmployees,
+    canReadAudit,
+    fetchOverviewFamilies,
+    fetchFamilies,
+    fetchMembers,
+    fetchEmployees,
+    fetchAuditLogs,
+    families.length,
+    overviewFamilies.length,
+  ]);
 
   // Scroll to and highlight targeted row
   React.useEffect(() => {
@@ -3027,20 +3070,20 @@ const Dashboard: React.FC = () => {
         el.classList.remove('highlighted-row');
         void el.offsetWidth;
         el.classList.add('highlighted-row');
-      } else if (attempts >= 25) {
+      } else if (attempts >= 75) {
         clearInterval(interval);
       }
     }, 40);
 
     const clearTimer = setTimeout(() => {
       setHighlightTarget(null);
-    }, 1800);
+    }, 3000);
 
     return () => {
       clearInterval(interval);
       clearTimeout(clearTimer);
     };
-  }, [activeTab, highlightTarget]);
+  }, [activeTab, highlightTarget, families, overviewFamilies, members, employees]);
 
   React.useEffect(() => {
     const handleHashChange = () => {
@@ -3124,19 +3167,22 @@ const Dashboard: React.FC = () => {
       message.type === 'FAMILY_UPDATED' || 
       message.type === 'CHILD_UPDATED'
     ) {
-      if (canReadFamiliesAll) {
-        fetchFamilies();
+      if (activeTab === 'familiesOverview') {
+        if (canReadOverview) fetchOverviewFamilies();
+      } else if (
+        activeTab === 'families' ||
+        activeTab === 'parents' ||
+        activeTab === 'children' ||
+        activeTab === 'hygieneBelehrung'
+      ) {
+        if (canReadFamiliesAll) fetchFamilies();
+      } else if (activeTab === 'members') {
         if (canReadMembers) fetchMembers();
-        if (canReadEmployees) fetchEmployees();
-      }
-      if (canReadOverview) {
-        fetchOverviewFamilies();
-      }
-      if (canReadMembers) {
-        fetchMembers();
-      }
-      if (canReadEmployees) {
-        fetchEmployees();
+      } else if (activeTab === 'childcareFees') {
+        if (canReadFamiliesAll) fetchFamilies();
+        else if (canReadOverview) fetchOverviewFamilies();
+      } else if (activeTab === 'audit') {
+        if (canReadAudit) fetchAuditLogs();
       }
     }
     if (
@@ -3144,11 +3190,23 @@ const Dashboard: React.FC = () => {
       message.type === 'EMPLOYEE_UPDATED' ||
       message.type === 'EMPLOYEE_DELETED'
     ) {
-      if (canReadEmployees) {
+      if (activeTab === 'employees' && canReadEmployees) {
         fetchEmployees();
       }
     }
-  }, [fetchFamilies, fetchOverviewFamilies, fetchMembers, fetchEmployees, canReadFamiliesAll, canReadOverview, canReadMembers, canReadEmployees]));
+  }, [
+    activeTab,
+    fetchFamilies,
+    fetchOverviewFamilies,
+    fetchMembers,
+    fetchEmployees,
+    fetchAuditLogs,
+    canReadFamiliesAll,
+    canReadOverview,
+    canReadMembers,
+    canReadEmployees,
+    canReadAudit,
+  ]));
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -3228,8 +3286,9 @@ const Dashboard: React.FC = () => {
             beforeParents: updatedParents,
           }
         });
-        fetchFamilies();
+        if (canReadFamiliesAll) fetchFamilies();
     if (canReadMembers) fetchMembers();
+    if (canReadOverview) fetchOverviewFamilies();
         setAddParentOpen(false);
         setNewParentTollhausEmail('');
         setIsTollhausEmailDirty(false);
@@ -3284,8 +3343,9 @@ const Dashboard: React.FC = () => {
             child: newChild,
           }
         });
-        fetchFamilies();
+        if (canReadFamiliesAll) fetchFamilies();
     if (canReadMembers) fetchMembers();
+    if (canReadOverview) fetchOverviewFamilies();
         setAddChildOpen(false);
       })
       .catch((err) => alert(err.message));
@@ -3352,8 +3412,9 @@ const Dashboard: React.FC = () => {
         membership: created,
       },
     });
-    fetchFamilies();
+    if (canReadFamiliesAll) fetchFamilies();
     if (canReadMembers) fetchMembers();
+    if (canReadOverview) fetchOverviewFamilies();
     if (targetParentMemberships && targetParentMemberships.id === parentId) {
       const existing = targetParentMemberships.memberships || [];
       const updatedMemberships = [...existing, created].sort(
@@ -3411,8 +3472,9 @@ const Dashboard: React.FC = () => {
         },
       });
     }
-    fetchFamilies();
+    if (canReadFamiliesAll) fetchFamilies();
     if (canReadMembers) fetchMembers();
+    if (canReadOverview) fetchOverviewFamilies();
     if (targetParentMemberships) {
       const existing = targetParentMemberships.memberships || [];
       const updatedMemberships = existing
@@ -3434,8 +3496,9 @@ const Dashboard: React.FC = () => {
       throw new Error(`Failed to delete membership: ${err || res.statusText}`);
     }
     purgeActionsForEntity(membershipId);
-    fetchFamilies();
+    if (canReadFamiliesAll) fetchFamilies();
     if (canReadMembers) fetchMembers();
+    if (canReadOverview) fetchOverviewFamilies();
     const updatedMemberships = (targetParentMemberships.memberships || []).filter((m) => m.id !== membershipId);
     setTargetParentMemberships({ ...targetParentMemberships, memberships: updatedMemberships });
   };
@@ -3582,8 +3645,9 @@ const Dashboard: React.FC = () => {
         change: created,
       }
     });
-    fetchFamilies();
+    if (canReadFamiliesAll) fetchFamilies();
     if (canReadMembers) fetchMembers();
+    if (canReadOverview) fetchOverviewFamilies();
     if (targetChildGroupChanges && targetChildGroupChanges.id === childId) {
       const existing = targetChildGroupChanges.group_changes || [];
       const filtered = existing.filter((c) => c.change_date !== created.change_date);
@@ -3604,8 +3668,9 @@ const Dashboard: React.FC = () => {
       throw new Error(`Failed to delete group change: ${err || res.statusText}`);
     }
     purgeActionsForEntity(changeId);
-    fetchFamilies();
+    if (canReadFamiliesAll) fetchFamilies();
     if (canReadMembers) fetchMembers();
+    if (canReadOverview) fetchOverviewFamilies();
     if (targetChildGroupChanges) {
       const updatedChanges = (targetChildGroupChanges.group_changes || []).filter((c) => c.id !== changeId);
       setTargetChildGroupChanges({ ...targetChildGroupChanges, group_changes: updatedChanges });
@@ -3648,8 +3713,9 @@ const Dashboard: React.FC = () => {
         },
       });
     }
-    fetchFamilies();
+    if (canReadFamiliesAll) fetchFamilies();
     if (canReadMembers) fetchMembers();
+    if (canReadOverview) fetchOverviewFamilies();
     if (targetChildGroupChanges) {
       const existing = targetChildGroupChanges.group_changes || [];
       const updatedChanges = existing
@@ -3928,8 +3994,9 @@ const Dashboard: React.FC = () => {
             parents: createdFamily.parents || [],
           }
         });
-        fetchFamilies();
+        if (canReadFamiliesAll) fetchFamilies();
     if (canReadMembers) fetchMembers();
+    if (canReadOverview) fetchOverviewFamilies();
         setAddFamilyOpen(false);
       })
       .catch((err) => alert(err.message));
@@ -4022,8 +4089,9 @@ const Dashboard: React.FC = () => {
             afterParents: stripParentsVaccination(updatedParents),
           }
         });
-        fetchFamilies();
+        if (canReadFamiliesAll) fetchFamilies();
     if (canReadMembers) fetchMembers();
+    if (canReadOverview) fetchOverviewFamilies();
       })
       .catch((err) => alert(err.message));
   };
@@ -4091,8 +4159,9 @@ const Dashboard: React.FC = () => {
           .then((res) => {
             if (!res.ok) throw new Error('Failed to delete parent');
             purgeActionsForEntity(parentId);
-            fetchFamilies();
+            if (canReadFamiliesAll) fetchFamilies();
     if (canReadMembers) fetchMembers();
+    if (canReadOverview) fetchOverviewFamilies();
             setConfirmDelete(prev => ({ ...prev, isOpen: false }));
           })
           .catch((err) => {
@@ -4120,8 +4189,9 @@ const Dashboard: React.FC = () => {
           .then((res) => {
             if (!res.ok) throw new Error('Failed to delete child');
             purgeActionsForEntity(childId);
-            fetchFamilies();
+            if (canReadFamiliesAll) fetchFamilies();
     if (canReadMembers) fetchMembers();
+    if (canReadOverview) fetchOverviewFamilies();
             setConfirmDelete(prev => ({ ...prev, isOpen: false }));
           })
           .catch((err) => {
