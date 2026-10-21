@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/pavolmarko/thweb-backend/internal/auth"
 	"github.com/pavolmarko/thweb-backend/internal/crypto"
 	"github.com/pavolmarko/thweb-backend/internal/kioskcert"
@@ -1039,6 +1040,10 @@ func (s *Server) HandleDeleteChildGroupChange(w http.ResponseWriter, r *http.Req
 	}
 
 	if err := s.Store.DeleteChildGroupChange(r.Context(), user.ID, changeID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) || strings.Contains(err.Error(), "no rows in result set") || strings.Contains(err.Error(), "not found") {
+			httpErrorLog(w, r, "Child group change not found", http.StatusNotFound, err)
+			return
+		}
 		httpErrorLog(w, r, "Failed to delete child group change", http.StatusInternalServerError, err)
 		return
 	}
@@ -1077,6 +1082,10 @@ func (s *Server) HandleUpdateChildGroupChange(w http.ResponseWriter, r *http.Req
 
 	updated, err := s.Store.UpdateChildGroupChange(r.Context(), user.ID, changeID, changeDate, req.TargetGroup)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) || strings.Contains(err.Error(), "no rows in result set") || strings.Contains(err.Error(), "not found") {
+			httpErrorLog(w, r, "Child group change not found", http.StatusNotFound, err)
+			return
+		}
 		httpErrorLog(w, r, "Failed to update child group change", http.StatusInternalServerError, err)
 		return
 	}
@@ -1458,6 +1467,107 @@ func (s *Server) HandleIssueKioskCert(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Length", strconv.Itoa(len(p12Bytes)))
 	w.WriteHeader(http.StatusOK)
 	w.Write(p12Bytes)
+}
+
+func (s *Server) HandleListEmployees(w http.ResponseWriter, r *http.Request) {
+	employees, err := s.Store.ListEmployees(r.Context())
+	if err != nil {
+		httpErrorLog(w, r, "Failed to list employees", http.StatusInternalServerError, err)
+		return
+	}
+	if employees == nil {
+		employees = []models.Employee{}
+	}
+	jsonResponse(w, employees)
+}
+
+func (s *Server) HandleCreateEmployee(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	var emp models.Employee
+	if err := json.NewDecoder(r.Body).Decode(&emp); err != nil {
+		httpErrorLog(w, r, "Invalid request body JSON", http.StatusBadRequest, err)
+		return
+	}
+
+	created, err := s.Store.CreateEmployee(r.Context(), user.ID, emp)
+	if err != nil {
+		httpErrorLog(w, r, err.Error(), http.StatusBadRequest, err)
+		return
+	}
+
+	if s.Hub != nil {
+		s.Hub.Broadcast(WSMessage{
+			Type:    "EMPLOYEE_CREATED",
+			Payload: map[string]string{"id": created.ID.String()},
+		})
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	jsonResponse(w, created)
+}
+
+func (s *Server) HandleUpdateEmployee(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	idStr := chi.URLParam(r, "id")
+	empID, err := uuid.Parse(idStr)
+	if err != nil {
+		httpErrorLog(w, r, "Invalid employee ID in URL", http.StatusBadRequest, err)
+		return
+	}
+
+	var emp models.Employee
+	if err := json.NewDecoder(r.Body).Decode(&emp); err != nil {
+		httpErrorLog(w, r, "Invalid request body JSON", http.StatusBadRequest, err)
+		return
+	}
+	emp.ID = empID
+
+	updated, err := s.Store.UpdateEmployee(r.Context(), user.ID, emp)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			httpErrorLog(w, r, err.Error(), http.StatusNotFound, err)
+			return
+		}
+		httpErrorLog(w, r, err.Error(), http.StatusBadRequest, err)
+		return
+	}
+
+	if s.Hub != nil {
+		s.Hub.Broadcast(WSMessage{
+			Type:    "EMPLOYEE_UPDATED",
+			Payload: map[string]string{"id": updated.ID.String()},
+		})
+	}
+
+	jsonResponse(w, updated)
+}
+
+func (s *Server) HandleDeleteEmployee(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	idStr := chi.URLParam(r, "id")
+	empID, err := uuid.Parse(idStr)
+	if err != nil {
+		httpErrorLog(w, r, "Invalid employee ID in URL", http.StatusBadRequest, err)
+		return
+	}
+
+	if err := s.Store.DeleteEmployee(r.Context(), user.ID, empID); err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			httpErrorLog(w, r, err.Error(), http.StatusNotFound, err)
+			return
+		}
+		httpErrorLog(w, r, "Failed to delete employee", http.StatusInternalServerError, err)
+		return
+	}
+
+	if s.Hub != nil {
+		s.Hub.Broadcast(WSMessage{
+			Type:    "EMPLOYEE_DELETED",
+			Payload: map[string]string{"id": empID.String()},
+		})
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) HandleTestReset(w http.ResponseWriter, r *http.Request) {

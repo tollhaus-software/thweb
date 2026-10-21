@@ -10,6 +10,7 @@ import EasyEdit, { Types } from './components/InlineEdit';
 import { Pencil, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, ArrowUpRight, X, Clock, AlertCircle, ChevronLeft, ChevronRight, Plus, ArrowUpDown, Check, Eye } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { MultiValueListEditor, type MultiValueFlagConfig, type MultiValueEntry, type MultiValueItem, getEntryValue, isFlagActive } from './components/Table/MultiValueListEditor';
+import { MultiValueCell } from './components/Table/MultiValueCell';
 import { NotesEditor } from './components/Table/NotesEditor';
 import { AddressEditor } from './components/Table/AddressEditor';
 import { GroupChangesPopover } from './components/Table/GroupChangesPopover';
@@ -78,6 +79,19 @@ interface MemberRow {
   first_became_member_date: string;
   last_type_change_date?: string | null;
   memberships: THMembership[];
+}
+
+interface Employee {
+  id: string;
+  first_name: string;
+  last_name: string;
+  employee_type: 'caregiver' | 'cook' | 'bufdi';
+  emails?: MultiValueEntry[];
+  phones?: MultiValueEntry[];
+  address?: string;
+  is_kinderschutzbeauftragter?: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 interface ChildGroupChange {
@@ -666,6 +680,7 @@ interface ParentMultiValueCellProps {
   placeholder: string;
   isActive: boolean;
   onOpenManage: (parent: Parent, field: 'emails' | 'phones', anchor: HTMLElement | string) => void;
+  canEdit?: boolean;
 }
 
 const ParentMultiValueCell: React.FC<ParentMultiValueCellProps> = ({
@@ -674,116 +689,18 @@ const ParentMultiValueCell: React.FC<ParentMultiValueCellProps> = ({
   placeholder,
   isActive,
   onOpenManage,
-}) => {
-  const cellId = `cell-${field}-${parent.id}`;
-  const values = parent[field] || [];
-
-  return (
-    <div
-      id={cellId}
-      className={`multi-value-cell-wrapper ${field}-cell-wrapper`}
-      onDoubleClick={(e) => {
-        e.stopPropagation();
-        window.getSelection()?.removeAllRanges();
-        const cellEl = document.getElementById(cellId) || e.currentTarget;
-        onOpenManage(parent, field, cellEl);
-      }}
-      style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        width: '100%',
-        minHeight: '28px',
-        borderRadius: '4px',
-        padding: '2px 4px',
-        backgroundColor: isActive ? 'var(--accent-bg)' : 'transparent',
-        transition: 'background-color 0.15s ease-in-out',
-        gap: '0.25rem',
-      }}
-      title={placeholder}
-    >
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px', textAlign: 'left' }}>
-        {values.length > 0 ? (
-          values.map((v, i) => {
-            const val = getEntryValue(v);
-            const isAddressList = isFlagActive(v, 'address_list', true);
-            const isIdentifier = isFlagActive(v, 'identifier_email', false);
-            return (
-              <div
-                key={i}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '8px',
-                  width: '100%',
-                  fontSize: '0.875rem',
-                  color: 'var(--text-h)',
-                }}
-              >
-                <span
-                  style={{
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    flex: 1,
-                    minWidth: 0,
-                  }}
-                >
-                  {val}
-                </span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0, marginLeft: 'auto' }}>
-                  {field === 'emails' && (
-                    <span
-                      className="identifier-email-indicator"
-                      style={{
-                        fontSize: '0.8rem',
-                        lineHeight: 1,
-                        opacity: isIdentifier ? 1 : 0.25,
-                        filter: isIdentifier ? 'none' : 'grayscale(100%)',
-                      }}
-                      title={isIdentifier ? t('identifierEmailActive') || 'Als Identifikator-E-Mail festgelegt' : t('identifierEmailInactive') || 'Nicht als Identifikator-E-Mail festgelegt'}
-                    >
-                      🆔
-                    </span>
-                  )}
-                  <span
-                    className="address-list-indicator"
-                    style={{
-                      fontSize: '0.8rem',
-                      lineHeight: 1,
-                      opacity: isAddressList ? 1 : 0.25,
-                      filter: isAddressList ? 'none' : 'grayscale(100%)',
-                    }}
-                    title={isAddressList ? t('addressListIncluded') || 'In Adressliste aufnehmen' : t('addressListExcluded') || 'Nicht in Adressliste aufnehmen'}
-                  >
-                    📋
-                  </span>
-                </div>
-              </div>
-            );
-          })
-        ) : (
-          <span style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.875rem' }}>
-            {placeholder}
-          </span>
-        )}
-      </div>
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          const cellEl = document.getElementById(cellId) || e.currentTarget;
-          onOpenManage(parent, field, cellEl);
-        }}
-        className="cell-edit-pencil-btn"
-        title={placeholder}
-      >
-        <Pencil size={13} />
-      </button>
-    </div>
-  );
-};
+  canEdit = true,
+}) => (
+  <MultiValueCell
+    id={parent.id}
+    field={field}
+    values={parent[field] || []}
+    placeholder={placeholder}
+    isActive={isActive}
+    onOpenManage={(_, anchor) => onOpenManage(parent, field, anchor)}
+    canEdit={canEdit}
+  />
+);
 
 interface AuditLog {
   id: string;
@@ -1373,6 +1290,8 @@ const ALL_AVAILABLE_PERMISSIONS = [
   'memberships.all.write',
   'memberships.all.read',
   'memberships.self.read',
+  'employees.all.write',
+  'employees.all.read',
   'mealplan.view',
   'audit.view',
   'users.all.manage',
@@ -1952,8 +1871,11 @@ const Dashboard: React.FC = () => {
   const canReadMembers = hasPermission('memberships.all.read');
   const canWriteMemberships = hasPermission('memberships.all.write');
   const canReadOwnMemberships = hasPermission('memberships.self.read');
+  const canReadEmployees = hasPermission('employees.all.read');
+  const canWriteEmployees = hasPermission('employees.all.write');
 
   const [families, setFamilies] = React.useState<Family[]>([]);
+  const [employees, setEmployees] = React.useState<Employee[]>([]);
   const [overviewFamilies, setOverviewFamilies] = React.useState<OverviewFamily[]>([]);
   const [overviewGroupBy, setOverviewGroupBy] = React.useState<'family' | 'group'>('family');
   const [expandedGroupParents, setExpandedGroupParents] = React.useState<Record<string, boolean>>({});
@@ -2001,7 +1923,7 @@ const Dashboard: React.FC = () => {
 
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [activeTab, setActiveTab] = React.useState<
-    'familiesOverview' | 'families' | 'parents' | 'children' | 'members' | 'childcareFees' | 'hygieneBelehrung' | 'mealPlan' | 'audit' | 'admin' | 'kiosk' | 'dashboard'
+    'familiesOverview' | 'families' | 'parents' | 'children' | 'members' | 'employees' | 'childcareFees' | 'hygieneBelehrung' | 'mealPlan' | 'audit' | 'admin' | 'kiosk' | 'dashboard'
   >(() => {
     const rawHash = window.location.hash.replace('#', '');
     const hash = rawHash.split('?')[0];
@@ -2012,6 +1934,7 @@ const Dashboard: React.FC = () => {
       (hash === 'parents' && canReadFamiliesAll) ||
       (hash === 'children' && canReadFamiliesAll) ||
       (hash === 'members' && canReadMembers) ||
+      (hash === 'employees' && canReadEmployees) ||
       (hash === 'childcareFees' && canReadFees) ||
       (hash === 'hygieneBelehrung' && (canReadFamiliesAll || hasPermission('hygiene.all.write'))) ||
       (hash === 'mealPlan' && canViewMealPlan) ||
@@ -2030,6 +1953,7 @@ const Dashboard: React.FC = () => {
       (saved === 'parents' && canReadFamiliesAll) ||
       (saved === 'children' && canReadFamiliesAll) ||
       (saved === 'members' && canReadMembers) ||
+      (saved === 'employees' && canReadEmployees) ||
       (saved === 'childcareFees' && canReadFees) ||
       (saved === 'hygieneBelehrung' && (canReadFamiliesAll || hasPermission('hygiene.all.write'))) ||
       (saved === 'mealPlan' && canViewMealPlan) ||
@@ -2051,6 +1975,9 @@ const Dashboard: React.FC = () => {
     }
     if (canReadMembers) {
       return 'members';
+    }
+    if (canReadEmployees) {
+      return 'employees';
     }
     return 'familiesOverview';
   });
@@ -2076,6 +2003,14 @@ const Dashboard: React.FC = () => {
       } else if (canReadFamiliesAll) {
         setActiveTab('families');
       }
+    } else if (activeTab === 'employees' && !canReadEmployees) {
+      if (canReadOverview) {
+        setActiveTab('familiesOverview');
+      } else if (canReadFees) {
+        setActiveTab('childcareFees');
+      } else if (canReadFamiliesAll) {
+        setActiveTab('families');
+      }
     } else if (activeTab === 'mealPlan' && !canViewMealPlan) {
       if (canReadOverview) {
         setActiveTab('familiesOverview');
@@ -2085,7 +2020,7 @@ const Dashboard: React.FC = () => {
         setActiveTab('families');
       }
     }
-  }, [activeTab, canReadFamiliesAll, canReadOverview, canReadFees, canReadMembers, canViewMealPlan]);
+  }, [activeTab, canReadFamiliesAll, canReadOverview, canReadFees, canReadMembers, canReadEmployees, canViewMealPlan]);
 
   // Navigation & Highlighting state (Patterns 2 & 3)
   const [highlightTarget, setHighlightTarget] = React.useState<{ id: string; key: number } | null>(null);
@@ -2296,6 +2231,11 @@ const Dashboard: React.FC = () => {
   const [newChildLastName, setNewChildLastName] = React.useState('');
   const [newChildBirthDate, setNewChildBirthDate] = React.useState('');
 
+  const [addEmployeeOpen, setAddEmployeeOpen] = React.useState(false);
+  const [empFirstName, setEmpFirstName] = React.useState('');
+  const [empLastName, setEmpLastName] = React.useState('');
+  const [empType, setEmpType] = React.useState<'caregiver' | 'cook' | 'bufdi'>('caregiver');
+
   // Hygiene Belehrung Event popover states
   const [targetParent, setTargetParent] = React.useState<ParentWithHygiene | null>(null);
   const [hygienePopoverAnchor, setHygienePopoverAnchor] = React.useState<HTMLElement | string | null>(null);
@@ -2310,6 +2250,7 @@ const Dashboard: React.FC = () => {
 
   // MultiValue (Emails/Phones) popover state
   const [targetParentMultiValue, setTargetParentMultiValue] = React.useState<Parent | null>(null);
+  const [targetEmployeeMultiValue, setTargetEmployeeMultiValue] = React.useState<Employee | null>(null);
   const [activeMultiValueField, setActiveMultiValueField] = React.useState<'emails' | 'phones' | null>(null);
   const [multiValuePopoverAnchor, setMultiValuePopoverAnchor] = React.useState<HTMLElement | string | null>(null);
 
@@ -2453,11 +2394,13 @@ const Dashboard: React.FC = () => {
         p.membershipId === entityId ||
         p.eventId === entityId ||
         p.changeId === entityId ||
+        p.employeeId === entityId ||
         p.parent?.id === entityId ||
         p.child?.id === entityId ||
         p.membership?.id === entityId ||
         p.event?.id === entityId ||
         p.change?.id === entityId ||
+        p.employee?.id === entityId ||
         (Array.isArray(p.beforeParents) && p.beforeParents.some((x: any) => x?.id === entityId)) ||
         (Array.isArray(p.afterParents) && p.afterParents.some((x: any) => x?.id === entityId))
       );
@@ -2472,7 +2415,7 @@ const Dashboard: React.FC = () => {
     const { type, payload } = action;
 
     // Switch to target tab if needed
-    const targetTab = payload.tab || (type.includes('CHILD') ? 'children' : 'parents');
+    const targetTab = payload.tab || (type.includes('CHILD') ? 'children' : type.includes('EMPLOYEE') ? 'employees' : 'parents');
     if (targetTab) {
       setActiveTab(targetTab);
       window.location.hash = targetTab;
@@ -2653,13 +2596,47 @@ const Dashboard: React.FC = () => {
             documentation: target.documentation,
           }),
         });
-        if (!res.ok) throw new Error();
+        if (!res.ok && res.status !== 404) throw new Error();
+      }
+      else if (type === 'ADD_EMPLOYEE') {
+        if (isUndo) {
+          const res = await fetch(`/api/employees/${payload.employeeId}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders(),
+          });
+          if (!res.ok && res.status !== 404) throw new Error();
+        } else {
+          const res = await fetch('/api/employees', {
+            method: 'POST',
+            headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(payload.employee),
+          });
+          if (!res.ok) throw new Error();
+          const created = await res.json();
+          payload.employeeId = created.id;
+          payload.employee = created;
+        }
+      }
+      else if (type === 'UPDATE_EMPLOYEE') {
+        const target = isUndo ? payload.before : payload.after;
+        const res = await fetch(`/api/employees/${payload.employeeId}`, {
+          method: 'PUT',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(target),
+        });
+        if (!res.ok && res.status !== 404) throw new Error();
       }
 
       await fetchFamilies();
+      if (canReadMembers) {
+        await fetchMembers();
+      }
+      if (canReadEmployees) {
+        await fetchEmployees();
+      }
 
       // Scroll and highlight target row
-      const targetId = payload.childId || payload.parentId || payload.familyId || payload.child?.id || payload.parent?.id;
+      const targetId = payload.childId || payload.parentId || payload.familyId || payload.employeeId || payload.child?.id || payload.parent?.id || payload.employee?.id;
       if (targetId) {
         setTimeout(() => {
           const el = document.getElementById(`row-${targetId}`);
@@ -2791,10 +2768,29 @@ const Dashboard: React.FC = () => {
       .catch((err) => console.error(err));
   }, [canReadMembers, getAuthHeaders]);
 
+  const fetchEmployees = React.useCallback(() => {
+    if (!canReadEmployees) return Promise.resolve([]);
+    return fetch('/api/employees', {
+      headers: getAuthHeaders(),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch employees');
+        return res.json();
+      })
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setEmployees(data);
+        }
+        return data;
+      })
+      .catch((err) => console.error(err));
+  }, [canReadEmployees, getAuthHeaders]);
+
   React.useEffect(() => {
     if (canReadFamiliesAll) {
       fetchFamilies();
-    if (canReadMembers) fetchMembers();
+      if (canReadMembers) fetchMembers();
+      if (canReadEmployees) fetchEmployees();
     }
     if (canReadOverview) {
       fetchOverviewFamilies();
@@ -2802,7 +2798,10 @@ const Dashboard: React.FC = () => {
     if (canReadMembers) {
       fetchMembers();
     }
-  }, [canReadFamiliesAll, canReadOverview, canReadMembers, fetchFamilies, fetchOverviewFamilies, fetchMembers]);
+    if (canReadEmployees) {
+      fetchEmployees();
+    }
+  }, [canReadFamiliesAll, canReadOverview, canReadMembers, canReadEmployees, fetchFamilies, fetchOverviewFamilies, fetchMembers, fetchEmployees]);
 
   const applyKmsToken = React.useCallback(async (tokenToApply: string) => {
     try {
@@ -2952,6 +2951,7 @@ const Dashboard: React.FC = () => {
         (hash === 'children' && canReadFamiliesAll) ||
         (hash === 'families' && canReadFamiliesAll) ||
         (hash === 'members' && canReadMembers) ||
+        (hash === 'employees' && canReadEmployees) ||
         (hash === 'childcareFees' && canReadFees) ||
         (hash === 'hygieneBelehrung' && (canReadFamiliesAll || hasPermission('hygiene.all.write'))) ||
         (hash === 'mealPlan' && canViewMealPlan) ||
@@ -3008,7 +3008,7 @@ const Dashboard: React.FC = () => {
       handleHashChange();
     }
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [canReadAudit, canManageUsers, canProvisionKiosk, canReadOverview, canReadFamiliesAll, canReadFees, canReadMembers, canViewMealPlan, hasPermission]);
+  }, [canReadAudit, canManageUsers, canProvisionKiosk, canReadOverview, canReadFamiliesAll, canReadFees, canReadMembers, canReadEmployees, canViewMealPlan, hasPermission]);
 
   useRealtime(React.useCallback((message: any) => {
     if (
@@ -3018,7 +3018,8 @@ const Dashboard: React.FC = () => {
     ) {
       if (canReadFamiliesAll) {
         fetchFamilies();
-    if (canReadMembers) fetchMembers();
+        if (canReadMembers) fetchMembers();
+        if (canReadEmployees) fetchEmployees();
       }
       if (canReadOverview) {
         fetchOverviewFamilies();
@@ -3026,8 +3027,20 @@ const Dashboard: React.FC = () => {
       if (canReadMembers) {
         fetchMembers();
       }
+      if (canReadEmployees) {
+        fetchEmployees();
+      }
     }
-  }, [fetchFamilies, fetchOverviewFamilies, fetchMembers, canReadFamiliesAll, canReadOverview, canReadMembers]));
+    if (
+      message.type === 'EMPLOYEE_CREATED' ||
+      message.type === 'EMPLOYEE_UPDATED' ||
+      message.type === 'EMPLOYEE_DELETED'
+    ) {
+      if (canReadEmployees) {
+        fetchEmployees();
+      }
+    }
+  }, [fetchFamilies, fetchOverviewFamilies, fetchMembers, fetchEmployees, canReadFamiliesAll, canReadOverview, canReadMembers, canReadEmployees]));
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -3035,15 +3048,16 @@ const Dashboard: React.FC = () => {
         setAddParentOpen(false);
         setAddFamilyOpen(false);
         setAddChildOpen(false);
+        setAddEmployeeOpen(false);
       }
     };
-    if (addParentOpen || addFamilyOpen || addChildOpen) {
+    if (addParentOpen || addFamilyOpen || addChildOpen || addEmployeeOpen) {
       window.addEventListener('keydown', handleKeyDown);
     }
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [addParentOpen, addFamilyOpen, addChildOpen]);
+  }, [addParentOpen, addFamilyOpen, addChildOpen, addEmployeeOpen]);
 
   const openAddParent = (familyId: string, familyName: string) => {
     setTargetFamily({ id: familyId, name: familyName });
@@ -3181,13 +3195,22 @@ const Dashboard: React.FC = () => {
 
   const openManageMultiValue = (parent: Parent, field: 'emails' | 'phones', anchor?: HTMLElement | string | null) => {
     setTargetParentMultiValue(parent);
+    setTargetEmployeeMultiValue(null);
     setActiveMultiValueField(field);
     setMultiValuePopoverAnchor(anchor || `cell-${field}-${parent.id}`);
+  };
+
+  const openManageEmployeeMultiValue = (employee: Employee, field: 'emails' | 'phones', anchor?: HTMLElement | string | null) => {
+    setTargetEmployeeMultiValue(employee);
+    setTargetParentMultiValue(null);
+    setActiveMultiValueField(field);
+    setMultiValuePopoverAnchor(anchor || `cell-${field}-${employee.id}`);
   };
 
   const closeManageMultiValue = () => {
     setMultiValuePopoverAnchor(null);
     setTargetParentMultiValue(null);
+    setTargetEmployeeMultiValue(null);
     setActiveMultiValueField(null);
   };
 
@@ -3581,10 +3604,21 @@ const Dashboard: React.FC = () => {
     return targetParentMultiValue;
   }, [families, targetParentMultiValue]);
 
+  const activeEmployeeForMultiValue = React.useMemo(() => {
+    if (!targetEmployeeMultiValue) return null;
+    const found = employees.find((e) => e.id === targetEmployeeMultiValue.id);
+    return found || targetEmployeeMultiValue;
+  }, [employees, targetEmployeeMultiValue]);
+
   const activeMultiValueValues = React.useMemo(() => {
-    if (!activeParentForMultiValue || !activeMultiValueField) return [];
-    return activeParentForMultiValue[activeMultiValueField] || [];
-  }, [activeParentForMultiValue, activeMultiValueField]);
+    if (activeParentForMultiValue && activeMultiValueField) {
+      return activeParentForMultiValue[activeMultiValueField] || [];
+    }
+    if (activeEmployeeForMultiValue && activeMultiValueField) {
+      return activeEmployeeForMultiValue[activeMultiValueField] || [];
+    }
+    return [];
+  }, [activeParentForMultiValue, activeEmployeeForMultiValue, activeMultiValueField]);
 
   const activeMultiValueTitle = activeMultiValueField === 'emails' ? t('emailsEdit') : t('phonesEdit');
   const activeMultiValuePlaceholder = activeMultiValueField === 'emails' ? t('addEmail') : t('addPhone');
@@ -3623,6 +3657,9 @@ const Dashboard: React.FC = () => {
 
   const canEditMultiValueItem = React.useCallback(
     (item: MultiValueItem) => {
+      if (activeEmployeeForMultiValue) {
+        return canWriteEmployees;
+      }
       if (activeMultiValueField === 'emails') {
         if (isFlagActive(item, 'identifier_email', false) && !hasPermission('families.all.write')) {
           return false;
@@ -3630,11 +3667,14 @@ const Dashboard: React.FC = () => {
       }
       return true;
     },
-    [activeMultiValueField, hasPermission]
+    [activeEmployeeForMultiValue, canWriteEmployees, activeMultiValueField, hasPermission]
   );
 
   const canDeleteMultiValueItem = React.useCallback(
     (item: MultiValueItem) => {
+      if (activeEmployeeForMultiValue) {
+        return canWriteEmployees;
+      }
       if (activeMultiValueField === 'emails') {
         if (isFlagActive(item, 'identifier_email', false) && !hasPermission('families.all.write')) {
           return false;
@@ -3642,11 +3682,14 @@ const Dashboard: React.FC = () => {
       }
       return true;
     },
-    [activeMultiValueField, hasPermission]
+    [activeEmployeeForMultiValue, canWriteEmployees, activeMultiValueField, hasPermission]
   );
 
   const canToggleMultiValueFlag = React.useCallback(
     (item: MultiValueItem | null, flagKey: string) => {
+      if (activeEmployeeForMultiValue) {
+        return canWriteEmployees;
+      }
       if (activeMultiValueField === 'emails' && flagKey === 'identifier_email') {
         return hasPermission('families.all.write');
       }
@@ -3657,11 +3700,17 @@ const Dashboard: React.FC = () => {
       }
       return true;
     },
-    [activeMultiValueField, hasPermission]
+    [activeEmployeeForMultiValue, canWriteEmployees, activeMultiValueField, hasPermission]
   );
 
   const getMultiValueDisabledReason = React.useCallback(
     (item: MultiValueItem | null, _action: 'edit' | 'delete' | 'toggle', flagKey?: string) => {
+      if (activeEmployeeForMultiValue) {
+        if (!canWriteEmployees) {
+          return t('permissionRequired') || 'employees.all.write permission required';
+        }
+        return undefined;
+      }
       if (activeMultiValueField === 'emails') {
         if (flagKey === 'identifier_email' && !hasPermission('families.all.write')) {
           return t('identifierEmailPermissionRequired') || 'families.all.write permission required';
@@ -3672,12 +3721,15 @@ const Dashboard: React.FC = () => {
       }
       return undefined;
     },
-    [activeMultiValueField, hasPermission]
+    [activeEmployeeForMultiValue, canWriteEmployees, activeMultiValueField, hasPermission]
   );
 
   const handleSaveActiveMultiValue = (newValues: (string | MultiValueEntry)[]) => {
-    if (!activeParentForMultiValue || !activeMultiValueField) return;
-    handleSaveParentField(activeParentForMultiValue, activeMultiValueField, newValues);
+    if (activeParentForMultiValue && activeMultiValueField) {
+      handleSaveParentField(activeParentForMultiValue, activeMultiValueField, newValues);
+    } else if (activeEmployeeForMultiValue && activeMultiValueField) {
+      handleSaveEmployeeField(activeEmployeeForMultiValue, activeMultiValueField, newValues);
+    }
   };
 
   const openAddFamily = () => {
@@ -5482,7 +5534,372 @@ function formatParentsSummary(parents: any[]): string {
     });
   }, [members, globalFilter]);
 
-  const isTableTab = activeTab === 'familiesOverview' || activeTab === 'parents' || activeTab === 'children' || activeTab === 'families' || activeTab === 'hygieneBelehrung' || activeTab === 'members';
+  const filteredEmployees = React.useMemo(() => {
+    if (!globalFilter.trim()) return employees;
+    const q = globalFilter.toLowerCase();
+    return employees.filter((emp) => {
+      const name = `${emp.first_name || ''} ${emp.last_name || ''}`.toLowerCase();
+      const type = (emp.employee_type || '').toLowerCase();
+      const addr = (emp.address || '').toLowerCase();
+      const emails = (emp.emails || []).map((e) => getEntryValue(e).toLowerCase()).join(' ');
+      const phones = (emp.phones || []).map((p) => getEntryValue(p).toLowerCase()).join(' ');
+      return (
+        name.includes(q) ||
+        type.includes(q) ||
+        addr.includes(q) ||
+        emails.includes(q) ||
+        phones.includes(q)
+      );
+    });
+  }, [employees, globalFilter]);
+
+  const handleSaveEmployeeField = React.useCallback(
+    async (employee: Employee, field: keyof Employee, value: any) => {
+      const originalEmployee = { ...employee };
+      const updated: any = { ...employee, [field]: value };
+      if (field === 'is_kinderschutzbeauftragter') {
+        updated.is_child_protection_officer = value;
+      }
+      if (field === 'employee_type') {
+        updated.type = value;
+        if (value !== 'caregiver') {
+          updated.is_kinderschutzbeauftragter = false;
+          updated.is_child_protection_officer = false;
+        }
+      }
+      try {
+        const res = await fetch(`/api/employees/${employee.id}`, {
+          method: 'PUT',
+          credentials: 'include',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(updated),
+        });
+        if (res.ok) {
+          const saved = await res.json();
+          setEmployees((prev) => prev.map((e) => (e.id === saved.id ? saved : e)));
+          pushAction({
+            type: 'UPDATE_EMPLOYEE',
+            payload: {
+              tab: 'employees',
+              employeeId: employee.id,
+              before: originalEmployee,
+              after: saved,
+            },
+          });
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          alert(errData.error || 'Failed to update employee');
+        }
+      } catch (err) {
+        console.error('Failed to update employee field:', err);
+      }
+    },
+    [getAuthHeaders]
+  );
+
+  const handleDeleteEmployee = React.useCallback(
+    (employee: Employee) => {
+      const fullName = `${employee.first_name} ${employee.last_name}`.trim();
+      setConfirmDelete({
+        isOpen: true,
+        title: t('deleteEmployee') || 'Mitarbeiter löschen',
+        message: t('employeeDeleteConfirm') || 'Möchten Sie den Mitarbeiter wirklich löschen?',
+        expectedName: fullName,
+        onConfirm: async () => {
+          try {
+            const res = await fetch(`/api/employees/${employee.id}`, {
+              method: 'DELETE',
+              credentials: 'include',
+              headers: getAuthHeaders(),
+            });
+            if (res.ok || res.status === 204) {
+              setEmployees((prev) => prev.filter((e) => e.id !== employee.id));
+              purgeActionsForEntity(employee.id);
+            } else {
+              const errData = await res.json().catch(() => ({}));
+              alert(errData.error || 'Failed to delete employee');
+            }
+          } catch (err) {
+            console.error('Failed to delete employee:', err);
+          } finally {
+            setConfirmDelete((prev) => ({ ...prev, isOpen: false }));
+          }
+        },
+      });
+    },
+    [getAuthHeaders]
+  );
+
+  const handleCreateEmployeeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!empFirstName.trim() || !empLastName.trim()) {
+      alert('Given name and surname are required');
+      return;
+    }
+    const payload: Partial<Employee> = {
+      first_name: empFirstName.trim(),
+      last_name: empLastName.trim(),
+      employee_type: empType,
+      address: '',
+      is_kinderschutzbeauftragter: false,
+      emails: [],
+      phones: [],
+    };
+    try {
+      const res = await fetch('/api/employees', {
+        method: 'POST',
+        credentials: 'include',
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setEmployees((prev) => [...prev, created]);
+        setAddEmployeeOpen(false);
+        setEmpFirstName('');
+        setEmpLastName('');
+        setEmpType('caregiver');
+        pushAction({
+          type: 'ADD_EMPLOYEE',
+          payload: {
+            tab: 'employees',
+            employeeId: created.id,
+            employee: created,
+          },
+        });
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.error || 'Failed to create employee');
+      }
+    } catch (err) {
+      console.error('Failed to create employee:', err);
+    }
+  };
+
+  const employeeColumns = React.useMemo<ColumnDef<Employee>[]>(
+    () => [
+      {
+        header: t('givenName') || 'Vorname',
+        accessorKey: 'first_name',
+        size: 180,
+        cell: (info) => {
+          const emp = info.row.original;
+          if (!canWriteEmployees) {
+            return <span>{emp.first_name}</span>;
+          }
+          return (
+            <EasyEditComponent
+              type={EasyEditTypes.TEXT}
+              value={emp.first_name}
+              onSave={(val: string) => handleSaveEmployeeField(emp, 'first_name', val)}
+              editButtonLabel={<Pencil size={13} />}
+              instructions={t('editFirstName')}
+              viewAttributes={{}}
+              inputAttributes={{}}
+              onCancel={() => {}}
+              onValidate={() => true}
+            />
+          );
+        },
+      },
+      {
+        header: t('surname') || 'Nachname',
+        accessorKey: 'last_name',
+        size: 180,
+        cell: (info) => {
+          const emp = info.row.original;
+          if (!canWriteEmployees) {
+            return <span>{emp.last_name}</span>;
+          }
+          return (
+            <EasyEditComponent
+              type={EasyEditTypes.TEXT}
+              value={emp.last_name}
+              onSave={(val: string) => handleSaveEmployeeField(emp, 'last_name', val)}
+              editButtonLabel={<Pencil size={13} />}
+              instructions={t('editLastName')}
+              viewAttributes={{}}
+              inputAttributes={{}}
+              onCancel={() => {}}
+              onValidate={() => true}
+            />
+          );
+        },
+      },
+      {
+        header: t('employeeType') || 'Mitarbeiter-Typ',
+        accessorKey: 'employee_type',
+        size: 180,
+        cell: (info) => {
+          const emp = info.row.original;
+          const options = [
+            { label: t('employeeTypeCaregiver') || 'Erzieher(in)', value: 'caregiver' },
+            { label: t('employeeTypeCook') || 'Koch/Köchin', value: 'cook' },
+            { label: t('employeeTypeBufdi') || 'Bufdi', value: 'bufdi' },
+          ];
+          const displayLabel =
+            emp.employee_type === 'caregiver'
+              ? t('employeeTypeCaregiver') || 'Erzieher(in)'
+              : emp.employee_type === 'cook'
+              ? t('employeeTypeCook') || 'Koch/Köchin'
+              : emp.employee_type === 'bufdi'
+              ? t('employeeTypeBufdi') || 'Bufdi'
+              : emp.employee_type || '-';
+
+          if (!canWriteEmployees) {
+            return <span>{displayLabel}</span>;
+          }
+
+          return (
+            <EasyEditComponent
+              type={EasyEditTypes.SELECT}
+              options={options}
+              value={emp.employee_type}
+              onSave={(val: string) => handleSaveEmployeeField(emp, 'employee_type', val)}
+              editButtonLabel={<Pencil size={13} />}
+              displayComponent={<span>{displayLabel}</span>}
+              viewAttributes={{}}
+              inputAttributes={{}}
+              onCancel={() => {}}
+              onValidate={() => true}
+            />
+          );
+        },
+      },
+      {
+        header: t('emails') || 'E-mail',
+        accessorKey: 'emails',
+        size: 260,
+        cell: (info) => {
+          const emp = info.row.original;
+          const isPopActive =
+            activeEmployeeForMultiValue?.id === emp.id && activeMultiValueField === 'emails';
+          return (
+            <MultiValueCell
+              id={emp.id}
+              field="emails"
+              values={emp.emails || []}
+              placeholder={t('addEmail')}
+              isActive={isPopActive}
+              onOpenManage={(field, anchor) => openManageEmployeeMultiValue(emp, field, anchor)}
+              canEdit={canWriteEmployees}
+            />
+          );
+        },
+      },
+      {
+        header: t('phones') || 'Telefon',
+        accessorKey: 'phones',
+        size: 200,
+        cell: (info) => {
+          const emp = info.row.original;
+          const isPopActive =
+            activeEmployeeForMultiValue?.id === emp.id && activeMultiValueField === 'phones';
+          return (
+            <MultiValueCell
+              id={emp.id}
+              field="phones"
+              values={emp.phones || []}
+              placeholder={t('addPhone')}
+              isActive={isPopActive}
+              onOpenManage={(field, anchor) => openManageEmployeeMultiValue(emp, field, anchor)}
+              canEdit={canWriteEmployees}
+            />
+          );
+        },
+      },
+      {
+        header: t('address') || 'Adresse',
+        accessorKey: 'address',
+        size: 250,
+        cell: (info) => {
+          const emp = info.row.original;
+          return (
+            <AddressEditor
+              parent={emp}
+              familyParents={[emp]}
+              canEdit={canWriteEmployees}
+              onSave={([updatedEmp]) =>
+                handleSaveEmployeeField(emp, 'address', updatedEmp.address || '')
+              }
+            />
+          );
+        },
+      },
+      {
+        header: t('kinderschutzbeauftragter') || 'Kinderschutzbeauftragte(r)',
+        accessorKey: 'is_kinderschutzbeauftragter',
+        size: 180,
+        cell: (info) => {
+          const emp = info.row.original;
+          if (emp.employee_type !== 'caregiver') {
+            return null;
+          }
+          const isOfficer = Boolean(emp.is_kinderschutzbeauftragter);
+          const displayLabel = isOfficer ? (t('kinderschutzbeauftragterYes') || 'Ja') : '-';
+
+          if (!canWriteEmployees) {
+            return <span>{displayLabel}</span>;
+          }
+
+          const options = [
+            { label: t('kinderschutzbeauftragterYes') || 'Ja', value: 'yes' },
+            { label: t('kinderschutzbeauftragterNo') || 'Nein', value: 'no' },
+          ];
+
+          return (
+            <EasyEditComponent
+              type={EasyEditTypes.SELECT}
+              options={options}
+              value={isOfficer ? 'yes' : 'no'}
+              onSave={(val: string) =>
+                handleSaveEmployeeField(
+                  emp,
+                  'is_kinderschutzbeauftragter',
+                  val === 'yes'
+                )
+              }
+              editButtonLabel={<Pencil size={13} />}
+              displayComponent={<span>{displayLabel}</span>}
+              instructions={t('kinderschutzbeauftragter') || 'Kinderschutzbeauftragte(r)'}
+              viewAttributes={{}}
+              inputAttributes={{}}
+              onCancel={() => {}}
+              onValidate={() => true}
+            />
+          );
+        },
+      },
+      {
+        id: 'actions',
+        header: '',
+        size: 50,
+        meta: { hideOnMobile: true },
+        cell: (info) => {
+          const emp = info.row.original;
+          const fullName = `${emp.first_name} ${emp.last_name}`.trim();
+          return (
+            <RowActionsMenu
+              onDelete={() => handleDeleteEmployee(emp)}
+              deleteLabel={t('deleteEmployee') || 'Mitarbeiter löschen'}
+              disabled={!canWriteEmployees}
+              disabledTooltip={!canWriteEmployees ? t('permissionRequired') : undefined}
+              entityName={fullName}
+            />
+          );
+        },
+      },
+    ],
+    [
+      canWriteEmployees,
+      activeEmployeeForMultiValue,
+      activeMultiValueField,
+      handleSaveEmployeeField,
+      handleDeleteEmployee,
+    ]
+  );
+
+  const isTableTab = activeTab === 'familiesOverview' || activeTab === 'parents' || activeTab === 'children' || activeTab === 'families' || activeTab === 'hygieneBelehrung' || activeTab === 'members' || activeTab === 'employees';
 
   return (
     <div className={`dashboard-container ${isTableTab ? 'table-view-active' : ''}`}>
@@ -5621,6 +6038,16 @@ function formatParentsSummary(parents: any[]): string {
                 {t('members')}
               </button>
             )}
+            {canReadEmployees && (
+              <button 
+                type="button"
+                onClick={() => handleTabClick('employees')}
+                className={`tab-btn ${activeTab === 'employees' ? 'active' : ''}`}
+                data-active={activeTab === 'employees'}
+              >
+                {t('employees')}
+              </button>
+            )}
             {(canReadFamiliesAll || hasPermission('hygiene.all.write')) && (
               <button 
                 onClick={() => handleTabClick('hygieneBelehrung')}
@@ -5734,7 +6161,9 @@ function formatParentsSummary(parents: any[]): string {
                 onChange={(e) => setGlobalFilter(e.target.value)}
                 className="search-input"
                 placeholder={
-                  activeTab === 'members'
+                  activeTab === 'employees'
+                    ? (t('searchEmployees') || 'Mitarbeiter suchen...')
+                    : activeTab === 'members'
                     ? t('searchMembers')
                     : activeTab === 'families' || activeTab === 'familiesOverview'
                     ? t('searchFamilies')
@@ -5770,6 +6199,34 @@ function formatParentsSummary(parents: any[]): string {
                 >
                   <Plus size={14} />
                   <span>{t('addFamily')}</span>
+                </button>
+              )}
+
+              {activeTab === 'employees' && canWriteEmployees && (
+                <button
+                  type="button"
+                  onClick={() => setAddEmployeeOpen(true)}
+                  className="primary-button add-employee-button"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    padding: '0.45rem 0.85rem',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    border: 'none',
+                    background: 'var(--primary)',
+                    color: '#ffffff',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                    height: '34px',
+                    boxSizing: 'border-box',
+                    fontSize: '0.85rem',
+                  }}
+                >
+                  <Plus size={14} />
+                  <span>{t('addEmployee') || 'Mitarbeiter/-in hinzufügen'}</span>
                 </button>
               )}
 
@@ -6190,6 +6647,39 @@ function formatParentsSummary(parents: any[]): string {
               );
             }}
           />
+        ) : activeTab === 'employees' && canReadEmployees ? (
+          <DataTable
+            className="card-table employees-table"
+            data={filteredEmployees}
+            columns={employeeColumns}
+            emptySubRowsText={t('noEmployeesYet') || 'Keine Mitarbeiter vorhanden'}
+            highlightedRowId={highlightedRowId}
+            getCardHeader={(emp: any) => {
+              const fullName = `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || '-';
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>{fullName}</span>
+                  {emp.employee_type === 'caregiver' && emp.is_kinderschutzbeauftragter && (
+                    <span style={{ fontSize: '0.75rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(59, 130, 246, 0.1)', color: '#2563eb', fontWeight: 600 }}>
+                      🛡️ {t('kinderschutzbeauftragterShort') || 'Kinderschutz'}
+                    </span>
+                  )}
+                </div>
+              );
+            }}
+            getCardActions={(emp: any) => {
+              const fullName = `${emp.first_name || ''} ${emp.last_name || ''}`.trim();
+              return (
+                <RowActionsMenu
+                  onDelete={() => handleDeleteEmployee(emp)}
+                  deleteLabel={t('deleteEmployee') || 'Mitarbeiter löschen'}
+                  disabled={!canWriteEmployees}
+                  disabledTooltip={!canWriteEmployees ? t('permissionRequired') : undefined}
+                  entityName={fullName}
+                />
+              );
+            }}
+          />
         ) : activeTab === 'audit' && canReadAudit ? (
           <AuditLogView logs={auditLogs} loading={auditLoading} families={families.length > 0 ? families : (overviewFamilies as any)} />
         ) : activeTab === 'admin' && canManageUsers ? (
@@ -6207,6 +6697,81 @@ function formatParentsSummary(parents: any[]): string {
           />
         )}
       </main>
+
+      {/* Add Employee Modal */}
+      {addEmployeeOpen && (
+        <div className="modal-overlay" onClick={() => setAddEmployeeOpen(false)}>
+          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+            <h2>{t('addEmployee') || 'Mitarbeiter/-in hinzufügen'}</h2>
+            <form onSubmit={handleCreateEmployeeSubmit}>
+              <div style={{ display: 'flex', gap: '1rem' }}>
+                <div className="modal-form-group" style={{ flex: 1 }}>
+                  <label htmlFor="emp-first-name">{t('givenName') || 'Vorname'}</label>
+                  <input
+                    id="emp-first-name"
+                    name="firstName"
+                    type="text"
+                    value={empFirstName}
+                    onChange={(e) => setEmpFirstName(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                </div>
+                <div className="modal-form-group" style={{ flex: 1 }}>
+                  <label htmlFor="emp-last-name">{t('surname') || 'Nachname'}</label>
+                  <input
+                    id="emp-last-name"
+                    name="lastName"
+                    type="text"
+                    value={empLastName}
+                    onChange={(e) => setEmpLastName(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="modal-form-group">
+                <label htmlFor="emp-type">{t('employeeType') || 'Mitarbeiter-Typ'}</label>
+                <select
+                  id="emp-type"
+                  name="employeeType"
+                  value={empType}
+                  onChange={(e) => setEmpType(e.target.value as any)}
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem',
+                    borderRadius: '4px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--input-bg)',
+                    color: 'var(--text)',
+                  }}
+                  required
+                >
+                  <option value="caregiver">{t('employeeTypeCaregiver') || 'Erzieher(in)'}</option>
+                  <option value="cook">{t('employeeTypeCook') || 'Koch/Köchin'}</option>
+                  <option value="bufdi">{t('employeeTypeBufdi') || 'Bufdi'}</option>
+                </select>
+              </div>
+
+              <div className="modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.25rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setAddEmployeeOpen(false)}
+                  className="secondary-button"
+                >
+                  {t('cancel')}
+                </button>
+                <button
+                  type="submit"
+                  className="primary-button"
+                >
+                  {t('addEmployee') || 'Mitarbeiter/-in hinzufügen'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Add Parent Modal */}
       {addParentOpen && targetFamily && (
@@ -6506,8 +7071,8 @@ function formatParentsSummary(parents: any[]): string {
 
         {/* Manage Multi-Values (Emails / Phones) Popover */}
         <MultiValueListEditor
-          key={`${activeParentForMultiValue?.id}-${activeMultiValueField}` || 'multivalue-popover'}
-          isOpen={Boolean(multiValuePopoverAnchor && activeParentForMultiValue && activeMultiValueField)}
+          key={`${(activeParentForMultiValue || activeEmployeeForMultiValue)?.id}-${activeMultiValueField}` || 'multivalue-popover'}
+          isOpen={Boolean(multiValuePopoverAnchor && (activeParentForMultiValue || activeEmployeeForMultiValue) && activeMultiValueField)}
           anchorEl={multiValuePopoverAnchor}
           onClose={closeManageMultiValue}
           values={activeMultiValueValues}

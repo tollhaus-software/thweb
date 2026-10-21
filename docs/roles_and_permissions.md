@@ -14,6 +14,7 @@ A user can only access an application feature or API endpoint if their effective
    - `fees.all.read` implies `fees.self.read`.
    - `memberships.all.write` implies `memberships.all.read`.
    - `memberships.all.read` implies `memberships.self.read`.
+   - `employees.all.write` implies `employees.all.read`.
 3. **Dynamic Roles**: Roles are defined declaratively in a YAML file (`local_dev_roles.yaml` for local development, or `roles.yaml` on deployment side) and loaded via `ROLES_FILE` (falling back to built-in `default_roles.yaml`).
 4. **Explicit Denials (`deny_permissions`)**: Roles can define `deny_permissions` to explicitly strip specific permissions from a user's effective permissions. This takes precedence over additive permissions (such as auto-granted parent self-service permissions), allowing educators who are also parents to retain self-service access without gaining access to fee calculation.
 5. **Database Synchronization**: Upon startup, the Go backend reads `ROLES_FILE` (or falls back to built-in defaults) and performs an idempotent upsert into the PostgreSQL `roles` table.
@@ -91,6 +92,8 @@ roles:
 | `memberships.all.read` | Access the "Members" (Vereinsmitglieder) tab and view all active parent memberships | Finanzausschuss, Treasurer, Board |
 | `memberships.self.read` | Scoped access for a parent to see their own family's membership status | Parents |
 | `memberships.all.write` | Create, edit, and delete Förderverein memberships (implies `memberships.all.read`) | Treasurer, Board |
+| `employees.all.read` | Access the "Employees" (*Mitarbeitende*) tab and view employee records | Staff, Board, Caregivers |
+| `employees.all.write` | Create, edit, and delete employee records (implies `employees.all.read`) | Management, Board, Administrators |
 | `vaccination.status.manage` | View and edit vaccination compliance status (*Masernschutzgesetz*) | Authorized MGA Officers |
 | `audit.view` | View change history and audit logs (entity details scoped to domain permissions) | Auditors, Viewers |
 | `users.all.manage` | Admin access to manage users, assign roles, and view user permissions | Administrators |

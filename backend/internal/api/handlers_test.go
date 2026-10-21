@@ -1063,3 +1063,142 @@ func TestHandleSimulation_LifecycleAndModifyingActions(t *testing.T) {
 	}
 }
 
+func TestEmployee_APIEndpointsAndPermissions(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := store.NewStore(pool)
+	server := &Server{Store: appStore, Hub: NewHub()}
+	go server.Hub.Run()
+
+	listHandler := auth.RequirePermission("employees.all.read")(http.HandlerFunc(server.HandleListEmployees))
+	createHandler := auth.RequirePermission("employees.all.write")(http.HandlerFunc(server.HandleCreateEmployee))
+	updateHandler := auth.RequirePermission("employees.all.write")(http.HandlerFunc(server.HandleUpdateEmployee))
+	deleteHandler := auth.RequirePermission("employees.all.write")(http.HandlerFunc(server.HandleDeleteEmployee))
+
+	uForbidden := &models.UserWithPermissions{
+		ID:                   uuid.New(),
+		Email:                "no-emp@example.com",
+		EffectivePermissions: []string{"families.all.read"},
+	}
+	uRead := &models.UserWithPermissions{
+		ID:                   uuid.New(),
+		Email:                "emp-reader@example.com",
+		EffectivePermissions: []string{"employees.all.read"},
+	}
+	writeEmail := fmt.Sprintf("emp-writer-%s@example.com", uuid.New().String()[:8])
+	uWrite := &models.UserWithPermissions{
+		ID:                   uuid.New(),
+		Email:                writeEmail,
+		EffectivePermissions: []string{"employees.all.write"},
+	}
+	if _, err := pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2)", uWrite.ID, uWrite.Email); err != nil {
+		t.Fatalf("failed to insert test user: %v", err)
+	}
+
+	// 1. GET /api/employees permissions
+	reqGet := httptest.NewRequest("GET", "/api/employees", nil)
+	recGet1 := httptest.NewRecorder()
+	listHandler.ServeHTTP(recGet1, reqGet.WithContext(context.WithValue(reqGet.Context(), auth.UserContextKey, uForbidden)))
+	if recGet1.Code != http.StatusForbidden {
+		t.Errorf("expected 403 Forbidden for GET /api/employees without permission, got %d", recGet1.Code)
+	}
+
+	recGet2 := httptest.NewRecorder()
+	listHandler.ServeHTTP(recGet2, reqGet.WithContext(context.WithValue(reqGet.Context(), auth.UserContextKey, uRead)))
+	if recGet2.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for GET /api/employees with employees.all.read, got %d", recGet2.Code)
+	}
+
+	recGet3 := httptest.NewRecorder()
+	listHandler.ServeHTTP(recGet3, reqGet.WithContext(context.WithValue(reqGet.Context(), auth.UserContextKey, uWrite)))
+	if recGet3.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for GET /api/employees with implied employees.all.write, got %d", recGet3.Code)
+	}
+
+	// 2. POST /api/employees permissions & validation
+	createBody := `{
+		"first_name": "Hans",
+		"last_name": "Bauer",
+		"employee_type": "caregiver",
+		"emails": [{"value": "hans@example.com", "identifier_email": true, "address_list": true}],
+		"phones": [{"value": "0123456789"}],
+		"address": "Waldweg 3",
+		"is_kinderschutzbeauftragter": true
+	}`
+	reqPost := httptest.NewRequest("POST", "/api/employees", strings.NewReader(createBody))
+	recPost1 := httptest.NewRecorder()
+	createHandler.ServeHTTP(recPost1, reqPost.WithContext(context.WithValue(reqPost.Context(), auth.UserContextKey, uRead)))
+	if recPost1.Code != http.StatusForbidden {
+		t.Errorf("expected 403 Forbidden for POST /api/employees with read-only permission, got %d", recPost1.Code)
+	}
+
+	reqPostValid := httptest.NewRequest("POST", "/api/employees", strings.NewReader(createBody))
+	recPostValid := httptest.NewRecorder()
+	createHandler.ServeHTTP(recPostValid, reqPostValid.WithContext(context.WithValue(reqPostValid.Context(), auth.UserContextKey, uWrite)))
+	if recPostValid.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created for POST /api/employees, got %d (body: %s)", recPostValid.Code, recPostValid.Body.String())
+	}
+
+	var createdEmp models.Employee
+	if err := json.Unmarshal(recPostValid.Body.Bytes(), &createdEmp); err != nil {
+		t.Fatalf("failed to decode created employee JSON: %v", err)
+	}
+	if createdEmp.ID == uuid.Nil || createdEmp.FirstName != "Hans" || !createdEmp.IsKinderschutzbeauftragter {
+		t.Fatalf("unexpected created employee response: %+v", createdEmp)
+	}
+
+	// 3. PUT /api/employees/{id}
+	updateBody := `{
+		"first_name": "Hans-Peter",
+		"last_name": "Bauer",
+		"employee_type": "bufdi",
+		"emails": [{"value": "hans.peter@example.com", "identifier_email": false}],
+		"phones": [],
+		"address": "Waldweg 5",
+		"is_kinderschutzbeauftragter": false
+	}`
+	rCtx := chi.NewRouteContext()
+	rCtx.URLParams.Add("id", createdEmp.ID.String())
+
+	reqPut := httptest.NewRequest("PUT", "/api/employees/"+createdEmp.ID.String(), strings.NewReader(updateBody))
+	reqPut = reqPut.WithContext(context.WithValue(reqPut.Context(), chi.RouteCtxKey, rCtx))
+	reqPut = reqPut.WithContext(context.WithValue(reqPut.Context(), auth.UserContextKey, uWrite))
+
+	recPut := httptest.NewRecorder()
+	updateHandler.ServeHTTP(recPut, reqPut)
+	if recPut.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for PUT /api/employees/{id}, got %d (body: %s)", recPut.Code, recPut.Body.String())
+	}
+
+	var updatedEmp models.Employee
+	if err := json.Unmarshal(recPut.Body.Bytes(), &updatedEmp); err != nil {
+		t.Fatalf("failed to decode updated employee JSON: %v", err)
+	}
+	if updatedEmp.FirstName != "Hans-Peter" || updatedEmp.EmployeeType != "bufdi" || updatedEmp.IsKinderschutzbeauftragter {
+		t.Fatalf("unexpected updated employee response: %+v", updatedEmp)
+	}
+
+	// 4. DELETE /api/employees/{id}
+	reqDel := httptest.NewRequest("DELETE", "/api/employees/"+createdEmp.ID.String(), nil)
+	reqDel = reqDel.WithContext(context.WithValue(reqDel.Context(), chi.RouteCtxKey, rCtx))
+	reqDel = reqDel.WithContext(context.WithValue(reqDel.Context(), auth.UserContextKey, uWrite))
+
+	recDel := httptest.NewRecorder()
+	deleteHandler.ServeHTTP(recDel, reqDel)
+	if recDel.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 No Content for DELETE /api/employees/{id}, got %d", recDel.Code)
+	}
+}
+
+

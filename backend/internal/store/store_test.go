@@ -616,4 +616,170 @@ func TestListAuditLogsForUser_PermissionsAndVisibility(t *testing.T) {
 	}
 }
 
+func TestEmployee_CRUDAndAudit(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := NewStore(pool)
+	testUserID := uuid.New()
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, 'emp-tester@example.com') ON CONFLICT (id) DO NOTHING", testUserID)
+
+	// 1. Validation tests
+	_, err = appStore.CreateEmployee(ctx, testUserID, models.Employee{
+		FirstName:    "",
+		LastName:     "Schmidt",
+		EmployeeType: "caregiver",
+	})
+	if err == nil {
+		t.Error("expected error for empty first name")
+	}
+
+	_, err = appStore.CreateEmployee(ctx, testUserID, models.Employee{
+		FirstName:    "Maria",
+		LastName:     "Schmidt",
+		EmployeeType: "invalid_type",
+	})
+	if err == nil {
+		t.Error("expected error for invalid employee_type")
+	}
+
+	// 2. Create Employee
+	emp := models.Employee{
+		FirstName:    "Maria",
+		LastName:     "Schmidt",
+		EmployeeType: "caregiver",
+		Emails: models.MultiValueList{
+			{Value: "maria@example.com", IdentifierEmail: true, AddressList: true},
+		},
+		Phones: models.MultiValueList{
+			{Value: "0170123456", AddressList: true},
+		},
+		Address:                    "Hauptstr. 10, 10115 Berlin",
+		IsKinderschutzbeauftragter: true,
+	}
+
+	created, err := appStore.CreateEmployee(ctx, testUserID, emp)
+	if err != nil {
+		t.Fatalf("failed to create employee: %v", err)
+	}
+	if created.ID == uuid.Nil {
+		t.Fatal("expected valid UUID for created employee")
+	}
+	if created.FirstName != "Maria" || created.LastName != "Schmidt" || created.EmployeeType != "caregiver" {
+		t.Errorf("unexpected created employee fields: %+v", created)
+	}
+	if !created.IsKinderschutzbeauftragter {
+		t.Errorf("expected IsKinderschutzbeauftragter=true")
+	}
+	if len(created.Emails) != 1 || !created.Emails[0].IdentifierEmail {
+		t.Errorf("unexpected emails: %+v", created.Emails)
+	}
+
+	defer func() {
+		_ = appStore.DeleteEmployee(ctx, testUserID, created.ID)
+	}()
+
+	// 3. GetEmployeeByID & ListEmployees
+	fetched, err := appStore.GetEmployeeByID(ctx, created.ID)
+	if err != nil || fetched == nil {
+		t.Fatalf("failed to fetch employee by ID: %v", err)
+	}
+	if fetched.LastName != "Schmidt" || fetched.Address != "Hauptstr. 10, 10115 Berlin" {
+		t.Errorf("mismatched fetched employee: %+v", fetched)
+	}
+
+	list, err := appStore.ListEmployees(ctx)
+	if err != nil {
+		t.Fatalf("failed to list employees: %v", err)
+	}
+	found := false
+	for _, e := range list {
+		if e.ID == created.ID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("created employee not found in ListEmployees")
+	}
+
+	// 4. Update Employee
+	created.LastName = "Schmidt-Mueller"
+	created.EmployeeType = "cook"
+	created.IsKinderschutzbeauftragter = false
+	created.Address = "Nebenstr. 5, 10115 Berlin"
+	created.Phones = append(created.Phones, models.MultiValueEntry{Value: "0170999999", AddressList: false})
+
+	updated, err := appStore.UpdateEmployee(ctx, testUserID, created)
+	if err != nil {
+		t.Fatalf("failed to update employee: %v", err)
+	}
+	if updated.LastName != "Schmidt-Mueller" || updated.EmployeeType != "cook" || updated.IsKinderschutzbeauftragter != false {
+		t.Errorf("unexpected updated employee: %+v", updated)
+	}
+	if len(updated.Phones) != 2 {
+		t.Errorf("expected 2 phones after update, got %d", len(updated.Phones))
+	}
+
+	// 5. Delete Employee
+	err = appStore.DeleteEmployee(ctx, testUserID, created.ID)
+	if err != nil {
+		t.Fatalf("failed to delete employee: %v", err)
+	}
+
+	afterDelete, err := appStore.GetEmployeeByID(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("error querying deleted employee: %v", err)
+	}
+	if afterDelete != nil {
+		t.Errorf("expected deleted employee to be nil, got: %+v", afterDelete)
+	}
+
+	// 6. Check Audit Logs for Employee INSERT, UPDATE, DELETE
+	adminUser := &models.UserWithPermissions{
+		ID:                   testUserID,
+		Email:                "emp-tester@example.com",
+		EffectivePermissions: []string{"employees.all.read", "audit.view"},
+	}
+	auditLogs, err := appStore.ListAuditLogsForUser(ctx, adminUser)
+	if err != nil {
+		t.Fatalf("ListAuditLogsForUser failed: %v", err)
+	}
+
+	var empOps []string
+	for _, l := range auditLogs {
+		if l.EntityType == "employee" && l.EntityID == created.ID {
+			empOps = append(empOps, l.Operation)
+		}
+	}
+
+	// Should have INSERT, UPDATE, DELETE (order in query is DESC, so DELETE, UPDATE, INSERT)
+	hasInsert, hasUpdate, hasDelete := false, false, false
+	for _, op := range empOps {
+		if op == "INSERT" {
+			hasInsert = true
+		}
+		if op == "UPDATE" {
+			hasUpdate = true
+		}
+		if op == "DELETE" {
+			hasDelete = true
+		}
+	}
+	if !hasInsert || !hasUpdate || !hasDelete {
+		t.Errorf("expected INSERT, UPDATE, DELETE audit logs for employee, got: %v", empOps)
+	}
+}
+
+
 
