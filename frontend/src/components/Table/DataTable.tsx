@@ -187,7 +187,12 @@ export function DataTable<TData>({
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
                   {headerGroup.headers.map((header, headerIndex) => {
-                    const isFixed = Boolean(stickyFirstColumn) && (header.column.id === 'first_name' || header.column.id === 'child_name');
+                    const isFixed = Boolean(stickyFirstColumn) && (
+                      header.column.id === 'first_name' ||
+                      header.column.id === 'child_name' ||
+                      header.column.id === 'overview_name' ||
+                      header.column.id === 'name'
+                    );
                     const isActions = header.column.id === 'actions';
                     const isLastHeader = headerIndex === headerGroup.headers.length - 1;
                     const shouldRenderColumnsInTh = !isMobile && (hasActionsCol ? isActions : isLastHeader);
@@ -452,7 +457,12 @@ export function DataTable<TData>({
                       return null;
                     }
                     const colSpan = meta?.getColSpan?.(row.original) ?? 1;
-                    const isFixed = Boolean(stickyFirstColumn) && (cell.column.id === 'first_name' || cell.column.id === 'child_name');
+                    const isFixed = Boolean(stickyFirstColumn) && (
+                      cell.column.id === 'first_name' ||
+                      cell.column.id === 'child_name' ||
+                      cell.column.id === 'overview_name' ||
+                      cell.column.id === 'name'
+                    );
                     const colHeader = cell.column.columnDef.header;
                     const headerText = typeof colHeader === 'string' ? colHeader : '';
                     const labelText = meta?.cardLabel ?? headerText;

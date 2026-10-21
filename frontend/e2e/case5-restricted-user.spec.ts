@@ -160,10 +160,10 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     // Verify no "Familie hinzufügen" button
     await expect(page.getByRole('button', { name: 'Familie hinzufügen' })).toHaveCount(0);
 
-    // Verify familiesOverview table has NO table header with column names and NO vertical separator (sticky-col)
+    // Verify familiesOverview table has NO table header with column names and has fixed name column (sticky-col)
     await expect(page.locator('table.data-table thead')).toHaveCount(0);
     await expect(page.locator('table.data-table th')).toHaveCount(0);
-    await expect(page.locator('table.data-table td.sticky-col')).toHaveCount(0);
+    await expect(page.locator('table.data-table td.sticky-col').first()).toBeVisible();
 
     // Verify family group header rows are rendered in overview
     const schmidtHeaderRow = page.locator('tr.family-group-row', { hasText: 'Schmidt' });

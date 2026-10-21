@@ -1448,7 +1448,8 @@ tr.family-group-row td {
     flex-shrink: 0 !important;
   }
 
-  .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td.sticky-col {
+  .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td.sticky-col,
+  .data-table.overview-table tr:not(.family-group-row):not(.empty-sub-row) td.sticky-col {
     position: static !important;
     white-space: normal !important;
     box-shadow: none !important;

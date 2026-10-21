@@ -98,7 +98,7 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     // Verify data-label attributes are set on cells
     const firstNameCell = sabineRow.locator('td[data-column-id="first_name"]');
     await expect(firstNameCell).toHaveAttribute('data-label', /Vorname/i);
-    await expect(firstNameCell).not.toHaveClass(/sticky-col/);
+    await expect(firstNameCell).toHaveClass(/sticky-col/);
 
     const emailCell = sabineRow.locator('td[data-column-id="emails"]');
     await expect(emailCell).toHaveAttribute('data-label', /E-Mail/i);
@@ -256,7 +256,7 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     expect(parseInt(cWeight, 10)).toBeGreaterThanOrEqual(700);
 
     const childFirstNameCell = timRow.locator('td[data-column-id="first_name"]');
-    await expect(childFirstNameCell).not.toHaveClass(/sticky-col/);
+    await expect(childFirstNameCell).toHaveClass(/sticky-col/);
 
     const childBirthDateCell = timRow.locator('td[data-column-id="birth_date"]');
     await expect(childBirthDateCell).toHaveAttribute('data-label', 'Geb.');
@@ -445,11 +445,11 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     await page.keyboard.press('Escape');
     await expect(desktopPopover).toBeHidden();
 
-    // Switch to parents tab on desktop and verify card-person-header is hidden and first_name is not sticky
+    // Switch to parents tab on desktop and verify card-person-header is hidden and first_name is sticky
     const dtParentsTab = page.getByRole('button', { name: 'Eltern(MGA)', exact: true });
     await dtParentsTab.click();
     await expect(page.locator('.parents-table .card-person-header')).toBeHidden();
-    await expect(page.locator('.parents-table tbody tr:not(.family-group-row) td[data-column-id="first_name"]').first()).not.toHaveClass(/sticky-col/);
+    await expect(page.locator('.parents-table tbody tr:not(.family-group-row) td[data-column-id="first_name"]').first()).toHaveClass(/sticky-col/);
 
     // Verify hovering on first_name does NOT highlight unrelated pencil buttons (address, emails, phones, memberships)
     const dtParentRow = page.locator('.parents-table tbody tr:not(.family-group-row)', { hasText: 'Sabine' });
