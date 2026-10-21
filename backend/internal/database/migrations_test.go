@@ -124,6 +124,20 @@ func TestApplySchemaMigrations(t *testing.T) {
 		t.Fatalf("expected children_group_changes table to exist: %v", err)
 	}
 
+	// Verify children.familiencards column exists
+	var familiencardsCol string
+	err = testDB.QueryRow(`
+		SELECT column_name 
+		FROM information_schema.columns 
+		WHERE table_name = 'children' AND column_name = 'familiencards';
+	`).Scan(&familiencardsCol)
+	if err != nil {
+		t.Fatalf("expected familiencards column to exist in children: %v", err)
+	}
+	if familiencardsCol != "familiencards" {
+		t.Errorf("expected column_name 'familiencards', got %q", familiencardsCol)
+	}
+
 	// Verify yellow_bag_dates view exists
 	var yellowBagView string
 	err = testDB.QueryRow(`

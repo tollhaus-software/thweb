@@ -388,6 +388,42 @@ type ChildGroupChange struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
+type FamiliencardList []int
+
+func (l FamiliencardList) Value() (driver.Value, error) {
+	if l == nil {
+		return "[]", nil
+	}
+	b, err := json.Marshal(l)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
+}
+
+func (l *FamiliencardList) Scan(src interface{}) error {
+	if src == nil {
+		*l = FamiliencardList{}
+		return nil
+	}
+	var raw []byte
+	switch s := src.(type) {
+	case []byte:
+		raw = s
+	case string:
+		raw = []byte(s)
+	default:
+		return fmt.Errorf("cannot scan %T into FamiliencardList", src)
+	}
+
+	if len(raw) == 0 {
+		*l = FamiliencardList{}
+		return nil
+	}
+
+	return json.Unmarshal(raw, l)
+}
+
 type Child struct {
 	ID                         uuid.UUID          `json:"id"`
 	FamilyID                   uuid.UUID          `json:"family_id"`
@@ -398,6 +434,7 @@ type Child struct {
 	VaccinationStatusProtected []byte             `json:"vaccination_status_protected,omitempty"`
 	VaccinationChecks          []VaccinationCheck `json:"vaccination_checks,omitempty"`
 	GroupChanges               []ChildGroupChange `json:"group_changes"`
+	Familiencards              FamiliencardList   `json:"familiencards"`
 	CreatedAt                  time.Time          `json:"created_at"`
 	UpdatedAt                  time.Time          `json:"updated_at"`
 }

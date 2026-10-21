@@ -781,5 +781,95 @@ func TestEmployee_CRUDAndAudit(t *testing.T) {
 	}
 }
 
+func TestChild_Familiencards(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := NewStore(pool)
+	testUserID := uuid.Nil
+	familyID := uuid.New()
+	childID := uuid.New()
+
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM children WHERE id = $1", childID)
+		_, _ = pool.Exec(ctx, "DELETE FROM families WHERE id = $1", familyID)
+	}()
+
+	child := models.Child{
+		ID:            childID,
+		FamilyID:      familyID,
+		FirstName:     "Lisa",
+		LastName:      "Simpson",
+		BirthDate:     time.Date(2020, 1, 15, 0, 0, 0, 0, time.UTC),
+		Familiencards: models.FamiliencardList{2025, 2026},
+	}
+
+	// 1. Create Child with familiencards
+	if err := appStore.UpdateChild(ctx, testUserID, childID, child); err != nil {
+		t.Fatalf("UpdateChild create failed: %v", err)
+	}
+
+	// 2. Fetch families and verify familiencards
+	families, err := appStore.ListFamilies(ctx)
+	if err != nil {
+		t.Fatalf("ListFamilies failed: %v", err)
+	}
+
+	var foundChild *models.Child
+	for _, f := range families {
+		for _, c := range f.Children {
+			if c.ID == childID {
+				foundChild = &c
+				break
+			}
+		}
+	}
+	if foundChild == nil {
+		t.Fatalf("child %s not found in families", childID)
+	}
+	if len(foundChild.Familiencards) != 2 {
+		t.Fatalf("expected 2 familiencards, got %d", len(foundChild.Familiencards))
+	}
+	if foundChild.Familiencards[0] != 2025 || foundChild.Familiencards[1] != 2026 {
+		t.Errorf("unexpected familiencards content: %+v", foundChild.Familiencards)
+	}
+
+	// 3. Update Child familiencards (remove 2025, add 2027)
+	child.Familiencards = models.FamiliencardList{2026, 2027}
+	if err := appStore.UpdateChild(ctx, testUserID, childID, child); err != nil {
+		t.Fatalf("UpdateChild update failed: %v", err)
+	}
+
+	families, err = appStore.ListFamilies(ctx)
+	if err != nil {
+		t.Fatalf("ListFamilies failed: %v", err)
+	}
+	for _, f := range families {
+		for _, c := range f.Children {
+			if c.ID == childID {
+				foundChild = &c
+				break
+			}
+		}
+	}
+	if len(foundChild.Familiencards) != 2 {
+		t.Fatalf("expected 2 familiencards after update, got %d", len(foundChild.Familiencards))
+	}
+	if foundChild.Familiencards[1] != 2027 {
+		t.Errorf("expected 2027, got: %+v", foundChild.Familiencards[1])
+	}
+}
+
+
 
 

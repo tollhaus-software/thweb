@@ -860,6 +860,7 @@ func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 		BirthDate         string                    `json:"birth_date"`
 		Notes             string                    `json:"notes"`
 		VaccinationChecks []models.VaccinationCheck `json:"vaccination_checks"`
+		Familiencards     *models.FamiliencardList  `json:"familiencards"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -933,6 +934,23 @@ func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 		encryptedBlob = blob
 	}
 
+	var familiencards models.FamiliencardList
+	if req.Familiencards != nil {
+		seen := make(map[int]bool)
+		familiencards = make(models.FamiliencardList, 0, len(*req.Familiencards))
+		for _, yr := range *req.Familiencards {
+			if yr < 1900 || yr > 2100 {
+				httpErrorLog(w, r, fmt.Sprintf("Invalid Familiencard year: %d (must be between 1900 and 2100)", yr), http.StatusBadRequest, nil)
+				return
+			}
+			if !seen[yr] {
+				seen[yr] = true
+				familiencards = append(familiencards, yr)
+			}
+		}
+		sort.Ints(familiencards)
+	}
+
 	child := models.Child{
 		ID:                         childID,
 		FamilyID:                   familyID,
@@ -942,6 +960,7 @@ func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 		Notes:                      req.Notes,
 		VaccinationStatusProtected: encryptedBlob,
 		VaccinationChecks:          req.VaccinationChecks,
+		Familiencards:              familiencards,
 	}
 
 	if err := s.Store.UpdateChild(r.Context(), user.ID, childID, child); err != nil {

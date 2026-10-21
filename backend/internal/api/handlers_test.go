@@ -1201,4 +1201,78 @@ func TestEmployee_APIEndpointsAndPermissions(t *testing.T) {
 	}
 }
 
+func TestHandleUpdateChild_FamiliencardsValidation(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := store.NewStore(pool)
+	server := &Server{Store: appStore, Hub: NewHub()}
+
+	familyID := uuid.New()
+	childID := uuid.New()
+
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM children WHERE id = $1", childID)
+		_, _ = pool.Exec(ctx, "DELETE FROM families WHERE id = $1", familyID)
+	}()
+
+	userAdmin := &models.UserWithPermissions{
+		Email:                "admin@example.com",
+		EffectivePermissions: []string{"children.all.write"},
+	}
+
+	// 1. Invalid familiencard year (out of range)
+	invalidPayload := map[string]interface{}{
+		"family_id":     familyID.String(),
+		"first_name":    "Bart",
+		"last_name":     "Simpson",
+		"birth_date":    "2018-04-01",
+		"familiencards": []int{1850},
+	}
+	bodyBytes, _ := json.Marshal(invalidPayload)
+
+	req := httptest.NewRequest("PUT", "/api/children/"+childID.String(), bytes.NewReader(bodyBytes))
+	rCtx := chi.NewRouteContext()
+	rCtx.URLParams.Add("id", childID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rCtx))
+	req = req.WithContext(context.WithValue(req.Context(), auth.UserContextKey, userAdmin))
+
+	rec := httptest.NewRecorder()
+	server.HandleUpdateChild(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 Bad Request for invalid familiencard year, got %d", rec.Code)
+	}
+
+	// 2. Valid familiencards
+	validPayload := map[string]interface{}{
+		"family_id":     familyID.String(),
+		"first_name":    "Bart",
+		"last_name":     "Simpson",
+		"birth_date":    "2018-04-01",
+		"familiencards": []int{2025, 2026},
+	}
+	bodyBytes, _ = json.Marshal(validPayload)
+
+	req = httptest.NewRequest("PUT", "/api/children/"+childID.String(), bytes.NewReader(bodyBytes))
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rCtx))
+	req = req.WithContext(context.WithValue(req.Context(), auth.UserContextKey, userAdmin))
+
+	rec = httptest.NewRecorder()
+	server.HandleUpdateChild(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for valid familiencard, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+}
+
+
 

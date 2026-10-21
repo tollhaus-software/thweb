@@ -167,3 +167,120 @@ func TestDetermineFeeRelevantData_HalfMonthStart(t *testing.T) {
 		t.Errorf("expected full month in December")
 	}
 }
+
+func TestDetermineFeeRelevantData_Familiencard(t *testing.T) {
+	childID := uuid.New()
+	child := models.Child{
+		ID:            childID,
+		FirstName:     "Bart",
+		LastName:      "Simpson",
+		BirthDate:     time.Date(2020, 4, 1, 0, 0, 0, 0, time.UTC),
+		Familiencards: models.FamiliencardList{2026},
+		GroupChanges: []models.ChildGroupChange{
+			{
+				Child:       childID,
+				ChangeDate:  time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+				TargetGroup: 1,
+			},
+		},
+	}
+
+	// Month in 2026: should have Familiencard
+	data2026 := DetermineFeeRelevantData([]models.Child{child}, time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC))
+	ft2026, ok := data2026.childrenFeeTypes["Bart"]
+	if !ok {
+		t.Fatalf("expected Bart in fees for 2026")
+	}
+	if !ft2026.Familiencard {
+		t.Errorf("expected Familiencard=true for Bart in 2026")
+	}
+
+	// Month in 2027: should NOT have Familiencard
+	data2027 := DetermineFeeRelevantData([]models.Child{child}, time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC))
+	ft2027, ok := data2027.childrenFeeTypes["Bart"]
+	if !ok {
+		t.Fatalf("expected Bart in fees for 2027")
+	}
+	if ft2027.Familiencard {
+		t.Errorf("expected Familiencard=false for Bart in 2027")
+	}
+}
+
+func TestDetermineFee_FamiliencardPerChild(t *testing.T) {
+	bartID := uuid.New()
+	lisaID := uuid.New()
+
+	bart := models.Child{
+		ID:            bartID,
+		FirstName:     "Bart",
+		LastName:      "Simpson",
+		BirthDate:     time.Date(2020, 4, 1, 0, 0, 0, 0, time.UTC),
+		Familiencards: models.FamiliencardList{2026},
+		GroupChanges: []models.ChildGroupChange{
+			{
+				Child:       bartID,
+				ChangeDate:  time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+				TargetGroup: 1,
+			},
+		},
+	}
+	lisa := models.Child{
+		ID:            lisaID,
+		FirstName:     "Lisa",
+		LastName:      "Simpson",
+		BirthDate:     time.Date(2022, 5, 9, 0, 0, 0, 0, time.UTC),
+		Familiencards: models.FamiliencardList{}, // No familiencard
+		GroupChanges: []models.ChildGroupChange{
+			{
+				Child:       lisaID,
+				ChangeDate:  time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+				TargetGroup: 1,
+			},
+		},
+	}
+
+	month := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+	data := DetermineFeeRelevantData([]models.Child{bart, lisa}, month)
+
+	// Bart has Familiencard, Lisa does not. Household has 2 children.
+	// Group 1, 2 children in household:
+	// Regular: 209.00 EUR
+	// Familiencard: 123.00 EUR
+	// Expected total: 209 + 123 = 332.00 EUR
+	totalFee, desc := DetermineFee(month, data)
+	if totalFee != 332.0 {
+		t.Errorf("expected total fee 332.00, got %.2f\nDesc:\n%s", totalFee, desc)
+	}
+}
+
+func TestDetermineChange_Familiencard(t *testing.T) {
+	childID := uuid.New()
+	child := models.Child{
+		ID:            childID,
+		FirstName:     "Bart",
+		LastName:      "Simpson",
+		BirthDate:     time.Date(2020, 4, 1, 0, 0, 0, 0, time.UTC),
+		Familiencards: models.FamiliencardList{2026},
+		GroupChanges: []models.ChildGroupChange{
+			{
+				Child:       childID,
+				ChangeDate:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+				TargetGroup: 1,
+			},
+		},
+	}
+
+	dataDec2025 := DetermineFeeRelevantData([]models.Child{child}, time.Date(2025, 12, 1, 0, 0, 0, 0, time.UTC))
+	dataJan2026 := DetermineFeeRelevantData([]models.Child{child}, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	dataJan2027 := DetermineFeeRelevantData([]models.Child{child}, time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC))
+
+	changeTo2026 := DetermineChange(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), dataDec2025, dataJan2026)
+	if changeTo2026 != "Bart: Neue Familiencard" {
+		t.Errorf("expected 'Bart: Neue Familiencard', got '%s'", changeTo2026)
+	}
+
+	changeTo2027 := DetermineChange(time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC), dataJan2026, dataJan2027)
+	if changeTo2027 != "Bart: Keine Familiencard mehr" {
+		t.Errorf("expected 'Bart: Keine Familiencard mehr', got '%s'", changeTo2027)
+	}
+}

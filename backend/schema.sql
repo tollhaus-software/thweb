@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS children (
     birth_date DATE NOT NULL,
     notes TEXT NOT NULL DEFAULT '',
     vaccination_status_protected BYTEA,
+    familiencards JSONB NOT NULL DEFAULT '[]'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
