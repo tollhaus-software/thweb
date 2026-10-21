@@ -97,3 +97,4 @@ roles:
 | `provision.kiosk.cert` | Issue new mTLS client certificates for kiosk tablets | Administrators |
 | `dashboard.read` | Access kiosk dashboard endpoints and live WebSocket updates | Kiosk Terminals |
 | `mealplan.view` | View weekly meal plans (*Kochplan*) | Staff, Parents, Kiosks |
+| `permissions.simulate` | Access the role & permissions simulator to test view and API scoping | Administrators |

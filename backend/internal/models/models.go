@@ -4,6 +4,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -22,15 +23,17 @@ type User struct {
 
 // UserWithPermissions represents a user with computed roles and effective permissions.
 type UserWithPermissions struct {
-	ID                   uuid.UUID  `json:"id"`
-	Email                string     `json:"email"`
-	Roles                []string   `json:"roles"`
-	Permissions          []string   `json:"permissions"`
-	EffectivePermissions []string   `json:"effective_permissions"`
-	FamilyID             *uuid.UUID `json:"family_id,omitempty"`
-	LastLogin            *time.Time `json:"last_login,omitempty"`
-	CreatedAt            time.Time  `json:"created_at"`
-	UpdatedAt            time.Time  `json:"updated_at"`
+	ID                   uuid.UUID             `json:"id"`
+	Email                string                `json:"email"`
+	Roles                []string              `json:"roles"`
+	Permissions          []string              `json:"permissions"`
+	EffectivePermissions []string              `json:"effective_permissions"`
+	FamilyID             *uuid.UUID            `json:"family_id,omitempty"`
+	LastLogin            *time.Time            `json:"last_login,omitempty"`
+	CreatedAt            time.Time             `json:"created_at"`
+	UpdatedAt            time.Time             `json:"updated_at"`
+	Simulation           *SimulationInfo       `json:"simulation,omitempty"`
+	ActualUser           *UserWithPermissions  `json:"-"`
 }
 
 func (s *UserWithPermissions) HasPermission(perm string) bool {
@@ -120,6 +123,112 @@ func (s *UserWithPermissions) RemovePermissions(denied []string) {
 // preserving dots in the username/local-part to support Google Workspace accounts.
 func NormalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
+}
+
+// SimulationInfo holds state and metadata about an active permissions simulation.
+type SimulationInfo struct {
+	Active                       bool     `json:"active"`
+	Mode                         string   `json:"mode"` // "user" or "custom"
+	SimulatedUser                string   `json:"simulated_user,omitempty"`
+	SimulatedRoles               []string `json:"simulated_roles,omitempty"`
+	SimulatedPermissions         []string `json:"simulated_permissions,omitempty"`
+	OriginalEmail                string   `json:"original_email"`
+	OriginalRoles                []string `json:"original_roles"`
+	OriginalEffectivePermissions []string `json:"original_effective_permissions"`
+}
+
+// SimulationConfig represents the request/cookie payload configuring a simulation session.
+type SimulationConfig struct {
+	Active      bool     `json:"active"`
+	Mode        string   `json:"mode"` // "user" or "custom"
+	UserEmail   string   `json:"user_email,omitempty"`
+	Roles       []string `json:"roles,omitempty"`
+	Permissions []string `json:"permissions,omitempty"`
+}
+
+// SimulationCandidate represents an option in the user simulation dropdown.
+type SimulationCandidate struct {
+	Email                string     `json:"email"`
+	Source               string     `json:"source"` // "user", "identifier_email", or "both"
+	Roles                []string   `json:"roles"`
+	Permissions          []string   `json:"permissions"`
+	EffectivePermissions []string   `json:"effective_permissions"`
+	FamilyID             *uuid.UUID `json:"family_id,omitempty"`
+}
+
+// AllKnownPermissions lists all granular permissions defined in the application.
+var AllKnownPermissions = []string{
+	"*",
+	"families.all.read",
+	"families.all.restrictedread",
+	"families.all.write",
+	"families.self.selfservice",
+	"children.all.read",
+	"children.all.write",
+	"fees.all.read",
+	"fees.self.read",
+	"hygiene.all.read",
+	"hygiene.all.write",
+	"memberships.all.write",
+	"memberships.all.read",
+	"memberships.self.read",
+	"mealplan.view",
+	"audit.view",
+	"users.all.manage",
+	"vaccination.status.manage",
+	"provision.kiosk.cert",
+	"dashboard.read",
+	"permissions.simulate",
+}
+
+// IntersectPermissions returns the intersection of effective permissions between actual and simulated.
+func IntersectPermissions(actual, simulated []string) []string {
+	actualHasWildcard := false
+	actualMap := make(map[string]bool, len(actual))
+	for _, p := range actual {
+		if p == "*" {
+			actualHasWildcard = true
+		}
+		actualMap[p] = true
+	}
+
+	simulatedHasWildcard := false
+	simulatedMap := make(map[string]bool, len(simulated))
+	for _, p := range simulated {
+		if p == "*" {
+			simulatedHasWildcard = true
+		}
+		simulatedMap[p] = true
+	}
+
+	if actualHasWildcard && simulatedHasWildcard {
+		return []string{"*"}
+	}
+	if actualHasWildcard {
+		res := make([]string, 0, len(simulatedMap))
+		for p := range simulatedMap {
+			res = append(res, p)
+		}
+		sort.Strings(res)
+		return res
+	}
+	if simulatedHasWildcard {
+		res := make([]string, 0, len(actualMap))
+		for p := range actualMap {
+			res = append(res, p)
+		}
+		sort.Strings(res)
+		return res
+	}
+
+	var res []string
+	for p := range simulatedMap {
+		if actualMap[p] {
+			res = append(res, p)
+		}
+	}
+	sort.Strings(res)
+	return res
 }
 
 type Role struct {

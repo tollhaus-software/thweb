@@ -7,7 +7,7 @@ import './App.css';
 import { DataTable } from './components/Table/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import EasyEdit, { Types } from './components/InlineEdit';
-import { Pencil, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, ArrowUpRight, X, Clock, AlertCircle, ChevronLeft, ChevronRight, Plus, ArrowUpDown, Check } from 'lucide-react';
+import { Pencil, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, ArrowUpRight, X, Clock, AlertCircle, ChevronLeft, ChevronRight, Plus, ArrowUpDown, Check, Eye } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { MultiValueListEditor, type MultiValueFlagConfig, type MultiValueEntry, type MultiValueItem, getEntryValue, isFlagActive } from './components/Table/MultiValueListEditor';
 import { NotesEditor } from './components/Table/NotesEditor';
@@ -21,6 +21,8 @@ import { KioskDashboard } from './components/Dashboard/KioskDashboard';
 import { MealPlanTab } from './components/MealPlan/MealPlanTab';
 import { MealPlanPrintView } from './components/MealPlan/MealPlanPrintView';
 import { KioskProvisioning } from './components/Admin/KioskProvisioning';
+import { PermissionsSimulatorModal } from './components/Admin/PermissionsSimulatorModal';
+import { SimulatedRolesPermissionsModal } from './components/Admin/SimulatedRolesPermissionsModal';
 import { getAppConfig } from './config/appConfig';
 import { HeaderOverflowMenu } from './components/Header/HeaderOverflowMenu';
 import { CellPopover } from './components/Table/CellPopover';
@@ -1374,10 +1376,15 @@ const ALL_AVAILABLE_PERMISSIONS = [
   'mealplan.view',
   'audit.view',
   'users.all.manage',
-  'vaccination.status.manage'
+  'vaccination.status.manage',
+  'permissions.simulate'
 ];
 
-const AdminView: React.FC = () => {
+interface AdminViewProps {
+  onOpenSimulator?: () => void;
+}
+
+const AdminView: React.FC<AdminViewProps> = ({ onOpenSimulator }) => {
   const { token, refreshUser } = useAuth();
   const [subTab, setSubTab] = React.useState<'users' | 'roles'>('users');
 
@@ -1619,15 +1626,40 @@ const AdminView: React.FC = () => {
             {t('roles')} ({roles.length})
           </button>
         </div>
-        {subTab === 'users' ? (
-          <button onClick={openAddUserModal} className="btn-primary" style={{ padding: '0.5rem 1rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
-            + {t('addUser')}
-          </button>
-        ) : (
-          <button onClick={openAddRoleModal} className="btn-primary" style={{ padding: '0.5rem 1rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
-            + {t('addRole')}
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          {onOpenSimulator && (
+            <button
+              type="button"
+              onClick={onOpenSimulator}
+              className="admin-open-simulator-btn"
+              data-testid="admin-open-simulator-button"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.5rem 1rem',
+                background: 'var(--bg-subtle)',
+                color: 'var(--text-main)',
+                border: '1px solid var(--border)',
+                borderRadius: '6px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+              }}
+            >
+              <Eye size={16} />
+              <span>{t('simulatePermissions')}</span>
+            </button>
+          )}
+          {subTab === 'users' ? (
+            <button onClick={openAddUserModal} className="btn-primary" style={{ padding: '0.5rem 1rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+              + {t('addUser')}
+            </button>
+          ) : (
+            <button onClick={openAddRoleModal} className="btn-primary" style={{ padding: '0.5rem 1rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+              + {t('addRole')}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Users Section */}
@@ -1878,7 +1910,9 @@ const AdminView: React.FC = () => {
 import { useRealtime } from './hooks/useRealtime';
 
 const Dashboard: React.FC = () => {
-  const { user, token, logout, hasPermission } = useAuth();
+  const { user, token, logout, hasPermission, canSimulate, leaveSimulation } = useAuth();
+  const [simulatorModalOpen, setSimulatorModalOpen] = React.useState(false);
+  const [viewRolesModalOpen, setViewRolesModalOpen] = React.useState(false);
   const appConfig = getAppConfig();
   const appTitle = appConfig.title || t('title');
   const appLogoUrl = appConfig.logoUrl;
@@ -5465,17 +5499,50 @@ function formatParentsSummary(parents: any[]): string {
             <h1>{appTitle}</h1>
           )}
         </div>
+
+        {user?.simulation?.active && (
+          <div className="simulation-header-banner" data-testid="simulation-banner">
+            <div className="simulation-banner-info">
+              <Eye size={16} className="simulation-icon" />
+              <span className="simulation-label">{t('simulationActive')}:</span>
+              {user.simulation.mode === 'user' && user.simulation.simulated_user && (
+                <span
+                  className="simulation-target"
+                  data-testid="simulation-target"
+                  title={user.simulation.simulated_user}
+                >
+                  {user.simulation.simulated_user}
+                </span>
+              )}
+              <button
+                type="button"
+                className="simulation-roles-btn"
+                data-testid="view-simulated-roles-btn"
+                onClick={() => setViewRolesModalOpen(true)}
+                title={t('simulatedRolesAndPermissionsTitle')}
+              >
+                {t('viewSimulatedRolesAndPermissions')}
+              </button>
+            </div>
+            <div className="simulation-banner-actions">
+              <button
+                type="button"
+                className="simulation-leave-button"
+                data-testid="leave-simulation-button"
+                onClick={leaveSimulation}
+                title={t('leaveSimulation')}
+              >
+                {t('leaveSimulation')}
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="user-info" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <span title={user?.email}>{user?.email}</span>
-          <button
-            type="button"
-            className="header-signout-desktop"
-            onClick={logout}
-          >
-            {t('logout')}
-          </button>
           <HeaderOverflowMenu
-            className="header-overflow-mobile"
+            canSimulate={canSimulate}
+            onOpenSimulator={() => setSimulatorModalOpen(true)}
             onLogout={logout}
           />
         </div>
@@ -6126,7 +6193,7 @@ function formatParentsSummary(parents: any[]): string {
         ) : activeTab === 'audit' && canReadAudit ? (
           <AuditLogView logs={auditLogs} loading={auditLoading} families={families.length > 0 ? families : (overviewFamilies as any)} />
         ) : activeTab === 'admin' && canManageUsers ? (
-          <AdminView />
+          <AdminView onOpenSimulator={() => setSimulatorModalOpen(true)} />
         ) : activeTab === 'kiosk' && canProvisionKiosk ? (
           <KioskProvisioning token={token} />
         ) : activeTab === 'mealPlan' && canViewMealPlan ? (
@@ -6478,6 +6545,20 @@ function formatParentsSummary(parents: any[]): string {
           onUpdateEvent={handleUpdateHygieneEvent}
           onDeleteEvent={handleDeleteHygieneEvent}
           readOnly={!canWriteHygiene}
+        />
+
+        {/* Permissions Simulator Modal */}
+        <PermissionsSimulatorModal
+          isOpen={simulatorModalOpen}
+          onClose={() => setSimulatorModalOpen(false)}
+        />
+
+        {/* Simulated Roles & Permissions Dialog */}
+        <SimulatedRolesPermissionsModal
+          isOpen={viewRolesModalOpen}
+          onClose={() => setViewRolesModalOpen(false)}
+          simulation={user?.simulation}
+          effectivePermissions={user?.effective_permissions}
         />
     </div>
   );

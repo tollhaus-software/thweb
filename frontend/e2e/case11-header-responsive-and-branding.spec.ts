@@ -6,7 +6,7 @@ test.describe('Test Case 11: Header Responsive Sign Out Overflow Menu & Branding
     expect(resetRes.ok()).toBeTruthy();
   });
 
-  test('on desktop layout (> 768px): sign out button is visible, overflow menu is hidden', async ({ page }) => {
+  test('on desktop layout (> 768px): 3-dots overflow menu is visible and functional with simulate and sign out options', async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 768 });
 
     await page.goto('/');
@@ -25,16 +25,33 @@ test.describe('Test Case 11: Header Responsive Sign Out Overflow Menu & Branding
     const desktopFontSize = await headerTitle.evaluate((el) => parseFloat(window.getComputedStyle(el).fontSize));
     expect(desktopFontSize).toBeLessThanOrEqual(20);
 
-    // Desktop Sign Out button is visible
-    const desktopSignOutBtn = header.locator('button.header-signout-desktop');
-    await expect(desktopSignOutBtn).toBeVisible();
+    // Overflow 3-dots menu container should be visible on desktop as well
+    const overflowMenu = header.locator('.header-overflow-menu-container');
+    await expect(overflowMenu).toBeVisible();
 
-    // Mobile overflow menu is hidden on desktop
-    const mobileOverflowMenu = header.locator('.header-overflow-mobile');
-    await expect(mobileOverflowMenu).toBeHidden();
+    const threeDotsBtn = overflowMenu.locator('button.header-overflow-btn');
+    await expect(threeDotsBtn).toBeVisible();
+
+    // Click 3-dots button to open menu
+    await threeDotsBtn.click();
+    const dropdown = overflowMenu.locator('.header-overflow-dropdown');
+    await expect(dropdown).toBeVisible();
+
+    // Contains "Berechtigungen simulieren" and "Abmelden"
+    const simulateItem = dropdown.locator('[data-testid="overflow-simulate-button"]');
+    await expect(simulateItem).toBeVisible();
+    await expect(simulateItem).toHaveText(/Berechtigungen simulieren|Simulate permissions/i);
+
+    const signOutMenuItem = dropdown.locator('[data-testid="overflow-signout-button"]');
+    await expect(signOutMenuItem).toBeVisible();
+    await expect(signOutMenuItem).toHaveText(/Abmelden|Sign out/i);
+
+    // Test closing via Escape key
+    await page.keyboard.press('Escape');
+    await expect(dropdown).toHaveCount(0);
   });
 
-  test('on small display layout (<= 768px): sign out button is hidden, 3-dots overflow menu is visible and functional', async ({ page }) => {
+  test('on small display layout (<= 768px): 3-dots overflow menu is visible and functional', async ({ page }) => {
     // Set viewport to small screen (<= 768px)
     await page.setViewportSize({ width: 600, height: 800 });
 
@@ -54,12 +71,8 @@ test.describe('Test Case 11: Header Responsive Sign Out Overflow Menu & Branding
     const mobileFontSize = await mobileHeaderTitle.evaluate((el) => parseFloat(window.getComputedStyle(el).fontSize));
     expect(mobileFontSize).toBeLessThan(20);
 
-    // Desktop Sign Out button should NOT be visible
-    const desktopSignOutBtn = header.locator('button.header-signout-desktop');
-    await expect(desktopSignOutBtn).toBeHidden();
-
     // Overflow 3-dots menu container should BE visible
-    const mobileOverflowMenu = header.locator('.header-overflow-mobile');
+    const mobileOverflowMenu = header.locator('.header-overflow-menu-container');
     await expect(mobileOverflowMenu).toBeVisible();
 
     const threeDotsBtn = mobileOverflowMenu.locator('button.header-overflow-btn');
@@ -73,8 +86,11 @@ test.describe('Test Case 11: Header Responsive Sign Out Overflow Menu & Branding
     await threeDotsBtn.click();
     await expect(dropdown).toBeVisible();
 
-    // Menu contains Sign out item
-    const signOutMenuItem = dropdown.locator('.header-overflow-menu-item');
+    // Menu contains Sign out item and Simulate permissions item
+    const simulateItem = dropdown.locator('[data-testid="overflow-simulate-button"]');
+    await expect(simulateItem).toBeVisible();
+
+    const signOutMenuItem = dropdown.locator('[data-testid="overflow-signout-button"]');
     await expect(signOutMenuItem).toBeVisible();
     await expect(signOutMenuItem).toHaveText(/Abmelden|Sign out/i);
 

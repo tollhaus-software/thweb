@@ -26,6 +26,12 @@ server {
         proxy_set_header X-Client-Verified $http_x_client_verified;
         proxy_set_header X-Client-DN $http_x_client_dn;
         proxy_set_header X-Kiosk-Mode $http_x_kiosk_mode;
+        proxy_set_header Cookie $http_cookie;
+        proxy_set_header X-Simulation $http_x_simulation;
+        proxy_set_header X-Simulation-Mode $http_x_simulation_mode;
+        proxy_set_header X-Simulation-User $http_x_simulation_user;
+        proxy_set_header X-Simulation-Roles $http_x_simulation_roles;
+        proxy_set_header X-Simulation-Permissions $http_x_simulation_permissions;
         proxy_set_header X-Proxy-Secret "${PROXY_SHARED_SECRET}";
     }
 
@@ -47,6 +53,12 @@ server {
         proxy_set_header X-Client-Verified $http_x_client_verified;
         proxy_set_header X-Client-DN $http_x_client_dn;
         proxy_set_header X-Kiosk-Mode $http_x_kiosk_mode;
+        proxy_set_header Cookie $http_cookie;
+        proxy_set_header X-Simulation $http_x_simulation;
+        proxy_set_header X-Simulation-Mode $http_x_simulation_mode;
+        proxy_set_header X-Simulation-User $http_x_simulation_user;
+        proxy_set_header X-Simulation-Roles $http_x_simulation_roles;
+        proxy_set_header X-Simulation-Permissions $http_x_simulation_permissions;
         proxy_set_header X-Proxy-Secret "${PROXY_SHARED_SECRET}";
     }
 }

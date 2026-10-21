@@ -47,6 +47,12 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		r.With(auth.RequirePermission("families.all.read")).Get("/api/families", server.HandleListFamilies)
 		r.With(auth.RequirePermission("audit.view")).Get("/api/audit-logs", server.HandleListAuditLogs)
 
+		// Permissions Simulator
+		r.Get("/api/simulation/options", server.HandleGetSimulationOptions)
+		r.Post("/api/simulation", server.HandleStartSimulation)
+		r.Delete("/api/simulation", server.HandleLeaveSimulation)
+		r.Post("/api/simulation/leave", server.HandleLeaveSimulation)
+
 		// Admin - Role Management
 		r.Get("/api/admin/roles", server.HandleListRoles)
 		r.With(auth.RequirePermission("users.all.manage")).Post("/api/admin/roles", server.HandleCreateRole)

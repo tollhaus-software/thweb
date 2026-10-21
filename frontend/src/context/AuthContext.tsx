@@ -1,12 +1,24 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { reauthManager } from '../utils/reauthManager';
 
+export interface SimulationInfo {
+  active: boolean;
+  mode: 'user' | 'custom';
+  simulated_user?: string;
+  simulated_roles?: string[];
+  simulated_permissions?: string[];
+  original_email: string;
+  original_roles: string[];
+  original_effective_permissions: string[];
+}
+
 interface User {
   email: string;
   roles: string[];
   permissions: string[];
   effective_permissions: string[];
   family_id?: string;
+  simulation?: SimulationInfo;
 }
 
 export interface AuthError {
@@ -23,6 +35,8 @@ interface AuthContextType {
   refreshUser: () => Promise<void>;
   loading: boolean;
   hasPermission: (perm: string) => boolean;
+  canSimulate: boolean;
+  leaveSimulation: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -75,6 +89,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       window.location.reload();
       return;
     }
+    fetch('/api/simulation', { method: 'DELETE' }).catch(() => {});
     reauthManager.handleCancel();
     setToken(null);
     setUser(null);
@@ -166,8 +181,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return false;
   };
 
+  const canSimulate = hasPermission('permissions.simulate');
+
+  const leaveSimulation = useCallback(async () => {
+    try {
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      await fetch('/api/simulation', { method: 'DELETE', headers });
+    } catch (e) {
+      console.error('Failed to leave simulation:', e);
+    }
+    await refreshUser();
+  }, [token, refreshUser]);
+
   return (
-    <AuthContext.Provider value={{ user, authError, token, login, logout, refreshUser, loading, hasPermission }}>
+    <AuthContext.Provider value={{ user, authError, token, login, logout, refreshUser, loading, hasPermission, canSimulate, leaveSimulation }}>
       {children}
     </AuthContext.Provider>
   );
