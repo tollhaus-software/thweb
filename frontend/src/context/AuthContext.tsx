@@ -57,8 +57,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return {
         email: 'kiosk@tablet',
         roles: ['kiosk'],
-        permissions: ['dashboard.read'],
-        effective_permissions: ['dashboard.read'],
+        permissions: ['dashboard.read', 'allergies.summary.read'],
+        effective_permissions: ['dashboard.read', 'allergies.summary.read'],
       };
     }
     return null;
@@ -179,6 +179,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return true;
     }
     if (perm === 'employees.all.read' && user.effective_permissions.includes('employees.all.write')) {
+      return true;
+    }
+    if (perm === 'allergies.children.read' && user.effective_permissions.includes('allergies.children.write')) {
+      return true;
+    }
+    if (perm === 'allergies.employees.read' && user.effective_permissions.includes('allergies.employees.write')) {
       return true;
     }
     return false;

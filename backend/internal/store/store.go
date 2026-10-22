@@ -184,6 +184,8 @@ func cleanForAudit(v interface{}) interface{} {
 	case models.Child:
 		e.VaccinationChecks = nil
 		e.VaccinationStatusProtected = nil
+		e.Allergies = nil
+		e.AllergiesProtected = nil
 		return e
 	case *models.Child:
 		if e == nil {
@@ -192,6 +194,20 @@ func cleanForAudit(v interface{}) interface{} {
 		cp := *e
 		cp.VaccinationChecks = nil
 		cp.VaccinationStatusProtected = nil
+		cp.Allergies = nil
+		cp.AllergiesProtected = nil
+		return cp
+	case models.Employee:
+		e.Allergies = nil
+		e.AllergiesProtected = nil
+		return e
+	case *models.Employee:
+		if e == nil {
+			return nil
+		}
+		cp := *e
+		cp.Allergies = nil
+		cp.AllergiesProtected = nil
 		return cp
 	case models.Family:
 		cp := e
@@ -209,6 +225,8 @@ func cleanForAudit(v interface{}) interface{} {
 				cp.Children[i] = e.Children[i]
 				cp.Children[i].VaccinationChecks = nil
 				cp.Children[i].VaccinationStatusProtected = nil
+				cp.Children[i].Allergies = nil
+				cp.Children[i].AllergiesProtected = nil
 			}
 		}
 		return cp
@@ -231,6 +249,8 @@ func cleanForAudit(v interface{}) interface{} {
 				cp.Children[i] = e.Children[i]
 				cp.Children[i].VaccinationChecks = nil
 				cp.Children[i].VaccinationStatusProtected = nil
+				cp.Children[i].Allergies = nil
+				cp.Children[i].AllergiesProtected = nil
 			}
 		}
 		return cp
@@ -335,6 +355,7 @@ func (s *Store) ListFamilies(ctx context.Context) ([]models.Family, error) {
 					   ), '[]'),
 					   'notes', c.notes,
 					   'vaccination_status_protected', encode(c.vaccination_status_protected, 'base64'),
+					   'allergies_protected', encode(c.allergies_protected, 'base64'),
 					   'familiencards', c.familiencards,
 					   'created_at', c.created_at,
 					   'updated_at', c.updated_at
@@ -598,6 +619,24 @@ func (s *Store) UpdateFamilyParents(ctx context.Context, userID uuid.UUID, famil
 	})
 }
 
+func (s *Store) GetChildByID(ctx context.Context, childID uuid.UUID) (*models.Child, error) {
+	var c models.Child
+	err := s.db.QueryRow(ctx, `
+		SELECT id, family_id, first_name, first_name_for_address_list, last_name, birth_date, notes, vaccination_status_protected, allergies_protected, familiencards, created_at, updated_at
+		FROM children
+		WHERE id = $1
+	`, childID).Scan(
+		&c.ID, &c.FamilyID, &c.FirstName, &c.FirstNameForAddressList, &c.LastName, &c.BirthDate, &c.Notes, &c.VaccinationStatusProtected, &c.AllergiesProtected, &c.Familiencards, &c.CreatedAt, &c.UpdatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &c, nil
+}
+
 func (s *Store) UpdateChild(ctx context.Context, userID uuid.UUID, childID uuid.UUID, child models.Child) error {
 	transactionID := uuid.New()
 
@@ -614,21 +653,26 @@ func (s *Store) UpdateChild(ctx context.Context, userID uuid.UUID, childID uuid.
 		}
 
 		var oldChild models.Child
-		err = tx.QueryRow(ctx, "SELECT id, family_id, first_name, first_name_for_address_list, last_name, birth_date, notes, vaccination_status_protected, familiencards FROM children WHERE id = $1", childID).Scan(
-			&oldChild.ID, &oldChild.FamilyID, &oldChild.FirstName, &oldChild.FirstNameForAddressList, &oldChild.LastName, &oldChild.BirthDate, &oldChild.Notes, &oldChild.VaccinationStatusProtected, &oldChild.Familiencards,
+		err = tx.QueryRow(ctx, "SELECT id, family_id, first_name, first_name_for_address_list, last_name, birth_date, notes, vaccination_status_protected, allergies_protected, familiencards FROM children WHERE id = $1", childID).Scan(
+			&oldChild.ID, &oldChild.FamilyID, &oldChild.FirstName, &oldChild.FirstNameForAddressList, &oldChild.LastName, &oldChild.BirthDate, &oldChild.Notes, &oldChild.VaccinationStatusProtected, &oldChild.AllergiesProtected, &oldChild.Familiencards,
 		)
 		isNew := (err == pgx.ErrNoRows)
 
 		if child.VaccinationStatusProtected == nil && child.VaccinationChecks == nil && len(oldChild.VaccinationStatusProtected) > 0 {
 			child.VaccinationStatusProtected = oldChild.VaccinationStatusProtected
 		}
+		if child.ClearAllergies {
+			child.AllergiesProtected = nil
+		} else if child.AllergiesProtected == nil && len(oldChild.AllergiesProtected) > 0 {
+			child.AllergiesProtected = oldChild.AllergiesProtected
+		}
 		if child.Familiencards == nil && oldChild.Familiencards != nil {
 			child.Familiencards = oldChild.Familiencards
 		}
 
 		res, err = tx.Exec(ctx,
-			"UPDATE children SET first_name = $1, first_name_for_address_list = $2, last_name = $3, birth_date = $4, notes = $5, vaccination_status_protected = $6, familiencards = $7, updated_at = NOW() WHERE id = $8",
-			child.FirstName, child.FirstNameForAddressList, child.LastName, child.BirthDate, child.Notes, child.VaccinationStatusProtected, child.Familiencards, childID)
+			"UPDATE children SET first_name = $1, first_name_for_address_list = $2, last_name = $3, birth_date = $4, notes = $5, vaccination_status_protected = $6, allergies_protected = $7, familiencards = $8, updated_at = NOW() WHERE id = $9",
+			child.FirstName, child.FirstNameForAddressList, child.LastName, child.BirthDate, child.Notes, child.VaccinationStatusProtected, child.AllergiesProtected, child.Familiencards, childID)
 		if err != nil {
 			return err
 		}
@@ -638,8 +682,8 @@ func (s *Store) UpdateChild(ctx context.Context, userID uuid.UUID, childID uuid.
 				child.ID = childID
 			}
 			_, err = tx.Exec(ctx,
-				"INSERT INTO children (id, family_id, first_name, first_name_for_address_list, last_name, birth_date, notes, vaccination_status_protected, familiencards) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-				child.ID, child.FamilyID, child.FirstName, child.FirstNameForAddressList, child.LastName, child.BirthDate, child.Notes, child.VaccinationStatusProtected, child.Familiencards)
+				"INSERT INTO children (id, family_id, first_name, first_name_for_address_list, last_name, birth_date, notes, vaccination_status_protected, allergies_protected, familiencards) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+				child.ID, child.FamilyID, child.FirstName, child.FirstNameForAddressList, child.LastName, child.BirthDate, child.Notes, child.VaccinationStatusProtected, child.AllergiesProtected, child.Familiencards)
 			if err != nil {
 				return err
 			}
@@ -660,7 +704,7 @@ func (s *Store) UpdateChild(ctx context.Context, userID uuid.UUID, childID uuid.
 			}
 			return s.recordAudit(ctx, tx, transactionID, &child.FamilyID, "child", child.ID, "INSERT", nil, child, userID)
 		} else {
-			if childNonVaccinationChanged(oldChild, child) {
+			if childNonVaccinationChanged(oldChild, child) || child.AllergiesUpdated {
 				return s.recordAudit(ctx, tx, transactionID, &child.FamilyID, "child", childID, "UPDATE", oldChild, child, userID)
 			}
 			return nil
@@ -1760,7 +1804,7 @@ func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*model
 
 func (s *Store) ListEmployees(ctx context.Context) ([]models.Employee, error) {
 	query := `
-		SELECT id, first_name, last_name, employee_type, emails, phones, address, is_kinderschutzbeauftragter, created_at, updated_at
+		SELECT id, first_name, last_name, employee_type, emails, phones, address, is_kinderschutzbeauftragter, allergies_protected, created_at, updated_at
 		FROM employees
 		ORDER BY last_name ASC, first_name ASC, created_at ASC
 	`
@@ -1783,6 +1827,7 @@ func (s *Store) ListEmployees(ctx context.Context) ([]models.Employee, error) {
 			&phonesRaw,
 			&emp.Address,
 			&emp.IsKinderschutzbeauftragter,
+			&emp.AllergiesProtected,
 			&emp.CreatedAt,
 			&emp.UpdatedAt,
 		); err != nil {
@@ -1803,7 +1848,7 @@ func (s *Store) ListEmployees(ctx context.Context) ([]models.Employee, error) {
 
 func (s *Store) GetEmployeeByID(ctx context.Context, id uuid.UUID) (*models.Employee, error) {
 	query := `
-		SELECT id, first_name, last_name, employee_type, emails, phones, address, is_kinderschutzbeauftragter, created_at, updated_at
+		SELECT id, first_name, last_name, employee_type, emails, phones, address, is_kinderschutzbeauftragter, allergies_protected, created_at, updated_at
 		FROM employees
 		WHERE id = $1
 	`
@@ -1818,6 +1863,7 @@ func (s *Store) GetEmployeeByID(ctx context.Context, id uuid.UUID) (*models.Empl
 		&phonesRaw,
 		&emp.Address,
 		&emp.IsKinderschutzbeauftragter,
+		&emp.AllergiesProtected,
 		&emp.CreatedAt,
 		&emp.UpdatedAt,
 	)
@@ -1865,10 +1911,10 @@ func (s *Store) CreateEmployee(ctx context.Context, userID uuid.UUID, emp models
 	err := s.WithTx(ctx, func(tx pgx.Tx) error {
 		var emailsRaw, phonesRaw []byte
 		err := tx.QueryRow(ctx, `
-			INSERT INTO employees (first_name, last_name, employee_type, emails, phones, address, is_kinderschutzbeauftragter)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
-			RETURNING id, first_name, last_name, employee_type, emails, phones, address, is_kinderschutzbeauftragter, created_at, updated_at
-		`, emp.FirstName, emp.LastName, emp.EmployeeType, emailsJSON, phonesJSON, emp.Address, emp.IsKinderschutzbeauftragter).Scan(
+			INSERT INTO employees (first_name, last_name, employee_type, emails, phones, address, is_kinderschutzbeauftragter, allergies_protected)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			RETURNING id, first_name, last_name, employee_type, emails, phones, address, is_kinderschutzbeauftragter, allergies_protected, created_at, updated_at
+		`, emp.FirstName, emp.LastName, emp.EmployeeType, emailsJSON, phonesJSON, emp.Address, emp.IsKinderschutzbeauftragter, emp.AllergiesProtected).Scan(
 			&created.ID,
 			&created.FirstName,
 			&created.LastName,
@@ -1877,6 +1923,7 @@ func (s *Store) CreateEmployee(ctx context.Context, userID uuid.UUID, emp models
 			&phonesRaw,
 			&created.Address,
 			&created.IsKinderschutzbeauftragter,
+			&created.AllergiesProtected,
 			&created.CreatedAt,
 			&created.UpdatedAt,
 		)
@@ -1891,6 +1938,7 @@ func (s *Store) CreateEmployee(ctx context.Context, userID uuid.UUID, emp models
 		}
 		created.Emails = sanitizeSlice(created.Emails)
 		created.Phones = sanitizePhones(created.Phones)
+		created.AllergiesUpdated = emp.AllergiesUpdated
 
 		return s.recordAudit(ctx, tx, transactionID, nil, "employee", created.ID, "INSERT", nil, created, userID)
 	})
@@ -1931,6 +1979,12 @@ func (s *Store) UpdateEmployee(ctx context.Context, userID uuid.UUID, emp models
 			return fmt.Errorf("employee not found")
 		}
 
+		if emp.ClearAllergies {
+			emp.AllergiesProtected = nil
+		} else if emp.AllergiesProtected == nil && len(oldEmp.AllergiesProtected) > 0 {
+			emp.AllergiesProtected = oldEmp.AllergiesProtected
+		}
+
 		var emailsRaw, phonesRaw []byte
 		err = tx.QueryRow(ctx, `
 			UPDATE employees
@@ -1941,10 +1995,11 @@ func (s *Store) UpdateEmployee(ctx context.Context, userID uuid.UUID, emp models
 			    phones = $5,
 			    address = $6,
 			    is_kinderschutzbeauftragter = $7,
+			    allergies_protected = $8,
 			    updated_at = NOW()
-			WHERE id = $8
-			RETURNING id, first_name, last_name, employee_type, emails, phones, address, is_kinderschutzbeauftragter, created_at, updated_at
-		`, emp.FirstName, emp.LastName, emp.EmployeeType, emailsJSON, phonesJSON, emp.Address, emp.IsKinderschutzbeauftragter, emp.ID).Scan(
+			WHERE id = $9
+			RETURNING id, first_name, last_name, employee_type, emails, phones, address, is_kinderschutzbeauftragter, allergies_protected, created_at, updated_at
+		`, emp.FirstName, emp.LastName, emp.EmployeeType, emailsJSON, phonesJSON, emp.Address, emp.IsKinderschutzbeauftragter, emp.AllergiesProtected, emp.ID).Scan(
 			&updated.ID,
 			&updated.FirstName,
 			&updated.LastName,
@@ -1953,6 +2008,7 @@ func (s *Store) UpdateEmployee(ctx context.Context, userID uuid.UUID, emp models
 			&phonesRaw,
 			&updated.Address,
 			&updated.IsKinderschutzbeauftragter,
+			&updated.AllergiesProtected,
 			&updated.CreatedAt,
 			&updated.UpdatedAt,
 		)
@@ -1967,6 +2023,7 @@ func (s *Store) UpdateEmployee(ctx context.Context, userID uuid.UUID, emp models
 		}
 		updated.Emails = sanitizeSlice(updated.Emails)
 		updated.Phones = sanitizePhones(updated.Phones)
+		updated.AllergiesUpdated = emp.AllergiesUpdated
 
 		return s.recordAudit(ctx, tx, transactionID, nil, "employee", updated.ID, "UPDATE", oldEmp, updated, userID)
 	})

@@ -114,7 +114,7 @@ var AuditRegistry = map[string]EntityPolicy{
 	},
 	"child": {
 		CanUserView: func(user *models.UserWithPermissions, familyID *uuid.UUID) bool {
-			if user.HasPermission("families.all.read") || user.HasPermission("children.all.write") {
+			if user.HasPermission("families.all.read") || user.HasPermission("children.all.write") || user.HasPermission("allergies.children.read") || user.HasPermission("allergies.children.write") {
 				return true
 			}
 			if familyID != nil && user.IsSelfFamily(*familyID) && user.HasPermission("families.self.selfservice") {
@@ -167,7 +167,7 @@ var AuditRegistry = map[string]EntityPolicy{
 	},
 	"employee": {
 		CanUserView: func(user *models.UserWithPermissions, familyID *uuid.UUID) bool {
-			return user.HasPermission("employees.all.read") || user.HasPermission("employees.all.write")
+			return user.HasPermission("employees.all.read") || user.HasPermission("employees.all.write") || user.HasPermission("allergies.employees.read") || user.HasPermission("allergies.employees.write")
 		},
 		SanitizeSnapshot: func(user *models.UserWithPermissions, snapshot map[string]interface{}) map[string]interface{} {
 			stripSensitiveHealthFields(snapshot)
@@ -190,7 +190,7 @@ func AllowedEntityTypesForUser(user *models.UserWithPermissions) []string {
 	if user.HasPermission("families.all.read") || (user.FamilyID != nil && user.HasPermission("families.self.selfservice")) {
 		allowed = append(allowed, "family", "parent")
 	}
-	if user.HasPermission("families.all.read") || user.HasPermission("children.all.write") || (user.FamilyID != nil && user.HasPermission("families.self.selfservice")) {
+	if user.HasPermission("families.all.read") || user.HasPermission("children.all.write") || user.HasPermission("allergies.children.read") || user.HasPermission("allergies.children.write") || (user.FamilyID != nil && user.HasPermission("families.self.selfservice")) {
 		allowed = append(allowed, "child", "child_group_change")
 	}
 	if user.HasPermission("families.all.read") || user.HasPermission("hygiene.all.write") {
@@ -199,7 +199,7 @@ func AllowedEntityTypesForUser(user *models.UserWithPermissions) []string {
 	if user.HasPermission("families.all.read") || user.HasPermission("memberships.all.read") || user.HasPermission("memberships.all.write") || user.HasPermission("fees.all.read") || (user.FamilyID != nil && user.HasPermission("memberships.self.read")) {
 		allowed = append(allowed, "th_membership")
 	}
-	if user.HasPermission("employees.all.read") || user.HasPermission("employees.all.write") {
+	if user.HasPermission("employees.all.read") || user.HasPermission("employees.all.write") || user.HasPermission("allergies.employees.read") || user.HasPermission("allergies.employees.write") {
 		allowed = append(allowed, "employee")
 	}
 

@@ -183,6 +183,26 @@ func TestApplySchemaMigrations(t *testing.T) {
 		t.Fatalf("expected data_encryption_keys table to exist: %v", err)
 	}
 
+	// Verify children.allergies_protected and employees.allergies_protected columns exist
+	var childAllergiesCol string
+	err = testDB.QueryRow(`
+		SELECT column_name
+		FROM information_schema.columns
+		WHERE table_name = 'children' AND column_name = 'allergies_protected';
+	`).Scan(&childAllergiesCol)
+	if err != nil {
+		t.Fatalf("expected allergies_protected column in children: %v", err)
+	}
+	var empAllergiesCol string
+	err = testDB.QueryRow(`
+		SELECT column_name
+		FROM information_schema.columns
+		WHERE table_name = 'employees' AND column_name = 'allergies_protected';
+	`).Scan(&empAllergiesCol)
+	if err != nil {
+		t.Fatalf("expected allergies_protected column in employees: %v", err)
+	}
+
 	// Verify migration 00004: test phone number type defaulting to "mobile"
 	// Roll back to migration 3, insert untyped phones, then migrate up to 4
 	if err := goose.DownToContext(context.Background(), testDB, "migrations", 3); err != nil {

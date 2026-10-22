@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pavolmarko/thweb-backend/internal/auth"
+	"github.com/pavolmarko/thweb-backend/internal/crypto"
 	"github.com/pavolmarko/thweb-backend/internal/kioskcert"
 	"github.com/pavolmarko/thweb-backend/internal/models"
 	"github.com/pavolmarko/thweb-backend/internal/store"
@@ -1390,6 +1391,266 @@ func TestHandleListAuditLogs_PaginationAndSearch(t *testing.T) {
 		t.Errorf("expected X-Has-More header to be set")
 	}
 }
+
+func TestAllergies_ChildrenEmployeesSummaryAndAudit(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := store.NewStore(pool)
+	_, _ = pool.Exec(ctx, "DELETE FROM data_encryption_keys WHERE purpose = $1", crypto.PurposeAllergies)
+	allergiesKMS := crypto.NewMockKMSProvider()
+	hub := NewHub()
+	server := &Server{
+		Store:                appStore,
+		Hub:                  hub,
+		AllergiesKMSProvider: allergiesKMS,
+	}
+
+	testUserID := uuid.New()
+	userEmail := "allergies-tester@example.com"
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING", testUserID, userEmail)
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", testUserID)
+	}()
+
+	// Create 2 families
+	fam1, err := appStore.CreateFamilyWithParents(ctx, testUserID, []models.Parent{
+		{FirstName: "Anna", LastName: "AllergieFam1"},
+	})
+	if err != nil {
+		t.Fatalf("failed to create family 1: %v", err)
+	}
+	defer func() {
+		_ = appStore.DeleteFamily(ctx, testUserID, fam1.ID)
+	}()
+
+	fam2, err := appStore.CreateFamilyWithParents(ctx, testUserID, []models.Parent{
+		{FirstName: "Bernd", LastName: "AllergieFam2"},
+	})
+	if err != nil {
+		t.Fatalf("failed to create family 2: %v", err)
+	}
+	defer func() {
+		_ = appStore.DeleteFamily(ctx, testUserID, fam2.ID)
+	}()
+
+	child1ID := uuid.New()
+	if err := appStore.UpdateChild(ctx, testUserID, child1ID, models.Child{
+		ID:        child1ID,
+		FamilyID:  fam1.ID,
+		FirstName: "Max",
+		LastName:  "AllergieFam1",
+		BirthDate: time.Date(2022, 3, 15, 0, 0, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatalf("failed to create child 1: %v", err)
+	}
+	_, _ = appStore.CreateChildGroupChange(ctx, testUserID, models.ChildGroupChange{
+		Child:       child1ID,
+		ChangeDate:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+		TargetGroup: 1,
+	})
+
+	child2ID := uuid.New()
+	if err := appStore.UpdateChild(ctx, testUserID, child2ID, models.Child{
+		ID:        child2ID,
+		FamilyID:  fam2.ID,
+		FirstName: "Lisa",
+		LastName:  "AllergieFam2",
+		BirthDate: time.Date(2021, 7, 10, 0, 0, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatalf("failed to create child 2: %v", err)
+	}
+	_, _ = appStore.CreateChildGroupChange(ctx, testUserID, models.ChildGroupChange{
+		Child:       child2ID,
+		ChangeDate:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+		TargetGroup: 1,
+	})
+
+	// 1. MGA user (has allergies.children.write & families.all.read, NOT children.all.write) updates child1 and child2 allergies
+	mgaUser := &models.UserWithPermissions{
+		ID:    testUserID,
+		Email: userEmail,
+		EffectivePermissions: []string{
+			"families.all.read",
+			"families.all.restrictedread",
+			"allergies.children.read",
+			"allergies.children.write",
+			"allergies.summary.read",
+			"audit.view",
+		},
+	}
+
+	updateBody1 := []byte(`{"allergies": ["Erdnuss", "Laktose"]}`)
+	req1 := httptest.NewRequest("PUT", "/api/children/"+child1ID.String(), bytes.NewReader(updateBody1))
+	rctx1 := chi.NewRouteContext()
+	rctx1.URLParams.Add("id", child1ID.String())
+	req1 = req1.WithContext(context.WithValue(context.WithValue(req1.Context(), chi.RouteCtxKey, rctx1), auth.UserContextKey, mgaUser))
+	rec1 := httptest.NewRecorder()
+	server.HandleUpdateChild(rec1, req1)
+	if rec1.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK when MGA updates child1 allergies, got %d (%s)", rec1.Code, rec1.Body.String())
+	}
+
+	// Verify MGA cannot modify child1's first_name without children.all.write
+	forbiddenBody := []byte(`{"first_name": "HackedName", "allergies": ["Erdnuss"]}`)
+	reqForb := httptest.NewRequest("PUT", "/api/children/"+child1ID.String(), bytes.NewReader(forbiddenBody))
+	reqForb = reqForb.WithContext(context.WithValue(context.WithValue(reqForb.Context(), chi.RouteCtxKey, rctx1), auth.UserContextKey, mgaUser))
+	recForb := httptest.NewRecorder()
+	server.HandleUpdateChild(recForb, reqForb)
+	if recForb.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden when MGA tries to change first_name without children.all.write, got %d", recForb.Code)
+	}
+
+	// Update child2 allergies using extensible object syntax {"name": "..."} to test backward/forward compatibility
+	updateBody2 := []byte(`{"allergies": [{"name": "erdnuss"}, {"name": "Haselnuss"}]}`)
+	req2 := httptest.NewRequest("PUT", "/api/children/"+child2ID.String(), bytes.NewReader(updateBody2))
+	rctx2 := chi.NewRouteContext()
+	rctx2.URLParams.Add("id", child2ID.String())
+	req2 = req2.WithContext(context.WithValue(context.WithValue(req2.Context(), chi.RouteCtxKey, rctx2), auth.UserContextKey, mgaUser))
+	rec2 := httptest.NewRecorder()
+	server.HandleUpdateChild(rec2, req2)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK when MGA updates child2 allergies, got %d (%s)", rec2.Code, rec2.Body.String())
+	}
+
+	// 2. Parent of fam1 (without allergies.children.read) views GET /api/families/overview:
+	//    Must see fam1 child1's allergies, must NOT see fam2 child2's allergies!
+	parentUser1 := &models.UserWithPermissions{
+		ID:                   testUserID,
+		Email:                "parent1@example.com",
+		FamilyID:             &fam1.ID,
+		EffectivePermissions: []string{"families.all.restrictedread", "allergies.summary.read"},
+	}
+	reqOv := httptest.NewRequest("GET", "/api/families/overview", nil)
+	reqOv = reqOv.WithContext(context.WithValue(reqOv.Context(), auth.UserContextKey, parentUser1))
+	recOv := httptest.NewRecorder()
+	server.HandleListFamiliesOverview(recOv, reqOv)
+	if recOv.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for overview, got %d", recOv.Code)
+	}
+	var ovFamilies []OverviewFamily
+	if err := json.Unmarshal(recOv.Body.Bytes(), &ovFamilies); err != nil {
+		t.Fatalf("failed to unmarshal overview: %v", err)
+	}
+	var foundChild1, foundChild2 *OverviewChild
+	for i := range ovFamilies {
+		for j := range ovFamilies[i].Children {
+			c := &ovFamilies[i].Children[j]
+			if c.ID == child1ID {
+				foundChild1 = c
+			}
+			if c.ID == child2ID {
+				foundChild2 = c
+			}
+		}
+	}
+	if foundChild1 == nil || len(foundChild1.Allergies) != 2 || foundChild1.Allergies[0] != "Erdnuss" || foundChild1.Allergies[1] != "Laktose" {
+		t.Errorf("expected parent of fam1 to see own child1 allergies [Erdnuss Laktose], got %+v", foundChild1)
+	}
+	if foundChild2 == nil || len(foundChild2.Allergies) != 0 {
+		t.Errorf("expected parent of fam1 NOT to see other family's child2 allergies, got %+v", foundChild2)
+	}
+
+	// 3. Employee allergies: create employee with allergies and verify summary
+	adminUser := &models.UserWithPermissions{
+		ID:                   testUserID,
+		Email:                userEmail,
+		EffectivePermissions: []string{"*"},
+	}
+	empBody := []byte(`{"first_name": "Erika", "last_name": "Koechin", "employee_type": "cook", "allergies": ["Sellerie", "Gluten"]}`)
+	reqEmp := httptest.NewRequest("POST", "/api/employees", bytes.NewReader(empBody))
+	reqEmp = reqEmp.WithContext(context.WithValue(reqEmp.Context(), auth.UserContextKey, adminUser))
+	recEmp := httptest.NewRecorder()
+	server.HandleCreateEmployee(recEmp, reqEmp)
+	if recEmp.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created for employee with allergies, got %d (%s)", recEmp.Code, recEmp.Body.String())
+	}
+	var createdEmp models.Employee
+	if err := json.Unmarshal(recEmp.Body.Bytes(), &createdEmp); err != nil {
+		t.Fatalf("failed to unmarshal created employee: %v", err)
+	}
+	defer func() {
+		_ = appStore.DeleteEmployee(ctx, testUserID, createdEmp.ID)
+	}()
+	if len(createdEmp.Allergies) != 2 || createdEmp.Allergies[0] != "Sellerie" || createdEmp.Allergies[1] != "Gluten" {
+		t.Errorf("expected created employee allergies [Sellerie Gluten], got %v", createdEmp.Allergies)
+	}
+
+	// Verify user with employees.all.read but WITHOUT allergies.employees.read does NOT see employee allergies
+	empReaderNoAllergies := &models.UserWithPermissions{
+		ID:                   testUserID,
+		Email:                "emp-reader@example.com",
+		EffectivePermissions: []string{"employees.all.read"},
+	}
+	reqListEmp := httptest.NewRequest("GET", "/api/employees", nil)
+	reqListEmp = reqListEmp.WithContext(context.WithValue(reqListEmp.Context(), auth.UserContextKey, empReaderNoAllergies))
+	recListEmp := httptest.NewRecorder()
+	server.HandleListEmployees(recListEmp, reqListEmp)
+	var listedEmps []models.Employee
+	_ = json.Unmarshal(recListEmp.Body.Bytes(), &listedEmps)
+	for _, e := range listedEmps {
+		if e.ID == createdEmp.ID && len(e.Allergies) > 0 {
+			t.Errorf("expected employee allergies to be hidden without allergies.employees.read, got %v", e.Allergies)
+		}
+	}
+
+	// 4. Test HandleGetAllergiesSummary (/api/dashboard/allergies):
+	//    Group 1 has child1 (Erdnuss, Laktose) and child2 (erdnuss, Haselnuss) -> deduplicated: [Erdnuss, Haselnuss, Laktose]
+	//    Employees has Erika (Sellerie, Gluten) -> deduplicated: [Gluten, Sellerie]
+	reqSum := httptest.NewRequest("GET", "/api/dashboard/allergies?date=2026-06-01", nil)
+	reqSum = reqSum.WithContext(context.WithValue(reqSum.Context(), auth.UserContextKey, parentUser1))
+	recSum := httptest.NewRecorder()
+	server.HandleGetAllergiesSummary(recSum, reqSum)
+	if recSum.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for allergies summary, got %d (%s)", recSum.Code, recSum.Body.String())
+	}
+	var sumResp AllergiesSummaryResponse
+	if err := json.Unmarshal(recSum.Body.Bytes(), &sumResp); err != nil {
+		t.Fatalf("failed to unmarshal allergies summary: %v", err)
+	}
+	if len(sumResp.Groups) != 3 {
+		t.Fatalf("expected 3 groups in allergies summary, got %d", len(sumResp.Groups))
+	}
+	grp1 := sumResp.Groups[0]
+	if grp1.GroupID != 1 || len(grp1.Allergies) != 3 || grp1.Allergies[0] != "Erdnuss" || grp1.Allergies[1] != "Haselnuss" || grp1.Allergies[2] != "Laktose" {
+		t.Errorf("expected group 1 deduplicated allergies [Erdnuss Haselnuss Laktose], got %+v", grp1.Allergies)
+	}
+	if len(sumResp.Employees) < 2 {
+		t.Errorf("expected employee allergies in summary to include Gluten and Sellerie, got %+v", sumResp.Employees)
+	}
+
+	// 5. Verify Audit Log records who edited allergies (changed_by) and sets allergies_updated: true without leaking plaintext allergy strings
+	logs, _, err := appStore.QueryAuditLogsForUser(ctx, mgaUser, models.AuditLogFilter{Limit: 20})
+	if err != nil {
+		t.Fatalf("QueryAuditLogsForUser failed: %v", err)
+	}
+	foundChild1Audit := false
+	for _, l := range logs {
+		if l.EntityType == "child" && l.EntityID == child1ID && l.Operation == "UPDATE" {
+			afterStr := string(l.AfterSnapshot)
+			if strings.Contains(afterStr, `"allergies_updated":true`) {
+				foundChild1Audit = true
+			}
+			if strings.Contains(afterStr, "Erdnuss") || strings.Contains(afterStr, "Laktose") {
+				t.Errorf("CRITICAL: audit log after_snapshot leaked plaintext allergy strings: %s", afterStr)
+			}
+		}
+	}
+	if !foundChild1Audit {
+		t.Errorf("expected child UPDATE audit log with allergies_updated=true for child1")
+	}
+}
+
 
 
 

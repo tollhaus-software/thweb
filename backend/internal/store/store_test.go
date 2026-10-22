@@ -1200,6 +1200,9 @@ func TestStore_DEKStore(t *testing.T) {
 
 	appStore := NewStore(pool)
 	_, _ = pool.Exec(ctx, "TRUNCATE TABLE data_encryption_keys")
+	defer func() {
+		_, _ = pool.Exec(ctx, "TRUNCATE TABLE data_encryption_keys")
+	}()
 
 	// 1. Initially no active DEK for vaccination or allergies
 	vacDEK, err := appStore.GetActiveDEK(ctx, crypto.PurposeVaccination)

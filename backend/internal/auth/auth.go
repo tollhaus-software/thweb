@@ -57,6 +57,8 @@ func IsAllowedKioskPath(path string) bool {
 	cleanPath := strings.TrimSuffix(path, "/")
 	return cleanPath == "/api/dashboard/daily-brief" ||
 		cleanPath == "/api/daily-brief" ||
+		cleanPath == "/api/dashboard/allergies" ||
+		cleanPath == "/api/allergies/summary" ||
 		cleanPath == "/ws" ||
 		cleanPath == "/api/ws"
 }
@@ -77,7 +79,7 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 				kioskRoles = []string{"kiosk"}
 			}
 			if len(kioskPerms) == 0 {
-				kioskPerms = []string{"dashboard.read"}
+				kioskPerms = []string{"dashboard.read", "allergies.summary.read"}
 			}
 			kioskUser := &models.UserWithPermissions{
 				Email:                kioskEmail,
@@ -361,12 +363,14 @@ func (a *Authenticator) RolesAndPermissionsForTriggers(triggers []string) ([]str
 					"fees.self.read",
 					"families.self.selfservice",
 					"memberships.self.read",
+					"allergies.summary.read",
 				}
 			case roles.AutoGrantCaregiverIdentifierEmail:
 				rIDs = []string{"caregiver_default"}
 				perms = []string{
 					"families.all.restrictedread",
 					"mealplan.view",
+					"allergies.summary.read",
 				}
 			}
 		}
@@ -599,6 +603,25 @@ func RequirePermission(perm string) func(http.Handler) http.Handler {
 				return
 			}
 			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func RequireAnyPermission(perms ...string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			user := GetUser(r.Context())
+			if user == nil {
+				writeJSONError(w, "Forbidden", http.StatusForbidden)
+				return
+			}
+			for _, perm := range perms {
+				if user.HasPermission(perm) {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+			writeJSONError(w, "Forbidden", http.StatusForbidden)
 		})
 	}
 }

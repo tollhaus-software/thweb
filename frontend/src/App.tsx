@@ -94,6 +94,7 @@ interface Employee {
   phones?: MultiValueEntry[];
   address?: string;
   is_kinderschutzbeauftragter?: boolean;
+  allergies?: string[];
   created_at?: string;
   updated_at?: string;
 }
@@ -116,6 +117,7 @@ interface Child {
   birth_date: string;
   notes?: string;
   vaccination_checks?: VaccinationCheck[];
+  allergies?: string[];
   family_name?: string;
   group_changes?: ChildGroupChange[];
   familiencards?: number[];
@@ -631,6 +633,7 @@ interface OverviewChild {
   current_group?: number | null;
   is_former?: boolean;
   group_changes?: ChildGroupChange[];
+  allergies?: string[];
 }
 
 const getOverviewChildGroupStatus = (
@@ -1035,6 +1038,10 @@ const diffChildSnapshots = (before: any, after: any): string[] => {
     changes.push(`${t('familiencard')}: "${beforeFc.text || '-'}" → "${afterFc.text || '-'}"`);
   }
 
+  if (after.allergies_updated) {
+    changes.push(t('allergiesUpdated'));
+  }
+
   return changes;
 };
 
@@ -1187,6 +1194,19 @@ const formatSnapshotDetails = (log: AuditLog, families: Family[] = []) => {
     const fc = getFamiliencardSummary(data.familiencards);
     if (fc.text) {
       parts.push(`${t('familiencard')}: ${fc.text}`);
+    }
+    if (data.allergies_updated) {
+      parts.push(t('allergiesUpdated'));
+    }
+  }
+
+  if (log.entity_type === 'employee') {
+    const empName = `${data.first_name || ''} ${data.last_name || ''}`.trim();
+    if (empName) {
+      parts.push(empName);
+    }
+    if (data.allergies_updated) {
+      parts.push(t('allergiesUpdated'));
     }
   }
 
@@ -1427,6 +1447,8 @@ const AuditLogView: React.FC<AuditLogViewProps> = ({
         return t('hygieneBelehrung');
       case 'th_membership':
         return t('th_membership');
+      case 'employee':
+        return t('employees');
       default:
         return etype;
     }
@@ -1690,6 +1712,11 @@ const ALL_AVAILABLE_PERMISSIONS = [
   'memberships.self.read',
   'employees.all.write',
   'employees.all.read',
+  'allergies.children.read',
+  'allergies.children.write',
+  'allergies.employees.read',
+  'allergies.employees.write',
+  'allergies.summary.read',
   'mealplan.view',
   'audit.view',
   'users.all.manage',
@@ -2269,7 +2296,11 @@ const Dashboard: React.FC = () => {
   const canReadMembers = hasPermission('memberships.all.read');
   const canWriteMemberships = hasPermission('memberships.all.write');
   const canReadOwnMemberships = hasPermission('memberships.self.read');
-  const canReadEmployees = hasPermission('employees.all.read');
+  const canReadChildAllergies = hasPermission('allergies.children.read') || hasPermission('allergies.children.write');
+  const canWriteChildAllergies = hasPermission('allergies.children.write');
+  const canReadEmployeeAllergies = hasPermission('allergies.employees.read') || hasPermission('allergies.employees.write');
+  const canWriteEmployeeAllergies = hasPermission('allergies.employees.write');
+  const canReadEmployees = hasPermission('employees.all.read') || canReadEmployeeAllergies;
   const canWriteEmployees = hasPermission('employees.all.write');
 
   const [families, setFamilies] = React.useState<Family[]>([]);
@@ -2649,10 +2680,11 @@ const Dashboard: React.FC = () => {
   const [targetChildFamiliencards, setTargetChildFamiliencards] = React.useState<Child | null>(null);
   const [familiencardPopoverAnchor, setFamiliencardPopoverAnchor] = React.useState<HTMLElement | string | null>(null);
 
-  // MultiValue (Emails/Phones) popover state
+  // MultiValue (Emails/Phones/Allergies) popover state
   const [targetParentMultiValue, setTargetParentMultiValue] = React.useState<Parent | null>(null);
+  const [targetChildMultiValue, setTargetChildMultiValue] = React.useState<Child | null>(null);
   const [targetEmployeeMultiValue, setTargetEmployeeMultiValue] = React.useState<Employee | null>(null);
-  const [activeMultiValueField, setActiveMultiValueField] = React.useState<'emails' | 'phones' | null>(null);
+  const [activeMultiValueField, setActiveMultiValueField] = React.useState<'emails' | 'phones' | 'allergies' | null>(null);
   const [multiValuePopoverAnchor, setMultiValuePopoverAnchor] = React.useState<HTMLElement | string | null>(null);
 
   // Vaccination Status popover state
@@ -3610,23 +3642,34 @@ const Dashboard: React.FC = () => {
     setTargetParentMemberships(null);
   };
 
-  const openManageMultiValue = (parent: Parent, field: 'emails' | 'phones', anchor?: HTMLElement | string | null) => {
+  const openManageMultiValue = (parent: Parent, field: 'emails' | 'phones' | 'allergies', anchor?: HTMLElement | string | null) => {
     setTargetParentMultiValue(parent);
+    setTargetChildMultiValue(null);
     setTargetEmployeeMultiValue(null);
     setActiveMultiValueField(field);
     setMultiValuePopoverAnchor(anchor || `cell-${field}-${parent.id}`);
   };
 
-  const openManageEmployeeMultiValue = (employee: Employee, field: 'emails' | 'phones', anchor?: HTMLElement | string | null) => {
+  const openManageChildMultiValue = React.useCallback((child: Child, field: 'emails' | 'phones' | 'allergies', anchor?: HTMLElement | string | null) => {
+    setTargetChildMultiValue(child);
+    setTargetParentMultiValue(null);
+    setTargetEmployeeMultiValue(null);
+    setActiveMultiValueField(field);
+    setMultiValuePopoverAnchor(anchor || `cell-${field}-${child.id}`);
+  }, []);
+
+  const openManageEmployeeMultiValue = React.useCallback((employee: Employee, field: 'emails' | 'phones' | 'allergies', anchor?: HTMLElement | string | null) => {
     setTargetEmployeeMultiValue(employee);
     setTargetParentMultiValue(null);
+    setTargetChildMultiValue(null);
     setActiveMultiValueField(field);
     setMultiValuePopoverAnchor(anchor || `cell-${field}-${employee.id}`);
-  };
+  }, []);
 
   const closeManageMultiValue = () => {
     setMultiValuePopoverAnchor(null);
     setTargetParentMultiValue(null);
+    setTargetChildMultiValue(null);
     setTargetEmployeeMultiValue(null);
     setActiveMultiValueField(null);
   };
@@ -4061,6 +4104,15 @@ const Dashboard: React.FC = () => {
     return targetParentMultiValue;
   }, [families, targetParentMultiValue]);
 
+  const activeChildForMultiValue = React.useMemo(() => {
+    if (!targetChildMultiValue) return null;
+    for (const f of families) {
+      const found = (f.children || []).find((c) => c.id === targetChildMultiValue.id);
+      if (found) return found;
+    }
+    return targetChildMultiValue;
+  }, [families, targetChildMultiValue]);
+
   const activeEmployeeForMultiValue = React.useMemo(() => {
     if (!targetEmployeeMultiValue) return null;
     const found = employees.find((e) => e.id === targetEmployeeMultiValue.id);
@@ -4068,17 +4120,30 @@ const Dashboard: React.FC = () => {
   }, [employees, targetEmployeeMultiValue]);
 
   const activeMultiValueValues = React.useMemo(() => {
-    if (activeParentForMultiValue && activeMultiValueField) {
+    if (activeParentForMultiValue && activeMultiValueField && activeMultiValueField !== 'allergies') {
       return activeParentForMultiValue[activeMultiValueField] || [];
+    }
+    if (activeChildForMultiValue && activeMultiValueField === 'allergies') {
+      return activeChildForMultiValue.allergies || [];
     }
     if (activeEmployeeForMultiValue && activeMultiValueField) {
       return activeEmployeeForMultiValue[activeMultiValueField] || [];
     }
     return [];
-  }, [activeParentForMultiValue, activeEmployeeForMultiValue, activeMultiValueField]);
+  }, [activeParentForMultiValue, activeChildForMultiValue, activeEmployeeForMultiValue, activeMultiValueField]);
 
-  const activeMultiValueTitle = activeMultiValueField === 'emails' ? t('emailsEdit') : t('phonesEdit');
-  const activeMultiValuePlaceholder = activeMultiValueField === 'emails' ? t('addEmail') : t('addPhone');
+  const activeMultiValueTitle =
+    activeMultiValueField === 'emails'
+      ? t('emailsEdit')
+      : activeMultiValueField === 'allergies'
+      ? t('allergiesEdit')
+      : t('phonesEdit');
+  const activeMultiValuePlaceholder =
+    activeMultiValueField === 'emails'
+      ? t('addEmail')
+      : activeMultiValueField === 'allergies'
+      ? t('addAllergy')
+      : t('addPhone');
 
   const emailFlagsConfig: MultiValueFlagConfig[] = React.useMemo(() => [
     {
@@ -4110,11 +4175,22 @@ const Dashboard: React.FC = () => {
     },
   ], []);
 
-  const activeMultiValueFlags = activeMultiValueField === 'emails' ? emailFlagsConfig : phoneFlagsConfig;
+  const activeMultiValueFlags =
+    activeMultiValueField === 'allergies'
+      ? undefined
+      : activeMultiValueField === 'emails'
+      ? emailFlagsConfig
+      : phoneFlagsConfig;
 
   const canEditMultiValueItem = React.useCallback(
     (item: MultiValueItem) => {
+      if (activeChildForMultiValue && activeMultiValueField === 'allergies') {
+        return canWriteChildAllergies;
+      }
       if (activeEmployeeForMultiValue) {
+        if (activeMultiValueField === 'allergies') {
+          return canWriteEmployeeAllergies;
+        }
         return canWriteEmployees;
       }
       if (activeMultiValueField === 'emails') {
@@ -4124,12 +4200,18 @@ const Dashboard: React.FC = () => {
       }
       return true;
     },
-    [activeEmployeeForMultiValue, canWriteEmployees, activeMultiValueField, hasPermission]
+    [activeChildForMultiValue, canWriteChildAllergies, activeEmployeeForMultiValue, canWriteEmployeeAllergies, canWriteEmployees, activeMultiValueField, hasPermission]
   );
 
   const canDeleteMultiValueItem = React.useCallback(
     (item: MultiValueItem) => {
+      if (activeChildForMultiValue && activeMultiValueField === 'allergies') {
+        return canWriteChildAllergies;
+      }
       if (activeEmployeeForMultiValue) {
+        if (activeMultiValueField === 'allergies') {
+          return canWriteEmployeeAllergies;
+        }
         return canWriteEmployees;
       }
       if (activeMultiValueField === 'emails') {
@@ -4139,12 +4221,18 @@ const Dashboard: React.FC = () => {
       }
       return true;
     },
-    [activeEmployeeForMultiValue, canWriteEmployees, activeMultiValueField, hasPermission]
+    [activeChildForMultiValue, canWriteChildAllergies, activeEmployeeForMultiValue, canWriteEmployeeAllergies, canWriteEmployees, activeMultiValueField, hasPermission]
   );
 
   const canToggleMultiValueFlag = React.useCallback(
     (item: MultiValueItem | null, flagKey: string) => {
+      if (activeChildForMultiValue && activeMultiValueField === 'allergies') {
+        return canWriteChildAllergies;
+      }
       if (activeEmployeeForMultiValue) {
+        if (activeMultiValueField === 'allergies') {
+          return canWriteEmployeeAllergies;
+        }
         return canWriteEmployees;
       }
       if (activeMultiValueField === 'emails' && flagKey === 'identifier_email') {
@@ -4157,12 +4245,24 @@ const Dashboard: React.FC = () => {
       }
       return true;
     },
-    [activeEmployeeForMultiValue, canWriteEmployees, activeMultiValueField, hasPermission]
+    [activeChildForMultiValue, canWriteChildAllergies, activeEmployeeForMultiValue, canWriteEmployeeAllergies, canWriteEmployees, activeMultiValueField, hasPermission]
   );
 
   const getMultiValueDisabledReason = React.useCallback(
     (item: MultiValueItem | null, _action: 'edit' | 'delete' | 'toggle', flagKey?: string) => {
+      if (activeChildForMultiValue && activeMultiValueField === 'allergies') {
+        if (!canWriteChildAllergies) {
+          return t('permissionRequired');
+        }
+        return undefined;
+      }
       if (activeEmployeeForMultiValue) {
+        if (activeMultiValueField === 'allergies') {
+          if (!canWriteEmployeeAllergies) {
+            return t('permissionRequired');
+          }
+          return undefined;
+        }
         if (!canWriteEmployees) {
           return t('permissionRequired') || 'employees.all.write permission required';
         }
@@ -4178,10 +4278,19 @@ const Dashboard: React.FC = () => {
       }
       return undefined;
     },
-    [activeEmployeeForMultiValue, canWriteEmployees, activeMultiValueField, hasPermission]
+    [activeChildForMultiValue, canWriteChildAllergies, activeEmployeeForMultiValue, canWriteEmployeeAllergies, canWriteEmployees, activeMultiValueField, hasPermission]
   );
 
   const handleSaveActiveMultiValue = (newValues: (string | MultiValueEntry)[]) => {
+    if (activeMultiValueField === 'allergies') {
+      const cleanStrings = newValues.map((v) => getEntryValue(v).trim()).filter(Boolean);
+      if (activeChildForMultiValue) {
+        handleSaveChildField(activeChildForMultiValue, 'allergies', cleanStrings);
+      } else if (activeEmployeeForMultiValue) {
+        handleSaveEmployeeField(activeEmployeeForMultiValue, 'allergies', cleanStrings);
+      }
+      return;
+    }
     if (activeParentForMultiValue && activeMultiValueField) {
       handleSaveParentField(activeParentForMultiValue, activeMultiValueField, newValues);
     } else if (activeEmployeeForMultiValue && activeMultiValueField) {
@@ -4734,7 +4843,8 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
         const groupMatch = groupInfo.groupLabel.toLowerCase().includes(query);
         const startMatch = groupInfo.startDate ? formatDisplayDate(groupInfo.startDate).toLowerCase().includes(query) : false;
         const familyLastNameMatch = (f.parents || []).some(p => (p.last_name || '').toLowerCase().includes(query));
-        return fnMatch || lnMatch || groupMatch || startMatch || familyLastNameMatch;
+        const allergyMatch = (c.allergies || []).some(a => String(a || '').toLowerCase().includes(query));
+        return fnMatch || lnMatch || groupMatch || startMatch || familyLastNameMatch || allergyMatch;
       });
 
       return {
@@ -4816,7 +4926,8 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
         const familyNameMatch = familyName.toLowerCase().includes(query);
         const parentMatch = parentNames.toLowerCase().includes(query);
         const notesMatch = (c.notes || '').toLowerCase().includes(query);
-        return fnMatch || lnMatch || fullName.includes(query) || bdMatch || groupMatch || fcMatch || familyNameMatch || parentMatch || notesMatch;
+        const allergyMatch = (c.allergies || []).some(a => String(a || '').toLowerCase().includes(query));
+        return fnMatch || lnMatch || fullName.includes(query) || bdMatch || groupMatch || fcMatch || familyNameMatch || parentMatch || notesMatch || allergyMatch;
       });
 
       const familyMatch = familyName.toLowerCase().includes(query) || parentNames.toLowerCase().includes(query);
@@ -5563,6 +5674,30 @@ function formatParentsSummary(parents: any[]): string {
           );
         }
       },
+      ...(canReadChildAllergies ? [
+        {
+          id: 'allergies',
+          header: t('allergies'),
+          accessorKey: 'allergies',
+          size: 220,
+          cell: (info: any) => {
+            const child = info.row.original;
+            const isPopActive =
+              activeChildForMultiValue?.id === child.id && activeMultiValueField === 'allergies';
+            return (
+              <MultiValueCell
+                id={child.id}
+                field="allergies"
+                values={child.allergies || []}
+                placeholder={canWriteChildAllergies ? t('addAllergy') : t('noAllergies')}
+                isActive={isPopActive}
+                onOpenManage={(field, anchor) => openManageChildMultiValue(child, field, anchor)}
+                canEdit={canWriteChildAllergies}
+              />
+            );
+          }
+        }
+      ] : []),
       ...(hasPermission('vaccination.status.manage') ? [
         {
           id: 'vaccination_status',
@@ -5616,6 +5751,11 @@ function formatParentsSummary(parents: any[]): string {
       handleSaveChildNames,
       handleDeleteChild,
       canWriteChildren,
+      canReadChildAllergies,
+      canWriteChildAllergies,
+      activeChildForMultiValue,
+      activeMultiValueField,
+      openManageChildMultiValue,
       openManageGroupChanges,
       groupPopoverAnchor,
       targetChildGroupChanges,
@@ -5698,6 +5838,30 @@ function formatParentsSummary(parents: any[]): string {
           );
         }
       },
+      ...(canReadChildAllergies ? [
+        {
+          id: 'allergies',
+          header: t('allergies'),
+          accessorKey: 'allergies',
+          size: 220,
+          cell: (info: any) => {
+            const child = info.row.original;
+            const isPopActive =
+              activeChildForMultiValue?.id === child.id && activeMultiValueField === 'allergies';
+            return (
+              <MultiValueCell
+                id={`fam-${child.id}`}
+                field="allergies"
+                values={child.allergies || []}
+                placeholder={canWriteChildAllergies ? t('addAllergy') : t('noAllergies')}
+                isActive={isPopActive}
+                onOpenManage={(field, anchor) => openManageChildMultiValue(child, field, anchor)}
+                canEdit={canWriteChildAllergies}
+              />
+            );
+          }
+        }
+      ] : []),
       {
         id: 'actions',
         header: '',
@@ -5706,7 +5870,16 @@ function formatParentsSummary(parents: any[]): string {
         cell: () => null,
       },
     ],
-    [childGroupColumn, handleJumpToChild, handleSaveChildField]
+    [
+      childGroupColumn,
+      handleJumpToChild,
+      handleSaveChildField,
+      canReadChildAllergies,
+      canWriteChildAllergies,
+      activeChildForMultiValue,
+      activeMultiValueField,
+      openManageChildMultiValue,
+    ]
   );
 
   const overviewColumns = React.useMemo<ColumnDef<any>[]>(
@@ -5856,15 +6029,29 @@ function formatParentsSummary(parents: any[]): string {
           }
 
           if (item.hide_group) {
+            if (item.allergies && item.allergies.length > 0) {
+              return (
+                <span className="overview-child-allergies-badge" style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                  <strong>{t('allergies')}:</strong> {item.allergies.join(', ')}
+                </span>
+              );
+            }
             return null;
           }
 
           const groupStatus = getOverviewChildGroupStatus(item);
           const displayGroup = groupStatus.groupLabel;
           return (
-            <span className="overview-child-group-badge" style={{ color: displayGroup === '-' ? 'var(--text-muted)' : 'var(--text)' }}>
-              {displayGroup}
-            </span>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.75rem' }}>
+              <span className="overview-child-group-badge" style={{ color: displayGroup === '-' ? 'var(--text-muted)' : 'var(--text)' }}>
+                {displayGroup}
+              </span>
+              {item.allergies && item.allergies.length > 0 && (
+                <span className="overview-child-allergies-badge" style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                  <strong>{t('allergies')}:</strong> {item.allergies.join(', ')}
+                </span>
+              )}
+            </div>
           );
         },
       },
@@ -6119,7 +6306,7 @@ function formatParentsSummary(parents: any[]): string {
     });
   }, [members, globalFilter]);
 
-  const filteredEmployees = React.useMemo(() => {
+      const filteredEmployees = React.useMemo(() => {
     if (!globalFilter.trim()) return employees;
     const q = globalFilter.toLowerCase();
     return employees.filter((emp) => {
@@ -6128,12 +6315,14 @@ function formatParentsSummary(parents: any[]): string {
       const addr = (emp.address || '').toLowerCase();
       const emails = (emp.emails || []).map((e) => getEntryValue(e).toLowerCase()).join(' ');
       const phones = (emp.phones || []).map((p) => getEntryValue(p).toLowerCase()).join(' ');
+      const allergies = (emp.allergies || []).map((a) => String(a || '').toLowerCase()).join(' ');
       return (
         name.includes(q) ||
         type.includes(q) ||
         addr.includes(q) ||
         emails.includes(q) ||
-        phones.includes(q)
+        phones.includes(q) ||
+        allergies.includes(q)
       );
     });
   }, [employees, globalFilter]);
@@ -6455,6 +6644,30 @@ function formatParentsSummary(parents: any[]): string {
           );
         },
       },
+      ...(canReadEmployeeAllergies ? [
+        {
+          id: 'allergies',
+          header: t('allergies') || 'Allergien',
+          accessorKey: 'allergies',
+          size: 220,
+          cell: (info: any) => {
+            const emp = info.row.original;
+            const isPopActive =
+              activeEmployeeForMultiValue?.id === emp.id && activeMultiValueField === 'allergies';
+            return (
+              <MultiValueCell
+                id={emp.id}
+                field="allergies"
+                values={emp.allergies || []}
+                placeholder={canWriteEmployeeAllergies ? t('addAllergy') : t('noAllergies')}
+                isActive={isPopActive}
+                onOpenManage={(field, anchor) => openManageEmployeeMultiValue(emp, field, anchor)}
+                canEdit={canWriteEmployeeAllergies}
+              />
+            );
+          },
+        }
+      ] : []),
       {
         id: 'actions',
         header: '',
@@ -6477,8 +6690,11 @@ function formatParentsSummary(parents: any[]): string {
     ],
     [
       canWriteEmployees,
+      canReadEmployeeAllergies,
+      canWriteEmployeeAllergies,
       activeEmployeeForMultiValue,
       activeMultiValueField,
+      openManageEmployeeMultiValue,
       handleSaveEmployeeField,
       handleDeleteEmployee,
     ]
@@ -7673,10 +7889,10 @@ function formatParentsSummary(parents: any[]): string {
           readOnly={!canWriteChildren}
         />
 
-        {/* Manage Multi-Values (Emails / Phones) Popover */}
+        {/* Manage Multi-Values (Emails / Phones / Allergies) Popover */}
         <MultiValueListEditor
-          key={`${(activeParentForMultiValue || activeEmployeeForMultiValue)?.id}-${activeMultiValueField}` || 'multivalue-popover'}
-          isOpen={Boolean(multiValuePopoverAnchor && (activeParentForMultiValue || activeEmployeeForMultiValue) && activeMultiValueField)}
+          key={`${(activeParentForMultiValue || activeChildForMultiValue || activeEmployeeForMultiValue)?.id}-${activeMultiValueField}` || 'multivalue-popover'}
+          isOpen={Boolean(multiValuePopoverAnchor && (activeParentForMultiValue || activeChildForMultiValue || activeEmployeeForMultiValue) && activeMultiValueField)}
           anchorEl={multiValuePopoverAnchor}
           onClose={closeManageMultiValue}
           values={activeMultiValueValues}

@@ -377,6 +377,13 @@ const translations: Record<Locale, Record<string, string>> = {
     familiencardDeleteConfirm: 'Sind Sie sicher, dass Sie diese Familiencard löschen möchten?',
     familiencardDateOrderError: '„Gültig bis“ muss nach „Gültig von“ liegen.',
     noFamiliencards: 'Keine Familiencards vorhanden',
+    allergies: 'Allergien',
+    allergiesEdit: 'Allergien',
+    addAllergy: 'Allergie hinzufügen',
+    editAllergies: 'Allergien bearbeiten',
+    noAllergies: 'Keine Allergien',
+    allergiesUpdated: 'Allergien aktualisiert',
+    employeeAllergiesTitle: 'Mitarbeitende',
   },
   en: {
     title: 'TH Portal',
@@ -752,6 +759,13 @@ const translations: Record<Locale, Record<string, string>> = {
     familiencardDeleteConfirm: 'Are you sure you want to delete this Familiencard?',
     familiencardDateOrderError: '“Valid until” must be after “Valid from”.',
     noFamiliencards: 'No Familiencards present',
+    allergies: 'Allergies',
+    allergiesEdit: 'Allergies',
+    addAllergy: 'Add allergy',
+    editAllergies: 'Edit allergies',
+    noAllergies: 'No allergies',
+    allergiesUpdated: 'Allergies updated',
+    employeeAllergiesTitle: 'Employees',
   },
 };
 

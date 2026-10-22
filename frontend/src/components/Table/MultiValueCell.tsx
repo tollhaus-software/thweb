@@ -5,11 +5,11 @@ import { getEntryValue, isFlagActive, getPhoneTypeSymbol, getPhoneTypeLabel, typ
 
 export interface MultiValueCellProps {
   id: string;
-  field: 'emails' | 'phones';
+  field: 'emails' | 'phones' | 'allergies';
   values?: MultiValueItem[];
   placeholder: string;
   isActive: boolean;
-  onOpenManage: (field: 'emails' | 'phones', anchor: HTMLElement | string) => void;
+  onOpenManage: (field: 'emails' | 'phones' | 'allergies', anchor: HTMLElement | string) => void;
   canEdit?: boolean;
 }
 
@@ -120,22 +120,24 @@ export const MultiValueCell: React.FC<MultiValueCellProps> = ({
                       🆔
                     </span>
                   )}
-                  <span
-                    className="address-list-indicator"
-                    style={{
-                      fontSize: '0.8rem',
-                      lineHeight: 1,
-                      opacity: isAddressList ? 1 : 0.25,
-                      filter: isAddressList ? 'none' : 'grayscale(100%)',
-                    }}
-                    title={
-                      isAddressList
-                        ? t('addressListIncluded') || 'In Adressliste aufnehmen'
-                        : t('addressListExcluded') || 'Nicht in Adressliste aufnehmen'
-                    }
-                  >
-                    📋
-                  </span>
+                  {field !== 'allergies' && (
+                    <span
+                      className="address-list-indicator"
+                      style={{
+                        fontSize: '0.8rem',
+                        lineHeight: 1,
+                        opacity: isAddressList ? 1 : 0.25,
+                        filter: isAddressList ? 'none' : 'grayscale(100%)',
+                      }}
+                      title={
+                        isAddressList
+                          ? t('addressListIncluded') || 'In Adressliste aufnehmen'
+                          : t('addressListExcluded') || 'Nicht in Adressliste aufnehmen'
+                      }
+                    >
+                      📋
+                    </span>
+                  )}
                 </div>
               </div>
             );
