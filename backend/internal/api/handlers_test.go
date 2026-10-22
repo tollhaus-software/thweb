@@ -1287,5 +1287,110 @@ func TestHandleUpdateChild_FamiliencardsValidation(t *testing.T) {
 	}
 }
 
+func TestHandleListAuditLogs_PaginationAndSearch(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := store.NewStore(pool)
+
+	testUserID := uuid.New()
+	userEmail := "audit-handler-tester@example.com"
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING", testUserID, userEmail)
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", testUserID)
+	}()
+
+	adminUser := &models.UserWithPermissions{
+		ID:                   testUserID,
+		Email:                userEmail,
+		EffectivePermissions: []string{"*"},
+	}
+
+	// Create a family to generate audit logs
+	_, err = appStore.CreateFamilyWithParents(ctx, testUserID, []models.Parent{
+		{
+			FirstName: "Wolfgang",
+			LastName:  "Mozart",
+			Address:   "Salzburg Getreidegasse 9",
+			Emails: models.MultiValueList{
+				{Value: "wolfgang@amadeus.at", AddressList: true},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateFamilyWithParents failed: %v", err)
+	}
+
+	server := &Server{Store: appStore}
+
+	// 1. Test search with matching query
+	req := httptest.NewRequest("GET", "/api/audit-logs?q=Getreidegasse", nil)
+	req = req.WithContext(context.WithValue(req.Context(), auth.UserContextKey, adminUser))
+	rec := httptest.NewRecorder()
+	server.HandleListAuditLogs(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", rec.Code)
+	}
+	var logs []models.AuditLog
+	if err := json.Unmarshal(rec.Body.Bytes(), &logs); err != nil {
+		t.Fatalf("expected JSON array response, got error: %v (body: %s)", err, rec.Body.String())
+	}
+	if len(logs) == 0 {
+		t.Errorf("expected at least 1 log matching 'Getreidegasse', got 0")
+	}
+
+	// 2. Test search with non-matching query
+	req = httptest.NewRequest("GET", "/api/audit-logs?q=NonExistentQueryZzzz", nil)
+	req = req.WithContext(context.WithValue(req.Context(), auth.UserContextKey, adminUser))
+	rec = httptest.NewRecorder()
+	server.HandleListAuditLogs(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", rec.Code)
+	}
+	logs = nil
+	if err := json.Unmarshal(rec.Body.Bytes(), &logs); err != nil {
+		t.Fatalf("expected JSON array response, got error: %v", err)
+	}
+	if len(logs) != 0 {
+		t.Errorf("expected 0 logs matching non-existent query, got %d", len(logs))
+	}
+
+	// 3. Test envelope format
+	req = httptest.NewRequest("GET", "/api/audit-logs?format=envelope&limit=10", nil)
+	req = req.WithContext(context.WithValue(req.Context(), auth.UserContextKey, adminUser))
+	rec = httptest.NewRecorder()
+	server.HandleListAuditLogs(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", rec.Code)
+	}
+	var envResp struct {
+		Logs    []models.AuditLog `json:"logs"`
+		HasMore bool              `json:"has_more"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &envResp); err != nil {
+		t.Fatalf("expected JSON envelope response, got error: %v", err)
+	}
+	if len(envResp.Logs) == 0 {
+		t.Errorf("expected logs in envelope response, got 0")
+	}
+	if rec.Header().Get("X-Has-More") == "" {
+		t.Errorf("expected X-Has-More header to be set")
+	}
+}
+
+
 
 

@@ -498,6 +498,13 @@ type AuditLog struct {
 	CreatedAt      time.Time       `json:"created_at"`
 }
 
+type AuditLogFilter struct {
+	Search   string     `json:"search,omitempty"`
+	Before   *time.Time `json:"before,omitempty"`
+	BeforeID *uuid.UUID `json:"before_id,omitempty"`
+	Limit    int        `json:"limit,omitempty"`
+}
+
 type THMembership struct {
 	ID             uuid.UUID  `json:"id"`
 	ParentID       uuid.UUID  `json:"parent_id"`

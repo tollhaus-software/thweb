@@ -1020,6 +1020,167 @@ func TestStore_FirstNameForAddressList(t *testing.T) {
 	}
 }
 
+func TestQueryAuditLogsForUser_PaginationAndSearch(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := NewStore(pool)
+
+	testUserID := uuid.New()
+	userEmail := "audit-query-user@example.com"
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING", testUserID, userEmail)
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", testUserID)
+	}()
+
+	adminUser := &models.UserWithPermissions{
+		Email:                userEmail,
+		EffectivePermissions: []string{"*"},
+	}
+
+	// 1. Create a family with parents (produces audit logs)
+	fam, err := appStore.CreateFamilyWithParents(ctx, testUserID, []models.Parent{
+		{
+			FirstName: "Albrecht",
+			LastName:  "Duerer",
+			Address:   "Nuernberg Hauptstr 42",
+			Notes:     "SecretStaffOnlyNoteForQueryTest",
+			Emails: models.MultiValueList{
+				{Value: "albrecht@duerer-art.de", AddressList: true},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateFamilyWithParents failed: %v", err)
+	}
+
+	// 2. Add a child (produces child audit log)
+	childID := uuid.New()
+	err = appStore.UpdateChild(ctx, testUserID, childID, models.Child{
+		ID:        childID,
+		FamilyID:  fam.ID,
+		FirstName: "Felicitas",
+		LastName:  "Duerer",
+	})
+	if err != nil {
+		t.Fatalf("UpdateChild failed: %v", err)
+	}
+
+	// Verify we have at least 3 audit logs (family INSERT, parent INSERT, child INSERT)
+	allLogs, err := appStore.ListAuditLogsForUser(ctx, adminUser)
+	if err != nil {
+		t.Fatalf("ListAuditLogsForUser failed: %v", err)
+	}
+	if len(allLogs) < 3 {
+		t.Fatalf("expected at least 3 audit logs, got %d", len(allLogs))
+	}
+
+	// 3. Search query: user who performed the action (case-insensitive substring)
+	logsByUser, _, err := appStore.QueryAuditLogsForUser(ctx, adminUser, models.AuditLogFilter{
+		Search: "QUERY-USER",
+	})
+	if err != nil {
+		t.Fatalf("QueryAuditLogsForUser search by user failed: %v", err)
+	}
+	if len(logsByUser) < 3 {
+		t.Errorf("expected at least 3 logs matching user substring 'QUERY-USER', got %d", len(logsByUser))
+	}
+
+	// 4. Search query: payload values (case-insensitive substring)
+	// 4a. Match parent address
+	logsByAddr, _, err := appStore.QueryAuditLogsForUser(ctx, adminUser, models.AuditLogFilter{
+		Search: "hauptstr 42",
+	})
+	if err != nil {
+		t.Fatalf("QueryAuditLogsForUser search by address failed: %v", err)
+	}
+	if len(logsByAddr) == 0 {
+		t.Errorf("expected logs matching address 'hauptstr 42', got 0")
+	}
+
+	// 4b. Match child name
+	logsByChild, _, err := appStore.QueryAuditLogsForUser(ctx, adminUser, models.AuditLogFilter{
+		Search: "felicitas",
+	})
+	if err != nil {
+		t.Fatalf("QueryAuditLogsForUser search by child name failed: %v", err)
+	}
+	if len(logsByChild) == 0 {
+		t.Errorf("expected logs matching child name 'felicitas', got 0")
+	}
+
+	// 4c. Non-existent query
+	logsNonExistent, _, err := appStore.QueryAuditLogsForUser(ctx, adminUser, models.AuditLogFilter{
+		Search: "NonExistentWord12345",
+	})
+	if err != nil {
+		t.Fatalf("QueryAuditLogsForUser search non-existent failed: %v", err)
+	}
+	if len(logsNonExistent) != 0 {
+		t.Errorf("expected 0 logs matching non-existent word, got %d", len(logsNonExistent))
+	}
+
+	// 5. Pagination by timestamp
+	// Fetch page 1 with limit = 1
+	p1Logs, hasMore1, err := appStore.QueryAuditLogsForUser(ctx, adminUser, models.AuditLogFilter{
+		Limit: 1,
+	})
+	if err != nil {
+		t.Fatalf("QueryAuditLogsForUser page 1 failed: %v", err)
+	}
+	if len(p1Logs) != 1 {
+		t.Fatalf("expected 1 log on page 1, got %d", len(p1Logs))
+	}
+	if !hasMore1 {
+		t.Errorf("expected hasMore=true after page 1")
+	}
+
+	// Fetch page 2 using cursor (Before = p1Logs[0].CreatedAt, BeforeID = p1Logs[0].ID)
+	p2Logs, hasMore2, err := appStore.QueryAuditLogsForUser(ctx, adminUser, models.AuditLogFilter{
+		Limit:    1,
+		Before:   &p1Logs[0].CreatedAt,
+		BeforeID: &p1Logs[0].ID,
+	})
+	if err != nil {
+		t.Fatalf("QueryAuditLogsForUser page 2 failed: %v", err)
+	}
+	if len(p2Logs) != 1 {
+		t.Fatalf("expected 1 log on page 2, got %d", len(p2Logs))
+	}
+	if p2Logs[0].ID == p1Logs[0].ID {
+		t.Errorf("expected different log on page 2, got same ID %s", p2Logs[0].ID)
+	}
+	_ = hasMore2
+
+	// 6. Sanitization defense-in-depth:
+	// A user without families.all.read (e.g. restricted user)
+	// searching for "SecretStaffOnlyNoteForQueryTest" must NOT get any results even if it's in the DB!
+	restrictedUser := &models.UserWithPermissions{
+		Email:                "restricted@example.com",
+		EffectivePermissions: []string{"children.all.write", "audit.view"},
+	}
+	leakedLogs, _, err := appStore.QueryAuditLogsForUser(ctx, restrictedUser, models.AuditLogFilter{
+		Search: "SecretStaffOnlyNoteForQueryTest",
+	})
+	if err != nil {
+		t.Fatalf("QueryAuditLogsForUser restricted test failed: %v", err)
+	}
+	if len(leakedLogs) != 0 {
+		t.Errorf("SECURITY LEAK: restricted user saw audit logs via search on sanitized note! got %d logs", len(leakedLogs))
+	}
+}
+
+
 
 
 

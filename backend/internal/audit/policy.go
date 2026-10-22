@@ -169,6 +169,36 @@ var AuditRegistry = map[string]EntityPolicy{
 	},
 }
 
+// AllowedEntityTypesForUser returns a list of entity type strings that the user is potentially authorized to view.
+// If the user has "*" superadmin permission, it returns nil (meaning all types allowed).
+func AllowedEntityTypesForUser(user *models.UserWithPermissions) []string {
+	if user == nil {
+		return []string{}
+	}
+	if user.HasPermission("*") {
+		return nil
+	}
+
+	var allowed []string
+	if user.HasPermission("families.all.read") || (user.FamilyID != nil && user.HasPermission("families.self.selfservice")) {
+		allowed = append(allowed, "family", "parent")
+	}
+	if user.HasPermission("families.all.read") || user.HasPermission("children.all.write") || (user.FamilyID != nil && user.HasPermission("families.self.selfservice")) {
+		allowed = append(allowed, "child", "child_group_change")
+	}
+	if user.HasPermission("families.all.read") || user.HasPermission("hygiene.all.write") {
+		allowed = append(allowed, "hygiene_event")
+	}
+	if user.HasPermission("families.all.read") || user.HasPermission("memberships.all.read") || user.HasPermission("memberships.all.write") || user.HasPermission("fees.all.read") || (user.FamilyID != nil && user.HasPermission("memberships.self.read")) {
+		allowed = append(allowed, "th_membership")
+	}
+	if user.HasPermission("employees.all.read") || user.HasPermission("employees.all.write") {
+		allowed = append(allowed, "employee")
+	}
+
+	return allowed
+}
+
 // CanUserViewEntity returns true if the user is authorized to view audit records of the specified entity type.
 // If the entity type is unknown, it fails closed (returns false unless the user has "*" superadmin permission).
 func CanUserViewEntity(user *models.UserWithPermissions, entityType string, familyID *uuid.UUID) bool {

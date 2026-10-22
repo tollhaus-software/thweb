@@ -1273,33 +1273,77 @@ func (s *Store) ListAuditLogs(ctx context.Context) ([]models.AuditLog, error) {
 	return logs, nil
 }
 
-func (s *Store) ListAuditLogsForUser(ctx context.Context, user *models.UserWithPermissions) ([]models.AuditLog, error) {
+func escapeLike(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	s = strings.ReplaceAll(s, `_`, `\_`)
+	return s
+}
+
+func (s *Store) QueryAuditLogsForUser(ctx context.Context, user *models.UserWithPermissions, filter models.AuditLogFilter) ([]models.AuditLog, bool, error) {
 	if user == nil {
-		return []models.AuditLog{}, nil
+		return []models.AuditLog{}, false, nil
 	}
 
-	var rows pgx.Rows
-	var err error
+	var whereClauses []string
+	var args []interface{}
 
 	// If the user does not have global access and is scoped to a specific family
 	if !user.HasPermission("*") && !user.HasPermission("families.all.read") && user.FamilyID != nil {
-		rows, err = s.db.Query(ctx, `
-			SELECT a.id, a.transaction_id, a.family_id, a.entity_type, a.entity_id, a.operation, a.before_snapshot, a.after_snapshot, a.changed_by, COALESCE(u.email, ''), a.created_at
-			FROM audit_log a
-			LEFT JOIN users u ON a.changed_by = u.id
-			WHERE a.family_id = $1
-			ORDER BY a.created_at DESC
-		`, *user.FamilyID)
-	} else {
-		rows, err = s.db.Query(ctx, `
-			SELECT a.id, a.transaction_id, a.family_id, a.entity_type, a.entity_id, a.operation, a.before_snapshot, a.after_snapshot, a.changed_by, COALESCE(u.email, ''), a.created_at
-			FROM audit_log a
-			LEFT JOIN users u ON a.changed_by = u.id
-			ORDER BY a.created_at DESC
-		`)
+		whereClauses = append(whereClauses, fmt.Sprintf("a.family_id = $%d", len(args)+1))
+		args = append(args, *user.FamilyID)
 	}
+
+	// Filter allowed entity types if not superadmin
+	if !user.HasPermission("*") {
+		allowedEntities := audit.AllowedEntityTypesForUser(user)
+		if len(allowedEntities) == 0 {
+			return []models.AuditLog{}, false, nil
+		}
+		whereClauses = append(whereClauses, fmt.Sprintf("a.entity_type = ANY($%d)", len(args)+1))
+		args = append(args, allowedEntities)
+	}
+
+	// Keyset pagination by timestamp and id
+	if filter.Before != nil {
+		if filter.BeforeID != nil {
+			whereClauses = append(whereClauses, fmt.Sprintf("(a.created_at < $%d OR (a.created_at = $%d AND a.id < $%d))", len(args)+1, len(args)+1, len(args)+2))
+			args = append(args, *filter.Before, *filter.BeforeID)
+		} else {
+			whereClauses = append(whereClauses, fmt.Sprintf("a.created_at < $%d", len(args)+1))
+			args = append(args, *filter.Before)
+		}
+	}
+
+	// Search query filter (user who performed action, or payload values)
+	searchTrimmed := strings.TrimSpace(filter.Search)
+	if searchTrimmed != "" {
+		pattern := "%" + escapeLike(searchTrimmed) + "%"
+		whereClauses = append(whereClauses, fmt.Sprintf(
+			"(COALESCE(u.email, '') ILIKE $%d OR COALESCE(a.before_snapshot::text, '') ILIKE $%d OR COALESCE(a.after_snapshot::text, '') ILIKE $%d)",
+			len(args)+1, len(args)+1, len(args)+1,
+		))
+		args = append(args, pattern)
+	}
+
+	query := `
+		SELECT a.id, a.transaction_id, a.family_id, a.entity_type, a.entity_id, a.operation, a.before_snapshot, a.after_snapshot, a.changed_by, COALESCE(u.email, ''), a.created_at
+		FROM audit_log a
+		LEFT JOIN users u ON a.changed_by = u.id
+	`
+	if len(whereClauses) > 0 {
+		query += " WHERE " + strings.Join(whereClauses, " AND ")
+	}
+	query += " ORDER BY a.created_at DESC, a.id DESC"
+
+	if filter.Limit > 0 {
+		query += fmt.Sprintf(" LIMIT $%d", len(args)+1)
+		args = append(args, filter.Limit+1)
+	}
+
+	rows, err := s.db.Query(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer rows.Close()
 
@@ -1308,15 +1352,44 @@ func (s *Store) ListAuditLogsForUser(ctx context.Context, user *models.UserWithP
 		var l models.AuditLog
 		err := rows.Scan(&l.ID, &l.TransactionID, &l.FamilyID, &l.EntityType, &l.EntityID, &l.Operation, &l.BeforeSnapshot, &l.AfterSnapshot, &l.ChangedBy, &l.ChangedByEmail, &l.CreatedAt)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		logs = append(logs, l)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	return audit.FilterAuditLogsForUser(user, logs), nil
+	// Apply row-level security and field sanitization
+	filtered := audit.FilterAuditLogsForUser(user, logs)
+
+	// Defense-in-depth: If search query was provided, ensure redacted snapshots didn't falsely match
+	if searchTrimmed != "" {
+		searchLower := strings.ToLower(searchTrimmed)
+		verified := make([]models.AuditLog, 0, len(filtered))
+		for _, l := range filtered {
+			userMatch := strings.Contains(strings.ToLower(l.ChangedByEmail), searchLower)
+			beforeMatch := len(l.BeforeSnapshot) > 0 && strings.Contains(strings.ToLower(string(l.BeforeSnapshot)), searchLower)
+			afterMatch := len(l.AfterSnapshot) > 0 && strings.Contains(strings.ToLower(string(l.AfterSnapshot)), searchLower)
+			if userMatch || beforeMatch || afterMatch {
+				verified = append(verified, l)
+			}
+		}
+		filtered = verified
+	}
+
+	hasMore := false
+	if filter.Limit > 0 && len(filtered) > filter.Limit {
+		hasMore = true
+		filtered = filtered[:filter.Limit]
+	}
+
+	return filtered, hasMore, nil
+}
+
+func (s *Store) ListAuditLogsForUser(ctx context.Context, user *models.UserWithPermissions) ([]models.AuditLog, error) {
+	logs, _, err := s.QueryAuditLogsForUser(ctx, user, models.AuditLogFilter{})
+	return logs, err
 }
 
 func (s *Store) ListRoles(ctx context.Context) ([]models.Role, error) {
