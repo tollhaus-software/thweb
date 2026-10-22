@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS children (
     birth_date DATE NOT NULL,
     notes TEXT NOT NULL DEFAULT '',
     vaccination_status_protected BYTEA,
+    allergies_protected BYTEA,
     familiencards JSONB NOT NULL DEFAULT '[]'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -193,6 +194,7 @@ CREATE TABLE IF NOT EXISTS employees (
     phones JSONB NOT NULL DEFAULT '[]'::jsonb,
     address TEXT NOT NULL DEFAULT '',
     is_kinderschutzbeauftragter BOOLEAN NOT NULL DEFAULT FALSE,
+    allergies_protected BYTEA,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

@@ -83,7 +83,7 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		r.With(auth.RequirePermission("families.all.write")).Delete("/api/parents/{id}", server.HandleDeleteParent)
 
 		r.With(auth.RequirePermission("children.all.write")).Post("/api/families/{id}/children", server.HandleUpdateChild)
-		r.With(auth.RequirePermission("children.all.write")).Put("/api/children/{id}", server.HandleUpdateChild)
+		r.With(auth.RequireAnyPermission("children.all.write", "allergies.children.write")).Put("/api/children/{id}", server.HandleUpdateChild)
 		r.With(auth.RequirePermission("children.all.write")).Delete("/api/children/{id}", server.HandleDeleteChild)
 		r.With(auth.RequirePermission("children.all.write")).Post("/api/children/{id}/group_changes", server.HandleCreateChildGroupChange)
 		r.With(auth.RequirePermission("children.all.write")).Post("/api/children_group_changes", server.HandleCreateChildGroupChange)
@@ -104,17 +104,19 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		r.With(auth.RequirePermission("memberships.all.write")).Delete("/api/memberships/{id}", server.HandleDeleteTHMembership)
 
 		// Employees CRUD
-		r.With(auth.RequirePermission("employees.all.read")).Get("/api/employees", server.HandleListEmployees)
+		r.With(auth.RequireAnyPermission("employees.all.read", "allergies.employees.read")).Get("/api/employees", server.HandleListEmployees)
 		r.With(auth.RequirePermission("employees.all.write")).Post("/api/employees", server.HandleCreateEmployee)
-		r.With(auth.RequirePermission("employees.all.write")).Put("/api/employees/{id}", server.HandleUpdateEmployee)
+		r.With(auth.RequireAnyPermission("employees.all.write", "allergies.employees.write")).Put("/api/employees/{id}", server.HandleUpdateEmployee)
 		r.With(auth.RequirePermission("employees.all.write")).Delete("/api/employees/{id}", server.HandleDeleteEmployee)
 
 		// Childcare Fees Calculation
 		r.With(auth.RequirePermission("fees.self.read")).Post("/api/fees/calculate", server.HandleCalculateFees)
 
-		// Dashboard / Daily Brief
+		// Dashboard / Daily Brief & Allergies Summary
 		r.Get("/api/dashboard/daily-brief", server.HandleGetDailyBrief)
 		r.Get("/api/daily-brief", server.HandleGetDailyBrief)
+		r.With(auth.RequirePermission("allergies.summary.read")).Get("/api/dashboard/allergies", server.HandleGetAllergiesSummary)
+		r.With(auth.RequirePermission("allergies.summary.read")).Get("/api/allergies/summary", server.HandleGetAllergiesSummary)
 	})
 
 	return r

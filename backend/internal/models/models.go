@@ -56,6 +56,12 @@ func (s *UserWithPermissions) HasPermission(perm string) bool {
 		if perm == "employees.all.read" && (p == "employees.all.write" || p == "*") {
 			return true
 		}
+		if perm == "allergies.children.read" && (p == "allergies.children.write" || p == "*") {
+			return true
+		}
+		if perm == "allergies.employees.read" && (p == "allergies.employees.write" || p == "*") {
+			return true
+		}
 	}
 	return false
 }
@@ -70,6 +76,8 @@ func (s *UserWithPermissions) EnsureImpliedPermissions() {
 	hasMembershipsWrite := false
 	hasMembershipsAll := false
 	hasEmployeesWrite := false
+	hasAllergiesChildrenWrite := false
+	hasAllergiesEmployeesWrite := false
 	permSet := make(map[string]bool)
 	for _, p := range s.EffectivePermissions {
 		permSet[p] = true
@@ -88,6 +96,12 @@ func (s *UserWithPermissions) EnsureImpliedPermissions() {
 		if p == "*" || p == "employees.all.write" {
 			hasEmployeesWrite = true
 		}
+		if p == "*" || p == "allergies.children.write" {
+			hasAllergiesChildrenWrite = true
+		}
+		if p == "*" || p == "allergies.employees.write" {
+			hasAllergiesEmployeesWrite = true
+		}
 	}
 	if hasFamiliesAll {
 		permSet["families.all.restrictedread"] = true
@@ -104,6 +118,12 @@ func (s *UserWithPermissions) EnsureImpliedPermissions() {
 	}
 	if hasEmployeesWrite {
 		permSet["employees.all.read"] = true
+	}
+	if hasAllergiesChildrenWrite {
+		permSet["allergies.children.read"] = true
+	}
+	if hasAllergiesEmployeesWrite {
+		permSet["allergies.employees.read"] = true
 	}
 	s.EffectivePermissions = make([]string, 0, len(permSet))
 	for p := range permSet {
@@ -184,6 +204,11 @@ var AllKnownPermissions = []string{
 	"memberships.self.read",
 	"employees.all.write",
 	"employees.all.read",
+	"allergies.children.read",
+	"allergies.children.write",
+	"allergies.employees.read",
+	"allergies.employees.write",
+	"allergies.summary.read",
 	"mealplan.view",
 	"audit.view",
 	"users.all.manage",
@@ -423,6 +448,109 @@ type VaccinationStatusProtected struct {
 	VaccinationChecks []VaccinationCheck `json:"vaccination_checks"`
 }
 
+// AllergyItem represents an extensible allergy entry inside AllergiesProtectedPayload.
+// It unmarshals from either a JSON object `{"name": "..."}` or a plain JSON string `"..."`.
+type AllergyItem struct {
+	Name string `json:"name"`
+}
+
+func (a *AllergyItem) UnmarshalJSON(data []byte) error {
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		a.Name = strings.TrimSpace(str)
+		return nil
+	}
+	var obj struct {
+		Name  string `json:"name"`
+		Value string `json:"value"`
+		Type  string `json:"type"`
+	}
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return err
+	}
+	if obj.Name != "" {
+		a.Name = strings.TrimSpace(obj.Name)
+	} else if obj.Value != "" {
+		a.Name = strings.TrimSpace(obj.Value)
+	} else {
+		a.Name = strings.TrimSpace(obj.Type)
+	}
+	return nil
+}
+
+// AllergiesProtectedPayload is the extensible JSON envelope encrypted inside allergies_protected.
+type AllergiesProtectedPayload struct {
+	Allergies []AllergyItem `json:"allergies"`
+}
+
+// SanitizeAllergiesList trims entries and filters out empty strings.
+func SanitizeAllergiesList(items []string) []string {
+	out := make([]string, 0, len(items))
+	for _, s := range items {
+		trimmed := strings.TrimSpace(s)
+		if trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
+}
+
+// EncodeAllergiesPayload serializes a slice of allergy strings into the extensible JSON payload.
+func EncodeAllergiesPayload(allergies []string) ([]byte, error) {
+	cleaned := SanitizeAllergiesList(allergies)
+	items := make([]AllergyItem, 0, len(cleaned))
+	for _, name := range cleaned {
+		items = append(items, AllergyItem{Name: name})
+	}
+	payload := AllergiesProtectedPayload{
+		Allergies: items,
+	}
+	return json.Marshal(payload)
+}
+
+// DecodeAllergiesPayload deserializes an AllergiesProtectedPayload (or plain JSON string array) into a slice of strings.
+func DecodeAllergiesPayload(rawJSON []byte) ([]string, error) {
+	if len(rawJSON) == 0 {
+		return []string{}, nil
+	}
+	var payload AllergiesProtectedPayload
+	if err := json.Unmarshal(rawJSON, &payload); err == nil && payload.Allergies != nil {
+		out := make([]string, 0, len(payload.Allergies))
+		for _, item := range payload.Allergies {
+			trimmed := strings.TrimSpace(item.Name)
+			if trimmed != "" {
+				out = append(out, trimmed)
+			}
+		}
+		return out, nil
+	}
+	var plainSlice []AllergyItem
+	if err := json.Unmarshal(rawJSON, &plainSlice); err == nil {
+		out := make([]string, 0, len(plainSlice))
+		for _, item := range plainSlice {
+			trimmed := strings.TrimSpace(item.Name)
+			if trimmed != "" {
+				out = append(out, trimmed)
+			}
+		}
+		return out, nil
+	}
+	return nil, fmt.Errorf("invalid allergies payload JSON")
+}
+
+// StringSlicesEqual returns true if two string slices have identical elements in order.
+func StringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 type ChildGroupChange struct {
 	ID          uuid.UUID `json:"id"`
 	Child       uuid.UUID `json:"child"`
@@ -478,6 +606,10 @@ type Child struct {
 	Notes                      string             `json:"notes"`
 	VaccinationStatusProtected []byte             `json:"vaccination_status_protected,omitempty"`
 	VaccinationChecks          []VaccinationCheck `json:"vaccination_checks,omitempty"`
+	AllergiesProtected         []byte             `json:"allergies_protected,omitempty"`
+	Allergies                  []string           `json:"allergies,omitempty"`
+	AllergiesUpdated           bool               `json:"allergies_updated,omitempty"`
+	ClearAllergies             bool               `json:"-"`
 	GroupChanges               []ChildGroupChange `json:"group_changes"`
 	Familiencards              FamiliencardList   `json:"familiencards"`
 	CreatedAt                  time.Time          `json:"created_at"`
@@ -544,6 +676,10 @@ type Employee struct {
 	Phones                     MultiValueList `json:"phones"`
 	Address                    string         `json:"address"`
 	IsKinderschutzbeauftragter bool           `json:"is_kinderschutzbeauftragter"`
+	AllergiesProtected         []byte         `json:"allergies_protected,omitempty"`
+	Allergies                  []string       `json:"allergies,omitempty"`
+	AllergiesUpdated           bool           `json:"allergies_updated,omitempty"`
+	ClearAllergies             bool           `json:"-"`
 	CreatedAt                  time.Time      `json:"created_at"`
 	UpdatedAt                  time.Time      `json:"updated_at"`
 }
@@ -552,11 +688,12 @@ func (e *Employee) UnmarshalJSON(data []byte) error {
 	type Alias Employee
 	var aux struct {
 		Alias
-		GivenName                  *string `json:"given_name"`
-		Surname                    *string `json:"surname"`
-		Type                       *string `json:"type"`
-		IsKinderschutzbeauftragter *bool   `json:"is_kinderschutzbeauftragter"`
-		IsChildProtectionOfficer   *bool   `json:"is_child_protection_officer"`
+		GivenName                  *string        `json:"given_name"`
+		Surname                    *string        `json:"surname"`
+		Type                       *string        `json:"type"`
+		IsKinderschutzbeauftragter *bool          `json:"is_kinderschutzbeauftragter"`
+		IsChildProtectionOfficer   *bool          `json:"is_child_protection_officer"`
+		AllergiesRaw               *[]AllergyItem `json:"allergies"`
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
@@ -575,6 +712,15 @@ func (e *Employee) UnmarshalJSON(data []byte) error {
 		e.IsKinderschutzbeauftragter = *aux.IsKinderschutzbeauftragter
 	} else if aux.IsChildProtectionOfficer != nil {
 		e.IsKinderschutzbeauftragter = *aux.IsChildProtectionOfficer
+	}
+	if aux.AllergiesRaw != nil {
+		allergies := make([]string, 0, len(*aux.AllergiesRaw))
+		for _, item := range *aux.AllergiesRaw {
+			if item.Name != "" {
+				allergies = append(allergies, item.Name)
+			}
+		}
+		e.Allergies = allergies
 	}
 	return nil
 }

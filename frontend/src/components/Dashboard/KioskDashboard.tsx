@@ -22,6 +22,18 @@ interface DailyBriefData {
   tasks_and_info: string[];
 }
 
+interface GroupAllergiesSummary {
+  group_id: number;
+  group_name: string;
+  allergies: string[];
+}
+
+interface AllergiesSummaryData {
+  date: string;
+  groups: GroupAllergiesSummary[];
+  employees: string[];
+}
+
 interface RealtimeEvent {
   type?: string;
   payload?: unknown;
@@ -33,11 +45,14 @@ export interface KioskDashboardProps {
 }
 
 export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false }) => {
-  const { token } = useAuth();
+  const { token, hasPermission } = useAuth();
+  const canViewAllergiesSummary = !embedded || hasPermission('allergies.summary.read');
 
   // If selectedDate is null, the frontend omits the ?date parameter, requesting "today" from backend
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [data, setData] = useState<DailyBriefData | null>(null);
+  const [allergiesData, setAllergiesData] = useState<AllergiesSummaryData | null>(null);
+  const [showAllergies, setShowAllergies] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState<Date>(() => new Date());
 
@@ -81,7 +96,36 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
     }
   }, [token]);
 
-  // Initial fetch and fetch when selectedDate changes
+  const fetchAllergiesSummary = useCallback(async (dateParam: string | null) => {
+    if (!canViewAllergiesSummary) return;
+    try {
+      const url = dateParam
+        ? `/api/dashboard/allergies?date=${encodeURIComponent(dateParam)}`
+        : `/api/dashboard/allergies`;
+
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const res = await fetch(url, { headers });
+      if (!res.ok) {
+        return;
+      }
+
+      const result: AllergiesSummaryData = await res.json();
+      setAllergiesData(result);
+    } catch (err: unknown) {
+      console.error('Error fetching allergies summary:', err);
+    }
+  }, [token, canViewAllergiesSummary]);
+
+  // Initial fetch and fetch when selectedDate or showAllergies changes
+  useEffect(() => {
+    if (showAllergies) {
+      void fetchAllergiesSummary(selectedDate);
+    }
+  }, [selectedDate, showAllergies, fetchAllergiesSummary]);
   useEffect(() => {
     let ignore = false;
     const runFetch = async () => {
@@ -142,7 +186,17 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
     ) {
       void fetchDailyBrief(selectedDateRef.current);
     }
-  }, [fetchDailyBrief]);
+    if (
+      message?.type === 'CHILD_UPDATED' ||
+      message?.type === 'CHILD_DELETED' ||
+      message?.type === 'EMPLOYEE_CREATED' ||
+      message?.type === 'EMPLOYEE_UPDATED' ||
+      message?.type === 'EMPLOYEE_DELETED' ||
+      message?.type === 'INVALIDATE'
+    ) {
+      void fetchAllergiesSummary(selectedDateRef.current);
+    }
+  }, [fetchDailyBrief, fetchAllergiesSummary]);
 
   useRealtime(handleRealtimeMessage);
 
@@ -176,6 +230,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
   };
 
   const handleHomeClick = () => {
+    setShowAllergies(false);
     setSelectedDate(null); // Omitting date fetches "today" from backend
   };
 
@@ -221,104 +276,152 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
             </button>
           </header>
 
-          {/* Card 2: Shows who is cooking. Header on top left: "Koch / Köchin" */}
-          <section className="kiosk-card kiosk-card-cook">
-            <div className="kiosk-card-header">
-              <UtensilsCrossed size={embedded ? 20 : 26} className="kiosk-card-header-icon" />
-              <span>{t('whoIsCooking')}</span>
-            </div>
-            <div className="kiosk-cook-content">
-              {data?.who_is_cooking ? (
-                data.who_is_cooking
-              ) : (
-                <span className="kiosk-empty-text">{t('noCook')}</span>
-              )}
-            </div>
-          </section>
-
-          {/* Card 3: Shows the meal, with header "Es gibt:" and up to 3 meal components as lines */}
-          <section className="kiosk-card kiosk-card-meal">
-            <div className="kiosk-card-header">
-              <Soup size={embedded ? 20 : 26} className="kiosk-card-header-icon" />
-              <span>{t('mealTitle')}</span>
-            </div>
-            <div className="kiosk-meal-lines">
-              {data?.meal_components && data.meal_components.length > 0 ? (
-                data.meal_components.slice(0, 3).map((component, idx) => (
-                  <div
-                    key={idx}
-                    className={`kiosk-meal-line ${idx === 0 ? 'kiosk-meal-line-primary' : 'kiosk-meal-line-secondary'}`}
-                  >
-                    <span className="kiosk-meal-text">{component}</span>
+          {showAllergies ? (
+            <div className="kiosk-allergies-view">
+              {(allergiesData?.groups || [
+                { group_id: 1, group_name: t('overviewGroup1'), allergies: [] },
+                { group_id: 2, group_name: t('overviewGroup2'), allergies: [] },
+                { group_id: 3, group_name: t('overviewGroup3'), allergies: [] },
+              ]).map((grp) => (
+                <section key={grp.group_id} className="kiosk-card kiosk-card-allergies-group">
+                  <div className="kiosk-card-header">
+                    <AlertCircle size={embedded ? 20 : 26} className="kiosk-card-header-icon" />
+                    <span>{grp.group_name}</span>
                   </div>
-                ))
-              ) : (
-                <div className="kiosk-empty-text">{t('noMeal')}</div>
-              )}
-            </div>
-          </section>
+                  <div className="kiosk-allergies-list">
+                    {grp.allergies && grp.allergies.length > 0 ? (
+                      grp.allergies.map((allergy, idx) => (
+                        <span key={idx} className="kiosk-allergy-badge">
+                          {allergy}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="kiosk-empty-text">{t('noAllergies')}</span>
+                    )}
+                  </div>
+                </section>
+              ))}
 
-          {/* Card 4: TODOs / warnings, aligned vertically at the bottom of the content area */}
-          <section className="kiosk-card kiosk-card-todos">
-            <div className="kiosk-card-header">
-              <AlertCircle size={embedded ? 20 : 26} className="kiosk-card-header-icon" />
-              <span>{t('tasksAndInfoTitle')}</span>
-            </div>
-            <div className="kiosk-todos-list">
-              {data?.tasks_and_info && data.tasks_and_info.length > 0 ? (
-                data.tasks_and_info.map((task, idx) => {
-                  if (task === 'yellow_bin_retrieve') {
-                    return (
-                      <div key={idx} className="kiosk-todo-item kiosk-todo-yellow">
-                        <Trash2 size={embedded ? 24 : 36} className="kiosk-todo-icon" />
-                        <span>{t('yellowBinRetrieve')}</span>
-                      </div>
-                    );
-                  }
-                  if (task === 'yellow_bin_put_out') {
-                    return (
-                      <div key={idx} className="kiosk-todo-item kiosk-todo-yellow">
-                        <Trash2 size={embedded ? 24 : 36} className="kiosk-todo-icon" />
-                        <span>{t('yellowBinPutOut')}</span>
-                      </div>
-                    );
-                  }
-                  if (task === 'clean_coffe_machine' || task === 'clean_coffee_machine') {
-                    return (
-                      <div key={idx} className="kiosk-todo-item kiosk-todo-coffee">
-                        <Coffee size={embedded ? 24 : 36} className="kiosk-todo-icon" />
-                        <span>{t('cleanCoffeeMachine')}</span>
-                      </div>
-                    );
-                  }
-                  if (task === 'clean_refrigerator') {
-                    return (
-                      <div key={idx} className="kiosk-todo-item kiosk-todo-refrigerator">
-                        <Refrigerator size={embedded ? 24 : 36} className="kiosk-todo-icon" />
-                        <span>{t('cleanRefrigerator')}</span>
-                      </div>
-                    );
-                  }
-                  // Fallback for any other custom task/info
-                  return (
-                    <div key={idx} className="kiosk-todo-item kiosk-todo-default">
-                      <AlertCircle size={embedded ? 24 : 36} className="kiosk-todo-icon" />
-                      <span>{task}</span>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="kiosk-todo-empty">
-                  <span>{t('noTasks')}</span>
+              <section className="kiosk-card kiosk-card-allergies-employees">
+                <div className="kiosk-card-header">
+                  <AlertCircle size={embedded ? 20 : 26} className="kiosk-card-header-icon" />
+                  <span>{t('employeeAllergiesTitle')}</span>
                 </div>
-              )}
+                <div className="kiosk-allergies-list">
+                  {allergiesData?.employees && allergiesData.employees.length > 0 ? (
+                    allergiesData.employees.map((allergy, idx) => (
+                      <span key={idx} className="kiosk-allergy-badge kiosk-allergy-badge-employee">
+                        {allergy}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="kiosk-empty-text">{t('noAllergies')}</span>
+                  )}
+                </div>
+              </section>
             </div>
-          </section>
+          ) : (
+            <>
+              {/* Card 2: Shows who is cooking. Header on top left: "Koch / Köchin" */}
+              <section className="kiosk-card kiosk-card-cook">
+                <div className="kiosk-card-header">
+                  <UtensilsCrossed size={embedded ? 20 : 26} className="kiosk-card-header-icon" />
+                  <span>{t('whoIsCooking')}</span>
+                </div>
+                <div className="kiosk-cook-content">
+                  {data?.who_is_cooking ? (
+                    data.who_is_cooking
+                  ) : (
+                    <span className="kiosk-empty-text">{t('noCook')}</span>
+                  )}
+                </div>
+              </section>
+
+              {/* Card 3: Shows the meal, with header "Es gibt:" and up to 3 meal components as lines */}
+              <section className="kiosk-card kiosk-card-meal">
+                <div className="kiosk-card-header">
+                  <Soup size={embedded ? 20 : 26} className="kiosk-card-header-icon" />
+                  <span>{t('mealTitle')}</span>
+                </div>
+                <div className="kiosk-meal-lines">
+                  {data?.meal_components && data.meal_components.length > 0 ? (
+                    data.meal_components.slice(0, 3).map((component, idx) => (
+                      <div
+                        key={idx}
+                        className={`kiosk-meal-line ${idx === 0 ? 'kiosk-meal-line-primary' : 'kiosk-meal-line-secondary'}`}
+                      >
+                        <span className="kiosk-meal-text">{component}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="kiosk-empty-text">{t('noMeal')}</div>
+                  )}
+                </div>
+              </section>
+
+              {/* Card 4: TODOs / warnings, aligned vertically at the bottom of the content area */}
+              <section className="kiosk-card kiosk-card-todos">
+                <div className="kiosk-card-header">
+                  <AlertCircle size={embedded ? 20 : 26} className="kiosk-card-header-icon" />
+                  <span>{t('tasksAndInfoTitle')}</span>
+                </div>
+                <div className="kiosk-todos-list">
+                  {data?.tasks_and_info && data.tasks_and_info.length > 0 ? (
+                    data.tasks_and_info.map((task, idx) => {
+                      if (task === 'yellow_bin_retrieve') {
+                        return (
+                          <div key={idx} className="kiosk-todo-item kiosk-todo-yellow">
+                            <Trash2 size={embedded ? 24 : 36} className="kiosk-todo-icon" />
+                            <span>{t('yellowBinRetrieve')}</span>
+                          </div>
+                        );
+                      }
+                      if (task === 'yellow_bin_put_out') {
+                        return (
+                          <div key={idx} className="kiosk-todo-item kiosk-todo-yellow">
+                            <Trash2 size={embedded ? 24 : 36} className="kiosk-todo-icon" />
+                            <span>{t('yellowBinPutOut')}</span>
+                          </div>
+                        );
+                      }
+                      if (task === 'clean_coffe_machine' || task === 'clean_coffee_machine') {
+                        return (
+                          <div key={idx} className="kiosk-todo-item kiosk-todo-coffee">
+                            <Coffee size={embedded ? 24 : 36} className="kiosk-todo-icon" />
+                            <span>{t('cleanCoffeeMachine')}</span>
+                          </div>
+                        );
+                      }
+                      if (task === 'clean_refrigerator') {
+                        return (
+                          <div key={idx} className="kiosk-todo-item kiosk-todo-refrigerator">
+                            <Refrigerator size={embedded ? 24 : 36} className="kiosk-todo-icon" />
+                            <span>{t('cleanRefrigerator')}</span>
+                          </div>
+                        );
+                      }
+                      // Fallback for any other custom task/info
+                      return (
+                        <div key={idx} className="kiosk-todo-item kiosk-todo-default">
+                          <AlertCircle size={embedded ? 24 : 36} className="kiosk-todo-icon" />
+                          <span>{task}</span>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="kiosk-todo-empty">
+                      <span>{t('noTasks')}</span>
+                    </div>
+                  )}
+                </div>
+              </section>
+            </>
+          )}
         </main>
 
         {/* Navigation bar at the bottom: max width, fixed height */}
         <footer className="kiosk-bottom-nav">
-          {/* Left: Home button (house icon) + Anleitungen button */}
+          {/* Left: Home button (house icon) + Anleitungen button + Allergien button */}
           <div className="kiosk-nav-left">
             <button
               onClick={handleHomeClick}
@@ -335,6 +438,16 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
             >
               <span>{t('anleitungen')}</span>
             </button>
+
+            {canViewAllergiesSummary && (
+              <button
+                onClick={() => setShowAllergies((prev) => !prev)}
+                className={`kiosk-nav-btn ${showAllergies ? 'active' : ''}`}
+                title={t('allergies')}
+              >
+                <span>{t('allergies')}</span>
+              </button>
+            )}
           </div>
 
           {/* Right: Clock */}

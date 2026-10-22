@@ -541,3 +541,62 @@
   background-color: var(--bg-hover);
   border-color: var(--border-strong);
 }
+
+/* Allergies View in Kiosk Dashboard */
+.kiosk-allergies-view {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  width: 100%;
+}
+
+.kiosk-card-allergies-group .kiosk-card-header {
+  color: #e11d48;
+}
+
+.kiosk-card-allergies-group .kiosk-card-header-icon {
+  color: #e11d48;
+}
+
+.kiosk-card-allergies-employees .kiosk-card-header {
+  color: #7c3aed;
+}
+
+.kiosk-card-allergies-employees .kiosk-card-header-icon {
+  color: #7c3aed;
+}
+
+.kiosk-allergies-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  align-items: center;
+}
+
+.kiosk-allergy-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.65rem 1.25rem;
+  border-radius: 9999px;
+  background-color: #fff1f2;
+  border: 2px solid #fecdd3;
+  color: #be123c;
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.kiosk-allergy-badge-employee {
+  background-color: #f5f3ff;
+  border-color: #ddd6fe;
+  color: #6d28d9;
+}
+
+.kiosk-tablet-page.embedded .kiosk-allergies-view {
+  gap: 1rem;
+}
+
+.kiosk-tablet-page.embedded .kiosk-allergy-badge {
+  font-size: 1.1rem;
+  padding: 0.45rem 0.9rem;
+}
