@@ -201,3 +201,18 @@ DROP TRIGGER IF EXISTS update_employees_updated_at ON employees;
 CREATE TRIGGER update_employees_updated_at BEFORE UPDATE ON employees FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 CREATE INDEX IF NOT EXISTS idx_employees_type ON employees (employee_type);
+
+-- Centralized Data Encryption Keys (DEK) store for envelope encryption
+CREATE TABLE IF NOT EXISTS data_encryption_keys (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    purpose TEXT NOT NULL CHECK (purpose IN ('vaccination', 'allergies')),
+    kms_key_path TEXT NOT NULL,
+    encrypted_dek BYTEA NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    retired_at TIMESTAMPTZ
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_dek_active_per_purpose
+ON data_encryption_keys (purpose)
+WHERE is_active = true;

@@ -7,22 +7,42 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+	"sync/atomic"
 )
 
 // MockKMSProvider simulates GCP KMS locally for development, mock mode, and offline testing
 type MockKMSProvider struct {
-	masterKey []byte
+	masterKey    []byte
+	keyPath      string
+	encryptCalls atomic.Int64
+	decryptCalls atomic.Int64
 }
 
 func NewMockKMSProvider() *MockKMSProvider {
 	master := []byte("12345678901234567890123456789012")
-	return &MockKMSProvider{masterKey: master}
+	return &MockKMSProvider{
+		masterKey: master,
+		keyPath:   "projects/mock/locations/eur8/keyRings/mock-keyring/cryptoKeys/mock-key",
+	}
+}
+
+func (m *MockKMSProvider) KeyPath() string {
+	return m.keyPath
+}
+
+func (m *MockKMSProvider) EncryptCalls() int64 {
+	return m.encryptCalls.Load()
+}
+
+func (m *MockKMSProvider) DecryptCalls() int64 {
+	return m.decryptCalls.Load()
 }
 
 func (m *MockKMSProvider) EncryptDEK(ctx context.Context, dek []byte, userEmail string, accessToken string) ([]byte, error) {
 	if accessToken == "no-access" || accessToken == "unauthorized" || accessToken == "mock-kms-no-access" {
 		return nil, fmt.Errorf("mock KMS: user %s has no access to KMS key", userEmail)
 	}
+	m.encryptCalls.Add(1)
 	block, err := aes.NewCipher(m.masterKey)
 	if err != nil {
 		return nil, err
@@ -42,6 +62,7 @@ func (m *MockKMSProvider) DecryptDEK(ctx context.Context, encryptedDEK []byte, u
 	if accessToken == "no-access" || accessToken == "unauthorized" || accessToken == "mock-kms-no-access" {
 		return nil, fmt.Errorf("mock KMS: user %s has no access to KMS key", userEmail)
 	}
+	m.decryptCalls.Add(1)
 	block, err := aes.NewCipher(m.masterKey)
 	if err != nil {
 		return nil, err
@@ -81,4 +102,3 @@ func (m *MockKMSProvider) ValidateAccess(ctx context.Context, userEmail string, 
 	}
 	return nil
 }
-

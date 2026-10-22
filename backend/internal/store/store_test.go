@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/pavolmarko/thweb-backend/internal/crypto"
 	"github.com/pavolmarko/thweb-backend/internal/models"
 )
 
@@ -1179,6 +1180,95 @@ func TestQueryAuditLogsForUser_PaginationAndSearch(t *testing.T) {
 		t.Errorf("SECURITY LEAK: restricted user saw audit logs via search on sanitized note! got %d logs", len(leakedLogs))
 	}
 }
+
+func TestStore_DEKStore(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	if envURL := os.Getenv("DATABASE_URL"); envURL != "" {
+		dbURL = envURL
+	}
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := NewStore(pool)
+	_, _ = pool.Exec(ctx, "TRUNCATE TABLE data_encryption_keys")
+
+	// 1. Initially no active DEK for vaccination or allergies
+	vacDEK, err := appStore.GetActiveDEK(ctx, crypto.PurposeVaccination)
+	if err != nil {
+		t.Fatalf("GetActiveDEK vaccination failed: %v", err)
+	}
+	if vacDEK != nil {
+		t.Fatalf("expected nil active DEK initially, got %+v", vacDEK)
+	}
+
+	// 2. Create active DEK for vaccination
+	id1 := uuid.New()
+	saved1, err := appStore.CreateActiveDEK(ctx, crypto.DEKRecord{
+		ID:           id1,
+		Purpose:      crypto.PurposeVaccination,
+		KMSKeyPath:   "projects/test/locations/eur8/keyRings/kr/cryptoKeys/health-data-key",
+		EncryptedDEK: []byte("enc-dek-vac-1"),
+		IsActive:     true,
+	})
+	if err != nil {
+		t.Fatalf("CreateActiveDEK vaccination failed: %v", err)
+	}
+	if saved1.ID != id1 {
+		t.Fatalf("expected ID %s, got %s", id1, saved1.ID)
+	}
+
+	// 3. Concurrent/second CreateActiveDEK for same purpose returns existing active DEK
+	id2 := uuid.New()
+	saved2, err := appStore.CreateActiveDEK(ctx, crypto.DEKRecord{
+		ID:           id2,
+		Purpose:      crypto.PurposeVaccination,
+		KMSKeyPath:   "projects/test/locations/eur8/keyRings/kr/cryptoKeys/health-data-key",
+		EncryptedDEK: []byte("enc-dek-vac-2"),
+		IsActive:     true,
+	})
+	if err != nil {
+		t.Fatalf("second CreateActiveDEK vaccination failed: %v", err)
+	}
+	if saved2.ID != id1 {
+		t.Fatalf("expected existing active DEK ID %s on conflict, got %s", id1, saved2.ID)
+	}
+
+	// 4. Separate purpose ('allergies') can have its own active DEK
+	idAllergies := uuid.New()
+	savedAllergies, err := appStore.CreateActiveDEK(ctx, crypto.DEKRecord{
+		ID:           idAllergies,
+		Purpose:      crypto.PurposeAllergies,
+		KMSKeyPath:   "projects/test/locations/eur8/keyRings/kr/cryptoKeys/allergies-key",
+		EncryptedDEK: []byte("enc-dek-allergies-1"),
+		IsActive:     true,
+	})
+	if err != nil {
+		t.Fatalf("CreateActiveDEK allergies failed: %v", err)
+	}
+	if savedAllergies.ID != idAllergies {
+		t.Fatalf("expected allergies DEK ID %s, got %s", idAllergies, savedAllergies.ID)
+	}
+
+	// 5. GetDEKByID resolves both keys
+	fetched1, err := appStore.GetDEKByID(ctx, id1)
+	if err != nil || fetched1 == nil || string(fetched1.EncryptedDEK) != "enc-dek-vac-1" {
+		t.Fatalf("GetDEKByID vaccination mismatch: %+v, err=%v", fetched1, err)
+	}
+	fetchedAllergies, err := appStore.GetDEKByID(ctx, idAllergies)
+	if err != nil || fetchedAllergies == nil || string(fetchedAllergies.EncryptedDEK) != "enc-dek-allergies-1" {
+		t.Fatalf("GetDEKByID allergies mismatch: %+v, err=%v", fetchedAllergies, err)
+	}
+}
+
 
 
 

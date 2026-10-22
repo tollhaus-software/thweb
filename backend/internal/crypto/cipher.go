@@ -5,18 +5,141 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"sync"
+
+	"github.com/google/uuid"
 )
 
-const BlobVersionByte byte = 0x01
+const (
+	BlobVersionByte byte = 0x02
+	BlobHeaderSize  int  = 1 + 16 + 12 // 1B version + 16B UUID key_id + 12B GCM nonce = 29 bytes
+
+	PurposeVaccination = "vaccination"
+	PurposeAllergies   = "allergies"
+)
+
+// DEKRecord represents a row in the centralized data_encryption_keys table.
+type DEKRecord struct {
+	ID           uuid.UUID
+	Purpose      string
+	KMSKeyPath   string
+	EncryptedDEK []byte
+	IsActive     bool
+}
+
+// DEKStore defines the persistence interface for centralized Data Encryption Keys (DEKs).
+type DEKStore interface {
+	// GetActiveDEK returns the active DEK record for the given purpose, or (nil, nil) if none exists.
+	GetActiveDEK(ctx context.Context, purpose string) (*DEKRecord, error)
+	// GetDEKByID returns the DEK record for the given UUID, or (nil, nil) if not found.
+	GetDEKByID(ctx context.Context, id uuid.UUID) (*DEKRecord, error)
+	// CreateActiveDEK persists a newly generated active DEK for the given purpose.
+	// If another concurrent caller already inserted an active DEK for this purpose,
+	// it returns the existing active DEK record.
+	CreateActiveDEK(ctx context.Context, rec DEKRecord) (*DEKRecord, error)
+}
+
+// MemoryDEKStore is an in-memory DEKStore implementation used for unit testing.
+type MemoryDEKStore struct {
+	mu     sync.Mutex
+	byID   map[uuid.UUID]DEKRecord
+	active map[string]uuid.UUID
+}
+
+func NewMemoryDEKStore() *MemoryDEKStore {
+	return &MemoryDEKStore{
+		byID:   make(map[uuid.UUID]DEKRecord),
+		active: make(map[string]uuid.UUID),
+	}
+}
+
+func (m *MemoryDEKStore) GetActiveDEK(_ context.Context, purpose string) (*DEKRecord, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	id, ok := m.active[purpose]
+	if !ok {
+		return nil, nil
+	}
+	rec, ok := m.byID[id]
+	if !ok {
+		return nil, nil
+	}
+	cp := rec
+	cp.EncryptedDEK = append([]byte(nil), rec.EncryptedDEK...)
+	return &cp, nil
+}
+
+func (m *MemoryDEKStore) GetDEKByID(_ context.Context, id uuid.UUID) (*DEKRecord, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	rec, ok := m.byID[id]
+	if !ok {
+		return nil, nil
+	}
+	cp := rec
+	cp.EncryptedDEK = append([]byte(nil), rec.EncryptedDEK...)
+	return &cp, nil
+}
+
+func (m *MemoryDEKStore) CreateActiveDEK(_ context.Context, rec DEKRecord) (*DEKRecord, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if existingID, ok := m.active[rec.Purpose]; ok {
+		existing := m.byID[existingID]
+		cp := existing
+		cp.EncryptedDEK = append([]byte(nil), existing.EncryptedDEK...)
+		return &cp, nil
+	}
+
+	if rec.ID == uuid.Nil {
+		rec.ID = uuid.New()
+	}
+	rec.IsActive = true
+	cp := rec
+	cp.EncryptedDEK = append([]byte(nil), rec.EncryptedDEK...)
+	m.byID[cp.ID] = cp
+	m.active[cp.Purpose] = cp.ID
+
+	out := cp
+	out.EncryptedDEK = append([]byte(nil), cp.EncryptedDEK...)
+	return &out, nil
+}
+
+// RotateActiveDEK retires the current active DEK for purpose and activates the provided DEKRecord.
+func (m *MemoryDEKStore) RotateActiveDEK(rec DEKRecord) (*DEKRecord, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if oldID, ok := m.active[rec.Purpose]; ok {
+		if oldRec, exists := m.byID[oldID]; exists {
+			oldRec.IsActive = false
+			m.byID[oldID] = oldRec
+		}
+		delete(m.active, rec.Purpose)
+	}
+
+	if rec.ID == uuid.Nil {
+		rec.ID = uuid.New()
+	}
+	rec.IsActive = true
+	cp := rec
+	cp.EncryptedDEK = append([]byte(nil), rec.EncryptedDEK...)
+	m.byID[cp.ID] = cp
+	m.active[cp.Purpose] = cp.ID
+	return &cp, nil
+}
 
 // KMSProvider defines the interface for KMS interaction (Google Cloud KMS or Mock KMS)
 type KMSProvider interface {
-	// EncryptDEK encrypts a DEK (or requests a new DEK) with KMS for the given user email and OAuth token
+	// KeyPath returns the configured KMS key resource path
+	KeyPath() string
+	// EncryptDEK encrypts a DEK with KMS for the given user email and OAuth token
 	EncryptDEK(ctx context.Context, dek []byte, userEmail string, accessToken string) (encryptedDEK []byte, err error)
 	// DecryptDEK decrypts an encrypted DEK with KMS for the given user email and OAuth token
 	DecryptDEK(ctx context.Context, encryptedDEK []byte, userEmail string, accessToken string) (dek []byte, err error)
@@ -29,16 +152,27 @@ type KMSProvider interface {
 // RequestCipherContext manages ephemeral request-scoped DEK caching & zeroing
 type RequestCipherContext struct {
 	mu          sync.Mutex
-	dekCache    map[string][]byte // string(encryptedDEK) -> plaintextDEK
+	dekCache    map[uuid.UUID][]byte // key_id (UUID) -> 32-byte plaintextDEK
+	activeKeyID *uuid.UUID
 	kmsProvider KMSProvider
+	dekStore    DEKStore
+	purpose     string
 	userEmail   string
 	accessToken string
 }
 
-func NewRequestCipherContext(kmsProvider KMSProvider, userEmail string, accessToken string) *RequestCipherContext {
+func NewRequestCipherContext(kmsProvider KMSProvider, dekStore DEKStore, purpose string, userEmail string, accessToken string) *RequestCipherContext {
+	if dekStore == nil {
+		dekStore = NewMemoryDEKStore()
+	}
+	if purpose == "" {
+		purpose = PurposeVaccination
+	}
 	return &RequestCipherContext{
-		dekCache:    make(map[string][]byte),
+		dekCache:    make(map[uuid.UUID][]byte),
 		kmsProvider: kmsProvider,
+		dekStore:    dekStore,
+		purpose:     purpose,
 		userEmail:   userEmail,
 		accessToken: accessToken,
 	}
@@ -55,46 +189,146 @@ func (r *RequestCipherContext) Close() {
 		}
 		delete(r.dekCache, k)
 	}
+	r.activeKeyID = nil
 }
 
-// GetOrDecryptDEK fetches the decrypted DEK for encryptedDEK once per request context
-func (r *RequestCipherContext) GetOrDecryptDEK(ctx context.Context, encryptedDEK []byte) ([]byte, error) {
+// GetOrDecryptDEKByID resolves and decrypts the DEK for a given key_id UUID once per request context.
+func (r *RequestCipherContext) GetOrDecryptDEKByID(ctx context.Context, keyID uuid.UUID) ([]byte, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	cacheKey := string(encryptedDEK)
-	if dek, exists := r.dekCache[cacheKey]; exists {
+	if dek, exists := r.dekCache[keyID]; exists {
 		return dek, nil
 	}
 
-	dek, err := r.kmsProvider.DecryptDEK(ctx, encryptedDEK, r.userEmail, r.accessToken)
+	rec, err := r.dekStore.GetDEKByID(ctx, keyID)
 	if err != nil {
-		return nil, fmt.Errorf("request cipher context failed to decrypt DEK for user %s: %w", r.userEmail, err)
+		return nil, fmt.Errorf("failed to query DEK store for key %s: %w", keyID, err)
+	}
+	if rec == nil {
+		return nil, fmt.Errorf("DEK %s not found in data_encryption_keys", keyID)
+	}
+
+	dek, err := r.kmsProvider.DecryptDEK(ctx, rec.EncryptedDEK, r.userEmail, r.accessToken)
+	if err != nil {
+		return nil, fmt.Errorf("request cipher context failed to decrypt DEK %s for user %s: %w", keyID, r.userEmail, err)
 	}
 
 	dekCopy := make([]byte, len(dek))
 	copy(dekCopy, dek)
-	r.dekCache[cacheKey] = dekCopy
+	for i := range dek {
+		dek[i] = 0
+	}
+	r.dekCache[keyID] = dekCopy
 
 	return dekCopy, nil
 }
 
-// Encrypt encrypts a raw byte payload using a new DEK and packages the encrypted blob
+// GetOrCreateActiveDEK resolves the active DEK for the context's purpose, lazily generating and storing one if none exists.
+func (r *RequestCipherContext) GetOrCreateActiveDEK(ctx context.Context) (uuid.UUID, []byte, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.activeKeyID != nil {
+		if dek, exists := r.dekCache[*r.activeKeyID]; exists {
+			return *r.activeKeyID, dek, nil
+		}
+	}
+
+	rec, err := r.dekStore.GetActiveDEK(ctx, r.purpose)
+	if err != nil {
+		return uuid.Nil, nil, fmt.Errorf("failed to query active DEK for purpose %q: %w", r.purpose, err)
+	}
+
+	if rec != nil {
+		if dek, exists := r.dekCache[rec.ID]; exists {
+			idCopy := rec.ID
+			r.activeKeyID = &idCopy
+			return rec.ID, dek, nil
+		}
+
+		dek, err := r.kmsProvider.DecryptDEK(ctx, rec.EncryptedDEK, r.userEmail, r.accessToken)
+		if err != nil {
+			return uuid.Nil, nil, fmt.Errorf("failed to decrypt active DEK %s for user %s: %w", rec.ID, r.userEmail, err)
+		}
+
+		dekCopy := make([]byte, len(dek))
+		copy(dekCopy, dek)
+		for i := range dek {
+			dek[i] = 0
+		}
+		r.dekCache[rec.ID] = dekCopy
+		idCopy := rec.ID
+		r.activeKeyID = &idCopy
+		return rec.ID, dekCopy, nil
+	}
+
+	// Lazy initialization: no active DEK exists yet for this purpose
+	plaintextDEK, encryptedDEK, err := r.kmsProvider.GenerateDEK(ctx, r.userEmail, r.accessToken)
+	if err != nil {
+		return uuid.Nil, nil, fmt.Errorf("failed to generate active DEK for purpose %q: %w", r.purpose, err)
+	}
+
+	candidate := DEKRecord{
+		ID:           uuid.New(),
+		Purpose:      r.purpose,
+		KMSKeyPath:   r.kmsProvider.KeyPath(),
+		EncryptedDEK: encryptedDEK,
+		IsActive:     true,
+	}
+
+	savedRec, err := r.dekStore.CreateActiveDEK(ctx, candidate)
+	if err != nil {
+		for i := range plaintextDEK {
+			plaintextDEK[i] = 0
+		}
+		return uuid.Nil, nil, fmt.Errorf("failed to persist active DEK for purpose %q: %w", r.purpose, err)
+	}
+
+	if savedRec.ID == candidate.ID {
+		dekCopy := make([]byte, len(plaintextDEK))
+		copy(dekCopy, plaintextDEK)
+		for i := range plaintextDEK {
+			plaintextDEK[i] = 0
+		}
+		r.dekCache[savedRec.ID] = dekCopy
+		idCopy := savedRec.ID
+		r.activeKeyID = &idCopy
+		return savedRec.ID, dekCopy, nil
+	}
+
+	// Another concurrent request won the race to insert the active DEK
+	for i := range plaintextDEK {
+		plaintextDEK[i] = 0
+	}
+
+	dek, err := r.kmsProvider.DecryptDEK(ctx, savedRec.EncryptedDEK, r.userEmail, r.accessToken)
+	if err != nil {
+		return uuid.Nil, nil, fmt.Errorf("failed to decrypt concurrently created active DEK %s: %w", savedRec.ID, err)
+	}
+
+	dekCopy := make([]byte, len(dek))
+	copy(dekCopy, dek)
+	for i := range dek {
+		dek[i] = 0
+	}
+	r.dekCache[savedRec.ID] = dekCopy
+	idCopy := savedRec.ID
+	r.activeKeyID = &idCopy
+	return savedRec.ID, dekCopy, nil
+}
+
+// Encrypt encrypts a raw byte payload using the active DEK and packages the compact 29-byte header blob:
+// [version:1B (0x02)][key_id:16B UUID][nonce:12B][ciphertext]
 func (r *RequestCipherContext) Encrypt(ctx context.Context, plaintext []byte) ([]byte, error) {
 	if len(plaintext) == 0 {
 		return nil, nil
 	}
 
-	plaintextDEK, encryptedDEK, err := r.kmsProvider.GenerateDEK(ctx, r.userEmail, r.accessToken)
+	keyID, plaintextDEK, err := r.GetOrCreateActiveDEK(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate DEK: %w", err)
+		return nil, err
 	}
-
-	defer func() {
-		for i := range plaintextDEK {
-			plaintextDEK[i] = 0
-		}
-	}()
 
 	block, err := aes.NewCipher(plaintextDEK)
 	if err != nil {
@@ -113,46 +347,36 @@ func (r *RequestCipherContext) Encrypt(ctx context.Context, plaintext []byte) ([
 
 	ciphertext := gcm.Seal(nil, nonce, plaintext, nil)
 
-	// Pack binary blob: [version:1B][dek_len:2B][encryptedDEK][nonce:12B][ciphertext]
-	dekLen := uint16(len(encryptedDEK))
-	blobLen := 1 + 2 + len(encryptedDEK) + len(nonce) + len(ciphertext)
-	blob := make([]byte, blobLen)
-
+	blob := make([]byte, BlobHeaderSize+len(ciphertext))
 	blob[0] = BlobVersionByte
-	binary.BigEndian.PutUint16(blob[1:3], dekLen)
-	copy(blob[3:3+dekLen], encryptedDEK)
-	copy(blob[3+dekLen:3+int(dekLen)+len(nonce)], nonce)
-	copy(blob[3+int(dekLen)+len(nonce):], ciphertext)
+	copy(blob[1:17], keyID[:])
+	copy(blob[17:29], nonce)
+	copy(blob[29:], ciphertext)
 
 	return blob, nil
 }
 
-// Decrypt unpacks the blob, resolves the DEK (cached or decrypted from KMS), and decrypts plaintext
+// Decrypt unpacks the 29-byte header blob, resolves the DEK by key_id (cached or decrypted from KMS), and decrypts plaintext.
 func (r *RequestCipherContext) Decrypt(ctx context.Context, encryptedBlob []byte) ([]byte, error) {
 	if len(encryptedBlob) == 0 {
 		return nil, nil
 	}
 
-	if len(encryptedBlob) < 3 {
+	if len(encryptedBlob) <= BlobHeaderSize {
 		return nil, errors.New("invalid encrypted blob: payload too short")
 	}
 
 	version := encryptedBlob[0]
 	if version != BlobVersionByte {
-		return nil, fmt.Errorf("unsupported encrypted blob version: %d", version)
+		return nil, fmt.Errorf("unsupported encrypted blob version: 0x%02x", version)
 	}
 
-	dekLen := int(binary.BigEndian.Uint16(encryptedBlob[1:3]))
-	minHeaderLen := 1 + 2 + dekLen + 12 // 1B ver + 2B len + dekLen + 12B nonce
-	if len(encryptedBlob) <= minHeaderLen {
-		return nil, errors.New("invalid encrypted blob: payload header corrupt or missing ciphertext")
-	}
+	var keyID uuid.UUID
+	copy(keyID[:], encryptedBlob[1:17])
+	nonce := encryptedBlob[17:29]
+	ciphertext := encryptedBlob[29:]
 
-	encryptedDEK := encryptedBlob[3 : 3+dekLen]
-	nonce := encryptedBlob[3+dekLen : 3+dekLen+12]
-	ciphertext := encryptedBlob[3+dekLen+12:]
-
-	plaintextDEK, err := r.GetOrDecryptDEK(ctx, encryptedDEK)
+	plaintextDEK, err := r.GetOrDecryptDEKByID(ctx, keyID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve DEK for decryption: %w", err)
 	}

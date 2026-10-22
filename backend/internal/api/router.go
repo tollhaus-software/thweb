@@ -11,13 +11,18 @@ import (
 	"github.com/pavolmarko/thweb-backend/internal/store"
 )
 
-func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *Hub, kmsProvider crypto.KMSProvider) *chi.Mux {
+func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *Hub, kmsProvider crypto.KMSProvider, allergiesKMSProvider ...crypto.KMSProvider) *chi.Mux {
+	var allergiesKMS crypto.KMSProvider
+	if len(allergiesKMSProvider) > 0 {
+		allergiesKMS = allergiesKMSProvider[0]
+	}
 	server := &Server{
-		Store:          appStore,
-		Authenticator:  authenticator,
-		Hub:            hub,
-		KMSProvider:    kmsProvider,
-		KioskGenerator: kioskcert.NewGenerator(""),
+		Store:                appStore,
+		Authenticator:        authenticator,
+		Hub:                  hub,
+		KMSProvider:          kmsProvider,
+		AllergiesKMSProvider: allergiesKMS,
+		KioskGenerator:       kioskcert.NewGenerator(""),
 	}
 
 	r := chi.NewRouter()
