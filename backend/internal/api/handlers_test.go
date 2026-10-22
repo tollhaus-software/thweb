@@ -442,10 +442,11 @@ func TestHandleListFamiliesOverview_ProjectionAndScoping(t *testing.T) {
 
 	parents1 := []models.Parent{
 		{
-			ID:        parentID1,
-			FamilyID:  familyID1,
-			FirstName: "Alice",
-			LastName:  "FamilyOne",
+			ID:                      parentID1,
+			FamilyID:                familyID1,
+			FirstName:               "Alice",
+			FirstNameForAddressList: "Ali",
+			LastName:                "FamilyOne",
 			Emails: models.MultiValueList{
 				{Value: "alice.public@example.com", AddressList: true, IdentifierEmail: true},
 				{Value: "alice.secret@example.com", AddressList: false, IdentifierEmail: false},
@@ -489,12 +490,13 @@ func TestHandleListFamiliesOverview_ProjectionAndScoping(t *testing.T) {
 	// Add children to family 1 with different birth dates
 	childID1 := uuid.New()
 	child1 := models.Child{
-		ID:        childID1,
-		FamilyID:  familyID1,
-		FirstName: "Charlie",
-		LastName:  "FamilyOne",
-		BirthDate: time.Date(2021, 5, 1, 0, 0, 0, 0, time.UTC),
-		Notes:     "Secret child notes",
+		ID:                      childID1,
+		FamilyID:                familyID1,
+		FirstName:               "Charlie",
+		FirstNameForAddressList: "Chuck",
+		LastName:                "FamilyOne",
+		BirthDate:               time.Date(2021, 5, 1, 0, 0, 0, 0, time.UTC),
+		Notes:                   "Secret child notes",
 	}
 	if err := appStore.UpdateChild(ctx, testUserID, childID1, child1); err != nil {
 		t.Fatalf("failed to seed child: %v", err)
@@ -562,9 +564,12 @@ func TestHandleListFamiliesOverview_ProjectionAndScoping(t *testing.T) {
 	if !strings.Contains(bodyStr, "Musterstraße 10, 70173 Stuttgart") {
 		t.Errorf("expected parent address in overview, got: %s", bodyStr)
 	}
-	// Family 1 child Charlie should have group changes
-	if !strings.Contains(bodyStr, "Charlie") {
-		t.Errorf("expected child Charlie in overview, got: %s", bodyStr)
+	// Custom address list names Ali and Chuck should be returned instead of Alice and Charlie
+	if !strings.Contains(bodyStr, "Chuck") {
+		t.Errorf("expected custom address list child name Chuck in overview, got: %s", bodyStr)
+	}
+	if !strings.Contains(bodyStr, "Ali") {
+		t.Errorf("expected custom address list parent name Ali in overview, got: %s", bodyStr)
 	}
 
 	var result []OverviewFamily
@@ -576,8 +581,16 @@ func TestHandleListFamiliesOverview_ProjectionAndScoping(t *testing.T) {
 			if len(f.Children) < 2 {
 				t.Fatalf("expected at least 2 children for family 1, got %d", len(f.Children))
 			}
-			if f.Children[0].FirstName != "Abby" || f.Children[1].FirstName != "Charlie" {
-				t.Errorf("expected children sorted by birthdate (Abby then Charlie), got %s then %s", f.Children[0].FirstName, f.Children[1].FirstName)
+			if f.Children[0].FirstName != "Abby" || f.Children[1].FirstName != "Chuck" {
+				t.Errorf("expected children sorted by birthdate (Abby then Chuck), got %s then %s", f.Children[0].FirstName, f.Children[1].FirstName)
+			}
+			if len(f.Parents) < 1 || f.Parents[0].FirstName != "Ali" {
+				t.Errorf("expected parent first name Ali in overview, got %+v", f.Parents)
+			}
+		}
+		if f.ID == familyID2 {
+			if len(f.Parents) < 1 || f.Parents[0].FirstName != "Bob" {
+				t.Errorf("expected parent first name Bob in overview, got %+v", f.Parents)
 			}
 		}
 	}

@@ -13,6 +13,7 @@ import { MultiValueListEditor, type MultiValueFlagConfig, type MultiValueEntry, 
 import { MultiValueCell } from './components/Table/MultiValueCell';
 import { NotesEditor } from './components/Table/NotesEditor';
 import { AddressEditor } from './components/Table/AddressEditor';
+import { FirstNameEditor } from './components/Table/FirstNameEditor';
 import { GroupChangesPopover } from './components/Table/GroupChangesPopover';
 import { FamiliencardsPopover } from './components/Table/FamiliencardsPopover';
 import { MembershipsModal } from './components/Table/MembershipsModal';
@@ -60,6 +61,7 @@ interface Parent {
   id: string;
   family_id: string;
   first_name: string;
+  first_name_for_address_list?: string;
   last_name: string;
   emails?: MultiValueEntry[];
   phones?: MultiValueEntry[];
@@ -109,6 +111,7 @@ interface Child {
   id: string;
   family_id: string;
   first_name: string;
+  first_name_for_address_list?: string;
   last_name: string;
   birth_date: string;
   notes?: string;
@@ -612,6 +615,7 @@ const ChildFamiliencardCell: React.FC<ChildFamiliencardCellProps> = ({
 interface OverviewParent {
   id: string;
   first_name: string;
+  first_name_for_address_list?: string;
   last_name: string;
   emails?: MultiValueEntry[];
   phones?: MultiValueEntry[];
@@ -622,6 +626,7 @@ interface OverviewParent {
 interface OverviewChild {
   id: string;
   first_name: string;
+  first_name_for_address_list?: string;
   last_name: string;
   current_group?: number | null;
   is_former?: boolean;
@@ -4089,6 +4094,55 @@ const Dashboard: React.FC = () => {
       .catch((err) => alert(err.message));
   };
 
+  const handleSaveParentNames = (parent: Parent, firstName: string, firstNameForAddressList: string) => {
+    const family = families.find(f => f.id === parent.family_id);
+    if (!family) return Promise.resolve();
+
+    const originalParents = family.parents || [];
+    const updatedParents = originalParents.map(p => 
+      p.id === parent.id ? { ...p, first_name: firstName, first_name_for_address_list: firstNameForAddressList } : p
+    );
+
+    return fetch(`/api/families/${family.id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ parents: updatedParents }),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          if (res.status === 403) {
+            const errData = await res.json().catch(() => ({}));
+            if (errData.error === 'kms_access_denied') {
+              sessionStorage.removeItem('kms_access_token');
+              setKmsAccessToken(null);
+              const errMsg = t('kmsAccessDenied');
+              setKmsError(errMsg);
+              throw new Error(errMsg);
+            }
+            if (errData.error) {
+              alert(errData.error);
+              throw new Error(errData.error);
+            }
+          }
+          throw new Error('Failed to update parent');
+        }
+        pushAction({
+          type: 'UPDATE_PARENT',
+          payload: {
+            tab: 'parents',
+            familyId: family.id,
+            parentId: parent.id,
+            beforeParents: stripParentsVaccination(originalParents),
+            afterParents: stripParentsVaccination(updatedParents),
+          }
+        });
+        if (canReadFamiliesAll) fetchFamilies();
+        if (canReadMembers) fetchMembers();
+        if (canReadOverview) fetchOverviewFamilies();
+      })
+      .catch((err) => alert(err.message));
+  };
+
   const handleSaveFamilyParents = (familyId: string, updatedParents: Parent[]) => {
     const family = families.find(f => f.id === familyId);
     if (!family) return;
@@ -4174,6 +4228,47 @@ const Dashboard: React.FC = () => {
           });
         }
         return fetchFamilies();
+      })
+      .catch((err) => alert(err.message));
+  };
+
+  const handleSaveChildNames = (child: Child, firstName: string, firstNameForAddressList: string) => {
+    const updatedChild = {
+      ...child,
+      first_name: firstName,
+      first_name_for_address_list: firstNameForAddressList,
+    };
+
+    return fetch(`/api/children/${child.id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(updatedChild),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          if (res.status === 403) {
+            const errData = await res.json().catch(() => ({}));
+            if (errData.error === 'kms_access_denied') {
+              sessionStorage.removeItem('kms_access_token');
+              setKmsAccessToken(null);
+              const errMsg = t('kmsAccessDenied');
+              setKmsError(errMsg);
+              throw new Error(errMsg);
+            }
+          }
+          throw new Error('Failed to update child');
+        }
+        pushAction({
+          type: 'UPDATE_CHILD',
+          payload: {
+            tab: 'children',
+            childId: child.id,
+            before: stripVaccination(child),
+            after: stripVaccination(updatedChild),
+          }
+        });
+        if (canReadFamiliesAll) fetchFamilies();
+        if (canReadOverview) fetchOverviewFamilies();
       })
       .catch((err) => alert(err.message));
   };
@@ -4582,17 +4677,18 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
 
 function formatParentsSummary(parents: any[]): string {
   if (!parents || parents.length === 0) return '';
-  const validParents = parents.filter((p) => p && (p.first_name || p.last_name));
+  const validParents = parents.filter((p) => p && ((p.first_name_for_address_list || p.first_name) || p.last_name));
   if (validParents.length === 0) return '';
   if (validParents.length === 1) {
-    return `${validParents[0].first_name || ''} ${validParents[0].last_name || ''}`.trim() || 'Elternteil';
+    const fn = ((validParents[0].first_name_for_address_list || validParents[0].first_name) || '').trim();
+    return `${fn} ${validParents[0].last_name || ''}`.trim() || 'Elternteil';
   }
   if (validParents.length === 2) {
     const p1 = validParents[0];
     const p2 = validParents[1];
-    const fn1 = (p1.first_name || '').trim();
+    const fn1 = ((p1.first_name_for_address_list || p1.first_name) || '').trim();
     const ln1 = (p1.last_name || '').trim();
-    const fn2 = (p2.first_name || '').trim();
+    const fn2 = ((p2.first_name_for_address_list || p2.first_name) || '').trim();
     const ln2 = (p2.last_name || '').trim();
 
     if (ln1 && ln2 && ln1.toLowerCase() === ln2.toLowerCase()) {
@@ -4609,7 +4705,7 @@ function formatParentsSummary(parents: any[]): string {
     }
   }
   return validParents
-    .map((p) => `${p.first_name || ''} ${p.last_name || ''}`.trim())
+    .map((p) => `${((p.first_name_for_address_list || p.first_name) || '').trim()} ${p.last_name || ''}`.trim())
     .filter(Boolean)
     .join(' & ');
 }
@@ -4706,8 +4802,9 @@ function formatParentsSummary(parents: any[]): string {
 
           const filteredBucketChildren = sortedBucketChildren.filter((c) => {
             if (!query) return true;
-            const fullName = `${c.first_name || ''} ${c.last_name || ''}`.trim().toLowerCase();
-            const fnMatch = (c.first_name || '').toLowerCase().includes(query);
+            const effectiveFn = ((c.first_name_for_address_list || c.first_name) || '').trim();
+            const fullName = `${effectiveFn} ${c.last_name || ''}`.trim().toLowerCase();
+            const fnMatch = effectiveFn.toLowerCase().includes(query) || (c.first_name || '').toLowerCase().includes(query);
             const lnMatch = (c.last_name || '').toLowerCase().includes(query);
             return fnMatch || lnMatch || fullName.includes(query);
           });
@@ -4722,7 +4819,11 @@ function formatParentsSummary(parents: any[]): string {
               : filteredBucketChildren;
 
           const sortedParents = [...(f.parents || [])]
-            .sort((a, b) => (a.first_name || '').localeCompare(b.first_name || '', CURRENT_LOCALE));
+            .sort((a, b) => {
+              const fnA = ((a.first_name_for_address_list || a.first_name) || '').trim();
+              const fnB = ((b.first_name_for_address_list || b.first_name) || '').trim();
+              return fnA.localeCompare(fnB, CURRENT_LOCALE);
+            });
 
           const groupFamilyKey = `${bucket.key}-${f.id}`;
           const isExplicitlyExpanded = expandedGroupParents[groupFamilyKey];
@@ -4782,13 +4883,15 @@ function formatParentsSummary(parents: any[]): string {
       const familyName = getFamilyName(f);
 
       const sortedParents = [...(f.parents || [])].sort((a, b) => {
-        const cmp = (a.first_name || '').localeCompare(b.first_name || '', CURRENT_LOCALE);
+        const fnA = ((a.first_name_for_address_list || a.first_name) || '').trim();
+        const fnB = ((b.first_name_for_address_list || b.first_name) || '').trim();
+        const cmp = fnA.localeCompare(fnB, CURRENT_LOCALE);
         if (cmp !== 0) return cmp;
         return (a.last_name || '').localeCompare(b.last_name || '', CURRENT_LOCALE);
       });
 
       const parentNames = sortedParents
-        .map((p) => `${p.first_name || ''} ${p.last_name || ''}`.trim())
+        .map((p) => `${((p.first_name_for_address_list || p.first_name) || '').trim()} ${p.last_name || ''}`.trim())
         .filter(Boolean)
         .join(', ');
 
@@ -4819,8 +4922,9 @@ function formatParentsSummary(parents: any[]): string {
 
       const filteredChildren = allChildren.filter((c) => {
         if (!query) return true;
-        const fullName = `${c.first_name || ''} ${c.last_name || ''}`.trim().toLowerCase();
-        const fnMatch = (c.first_name || '').toLowerCase().includes(query);
+        const effectiveFn = ((c.first_name_for_address_list || c.first_name) || '').trim();
+        const fullName = `${effectiveFn} ${c.last_name || ''}`.trim().toLowerCase();
+        const fnMatch = effectiveFn.toLowerCase().includes(query) || (c.first_name || '').toLowerCase().includes(query);
         const lnMatch = (c.last_name || '').toLowerCase().includes(query);
         const groupStatus = getOverviewChildGroupStatus(c);
         const groupMatch = groupStatus.groupLabel.toLowerCase().includes(query);
@@ -4930,16 +5034,12 @@ function formatParentsSummary(parents: any[]): string {
         cell: (info) => {
           const parent = info.row.original;
           return (
-            <EasyEditComponent
-              type={EasyEditTypes.TEXT}
-              value={parent.first_name}
-              onSave={(val: string) => handleSaveParentField(parent, 'first_name', val)}
-              editButtonLabel={<Pencil size={13} />}
-              instructions={t('editFirstName')}
-              viewAttributes={{}}
-              inputAttributes={{}}
-              onCancel={() => {}}
-              onValidate={() => true}
+            <FirstNameEditor
+              id={`parent-${parent.id}`}
+              firstName={parent.first_name}
+              firstNameForAddressList={parent.first_name_for_address_list || ''}
+              onSave={(fn, fnAddr) => handleSaveParentNames(parent, fn, fnAddr)}
+              disabled={!canWriteParents}
             />
           );
         }
@@ -5104,7 +5204,7 @@ function formatParentsSummary(parents: any[]): string {
         }
       }
     ],
-    [families, handleSaveParentField, handleSaveFamilyParents, handleDeleteParent, canWriteParents, isVaccinationUnlocked, handleRequestKmsAuth, hasPermission, user?.email, membershipPopoverAnchor, targetParentMemberships, openManageMemberships, multiValuePopoverAnchor, activeParentForMultiValue, activeMultiValueField, openManageMultiValue, vaccinationPopoverAnchor, targetVaccinationPerson, openManageVaccination]
+    [families, handleSaveParentField, handleSaveParentNames, handleSaveFamilyParents, handleDeleteParent, canWriteParents, isVaccinationUnlocked, handleRequestKmsAuth, hasPermission, user?.email, membershipPopoverAnchor, targetParentMemberships, openManageMemberships, multiValuePopoverAnchor, activeParentForMultiValue, activeMultiValueField, openManageMultiValue, vaccinationPopoverAnchor, targetVaccinationPerson, openManageVaccination]
   );
 
   const childGroupColumn = React.useMemo<ColumnDef<any>>(
@@ -5138,16 +5238,12 @@ function formatParentsSummary(parents: any[]): string {
         cell: (info) => {
           const child = info.row.original;
           return (
-            <EasyEditComponent
-              type={EasyEditTypes.TEXT}
-              value={child.first_name}
-              onSave={(val: string) => handleSaveChildField(child, 'first_name', val)}
-              editButtonLabel={<Pencil size={13} />}
-              instructions={t('editFirstName')}
-              viewAttributes={{}}
-              inputAttributes={{}}
-              onCancel={() => {}}
-              onValidate={() => true}
+            <FirstNameEditor
+              id={`child-${child.id}`}
+              firstName={child.first_name}
+              firstNameForAddressList={child.first_name_for_address_list || ''}
+              onSave={(fn, fnAddr) => handleSaveChildNames(child, fn, fnAddr)}
+              disabled={!canWriteChildren}
             />
           );
         }
@@ -5311,6 +5407,7 @@ function formatParentsSummary(parents: any[]): string {
     [
       families,
       handleSaveChildField,
+      handleSaveChildNames,
       handleDeleteChild,
       canWriteChildren,
       openManageGroupChanges,
@@ -5410,17 +5507,18 @@ function formatParentsSummary(parents: any[]): string {
     () => [
       {
         id: 'overview_name',
-        accessorFn: (row: any) => `${row.first_name || ''} ${row.last_name || ''}`.trim(),
+        accessorFn: (row: any) => `${((row.first_name_for_address_list || row.first_name) || '').trim()} ${row.last_name || ''}`.trim(),
         header: '',
         size: 260,
         minSize: 210,
         cell: (info) => {
           const item = info.row.original;
           const isIndented = item.indent_name ?? item._rowType === 'child';
+          const effectiveFn = ((item.first_name_for_address_list || item.first_name) || '').trim();
           if (item._rowType === 'child') {
             const displayName = item.hide_last_name
-              ? (item.first_name || '').trim() || '-'
-              : `${item.first_name || ''} ${item.last_name || ''}`.trim() || '-';
+              ? effectiveFn || '-'
+              : `${effectiveFn} ${item.last_name || ''}`.trim() || '-';
             return (
               <span className="overview-person-name" style={isIndented ? { paddingLeft: '1.25rem', display: 'inline-block' } : undefined}>
                 {displayName}
@@ -5441,7 +5539,7 @@ function formatParentsSummary(parents: any[]): string {
               </span>
             );
           }
-          const fullName = `${item.first_name || ''} ${item.last_name || ''}`.trim() || '-';
+          const fullName = `${effectiveFn} ${item.last_name || ''}`.trim() || '-';
           const membershipStatus = item.memberships ? getMembershipStatus(item.memberships) : null;
           return (
             <span className="overview-person-name" style={isIndented ? { paddingLeft: '1.25rem', display: 'inline-block' } : undefined}>

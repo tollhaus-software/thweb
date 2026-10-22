@@ -86,6 +86,28 @@ func TestApplySchemaMigrations(t *testing.T) {
 		t.Errorf("expected phones data_type 'jsonb', got %q", phonesColType)
 	}
 
+	// Verify parents.first_name_for_address_list exists
+	var parentAddrNameCol string
+	err = testDB.QueryRow(`
+		SELECT column_name 
+		FROM information_schema.columns 
+		WHERE table_name = 'parents' AND column_name = 'first_name_for_address_list';
+	`).Scan(&parentAddrNameCol)
+	if err != nil {
+		t.Fatalf("expected first_name_for_address_list column in parents: %v", err)
+	}
+
+	// Verify children.first_name_for_address_list exists
+	var childAddrNameCol string
+	err = testDB.QueryRow(`
+		SELECT column_name 
+		FROM information_schema.columns 
+		WHERE table_name = 'children' AND column_name = 'first_name_for_address_list';
+	`).Scan(&childAddrNameCol)
+	if err != nil {
+		t.Fatalf("expected first_name_for_address_list column in children: %v", err)
+	}
+
 	// Verify parents.address column
 	var addressCol string
 	err = testDB.QueryRow(`

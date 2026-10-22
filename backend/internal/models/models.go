@@ -386,6 +386,7 @@ type Parent struct {
 	ID                         uuid.UUID               `json:"id"`
 	FamilyID                   uuid.UUID               `json:"family_id"`
 	FirstName                  string                  `json:"first_name"`
+	FirstNameForAddressList    string                  `json:"first_name_for_address_list"`
 	LastName                   string                  `json:"last_name"`
 	Emails                     MultiValueList          `json:"emails"`
 	Phones                     MultiValueList          `json:"phones"`
@@ -471,6 +472,7 @@ type Child struct {
 	ID                         uuid.UUID          `json:"id"`
 	FamilyID                   uuid.UUID          `json:"family_id"`
 	FirstName                  string             `json:"first_name"`
+	FirstNameForAddressList    string             `json:"first_name_for_address_list"`
 	LastName                   string             `json:"last_name"`
 	BirthDate                  time.Time          `json:"birth_date"`
 	Notes                      string             `json:"notes"`

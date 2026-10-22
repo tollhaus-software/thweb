@@ -195,10 +195,10 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     await mobileBackdrop.click({ position: { x: 20, y: 20 } });
     await expect(bottomSheet).toBeHidden();
 
-    // Inline edit in mobile card view
+    // Edit in mobile card view opens popover
     const editBtn = firstNameCell.locator('.easy-edit-button').first();
     await editBtn.click();
-    const nameInput = firstNameCell.locator('input[type="text"]');
+    const nameInput = page.locator('input.first-name-input');
     await expect(nameInput).toBeVisible();
     await nameInput.fill('Sabina');
     await nameInput.press('Enter');
@@ -541,16 +541,15 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     await page.keyboard.press('Escape');
     await expect(bDateInput).toBeHidden();
 
-    // Open first_name inline editor
+    // Open first_name popover editor
     await dtChildFirstNameTd.locator('.easy-edit-button').click();
-    const fNameInput = dtChildFirstNameTd.locator('input');
+    const fNameInput = page.locator('input.first-name-input');
     await expect(fNameInput).toBeVisible();
+    const addrListNameInput = page.locator('input.address-list-name-input');
+    await expect(addrListNameInput).toBeVisible();
     const fNameBoxAfter = await dtChildFirstNameTd.boundingBox();
     expect(fNameBoxAfter).not.toBeNull();
     expect(Math.abs(fNameBoxAfter!.width - fNameBoxBefore!.width)).toBeLessThan(1);
-    await expect(fNameInput).toHaveCSS('box-sizing', 'border-box');
-    await expect(fNameInput).toHaveCSS('border-radius', '4px');
-    await expect(fNameInput).toHaveCSS('height', '28px');
 
     await page.keyboard.press('Escape');
     await expect(fNameInput).toBeHidden();
