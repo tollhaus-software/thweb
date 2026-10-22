@@ -603,6 +603,7 @@ type Child struct {
 	FirstNameForAddressList    string             `json:"first_name_for_address_list"`
 	LastName                   string             `json:"last_name"`
 	BirthDate                  time.Time          `json:"birth_date"`
+	SchoolEnrollmentDefault    *int               `json:"school_enrollment_default,omitempty"`
 	Notes                      string             `json:"notes"`
 	VaccinationStatusProtected []byte             `json:"vaccination_status_protected,omitempty"`
 	VaccinationChecks          []VaccinationCheck `json:"vaccination_checks,omitempty"`
@@ -737,5 +738,76 @@ func (e Employee) MarshalJSON() ([]byte, error) {
 		IsChildProtectionOfficer: e.IsKinderschutzbeauftragter,
 	})
 }
+
+// CalculateDefaultSchoolEnrollment computes the default/regular school enrollment year (Einschulung regulär):
+// Take the child's birthday and add 6 years. This gives us the variable sixthBirthday.
+// - If the calendar year of sixthBirthday is 2019 or earlier:
+//     If the calendar month of sixthBirthday is September or earlier: calendarYearOf(sixthBirthday)
+//     Otherwise: calendarYearOf(sixthBirthday) + 1
+// - If the calendar year of sixthBirthday is 2020:
+//     If the calendar month of sixthBirthday is August or earlier: calendarYearOf(sixthBirthday)
+//     Otherwise: calendarYearOf(sixthBirthday) + 1
+// - If the calendar year of sixthBirthday is 2021:
+//     If the calendar month of sixthBirthday is July or earlier: calendarYearOf(sixthBirthday)
+//     Otherwise: calendarYearOf(sixthBirthday) + 1
+// - If the calendar year of sixthBirthday is 2022 or later:
+//     If the calendar month of sixthBirthday is June or earlier: calendarYearOf(sixthBirthday)
+//     Otherwise: calendarYearOf(sixthBirthday) + 1
+func CalculateDefaultSchoolEnrollment(birthDate time.Time) *int {
+	if birthDate.IsZero() {
+		return nil
+	}
+	sixthBirthday := birthDate.AddDate(6, 0, 0)
+	year := sixthBirthday.Year()
+	month := sixthBirthday.Month()
+
+	var result int
+	if year <= 2019 {
+		if month <= time.September {
+			result = year
+		} else {
+			result = year + 1
+		}
+	} else if year == 2020 {
+		if month <= time.August {
+			result = year
+		} else {
+			result = year + 1
+		}
+	} else if year == 2021 {
+		if month <= time.July {
+			result = year
+		} else {
+			result = year + 1
+		}
+	} else {
+		if month <= time.June {
+			result = year
+		} else {
+			result = year + 2
+		}
+	}
+	return &result
+}
+
+// CalculateRegularSchoolEnrollment is an alias for CalculateDefaultSchoolEnrollment.
+func CalculateRegularSchoolEnrollment(birthDate time.Time) *int {
+	return CalculateDefaultSchoolEnrollment(birthDate)
+}
+
+func (c *Child) PopulateComputedFields() {
+	if !c.BirthDate.IsZero() {
+		c.SchoolEnrollmentDefault = CalculateDefaultSchoolEnrollment(c.BirthDate)
+	}
+}
+
+func (c Child) MarshalJSON() ([]byte, error) {
+	if c.SchoolEnrollmentDefault == nil && !c.BirthDate.IsZero() {
+		c.PopulateComputedFields()
+	}
+	type Alias Child
+	return json.Marshal((Alias)(c))
+}
+
 
 
