@@ -307,12 +307,13 @@ func (s *Server) HandleLeaveSimulation(w http.ResponseWriter, r *http.Request) {
 }
 
 type OverviewChild struct {
-	ID           uuid.UUID                 `json:"id"`
-	FirstName    string                    `json:"first_name"`
-	LastName     string                    `json:"last_name"`
-	CurrentGroup *int                      `json:"current_group,omitempty"`
-	IsFormer     bool                      `json:"is_former,omitempty"`
-	GroupChanges []models.ChildGroupChange `json:"group_changes,omitempty"`
+	ID                      uuid.UUID                 `json:"id"`
+	FirstName               string                    `json:"first_name"`
+	FirstNameForAddressList string                    `json:"first_name_for_address_list,omitempty"`
+	LastName                string                    `json:"last_name"`
+	CurrentGroup            *int                      `json:"current_group,omitempty"`
+	IsFormer                bool                      `json:"is_former,omitempty"`
+	GroupChanges            []models.ChildGroupChange `json:"group_changes,omitempty"`
 }
 
 func computeChildOverviewGroupStatus(changes []models.ChildGroupChange, now time.Time) (*int, bool) {
@@ -350,13 +351,14 @@ func computeChildOverviewGroupStatus(changes []models.ChildGroupChange, now time
 }
 
 type OverviewParent struct {
-	ID          uuid.UUID              `json:"id"`
-	FirstName   string                 `json:"first_name"`
-	LastName    string                 `json:"last_name"`
-	Emails      models.MultiValueList  `json:"emails"`
-	Phones      models.MultiValueList  `json:"phones"`
-	Address     string                 `json:"address"`
-	Memberships *[]models.THMembership `json:"memberships,omitempty"`
+	ID                      uuid.UUID              `json:"id"`
+	FirstName               string                 `json:"first_name"`
+	FirstNameForAddressList string                 `json:"first_name_for_address_list,omitempty"`
+	LastName                string                 `json:"last_name"`
+	Emails                  models.MultiValueList  `json:"emails"`
+	Phones                  models.MultiValueList  `json:"phones"`
+	Address                 string                 `json:"address"`
+	Memberships             *[]models.THMembership `json:"memberships,omitempty"`
 }
 
 type OverviewFamily struct {
@@ -409,14 +411,19 @@ func (s *Server) HandleListFamiliesOverview(w http.ResponseWriter, r *http.Reque
 				mCopy := p.Memberships
 				pMemberships = &mCopy
 			}
+			displayFirstName := p.FirstName
+			if strings.TrimSpace(p.FirstNameForAddressList) != "" {
+				displayFirstName = p.FirstNameForAddressList
+			}
 			ovParents = append(ovParents, OverviewParent{
-				ID:          p.ID,
-				FirstName:   p.FirstName,
-				LastName:    p.LastName,
-				Emails:      filteredEmails,
-				Phones:      filteredPhones,
-				Address:     p.Address,
-				Memberships: pMemberships,
+				ID:                      p.ID,
+				FirstName:               displayFirstName,
+				FirstNameForAddressList: p.FirstNameForAddressList,
+				LastName:                p.LastName,
+				Emails:                  filteredEmails,
+				Phones:                  filteredPhones,
+				Address:                 p.Address,
+				Memberships:             pMemberships,
 			})
 		}
 
@@ -432,12 +439,17 @@ func (s *Server) HandleListFamiliesOverview(w http.ResponseWriter, r *http.Reque
 		ovChildren := make([]OverviewChild, 0, len(famChildren))
 		for _, c := range famChildren {
 			currGrp, isFormer := computeChildOverviewGroupStatus(c.GroupChanges, now)
+			displayFirstName := c.FirstName
+			if strings.TrimSpace(c.FirstNameForAddressList) != "" {
+				displayFirstName = c.FirstNameForAddressList
+			}
 			ovc := OverviewChild{
-				ID:           c.ID,
-				FirstName:    c.FirstName,
-				LastName:     c.LastName,
-				CurrentGroup: currGrp,
-				IsFormer:     isFormer,
+				ID:                      c.ID,
+				FirstName:               displayFirstName,
+				FirstNameForAddressList: c.FirstNameForAddressList,
+				LastName:                c.LastName,
+				CurrentGroup:            currGrp,
+				IsFormer:                isFormer,
 			}
 			if canViewGroupChanges {
 				ovc.GroupChanges = c.GroupChanges
@@ -590,17 +602,19 @@ func (s *Server) HandleListAuditLogs(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleCreateFamily(w http.ResponseWriter, r *http.Request) {
 	user := auth.GetUser(r.Context())
 	var req struct {
-		FirstName string                `json:"first_name"`
-		LastName  string                `json:"last_name"`
-		Emails    models.MultiValueList `json:"emails"`
-		Phones    models.MultiValueList `json:"phones"`
-		Address   string                `json:"address"`
-		Parents   []struct {
-			FirstName string                `json:"first_name"`
-			LastName  string                `json:"last_name"`
-			Emails    models.MultiValueList `json:"emails"`
-			Phones    models.MultiValueList `json:"phones"`
-			Address   string                `json:"address"`
+		FirstName               string                `json:"first_name"`
+		FirstNameForAddressList string                `json:"first_name_for_address_list"`
+		LastName                string                `json:"last_name"`
+		Emails                  models.MultiValueList `json:"emails"`
+		Phones                  models.MultiValueList `json:"phones"`
+		Address                 string                `json:"address"`
+		Parents                 []struct {
+			FirstName               string                `json:"first_name"`
+			FirstNameForAddressList string                `json:"first_name_for_address_list"`
+			LastName                string                `json:"last_name"`
+			Emails                  models.MultiValueList `json:"emails"`
+			Phones                  models.MultiValueList `json:"phones"`
+			Address                 string                `json:"address"`
 		} `json:"parents"`
 	}
 
@@ -613,20 +627,22 @@ func (s *Server) HandleCreateFamily(w http.ResponseWriter, r *http.Request) {
 	if len(req.Parents) > 0 {
 		for _, p := range req.Parents {
 			parents = append(parents, models.Parent{
-				FirstName: p.FirstName,
-				LastName:  p.LastName,
-				Emails:    p.Emails,
-				Phones:    p.Phones,
-				Address:   p.Address,
+				FirstName:               p.FirstName,
+				FirstNameForAddressList: p.FirstNameForAddressList,
+				LastName:                p.LastName,
+				Emails:                  p.Emails,
+				Phones:                  p.Phones,
+				Address:                 p.Address,
 			})
 		}
 	} else if req.FirstName != "" || req.LastName != "" {
 		parents = append(parents, models.Parent{
-			FirstName: req.FirstName,
-			LastName:  req.LastName,
-			Emails:    req.Emails,
-			Phones:    req.Phones,
-			Address:   req.Address,
+			FirstName:               req.FirstName,
+			FirstNameForAddressList: req.FirstNameForAddressList,
+			LastName:                req.LastName,
+			Emails:                  req.Emails,
+			Phones:                  req.Phones,
+			Address:                 req.Address,
 		})
 	}
 
@@ -855,14 +871,15 @@ func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		ID                *uuid.UUID                `json:"id"`
-		FamilyID          *uuid.UUID                `json:"family_id"`
-		FirstName         string                    `json:"first_name"`
-		LastName          string                    `json:"last_name"`
-		BirthDate         string                    `json:"birth_date"`
-		Notes             string                    `json:"notes"`
-		VaccinationChecks []models.VaccinationCheck `json:"vaccination_checks"`
-		Familiencards     *models.FamiliencardList  `json:"familiencards"`
+		ID                      *uuid.UUID                `json:"id"`
+		FamilyID                *uuid.UUID                `json:"family_id"`
+		FirstName               string                    `json:"first_name"`
+		FirstNameForAddressList string                    `json:"first_name_for_address_list"`
+		LastName                string                    `json:"last_name"`
+		BirthDate               string                    `json:"birth_date"`
+		Notes                   string                    `json:"notes"`
+		VaccinationChecks       []models.VaccinationCheck `json:"vaccination_checks"`
+		Familiencards           *models.FamiliencardList  `json:"familiencards"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -957,6 +974,7 @@ func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 		ID:                         childID,
 		FamilyID:                   familyID,
 		FirstName:                  req.FirstName,
+		FirstNameForAddressList:    req.FirstNameForAddressList,
 		LastName:                   req.LastName,
 		BirthDate:                  birthDate,
 		Notes:                      req.Notes,

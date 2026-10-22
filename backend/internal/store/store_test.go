@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -867,6 +868,155 @@ func TestChild_Familiencards(t *testing.T) {
 	}
 	if foundChild.Familiencards[1] != 2027 {
 		t.Errorf("expected 2027, got: %+v", foundChild.Familiencards[1])
+	}
+}
+
+func TestStore_FirstNameForAddressList(t *testing.T) {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := NewStore(pool)
+
+	testUserID := uuid.New()
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2)", testUserID, "test-user-"+testUserID.String()+"@example.com")
+	if err != nil {
+		t.Fatalf("failed to insert test user: %v", err)
+	}
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", testUserID)
+	}()
+
+	parentID := uuid.New()
+	parent := models.Parent{
+		ID:                      parentID,
+		FirstName:               "Maximilian",
+		FirstNameForAddressList: "Max",
+		LastName:                "Mustermann",
+		Emails: models.MultiValueList{
+			{Value: "max@example.com", AddressList: true},
+		},
+		Phones: models.MultiValueList{
+			{Value: "0170123456", AddressList: true},
+		},
+	}
+
+	family, err := appStore.CreateFamilyWithParents(ctx, testUserID, []models.Parent{parent})
+	if err != nil {
+		t.Fatalf("CreateFamilyWithParents failed: %v", err)
+	}
+	defer func() {
+		_ = appStore.DeleteFamily(ctx, testUserID, family.ID)
+	}()
+	if len(family.Parents) == 0 {
+		t.Fatalf("expected at least 1 parent created")
+	}
+	parentID = family.Parents[0].ID
+
+	// Verify parent in ListFamilies
+	fams, err := appStore.ListFamilies(ctx)
+	if err != nil {
+		t.Fatalf("ListFamilies failed: %v", err)
+	}
+	var foundParent *models.Parent
+	for _, f := range fams {
+		if f.ID == family.ID {
+			for _, p := range f.Parents {
+				if p.ID == parentID {
+					foundParent = &p
+					break
+				}
+			}
+		}
+	}
+	if foundParent == nil {
+		t.Fatalf("parent not found in ListFamilies")
+	}
+	if foundParent.FirstName != "Maximilian" || foundParent.FirstNameForAddressList != "Max" {
+		t.Errorf("expected FirstName=Maximilian and FirstNameForAddressList=Max, got %q, %q", foundParent.FirstName, foundParent.FirstNameForAddressList)
+	}
+
+	// Verify parent in GetParentsByFamilyID
+	parents, err := appStore.GetParentsByFamilyID(ctx, family.ID)
+	if err != nil {
+		t.Fatalf("GetParentsByFamilyID failed: %v", err)
+	}
+	if len(parents) == 0 || parents[0].FirstNameForAddressList != "Max" {
+		t.Errorf("expected parent FirstNameForAddressList=Max, got %+v", parents)
+	}
+
+	// Create child with FirstNameForAddressList
+	childID := uuid.New()
+	child := models.Child{
+		ID:                      childID,
+		FamilyID:                family.ID,
+		FirstName:               "Elisabeth",
+		FirstNameForAddressList: "Lisa",
+		LastName:                "Mustermann",
+		BirthDate:               time.Date(2020, 3, 15, 0, 0, 0, 0, time.UTC),
+	}
+	if err := appStore.UpdateChild(ctx, testUserID, childID, child); err != nil {
+		t.Fatalf("UpdateChild failed: %v", err)
+	}
+
+	// Verify child in ListFamilies
+	fams, err = appStore.ListFamilies(ctx)
+	if err != nil {
+		t.Fatalf("ListFamilies failed: %v", err)
+	}
+	var foundChild *models.Child
+	for _, f := range fams {
+		if f.ID == family.ID {
+			for _, c := range f.Children {
+				if c.ID == childID {
+					foundChild = &c
+					break
+				}
+			}
+		}
+	}
+	if foundChild == nil {
+		t.Fatalf("child not found in ListFamilies")
+	}
+	if foundChild.FirstName != "Elisabeth" || foundChild.FirstNameForAddressList != "Lisa" {
+		t.Errorf("expected child FirstName=Elisabeth and FirstNameForAddressList=Lisa, got %q, %q", foundChild.FirstName, foundChild.FirstNameForAddressList)
+	}
+
+	// Update parent and child FirstNameForAddressList
+	foundParent.FirstNameForAddressList = "Maxi"
+	if err := appStore.UpdateFamilyParents(ctx, testUserID, family.ID, []models.Parent{*foundParent}); err != nil {
+		t.Fatalf("UpdateFamilyParents failed: %v", err)
+	}
+
+	foundChild.FirstNameForAddressList = "Lisi"
+	if err := appStore.UpdateChild(ctx, testUserID, childID, *foundChild); err != nil {
+		t.Fatalf("UpdateChild failed: %v", err)
+	}
+
+	// Verify updated
+	fams, err = appStore.ListFamilies(ctx)
+	if err != nil {
+		t.Fatalf("ListFamilies after update failed: %v", err)
+	}
+	for _, f := range fams {
+		if f.ID == family.ID {
+			if len(f.Parents) > 0 && f.Parents[0].FirstNameForAddressList != "Maxi" {
+				t.Errorf("expected updated parent FirstNameForAddressList=Maxi, got %q", f.Parents[0].FirstNameForAddressList)
+			}
+			if len(f.Children) > 0 && f.Children[0].FirstNameForAddressList != "Lisi" {
+				t.Errorf("expected updated child FirstNameForAddressList=Lisi, got %q", f.Children[0].FirstNameForAddressList)
+			}
+		}
 	}
 }
 

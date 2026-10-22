@@ -71,8 +71,8 @@ func (s *Store) CreateFamilyWithParents(ctx context.Context, userID uuid.UUID, p
 			p.Phones = sanitizePhones(p.Phones)
 
 			_, err = tx.Exec(ctx,
-				"INSERT INTO parents (id, family_id, first_name, last_name, emails, phones, address, notes, vaccination_status_protected) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-				p.ID, p.FamilyID, p.FirstName, p.LastName, p.Emails, p.Phones, p.Address, p.Notes, p.VaccinationStatusProtected)
+				"INSERT INTO parents (id, family_id, first_name, first_name_for_address_list, last_name, emails, phones, address, notes, vaccination_status_protected) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+				p.ID, p.FamilyID, p.FirstName, p.FirstNameForAddressList, p.LastName, p.Emails, p.Phones, p.Address, p.Notes, p.VaccinationStatusProtected)
 			if err != nil {
 				return err
 			}
@@ -134,6 +134,7 @@ func multiValueListEqual(a, b models.MultiValueList) bool {
 
 func parentNonVaccinationChanged(old, new models.Parent) bool {
 	return old.FirstName != new.FirstName ||
+		old.FirstNameForAddressList != new.FirstNameForAddressList ||
 		old.LastName != new.LastName ||
 		old.Address != new.Address ||
 		old.Notes != new.Notes ||
@@ -143,6 +144,7 @@ func parentNonVaccinationChanged(old, new models.Parent) bool {
 
 func childNonVaccinationChanged(old, new models.Child) bool {
 	return old.FirstName != new.FirstName ||
+		old.FirstNameForAddressList != new.FirstNameForAddressList ||
 		old.LastName != new.LastName ||
 		old.BirthDate.Format("2006-01-02") != new.BirthDate.Format("2006-01-02") ||
 		old.Notes != new.Notes ||
@@ -276,6 +278,7 @@ func (s *Store) ListFamilies(ctx context.Context) ([]models.Family, error) {
 					   'id', p.id,
 					   'family_id', p.family_id,
 					   'first_name', p.first_name,
+					   'first_name_for_address_list', p.first_name_for_address_list,
 					   'last_name', p.last_name,
 					   'emails', p.emails,
 					   'phones', p.phones,
@@ -315,6 +318,7 @@ func (s *Store) ListFamilies(ctx context.Context) ([]models.Family, error) {
 					   'id', c.id,
 					   'family_id', c.family_id,
 					   'first_name', c.first_name,
+					   'first_name_for_address_list', c.first_name_for_address_list,
 					   'last_name', c.last_name,
 					   'birth_date', c.birth_date::timestamptz,
 					   'group_changes', COALESCE((
@@ -399,7 +403,7 @@ func (s *Store) GetHistoryForUser(ctx context.Context, entityID uuid.UUID, user 
 
 func (s *Store) GetParentsByFamilyID(ctx context.Context, familyID uuid.UUID) ([]models.Parent, error) {
 	rows, err := s.db.Query(ctx,
-		"SELECT id, family_id, first_name, last_name, emails, phones, address, notes, vaccination_status_protected, created_at, updated_at FROM parents WHERE family_id = $1",
+		"SELECT id, family_id, first_name, first_name_for_address_list, last_name, emails, phones, address, notes, vaccination_status_protected, created_at, updated_at FROM parents WHERE family_id = $1",
 		familyID,
 	)
 	if err != nil {
@@ -410,7 +414,7 @@ func (s *Store) GetParentsByFamilyID(ctx context.Context, familyID uuid.UUID) ([
 	var parents []models.Parent
 	for rows.Next() {
 		var p models.Parent
-		if err := rows.Scan(&p.ID, &p.FamilyID, &p.FirstName, &p.LastName, &p.Emails, &p.Phones, &p.Address, &p.Notes, &p.VaccinationStatusProtected, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.FamilyID, &p.FirstName, &p.FirstNameForAddressList, &p.LastName, &p.Emails, &p.Phones, &p.Address, &p.Notes, &p.VaccinationStatusProtected, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
 		p.Phones = sanitizePhones(p.Phones)
@@ -551,8 +555,8 @@ func (s *Store) UpdateFamilyParents(ctx context.Context, userID uuid.UUID, famil
 			p.Emails = sanitizeSlice(p.Emails)
 			p.Phones = sanitizePhones(p.Phones)
 			var oldParent models.Parent
-			err := tx.QueryRow(ctx, "SELECT id, family_id, first_name, last_name, emails, phones, address, notes, vaccination_status_protected FROM parents WHERE id = $1 AND family_id = $2", p.ID, familyID).Scan(
-				&oldParent.ID, &oldParent.FamilyID, &oldParent.FirstName, &oldParent.LastName, &oldParent.Emails, &oldParent.Phones, &oldParent.Address, &oldParent.Notes, &oldParent.VaccinationStatusProtected,
+			err := tx.QueryRow(ctx, "SELECT id, family_id, first_name, first_name_for_address_list, last_name, emails, phones, address, notes, vaccination_status_protected FROM parents WHERE id = $1 AND family_id = $2", p.ID, familyID).Scan(
+				&oldParent.ID, &oldParent.FamilyID, &oldParent.FirstName, &oldParent.FirstNameForAddressList, &oldParent.LastName, &oldParent.Emails, &oldParent.Phones, &oldParent.Address, &oldParent.Notes, &oldParent.VaccinationStatusProtected,
 			)
 			isNew := (err == pgx.ErrNoRows)
 
@@ -561,8 +565,8 @@ func (s *Store) UpdateFamilyParents(ctx context.Context, userID uuid.UUID, famil
 			}
 
 			res, err := tx.Exec(ctx,
-				"UPDATE parents SET first_name = $1, last_name = $2, emails = $3, phones = $4, address = $5, notes = $6, vaccination_status_protected = $7, updated_at = NOW() WHERE id = $8 AND family_id = $9",
-				p.FirstName, p.LastName, p.Emails, p.Phones, p.Address, p.Notes, p.VaccinationStatusProtected, p.ID, familyID)
+				"UPDATE parents SET first_name = $1, first_name_for_address_list = $2, last_name = $3, emails = $4, phones = $5, address = $6, notes = $7, vaccination_status_protected = $8, updated_at = NOW() WHERE id = $9 AND family_id = $10",
+				p.FirstName, p.FirstNameForAddressList, p.LastName, p.Emails, p.Phones, p.Address, p.Notes, p.VaccinationStatusProtected, p.ID, familyID)
 			if err != nil {
 				return err
 			}
@@ -573,8 +577,8 @@ func (s *Store) UpdateFamilyParents(ctx context.Context, userID uuid.UUID, famil
 				}
 				p.FamilyID = familyID
 				_, err = tx.Exec(ctx,
-					"INSERT INTO parents (id, family_id, first_name, last_name, emails, phones, address, notes, vaccination_status_protected) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-					p.ID, p.FamilyID, p.FirstName, p.LastName, p.Emails, p.Phones, p.Address, p.Notes, p.VaccinationStatusProtected)
+					"INSERT INTO parents (id, family_id, first_name, first_name_for_address_list, last_name, emails, phones, address, notes, vaccination_status_protected) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+					p.ID, p.FamilyID, p.FirstName, p.FirstNameForAddressList, p.LastName, p.Emails, p.Phones, p.Address, p.Notes, p.VaccinationStatusProtected)
 				if err != nil {
 					return err
 				}
@@ -609,8 +613,8 @@ func (s *Store) UpdateChild(ctx context.Context, userID uuid.UUID, childID uuid.
 		}
 
 		var oldChild models.Child
-		err = tx.QueryRow(ctx, "SELECT id, family_id, first_name, last_name, birth_date, notes, vaccination_status_protected, familiencards FROM children WHERE id = $1", childID).Scan(
-			&oldChild.ID, &oldChild.FamilyID, &oldChild.FirstName, &oldChild.LastName, &oldChild.BirthDate, &oldChild.Notes, &oldChild.VaccinationStatusProtected, &oldChild.Familiencards,
+		err = tx.QueryRow(ctx, "SELECT id, family_id, first_name, first_name_for_address_list, last_name, birth_date, notes, vaccination_status_protected, familiencards FROM children WHERE id = $1", childID).Scan(
+			&oldChild.ID, &oldChild.FamilyID, &oldChild.FirstName, &oldChild.FirstNameForAddressList, &oldChild.LastName, &oldChild.BirthDate, &oldChild.Notes, &oldChild.VaccinationStatusProtected, &oldChild.Familiencards,
 		)
 		isNew := (err == pgx.ErrNoRows)
 
@@ -622,8 +626,8 @@ func (s *Store) UpdateChild(ctx context.Context, userID uuid.UUID, childID uuid.
 		}
 
 		res, err = tx.Exec(ctx,
-			"UPDATE children SET first_name = $1, last_name = $2, birth_date = $3, notes = $4, vaccination_status_protected = $5, familiencards = $6, updated_at = NOW() WHERE id = $7",
-			child.FirstName, child.LastName, child.BirthDate, child.Notes, child.VaccinationStatusProtected, child.Familiencards, childID)
+			"UPDATE children SET first_name = $1, first_name_for_address_list = $2, last_name = $3, birth_date = $4, notes = $5, vaccination_status_protected = $6, familiencards = $7, updated_at = NOW() WHERE id = $8",
+			child.FirstName, child.FirstNameForAddressList, child.LastName, child.BirthDate, child.Notes, child.VaccinationStatusProtected, child.Familiencards, childID)
 		if err != nil {
 			return err
 		}
@@ -633,8 +637,8 @@ func (s *Store) UpdateChild(ctx context.Context, userID uuid.UUID, childID uuid.
 				child.ID = childID
 			}
 			_, err = tx.Exec(ctx,
-				"INSERT INTO children (id, family_id, first_name, last_name, birth_date, notes, vaccination_status_protected, familiencards) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-				child.ID, child.FamilyID, child.FirstName, child.LastName, child.BirthDate, child.Notes, child.VaccinationStatusProtected, child.Familiencards)
+				"INSERT INTO children (id, family_id, first_name, first_name_for_address_list, last_name, birth_date, notes, vaccination_status_protected, familiencards) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+				child.ID, child.FamilyID, child.FirstName, child.FirstNameForAddressList, child.LastName, child.BirthDate, child.Notes, child.VaccinationStatusProtected, child.Familiencards)
 			if err != nil {
 				return err
 			}
@@ -683,8 +687,8 @@ func (s *Store) DeleteChild(ctx context.Context, userID uuid.UUID, childID uuid.
 	transactionID := uuid.New()
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
 		var oldChild models.Child
-		err := tx.QueryRow(ctx, "SELECT id, family_id, first_name, last_name, birth_date, notes, vaccination_status_protected, familiencards FROM children WHERE id = $1", childID).Scan(
-			&oldChild.ID, &oldChild.FamilyID, &oldChild.FirstName, &oldChild.LastName, &oldChild.BirthDate, &oldChild.Notes, &oldChild.VaccinationStatusProtected, &oldChild.Familiencards,
+		err := tx.QueryRow(ctx, "SELECT id, family_id, first_name, first_name_for_address_list, last_name, birth_date, notes, vaccination_status_protected, familiencards FROM children WHERE id = $1", childID).Scan(
+			&oldChild.ID, &oldChild.FamilyID, &oldChild.FirstName, &oldChild.FirstNameForAddressList, &oldChild.LastName, &oldChild.BirthDate, &oldChild.Notes, &oldChild.VaccinationStatusProtected, &oldChild.Familiencards,
 		)
 		if err != nil {
 			return err
@@ -726,8 +730,8 @@ func (s *Store) DeleteParent(ctx context.Context, userID uuid.UUID, parentID uui
 	transactionID := uuid.New()
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
 		var oldParent models.Parent
-		err := tx.QueryRow(ctx, "SELECT id, family_id, first_name, last_name, emails, phones, address, notes, vaccination_status_protected FROM parents WHERE id = $1", parentID).Scan(
-			&oldParent.ID, &oldParent.FamilyID, &oldParent.FirstName, &oldParent.LastName, &oldParent.Emails, &oldParent.Phones, &oldParent.Address, &oldParent.Notes, &oldParent.VaccinationStatusProtected,
+		err := tx.QueryRow(ctx, "SELECT id, family_id, first_name, first_name_for_address_list, last_name, emails, phones, address, notes, vaccination_status_protected FROM parents WHERE id = $1", parentID).Scan(
+			&oldParent.ID, &oldParent.FamilyID, &oldParent.FirstName, &oldParent.FirstNameForAddressList, &oldParent.LastName, &oldParent.Emails, &oldParent.Phones, &oldParent.Address, &oldParent.Notes, &oldParent.VaccinationStatusProtected,
 		)
 		if err != nil {
 			return err

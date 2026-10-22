@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS parents (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     family_id UUID NOT NULL REFERENCES families(id) ON DELETE CASCADE,
     first_name TEXT NOT NULL,
+    first_name_for_address_list TEXT NOT NULL DEFAULT '',
     last_name TEXT NOT NULL,
     emails JSONB NOT NULL DEFAULT '[]'::jsonb,
     -- phones: JSONB array of objects [{ "value": "...", "type": "mobile"|"landline"|"work", "address_list": bool }]
@@ -65,6 +66,7 @@ CREATE TABLE IF NOT EXISTS children (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     family_id UUID NOT NULL REFERENCES families(id) ON DELETE CASCADE,
     first_name TEXT NOT NULL,
+    first_name_for_address_list TEXT NOT NULL DEFAULT '',
     last_name TEXT NOT NULL,
     birth_date DATE NOT NULL,
     notes TEXT NOT NULL DEFAULT '',
