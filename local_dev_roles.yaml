@@ -47,6 +47,8 @@ roles:
       - fees.self.read
       - families.self.selfservice
       - memberships.self.read
+      - meal_allergens.read
+      - meal_allergens.write
 
   - id: caregiver_default
     name: Caregiver (default)
@@ -56,3 +58,16 @@ roles:
     permissions:
       - families.all.restrictedread
       - mealplan.view
+      - meal_allergens.read
+      - meal_allergens.write
+
+  - id: cook_default
+    name: Cook (default)
+    description: Default access for cooks logging in via identifier email
+    auto_grant_on:
+      - cook_identifier_email
+    permissions:
+      - mealplan.view
+      - meal_allergens.read
+      - meal_allergens.write
+

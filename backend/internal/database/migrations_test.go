@@ -203,6 +203,18 @@ func TestApplySchemaMigrations(t *testing.T) {
 		t.Fatalf("expected allergies_protected column in employees: %v", err)
 	}
 
+	// Verify meal_allergens table exists
+	var mealAllergensTable string
+	err = testDB.QueryRow(`
+		SELECT table_name
+		FROM information_schema.tables
+		WHERE table_schema = 'public' AND table_name = 'meal_allergens';
+	`).Scan(&mealAllergensTable)
+	if err != nil {
+		t.Fatalf("expected meal_allergens table to exist: %v", err)
+	}
+
+
 	// Verify migration 00004: test phone number type defaulting to "mobile"
 	// Roll back to migration 3, insert untyped phones, then migrate up to 4
 	if err := goose.DownToContext(context.Background(), testDB, "migrations", 3); err != nil {

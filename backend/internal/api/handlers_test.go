@@ -1651,6 +1651,135 @@ func TestAllergies_ChildrenEmployeesSummaryAndAudit(t *testing.T) {
 	}
 }
 
+func TestMealAllergensHandlers(t *testing.T) {
+	ctx := context.Background()
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := store.NewStore(pool)
+	server := &Server{
+		Store: appStore,
+		Hub:   NewHub(),
+	}
+
+	testDate := "2099-11-16"
+
+	// Ensure meal_allergens table exists and is clean for testDate
+	_, _ = pool.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS meal_allergens (
+			date DATE PRIMARY KEY,
+			cook_parent_id UUID REFERENCES parents(id) ON DELETE SET NULL,
+			cook_employee_id UUID REFERENCES employees(id) ON DELETE SET NULL,
+			cook_custom_name TEXT NOT NULL DEFAULT '',
+			meal_components JSONB NOT NULL DEFAULT '[]'::jsonb,
+			status TEXT NOT NULL DEFAULT 'unspecified' CHECK (status IN ('unspecified', 'not_relevant', 'not_finalized', 'finalized')),
+			documentation JSONB NOT NULL DEFAULT '{}'::jsonb,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		);
+	`)
+	_, _ = pool.Exec(ctx, "DELETE FROM meal_allergens WHERE date = $1", testDate)
+	_, _ = pool.Exec(ctx, "DELETE FROM meal_plan_from_sheets WHERE date = $1", testDate)
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM meal_allergens WHERE date = $1", testDate)
+		_, _ = pool.Exec(ctx, "DELETE FROM meal_plan_from_sheets WHERE date = $1", testDate)
+	}()
+
+	// Seed meal plan for testDate
+	if err := appStore.SeedTestMealPlan(ctx, testDate, "Maria Köchin", "Spaghetti Bolognese", "Salat", "Obst"); err != nil {
+		t.Fatalf("SeedTestMealPlan failed: %v", err)
+	}
+
+	user := &models.UserWithPermissions{
+		ID:                   uuid.New(),
+		Email:                "cook@example.com",
+		EffectivePermissions: []string{"meal_allergens.read", "meal_allergens.write"},
+	}
+
+	// 1. GET /api/meal-allergens?start_date=2099-11-16&end_date=2099-11-16 -> unspecified status, plan components populated
+	reqGet := httptest.NewRequest("GET", "/api/meal-allergens?start_date="+testDate+"&end_date="+testDate, nil)
+	reqGet = reqGet.WithContext(context.WithValue(reqGet.Context(), auth.UserContextKey, user))
+	recGet := httptest.NewRecorder()
+	server.HandleListMealAllergens(recGet, reqGet)
+	if recGet.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK from HandleListMealAllergens, got %d (%s)", recGet.Code, recGet.Body.String())
+	}
+	var days []models.MealAllergenDay
+	if err := json.Unmarshal(recGet.Body.Bytes(), &days); err != nil {
+		t.Fatalf("failed to unmarshal days: %v", err)
+	}
+	if len(days) != 1 {
+		t.Fatalf("expected 1 day, got %d", len(days))
+	}
+	if days[0].Status != models.MealAllergenStatusUnspecified || !days[0].HasPlanMeal || days[0].PlanCookName != "Maria Köchin" {
+		t.Errorf("unexpected initial day state: %+v", days[0])
+	}
+
+	// 2. PUT /api/meal-allergens/{date} -> status becomes not_finalized
+	putBody := []byte(`{
+		"cook_custom_name": "Maria Custom",
+		"meal_components": [
+			{"name": "Spaghetti Bolognese", "allergens": ["gluten", "sellerie"]},
+			{"name": "Salat", "allergens": ["senf"]}
+		],
+		"documentation": {"pdf_url": "https://drive.google.com/file/d/123/view"}
+	}`)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("date", testDate)
+	reqPut := httptest.NewRequest("PUT", "/api/meal-allergens/"+testDate, bytes.NewReader(putBody))
+	reqPut = reqPut.WithContext(context.WithValue(context.WithValue(reqPut.Context(), chi.RouteCtxKey, rctx), auth.UserContextKey, user))
+	recPut := httptest.NewRecorder()
+	server.HandleUpsertMealAllergens(recPut, reqPut)
+	if recPut.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK from HandleUpsertMealAllergens, got %d (%s)", recPut.Code, recPut.Body.String())
+	}
+	var updatedDay models.MealAllergenDay
+	_ = json.Unmarshal(recPut.Body.Bytes(), &updatedDay)
+	if updatedDay.Status != models.MealAllergenStatusNotFinalized {
+		t.Errorf("expected status 'not_finalized' after upsert, got %q", updatedDay.Status)
+	}
+	if updatedDay.CookDisplayName != "Maria Custom" || len(updatedDay.MealComponents) != 2 {
+		t.Errorf("unexpected updatedDay: %+v", updatedDay)
+	}
+
+	// 3. POST /api/meal-allergens/{date}/finalize -> status becomes finalized
+	reqFin := httptest.NewRequest("POST", "/api/meal-allergens/"+testDate+"/finalize", nil)
+	reqFin = reqFin.WithContext(context.WithValue(context.WithValue(reqFin.Context(), chi.RouteCtxKey, rctx), auth.UserContextKey, user))
+	recFin := httptest.NewRecorder()
+	server.HandleFinalizeMealAllergens(recFin, reqFin)
+	if recFin.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK from HandleFinalizeMealAllergens, got %d (%s)", recFin.Code, recFin.Body.String())
+	}
+	var finDay models.MealAllergenDay
+	_ = json.Unmarshal(recFin.Body.Bytes(), &finDay)
+	if finDay.Status != models.MealAllergenStatusFinalized {
+		t.Errorf("expected status 'finalized' after finalize, got %q", finDay.Status)
+	}
+
+	// 4. Subsequent PUT /api/meal-allergens/{date} (editing after finalization) -> status reverts to not_finalized
+	reqPut2 := httptest.NewRequest("PUT", "/api/meal-allergens/"+testDate, bytes.NewReader(putBody))
+	reqPut2 = reqPut2.WithContext(context.WithValue(context.WithValue(reqPut2.Context(), chi.RouteCtxKey, rctx), auth.UserContextKey, user))
+	recPut2 := httptest.NewRecorder()
+	server.HandleUpsertMealAllergens(recPut2, reqPut2)
+	if recPut2.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK from second HandleUpsertMealAllergens, got %d", recPut2.Code)
+	}
+	var revertedDay models.MealAllergenDay
+	_ = json.Unmarshal(recPut2.Body.Bytes(), &revertedDay)
+	if revertedDay.Status != models.MealAllergenStatusNotFinalized {
+		t.Errorf("expected status to revert to 'not_finalized' after editing finalized entry, got %q", revertedDay.Status)
+	}
+}
+
+
 
 
 

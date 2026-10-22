@@ -37,6 +37,7 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 	// Test-only endpoints (only enabled when mock auth is active)
 	if authenticator.AllowMockAuth {
 		r.Post("/api/test/reset", server.HandleTestReset)
+		r.Post("/api/test/meal-plan", server.HandleTestSeedMealPlan)
 	}
 
 	// Protected routes
@@ -115,6 +116,13 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		// Dashboard / Daily Brief & Allergies Summary
 		r.Get("/api/dashboard/daily-brief", server.HandleGetDailyBrief)
 		r.With(auth.RequirePermission("allergies.summary.read")).Get("/api/dashboard/allergies", server.HandleGetAllergiesSummary)
+
+		// Meal Allergens (Essen/Allergene)
+		r.With(auth.RequirePermission("meal_allergens.read")).Get("/api/meal-allergens", server.HandleListMealAllergens)
+		r.With(auth.RequirePermission("meal_allergens.read")).Get("/api/meal-allergens/cooks", server.HandleListMealAllergenCooks)
+		r.With(auth.RequirePermission("meal_allergens.read")).Get("/api/meal-allergens/{date}", server.HandleGetMealAllergenDay)
+		r.With(auth.RequirePermission("meal_allergens.write")).Put("/api/meal-allergens/{date}", server.HandleUpsertMealAllergens)
+		r.With(auth.RequirePermission("meal_allergens.write")).Post("/api/meal-allergens/{date}/finalize", server.HandleFinalizeMealAllergens)
 	})
 
 	return r
