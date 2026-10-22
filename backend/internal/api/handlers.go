@@ -23,11 +23,12 @@ import (
 )
 
 type Server struct {
-	Store          *store.Store
-	Authenticator  *auth.Authenticator
-	Hub            *Hub
-	KMSProvider    crypto.KMSProvider
-	KioskGenerator *kioskcert.Generator
+	Store                *store.Store
+	Authenticator        *auth.Authenticator
+	Hub                  *Hub
+	KMSProvider          crypto.KMSProvider
+	AllergiesKMSProvider crypto.KMSProvider
+	KioskGenerator       *kioskcert.Generator
 }
 
 func jsonResponse(w http.ResponseWriter, data interface{}) {
@@ -478,7 +479,7 @@ func (s *Server) HandleListFamilies(w http.ResponseWriter, r *http.Request) {
 	user := auth.GetUser(r.Context())
 	accessToken := auth.GetAccessToken(r.Context())
 	if s.KMSProvider != nil && user != nil && accessToken != "" && user.HasPermission("vaccination.status.manage") {
-		reqCtx := crypto.NewRequestCipherContext(s.KMSProvider, user.Email, accessToken)
+		reqCtx := crypto.NewRequestCipherContext(s.KMSProvider, s.Store, crypto.PurposeVaccination, user.Email, accessToken)
 		defer reqCtx.Close()
 
 		hasProtectedRecords := false
@@ -846,7 +847,7 @@ func (s *Server) HandleUpdateFamilyParents(w http.ResponseWriter, r *http.Reques
 			httpErrorLog(w, r, "KMS authentication required to save vaccination status", http.StatusUnauthorized, nil)
 			return
 		}
-		reqCtx := crypto.NewRequestCipherContext(s.KMSProvider, user.Email, accessToken)
+		reqCtx := crypto.NewRequestCipherContext(s.KMSProvider, s.Store, crypto.PurposeVaccination, user.Email, accessToken)
 		defer reqCtx.Close()
 
 		for i := range req.Parents {
@@ -980,7 +981,7 @@ func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 			httpErrorLog(w, r, "KMS authentication required to save vaccination status", http.StatusUnauthorized, nil)
 			return
 		}
-		reqCtx := crypto.NewRequestCipherContext(s.KMSProvider, user.Email, accessToken)
+		reqCtx := crypto.NewRequestCipherContext(s.KMSProvider, s.Store, crypto.PurposeVaccination, user.Email, accessToken)
 		defer reqCtx.Close()
 
 		for cIdx := range req.VaccinationChecks {

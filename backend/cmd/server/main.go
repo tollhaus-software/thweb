@@ -43,16 +43,40 @@ func main() {
 		log.Println("[SECURITY WARNING] ALLOW_MOCK_AUTH=true is set. Mock authentication enabled for local testing.")
 	}
 
-	// Initialize KMS Provider
+	// Initialize Vaccination KMS Provider (human step-up auth only; no ambient credentials)
 	var kmsProvider crypto.KMSProvider
-	kmsKeyPath := os.Getenv("GCP_KMS_KEY_PATH")
+	vaccinationKeyPath := os.Getenv("GCP_KMS_VACCINATION_KEY_PATH")
+	if vaccinationKeyPath == "" {
+		vaccinationKeyPath = os.Getenv("GCP_KMS_KEY_PATH")
+	}
 
-	if allowMockAuth || kmsKeyPath == "" || kmsKeyPath == "mock" {
-		log.Println("[INFO] Using Mock KMS Provider for local testing/development.")
+	if allowMockAuth || vaccinationKeyPath == "" || vaccinationKeyPath == "mock" {
+		log.Println("[INFO] Using Mock KMS Provider for vaccination data (local testing/development).")
 		kmsProvider = crypto.NewMockKMSProvider()
 	} else {
-		log.Printf("[INFO] Initializing GCP Cloud KMS Provider with Key: %s (per-request user OAuth credentials)\n", kmsKeyPath)
-		kmsProvider = crypto.NewGCPKMSProvider(nil, kmsKeyPath)
+		log.Printf("[INFO] Initializing GCP Cloud KMS Provider for vaccination data with Key: %s (per-request user OAuth credentials)\n", vaccinationKeyPath)
+		kmsProvider = crypto.NewGCPKMSProvider(nil, vaccinationKeyPath)
+	}
+
+	// Initialize Allergies KMS Provider (scoped service account credentials)
+	var allergiesKMSProvider crypto.KMSProvider
+	allergiesKeyPath := os.Getenv("GCP_KMS_ALLERGIES_KEY_PATH")
+	allergiesCredsFile := os.Getenv("GCP_KMS_ALLERGIES_CREDENTIALS_FILE")
+
+	if allowMockAuth || allergiesKeyPath == "" || allergiesKeyPath == "mock" {
+		log.Println("[INFO] Using Mock KMS Provider for allergies data (local testing/development).")
+		allergiesKMSProvider = crypto.NewMockKMSProvider()
+	} else if info, err := os.Stat(allergiesCredsFile); err != nil || info.Size() == 0 {
+		log.Printf("[WARNING] GCP_KMS_ALLERGIES_CREDENTIALS_FILE (%q) is missing or empty; allergies KMS provider will remain unavailable until provisioned.\n", allergiesCredsFile)
+	} else {
+		log.Printf("[INFO] Initializing GCP Cloud KMS Provider for allergies data with Key: %s (credentials file: %s)\n", allergiesKeyPath, allergiesCredsFile)
+		gcpAllergiesProvider, err := crypto.NewGCPKMSProviderFromCredentialsFile(ctx, allergiesCredsFile, allergiesKeyPath)
+		if err != nil {
+			log.Printf("[WARNING] Failed to initialize GCP Cloud KMS Provider for allergies: %v\n", err)
+		} else {
+			defer gcpAllergiesProvider.Close()
+			allergiesKMSProvider = gcpAllergiesProvider
+		}
 	}
 
 	// Automatically run database migrations on startup
@@ -87,7 +111,7 @@ func main() {
 	hub := api.NewHub()
 	go hub.Run()
 
-	r := api.SetupRouter(appStore, authenticator, hub, kmsProvider)
+	r := api.SetupRouter(appStore, authenticator, hub, kmsProvider, allergiesKMSProvider)
 
 	log.Println("Server running on http://localhost:8080")
 	if err := http.ListenAndServe(":8080", r); err != nil {

@@ -16,6 +16,17 @@ type EntityPolicy struct {
 	SanitizeSnapshot func(user *models.UserWithPermissions, snapshot map[string]interface{}) map[string]interface{}
 }
 
+// stripSensitiveHealthFields removes GDPR Art. 9 sensitive health fields (vaccination and allergies)
+// as a defense-in-depth guarantee so they are never exposed via audit log snapshots.
+func stripSensitiveHealthFields(m map[string]interface{}) {
+	delete(m, "vaccination_checks")
+	delete(m, "vaccination_status_protected")
+	delete(m, "allergies")
+	delete(m, "allergies_protected")
+	delete(m, "dietary_notes")
+	delete(m, "emergency_instructions")
+}
+
 // AuditRegistry holds the security policies for all entity types recorded in audit_log.
 // Any entity type not explicitly registered here will fail-closed (hidden from non-superadmins).
 var AuditRegistry = map[string]EntityPolicy{
@@ -30,14 +41,12 @@ var AuditRegistry = map[string]EntityPolicy{
 			return false
 		},
 		SanitizeSnapshot: func(user *models.UserWithPermissions, snapshot map[string]interface{}) map[string]interface{} {
-			delete(snapshot, "vaccination_checks")
-			delete(snapshot, "vaccination_status_protected")
+			stripSensitiveHealthFields(snapshot)
 
 			if parentsRaw, ok := snapshot["parents"].([]interface{}); ok {
 				for _, pItem := range parentsRaw {
 					if pMap, ok := pItem.(map[string]interface{}); ok {
-						delete(pMap, "vaccination_checks")
-						delete(pMap, "vaccination_status_protected")
+						stripSensitiveHealthFields(pMap)
 						if !user.HasPermission("families.all.read") {
 							pMap["notes"] = ""
 						}
@@ -47,8 +56,7 @@ var AuditRegistry = map[string]EntityPolicy{
 			if childrenRaw, ok := snapshot["children"].([]interface{}); ok {
 				for _, cItem := range childrenRaw {
 					if cMap, ok := cItem.(map[string]interface{}); ok {
-						delete(cMap, "vaccination_checks")
-						delete(cMap, "vaccination_status_protected")
+						stripSensitiveHealthFields(cMap)
 						if !user.HasPermission("families.all.read") {
 							cMap["notes"] = ""
 						}
@@ -69,8 +77,7 @@ var AuditRegistry = map[string]EntityPolicy{
 			return false
 		},
 		SanitizeSnapshot: func(user *models.UserWithPermissions, snapshot map[string]interface{}) map[string]interface{} {
-			delete(snapshot, "vaccination_checks")
-			delete(snapshot, "vaccination_status_protected")
+			stripSensitiveHealthFields(snapshot)
 
 			// Non-staff users (e.g. self-service or restricted) cannot see staff notes
 			if !user.HasPermission("families.all.read") {
@@ -116,8 +123,7 @@ var AuditRegistry = map[string]EntityPolicy{
 			return false
 		},
 		SanitizeSnapshot: func(user *models.UserWithPermissions, snapshot map[string]interface{}) map[string]interface{} {
-			delete(snapshot, "vaccination_checks")
-			delete(snapshot, "vaccination_status_protected")
+			stripSensitiveHealthFields(snapshot)
 
 			if !user.HasPermission("families.all.read") && !user.HasPermission("children.all.write") {
 				snapshot["notes"] = ""
@@ -164,6 +170,7 @@ var AuditRegistry = map[string]EntityPolicy{
 			return user.HasPermission("employees.all.read") || user.HasPermission("employees.all.write")
 		},
 		SanitizeSnapshot: func(user *models.UserWithPermissions, snapshot map[string]interface{}) map[string]interface{} {
+			stripSensitiveHealthFields(snapshot)
 			return snapshot
 		},
 	},
@@ -233,9 +240,8 @@ func SanitizeSnapshot(user *models.UserWithPermissions, entityType string, rawJS
 	if exists && policy.SanitizeSnapshot != nil {
 		m = policy.SanitizeSnapshot(user, m)
 	} else {
-		// Defense-in-depth: always strip vaccination fields
-		delete(m, "vaccination_checks")
-		delete(m, "vaccination_status_protected")
+		// Defense-in-depth: always strip sensitive health fields
+		stripSensitiveHealthFields(m)
 	}
 
 	sanitized, err := json.Marshal(m)

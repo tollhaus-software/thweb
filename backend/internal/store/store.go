@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pavolmarko/thweb-backend/internal/audit"
+	"github.com/pavolmarko/thweb-backend/internal/crypto"
 	"github.com/pavolmarko/thweb-backend/internal/models"
 )
 
@@ -1996,9 +1997,74 @@ func (s *Store) DeleteEmployee(ctx context.Context, userID uuid.UUID, empID uuid
 	})
 }
 
+func (s *Store) GetActiveDEK(ctx context.Context, purpose string) (*crypto.DEKRecord, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("database store is not initialized")
+	}
+	var rec crypto.DEKRecord
+	err := s.db.QueryRow(ctx, `
+		SELECT id, purpose, kms_key_path, encrypted_dek, is_active
+		FROM data_encryption_keys
+		WHERE purpose = $1 AND is_active = true
+		LIMIT 1
+	`, purpose).Scan(&rec.ID, &rec.Purpose, &rec.KMSKeyPath, &rec.EncryptedDEK, &rec.IsActive)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &rec, nil
+}
+
+func (s *Store) GetDEKByID(ctx context.Context, id uuid.UUID) (*crypto.DEKRecord, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("database store is not initialized")
+	}
+	var rec crypto.DEKRecord
+	err := s.db.QueryRow(ctx, `
+		SELECT id, purpose, kms_key_path, encrypted_dek, is_active
+		FROM data_encryption_keys
+		WHERE id = $1
+	`, id).Scan(&rec.ID, &rec.Purpose, &rec.KMSKeyPath, &rec.EncryptedDEK, &rec.IsActive)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &rec, nil
+}
+
+func (s *Store) CreateActiveDEK(ctx context.Context, rec crypto.DEKRecord) (*crypto.DEKRecord, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("database store is not initialized")
+	}
+	if rec.ID == uuid.Nil {
+		rec.ID = uuid.New()
+	}
+	var out crypto.DEKRecord
+	err := s.db.QueryRow(ctx, `
+		INSERT INTO data_encryption_keys (id, purpose, kms_key_path, encrypted_dek, is_active)
+		VALUES ($1, $2, $3, $4, true)
+		ON CONFLICT (purpose) WHERE is_active = true DO NOTHING
+		RETURNING id, purpose, kms_key_path, encrypted_dek, is_active
+	`, rec.ID, rec.Purpose, rec.KMSKeyPath, rec.EncryptedDEK).Scan(
+		&out.ID, &out.Purpose, &out.KMSKeyPath, &out.EncryptedDEK, &out.IsActive,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return s.GetActiveDEK(ctx, rec.Purpose)
+		}
+		return nil, err
+	}
+	return &out, nil
+}
+
 func (s *Store) ResetTestData(ctx context.Context) error {
 	_, err := s.db.Exec(ctx, `
 		TRUNCATE TABLE 
+			data_encryption_keys,
 			employees,
 			th_memberships, 
 			hygiene_belehrung_events, 

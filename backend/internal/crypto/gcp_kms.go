@@ -14,7 +14,7 @@ import (
 
 type GCPKMSProvider struct {
 	defaultClient *kms.KeyManagementClient
-	keyPath       string // e.g. "projects/thweb-main/locations/global/keyRings/thweb-keyring/cryptoKeys/health-data-key"
+	keyPath       string // e.g. "projects/thweb-prod-kms/locations/eur8/keyRings/thweb-prod-keyring/cryptoKeys/health-data-key"
 }
 
 func NewGCPKMSProvider(client *kms.KeyManagementClient, keyPath string) *GCPKMSProvider {
@@ -22,6 +22,33 @@ func NewGCPKMSProvider(client *kms.KeyManagementClient, keyPath string) *GCPKMSP
 		defaultClient: client,
 		keyPath:       keyPath,
 	}
+}
+
+// NewGCPKMSProviderFromCredentialsFile initializes a GCPKMSProvider backed by an explicit service account JSON key file
+// without relying on or polluting global GOOGLE_APPLICATION_CREDENTIALS.
+func NewGCPKMSProviderFromCredentialsFile(ctx context.Context, credentialsFile string, keyPath string) (*GCPKMSProvider, error) {
+	if credentialsFile == "" {
+		return nil, fmt.Errorf("credentials file path is required for service-account-backed KMS provider (key: %s)", keyPath)
+	}
+	client, err := kms.NewKeyManagementClient(ctx, option.WithCredentialsFile(credentialsFile))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create KMS client from credentials file %q: %w", credentialsFile, err)
+	}
+	return &GCPKMSProvider{
+		defaultClient: client,
+		keyPath:       keyPath,
+	}, nil
+}
+
+func (g *GCPKMSProvider) KeyPath() string {
+	return g.keyPath
+}
+
+func (g *GCPKMSProvider) Close() error {
+	if g.defaultClient != nil {
+		return g.defaultClient.Close()
+	}
+	return nil
 }
 
 // getKMSClient returns a user-scoped KMS client using the user's OAuth access token if available,
@@ -112,4 +139,3 @@ func (g *GCPKMSProvider) ValidateAccess(ctx context.Context, userEmail string, a
 	}
 	return nil
 }
-
