@@ -1,0 +1,723 @@
+.meal-allergens-tab {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  flex: 1;
+  padding: 1rem;
+  box-sizing: border-box;
+  gap: 1rem;
+}
+
+.meal-allergens-calendar-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  width: 100%;
+}
+
+.meal-allergens-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.65rem 1rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.meal-allergens-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.meal-allergens-nav-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #1e293b;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.meal-allergens-nav-arrow:hover {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+}
+
+.meal-allergens-period-label {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #0f172a;
+  min-width: 180px;
+  text-align: center;
+}
+
+.meal-allergens-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  max-width: 420px;
+}
+
+.meal-allergens-search-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.meal-allergens-search-input {
+  width: 100%;
+  padding: 0.45rem 2rem 0.45rem 0.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: #0f172a;
+  background: #ffffff;
+}
+
+.meal-allergens-search-input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.meal-allergens-weekday-headers {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.75rem;
+  padding: 0 0.15rem;
+}
+
+.meal-allergens-weekday-header {
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #475569;
+  text-align: center;
+  padding: 0.35rem 0;
+}
+
+.meal-allergens-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.meal-allergens-grid.mobile-week-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.meal-allergen-day-box {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 0.45rem;
+  min-height: 118px;
+  padding: 0.7rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  background-color: #ffffff;
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+  box-sizing: border-box;
+  position: relative;
+}
+
+.meal-allergen-day-box:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
+  border-color: #64748b;
+}
+
+/* Status-based background colors */
+.meal-allergen-day-box.bg-default {
+  background-color: #ffffff;
+  border-color: #cbd5e1;
+}
+
+.meal-allergen-day-box.bg-finalized {
+  background-color: #dcfce7;
+  border-color: #86efac;
+}
+
+.meal-allergen-day-box.bg-not_finalized_upcoming {
+  background-color: #fef9c3;
+  border-color: #fde047;
+}
+
+.meal-allergen-day-box.bg-overdue {
+  background-color: #fee2e2;
+  border-color: #fca5a5;
+}
+
+/* Search highlight styles */
+.meal-allergen-day-box.search-match {
+  outline: 3px solid #2563eb;
+  outline-offset: -1px;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+}
+
+.meal-allergen-day-box.search-active-match {
+  outline: 3px solid #1d4ed8;
+  box-shadow: 0 0 0 5px rgba(29, 78, 216, 0.35);
+}
+
+.meal-allergen-day-box.outside-month {
+  opacity: 0.82;
+}
+
+.meal-allergen-day-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  padding-bottom: 0.3rem;
+}
+
+.meal-allergen-day-date {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.meal-allergen-day-cook {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #334155;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.meal-allergen-day-components {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.82rem;
+  color: #1e293b;
+}
+
+.meal-allergen-day-component-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  line-height: 1.3;
+}
+
+.meal-allergen-mini-badge {
+  font-size: 0.68rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.1);
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.meal-allergen-empty-text {
+  font-size: 0.78rem;
+  color: #64748b;
+  font-style: italic;
+}
+
+/* Editor Full Area */
+.meal-allergens-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.25rem;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.meal-allergens-editor-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.meal-allergens-editor-title-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+}
+
+.meal-allergens-back-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #0f172a;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.meal-allergens-back-btn:hover {
+  background: #e2e8f0;
+}
+
+.meal-allergens-editor-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.meal-allergens-editor-day-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.meal-allergens-editor-plan-subtitle {
+  font-size: 0.92rem;
+  color: #475569;
+}
+
+.meal-allergens-editor-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.meal-allergens-finalize-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 1rem;
+  border-radius: 8px;
+  border: 1px solid #16a34a;
+  background: #16a34a;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.meal-allergens-finalize-btn:hover:not(:disabled) {
+  background: #15803d;
+}
+
+.meal-allergens-finalize-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.meal-allergens-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 0.95rem;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #1e293b;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.meal-allergens-copy-btn:hover {
+  background: #e2e8f0;
+}
+
+.meal-allergens-finalized-warning {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  background: #fffbeb;
+  border: 1px solid #f59e0b;
+  color: #92400e;
+  font-size: 0.92rem;
+  font-weight: 500;
+}
+
+.meal-allergens-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+  padding: 0.9rem;
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+}
+
+.meal-allergens-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.meal-allergens-field-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.meal-allergens-select,
+.meal-allergens-input {
+  padding: 0.48rem 0.7rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: #0f172a;
+  background: #ffffff;
+}
+
+.meal-allergens-components-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.meal-allergens-component-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.meal-allergens-component-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.meal-allergens-component-name-input {
+  flex: 1;
+  font-size: 0.98rem;
+  font-weight: 600;
+  color: #0f172a;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+}
+
+.meal-allergens-remove-component-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 6px;
+  border: 1px solid #fca5a5;
+  background: #fef2f2;
+  color: #dc2626;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.meal-allergens-remove-component-btn:hover {
+  background: #fee2e2;
+}
+
+.meal-allergens-tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.meal-allergens-tag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.28rem 0.65rem;
+  border-radius: 999px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.meal-allergens-tag-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: #1e40af;
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.meal-allergens-cook-combobox {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  max-width: 420px;
+  width: 100%;
+}
+
+.meal-allergens-cook-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 10px 15px -3px rgba(15, 23, 42, 0.12);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  padding: 0.25rem;
+}
+
+.meal-allergens-cook-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0.65rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #0f172a;
+  font-size: 0.88rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.meal-allergens-cook-option:hover,
+.meal-allergens-cook-option.selected {
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+.meal-allergens-cook-option-badge {
+  font-size: 0.72rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+  font-weight: 600;
+}
+
+.meal-allergens-component-title-display {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.meal-allergens-component-name-text {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.meal-allergens-edit-name-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  padding: 0;
+}
+
+.meal-allergens-edit-name-btn:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.meal-allergens-expand-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.meal-allergens-expand-chip:hover {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+}
+
+.meal-allergens-picker-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.8rem;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  margin-top: 0.25rem;
+}
+
+.meal-allergens-main-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 0.4rem;
+}
+
+.meal-allergens-main-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #1e293b;
+  font-size: 0.82rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.meal-allergens-main-option.selected {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #1e3a8a;
+  font-weight: 600;
+}
+
+.meal-allergens-custom-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.meal-allergens-add-component-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding-top: 0.4rem;
+}
+
+/* Copy Allergens Popover / Modal */
+.meal-allergens-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1200;
+  padding: 1rem;
+}
+
+.meal-allergens-modal-content {
+  background: #ffffff;
+  border-radius: 12px;
+  max-width: 980px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-shadow: 0 20px 25px -5px rgba(15, 23, 42, 0.2);
+}
+
+.meal-allergens-suggestions-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.85rem;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.meal-allergens-suggestions-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 0.6rem;
+}
+
+.meal-allergens-suggestion-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.meal-allergens-suggestion-item:hover {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.meal-allergens-conflict-dialog {
+  background: #ffffff;
+  border-radius: 12px;
+  max-width: 460px;
+  width: 100%;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-shadow: 0 20px 25px -5px rgba(15, 23, 42, 0.25);
+}
+
+@media (max-width: __MOBILE_BREAKPOINT__) {
+  .meal-allergens-weekday-headers {
+    display: none;
+  }
+
+  .meal-allergens-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -2123,5 +2124,250 @@ func (s *Server) HandleTestReset(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonResponse(w, map[string]string{"status": "ok", "message": "Test data reset successfully"})
 }
+
+type SeedMealPlanEntry struct {
+	Date           string   `json:"date"`
+	CookName       string   `json:"cook_name"`
+	MealComponents []string `json:"meal_components"`
+	FoodComponent1 string   `json:"food_component_1"`
+	FoodComponent2 string   `json:"food_component_2"`
+	FoodComponent3 string   `json:"food_component_3"`
+}
+
+func (s *Server) HandleTestSeedMealPlan(w http.ResponseWriter, r *http.Request) {
+	if s.Authenticator == nil || !s.Authenticator.AllowMockAuth {
+		httpErrorLog(w, r, "Test seed meal plan is only available when mock auth is enabled", http.StatusForbidden, nil)
+		return
+	}
+
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		httpErrorLog(w, r, "Failed to read request body", http.StatusBadRequest, err)
+		return
+	}
+
+	var entries []SeedMealPlanEntry
+	if err := json.Unmarshal(bodyBytes, &entries); err != nil {
+		var single SeedMealPlanEntry
+		if errSingle := json.Unmarshal(bodyBytes, &single); errSingle != nil {
+			httpErrorLog(w, r, "Invalid JSON payload", http.StatusBadRequest, err)
+			return
+		}
+		entries = []SeedMealPlanEntry{single}
+	}
+
+	for _, entry := range entries {
+		if _, err := time.Parse("2006-01-02", entry.Date); err != nil {
+			httpErrorLog(w, r, "Invalid date format, expected YYYY-MM-DD", http.StatusBadRequest, err)
+			return
+		}
+		c1, c2, c3 := entry.FoodComponent1, entry.FoodComponent2, entry.FoodComponent3
+		if len(entry.MealComponents) > 0 && c1 == "" && c2 == "" && c3 == "" {
+			if len(entry.MealComponents) > 0 {
+				c1 = entry.MealComponents[0]
+			}
+			if len(entry.MealComponents) > 1 {
+				c2 = entry.MealComponents[1]
+			}
+			if len(entry.MealComponents) > 2 {
+				c3 = entry.MealComponents[2]
+			}
+		}
+		if err := s.Store.SeedTestMealPlan(r.Context(), entry.Date, entry.CookName, c1, c2, c3); err != nil {
+			httpErrorLog(w, r, "Failed to seed meal plan", http.StatusInternalServerError, err)
+			return
+		}
+	}
+
+	jsonResponse(w, map[string]string{"status": "ok"})
+}
+
+func (s *Server) HandleListMealAllergenCooks(w http.ResponseWriter, r *http.Request) {
+	cooks, err := s.Store.ListCookOptions(r.Context())
+	if err != nil {
+		httpErrorLog(w, r, "Failed to list cook options", http.StatusInternalServerError, err)
+		return
+	}
+	jsonResponse(w, cooks)
+}
+
+func (s *Server) HandleListMealAllergens(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("all") == "true" {
+		entries, err := s.Store.GetAllMealAllergenEntries(r.Context())
+		if err != nil {
+			httpErrorLog(w, r, "Failed to list all meal allergen entries", http.StatusInternalServerError, err)
+			return
+		}
+		jsonResponse(w, entries)
+		return
+	}
+
+	startStr := strings.TrimSpace(r.URL.Query().Get("start_date"))
+	endStr := strings.TrimSpace(r.URL.Query().Get("end_date"))
+
+	var startDate, endDate time.Time
+	if startStr == "" || endStr == "" {
+		now := time.Now().UTC()
+		startDate = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC).AddDate(0, 0, -7)
+		endDate = startDate.AddDate(0, 0, 42)
+	} else {
+		var err error
+		startDate, err = time.Parse("2006-01-02", startStr)
+		if err != nil {
+			httpErrorLog(w, r, "Invalid start_date format, expected YYYY-MM-DD", http.StatusBadRequest, err)
+			return
+		}
+		endDate, err = time.Parse("2006-01-02", endStr)
+		if err != nil {
+			httpErrorLog(w, r, "Invalid end_date format, expected YYYY-MM-DD", http.StatusBadRequest, err)
+			return
+		}
+		if endDate.Before(startDate) {
+			httpErrorLog(w, r, "end_date cannot be before start_date", http.StatusBadRequest, nil)
+			return
+		}
+	}
+
+	days, err := s.Store.GetMealAllergenDaysRange(r.Context(), startDate, endDate)
+	if err != nil {
+		httpErrorLog(w, r, "Failed to get meal allergen days", http.StatusInternalServerError, err)
+		return
+	}
+
+	jsonResponse(w, days)
+}
+
+func (s *Server) HandleGetMealAllergenDay(w http.ResponseWriter, r *http.Request) {
+	dateStr := strings.TrimSpace(chi.URLParam(r, "date"))
+	targetDate, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		httpErrorLog(w, r, "Invalid date format, expected YYYY-MM-DD", http.StatusBadRequest, err)
+		return
+	}
+
+	day, err := s.Store.GetMealAllergenDay(r.Context(), targetDate)
+	if err != nil {
+		httpErrorLog(w, r, "Failed to get meal allergen day", http.StatusInternalServerError, err)
+		return
+	}
+
+	jsonResponse(w, day)
+}
+
+type UpsertMealAllergensRequest struct {
+	CookParentID   *uuid.UUID                       `json:"cook_parent_id"`
+	CookEmployeeID *uuid.UUID                       `json:"cook_employee_id"`
+	CookCustomName string                           `json:"cook_custom_name"`
+	MealComponents models.MealAllergenComponentList `json:"meal_components"`
+	Documentation  models.MealAllergenDocumentation `json:"documentation"`
+	Status         *models.MealAllergenStatus       `json:"status,omitempty"`
+}
+
+func (s *Server) HandleUpsertMealAllergens(w http.ResponseWriter, r *http.Request) {
+	dateStr := strings.TrimSpace(chi.URLParam(r, "date"))
+	targetDate, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		httpErrorLog(w, r, "Invalid date format, expected YYYY-MM-DD", http.StatusBadRequest, err)
+		return
+	}
+
+	var req UpsertMealAllergensRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpErrorLog(w, r, "Invalid request body", http.StatusBadRequest, err)
+		return
+	}
+
+	if req.CookParentID != nil && req.CookEmployeeID != nil {
+		httpErrorLog(w, r, "Cannot specify both cook_parent_id and cook_employee_id", http.StatusBadRequest, nil)
+		return
+	}
+
+	// Whenever a change to allergens JSONB is persisted, the status of the row should change to not_finalized
+	var explicitStatus *models.MealAllergenStatus
+	if req.Status != nil && *req.Status == models.MealAllergenStatusNotRelevant {
+		explicitStatus = req.Status
+	}
+
+	updated, err := s.Store.UpsertMealAllergens(
+		r.Context(),
+		targetDate,
+		req.CookParentID,
+		req.CookEmployeeID,
+		req.CookCustomName,
+		req.MealComponents,
+		req.Documentation,
+		explicitStatus,
+	)
+	if err != nil {
+		httpErrorLog(w, r, "Failed to save meal allergens", http.StatusInternalServerError, err)
+		return
+	}
+
+	if s.Hub != nil {
+		s.Hub.Broadcast(WSMessage{
+			Type:    "MEAL_ALLERGENS_UPDATED",
+			Payload: map[string]string{"date": dateStr},
+		})
+	}
+
+	jsonResponse(w, updated)
+}
+
+func (s *Server) HandleFinalizeMealAllergens(w http.ResponseWriter, r *http.Request) {
+	dateStr := strings.TrimSpace(chi.URLParam(r, "date"))
+	targetDate, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		httpErrorLog(w, r, "Invalid date format, expected YYYY-MM-DD", http.StatusBadRequest, err)
+		return
+	}
+
+	bodyBytes, _ := io.ReadAll(r.Body)
+	if len(strings.TrimSpace(string(bodyBytes))) > 0 {
+		var req UpsertMealAllergensRequest
+		if err := json.Unmarshal(bodyBytes, &req); err != nil {
+			httpErrorLog(w, r, "Invalid request body", http.StatusBadRequest, err)
+			return
+		}
+		finalizedStatus := models.MealAllergenStatusFinalized
+		updated, err := s.Store.UpsertMealAllergens(
+			r.Context(),
+			targetDate,
+			req.CookParentID,
+			req.CookEmployeeID,
+			req.CookCustomName,
+			req.MealComponents,
+			req.Documentation,
+			&finalizedStatus,
+		)
+		if err != nil {
+			httpErrorLog(w, r, "Failed to finalize meal allergens", http.StatusInternalServerError, err)
+			return
+		}
+		if s.Hub != nil {
+			s.Hub.Broadcast(WSMessage{
+				Type:    "MEAL_ALLERGENS_UPDATED",
+				Payload: map[string]string{"date": dateStr},
+			})
+		}
+		jsonResponse(w, updated)
+		return
+	}
+
+	updated, err := s.Store.FinalizeMealAllergens(r.Context(), targetDate)
+	if err != nil {
+		httpErrorLog(w, r, "Failed to finalize meal allergens", http.StatusInternalServerError, err)
+		return
+	}
+
+	if s.Hub != nil {
+		s.Hub.Broadcast(WSMessage{
+			Type:    "MEAL_ALLERGENS_UPDATED",
+			Payload: map[string]string{"date": dateStr},
+		})
+	}
+
+	jsonResponse(w, updated)
+}
+
 
 

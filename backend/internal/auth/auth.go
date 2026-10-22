@@ -362,6 +362,8 @@ func (a *Authenticator) RolesAndPermissionsForTriggers(triggers []string) ([]str
 					"families.self.selfservice",
 					"memberships.self.read",
 					"allergies.summary.read",
+					"meal_allergens.read",
+					"meal_allergens.write",
 				}
 			case roles.AutoGrantCaregiverIdentifierEmail:
 				rIDs = []string{"caregiver_default"}
@@ -369,6 +371,16 @@ func (a *Authenticator) RolesAndPermissionsForTriggers(triggers []string) ([]str
 					"families.all.restrictedread",
 					"mealplan.view",
 					"allergies.summary.read",
+					"meal_allergens.read",
+					"meal_allergens.write",
+				}
+			case roles.AutoGrantCookIdentifierEmail:
+				rIDs = []string{"cook_default"}
+				perms = []string{
+					"mealplan.view",
+					"allergies.summary.read",
+					"meal_allergens.read",
+					"meal_allergens.write",
 				}
 			}
 		}

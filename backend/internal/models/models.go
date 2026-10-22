@@ -62,6 +62,9 @@ func (s *UserWithPermissions) HasPermission(perm string) bool {
 		if perm == "allergies.employees.read" && (p == "allergies.employees.write" || p == "*") {
 			return true
 		}
+		if perm == "meal_allergens.read" && (p == "meal_allergens.write" || p == "*") {
+			return true
+		}
 	}
 	return false
 }
@@ -78,6 +81,7 @@ func (s *UserWithPermissions) EnsureImpliedPermissions() {
 	hasEmployeesWrite := false
 	hasAllergiesChildrenWrite := false
 	hasAllergiesEmployeesWrite := false
+	hasMealAllergensWrite := false
 	permSet := make(map[string]bool)
 	for _, p := range s.EffectivePermissions {
 		permSet[p] = true
@@ -102,6 +106,9 @@ func (s *UserWithPermissions) EnsureImpliedPermissions() {
 		if p == "*" || p == "allergies.employees.write" {
 			hasAllergiesEmployeesWrite = true
 		}
+		if p == "*" || p == "meal_allergens.write" {
+			hasMealAllergensWrite = true
+		}
 	}
 	if hasFamiliesAll {
 		permSet["families.all.restrictedread"] = true
@@ -124,6 +131,9 @@ func (s *UserWithPermissions) EnsureImpliedPermissions() {
 	}
 	if hasAllergiesEmployeesWrite {
 		permSet["allergies.employees.read"] = true
+	}
+	if hasMealAllergensWrite {
+		permSet["meal_allergens.read"] = true
 	}
 	s.EffectivePermissions = make([]string, 0, len(permSet))
 	for p := range permSet {
@@ -210,6 +220,8 @@ var AllKnownPermissions = []string{
 	"allergies.employees.write",
 	"allergies.summary.read",
 	"mealplan.view",
+	"meal_allergens.read",
+	"meal_allergens.write",
 	"audit.view",
 	"users.all.manage",
 	"vaccination.status.manage",
@@ -808,6 +820,122 @@ func (c Child) MarshalJSON() ([]byte, error) {
 	type Alias Child
 	return json.Marshal((Alias)(c))
 }
+
+type MealAllergenStatus string
+
+const (
+	MealAllergenStatusUnspecified  MealAllergenStatus = "unspecified"
+	MealAllergenStatusNotRelevant  MealAllergenStatus = "not_relevant"
+	MealAllergenStatusNotFinalized MealAllergenStatus = "not_finalized"
+	MealAllergenStatusFinalized    MealAllergenStatus = "finalized"
+)
+
+func IsValidMealAllergenStatus(s MealAllergenStatus) bool {
+	switch s {
+	case MealAllergenStatusUnspecified, MealAllergenStatusNotRelevant, MealAllergenStatusNotFinalized, MealAllergenStatusFinalized:
+		return true
+	default:
+		return false
+	}
+}
+
+type MealAllergenComponent struct {
+	Name      string   `json:"name"`
+	Allergens []string `json:"allergens"`
+}
+
+type MealAllergenComponentList []MealAllergenComponent
+
+func (l MealAllergenComponentList) Value() (driver.Value, error) {
+	if l == nil {
+		return "[]", nil
+	}
+	b, err := json.Marshal(l)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
+}
+
+func (l *MealAllergenComponentList) Scan(src interface{}) error {
+	if src == nil {
+		*l = MealAllergenComponentList{}
+		return nil
+	}
+	var raw []byte
+	switch s := src.(type) {
+	case []byte:
+		raw = s
+	case string:
+		raw = []byte(s)
+	default:
+		return fmt.Errorf("cannot scan %T into MealAllergenComponentList", src)
+	}
+	if len(raw) == 0 {
+		*l = MealAllergenComponentList{}
+		return nil
+	}
+	return json.Unmarshal(raw, l)
+}
+
+type MealAllergenDocumentation struct {
+	PDFURL string `json:"pdf_url,omitempty"`
+}
+
+func (d MealAllergenDocumentation) Value() (driver.Value, error) {
+	b, err := json.Marshal(d)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
+}
+
+func (d *MealAllergenDocumentation) Scan(src interface{}) error {
+	if src == nil {
+		*d = MealAllergenDocumentation{}
+		return nil
+	}
+	var raw []byte
+	switch s := src.(type) {
+	case []byte:
+		raw = s
+	case string:
+		raw = []byte(s)
+	default:
+		return fmt.Errorf("cannot scan %T into MealAllergenDocumentation", src)
+	}
+	if len(raw) == 0 {
+		*d = MealAllergenDocumentation{}
+		return nil
+	}
+	return json.Unmarshal(raw, d)
+}
+
+type MealAllergenDay struct {
+	Date               string                    `json:"date"`
+	HasAllergenRecord  bool                      `json:"has_allergen_record"`
+	CookParentID       *uuid.UUID                `json:"cook_parent_id,omitempty"`
+	CookEmployeeID     *uuid.UUID                `json:"cook_employee_id,omitempty"`
+	CookCustomName     string                    `json:"cook_custom_name"`
+	CookDisplayName    string                    `json:"cook_display_name"`
+	MealComponents     MealAllergenComponentList `json:"meal_components"`
+	Status             MealAllergenStatus        `json:"status"`
+	Documentation      MealAllergenDocumentation `json:"documentation"`
+	PlanCookName       string                    `json:"plan_cook_name"`
+	PlanMealComponents []string                  `json:"plan_meal_components"`
+	HasPlanMeal        bool                      `json:"has_plan_meal"`
+	CreatedAt          *time.Time                `json:"created_at,omitempty"`
+	UpdatedAt          *time.Time                `json:"updated_at,omitempty"`
+}
+
+type CookOption struct {
+	ID          uuid.UUID `json:"id"`
+	Type        string    `json:"type"` // "parent" or "employee"
+	FirstName   string    `json:"first_name"`
+	LastName    string    `json:"last_name"`
+	DisplayName string    `json:"display_name"`
+}
+
 
 
 

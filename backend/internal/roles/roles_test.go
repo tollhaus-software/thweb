@@ -43,16 +43,16 @@ func TestLoadDefault(t *testing.T) {
 	if len(identRoles) == 0 || identRoles[0] != "parent_default" {
 		t.Errorf("expected parent_identifier_email trigger to return parent_default role, got %v", identRoles)
 	}
-	if len(identPerms) != 5 {
-		t.Errorf("expected 5 permissions for parent_identifier_email trigger, got %d (%v)", len(identPerms), identPerms)
+	if len(identPerms) != 7 {
+		t.Errorf("expected 7 permissions for parent_identifier_email trigger, got %d (%v)", len(identPerms), identPerms)
 	}
 
 	caregiverRoles, caregiverPerms := cfg.RolesForTrigger(AutoGrantCaregiverIdentifierEmail)
 	if len(caregiverRoles) == 0 || caregiverRoles[0] != "caregiver_default" {
 		t.Errorf("expected caregiver_identifier_email trigger to return caregiver_default role, got %v", caregiverRoles)
 	}
-	if len(caregiverPerms) != 3 {
-		t.Errorf("expected 3 permissions for caregiver_identifier_email trigger, got %d (%v)", len(caregiverPerms), caregiverPerms)
+	if len(caregiverPerms) != 5 {
+		t.Errorf("expected 5 permissions for caregiver_identifier_email trigger, got %d (%v)", len(caregiverPerms), caregiverPerms)
 	}
 }
 
