@@ -56,9 +56,7 @@ func writeJSONError(w http.ResponseWriter, message string, statusCode int) {
 func IsAllowedKioskPath(path string) bool {
 	cleanPath := strings.TrimSuffix(path, "/")
 	return cleanPath == "/api/dashboard/daily-brief" ||
-		cleanPath == "/api/daily-brief" ||
 		cleanPath == "/api/dashboard/allergies" ||
-		cleanPath == "/api/allergies/summary" ||
 		cleanPath == "/ws" ||
 		cleanPath == "/api/ws"
 }
