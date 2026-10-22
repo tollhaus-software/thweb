@@ -365,8 +365,10 @@ func TestIsAllowedKioskPath(t *testing.T) {
 	}{
 		{"/api/dashboard/daily-brief", true},
 		{"/api/dashboard/daily-brief/", true},
-		{"/api/daily-brief", true},
-		{"/api/daily-brief/", true},
+		{"/api/dashboard/allergies", true},
+		{"/api/dashboard/allergies/", true},
+		{"/api/daily-brief", false},
+		{"/api/allergies/summary", false},
 		{"/ws", true},
 		{"/ws/", true},
 		{"/api/ws", true},
