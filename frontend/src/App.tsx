@@ -115,6 +115,7 @@ interface Child {
   first_name_for_address_list?: string;
   last_name: string;
   birth_date: string;
+  school_enrollment_default?: number;
   notes?: string;
   vaccination_checks?: VaccinationCheck[];
   allergies?: string[];
@@ -4844,7 +4845,10 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
         const startMatch = groupInfo.startDate ? formatDisplayDate(groupInfo.startDate).toLowerCase().includes(query) : false;
         const familyLastNameMatch = (f.parents || []).some(p => (p.last_name || '').toLowerCase().includes(query));
         const allergyMatch = (c.allergies || []).some(a => String(a || '').toLowerCase().includes(query));
-        return fnMatch || lnMatch || groupMatch || startMatch || familyLastNameMatch || allergyMatch;
+        const enrollmentMatch = c.school_enrollment_default
+          ? String(c.school_enrollment_default).includes(query)
+          : false;
+        return fnMatch || lnMatch || groupMatch || startMatch || familyLastNameMatch || allergyMatch || enrollmentMatch;
       });
 
       return {
@@ -5617,6 +5621,21 @@ function formatParentsSummary(parents: any[]): string {
               }}
             />
           );
+        }
+      },
+      {
+        header: t('schoolEnrollmentRegular') || '🏫(regulär)',
+        accessorKey: 'school_enrollment_default',
+        id: 'school_enrollment_default',
+        size: 110,
+        minSize: 95,
+        meta: {
+          cardLabel: t('schoolEnrollmentRegularCardLabel') || t('schoolEnrollmentRegular') || '🏫(regulär)',
+        },
+        cell: (info) => {
+          const child = info.row.original;
+          const val = child.school_enrollment_default;
+          return <span>{val !== undefined && val !== null && val !== '' ? val : '-'}</span>;
         }
       },
       {

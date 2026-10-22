@@ -3,6 +3,7 @@ package models
 import (
 	"encoding/json"
 	"testing"
+	"time"
 )
 
 func TestUserWithPermissions_HasPermission(t *testing.T) {
@@ -444,6 +445,128 @@ func TestMultiValueEntry_Type(t *testing.T) {
 		t.Errorf("expected empty type for plain string, got %q", strEntry.Type)
 	}
 }
+
+func TestCalculateRegularSchoolEnrollment(t *testing.T) {
+	intPtr := func(i int) *int { return &i }
+
+	tests := []struct {
+		name      string
+		birthDate time.Time
+		want      *int
+	}{
+		{
+			name:      "zero birth date",
+			birthDate: time.Time{},
+			want:      nil,
+		},
+		{
+			name:      "sixthBirthday <= 2019, month <= September (May 2016)",
+			birthDate: time.Date(2010, 5, 15, 0, 0, 0, 0, time.UTC),
+			want:      intPtr(2016),
+		},
+		{
+			name:      "sixthBirthday <= 2019, month <= September (September 2019)",
+			birthDate: time.Date(2013, 9, 30, 0, 0, 0, 0, time.UTC),
+			want:      intPtr(2019),
+		},
+		{
+			name:      "sixthBirthday <= 2019, month > September (October 2016)",
+			birthDate: time.Date(2010, 10, 1, 0, 0, 0, 0, time.UTC),
+			want:      intPtr(2017),
+		},
+		{
+			name:      "sixthBirthday <= 2019, month > September (October 2019)",
+			birthDate: time.Date(2013, 10, 1, 0, 0, 0, 0, time.UTC),
+			want:      intPtr(2020),
+		},
+		{
+			name:      "sixthBirthday == 2020, month <= August (August 2020)",
+			birthDate: time.Date(2014, 8, 31, 0, 0, 0, 0, time.UTC),
+			want:      intPtr(2020),
+		},
+		{
+			name:      "sixthBirthday == 2020, month > August (September 2020)",
+			birthDate: time.Date(2014, 9, 1, 0, 0, 0, 0, time.UTC),
+			want:      intPtr(2021),
+		},
+		{
+			name:      "sixthBirthday == 2021, month <= July (July 2021)",
+			birthDate: time.Date(2015, 7, 31, 0, 0, 0, 0, time.UTC),
+			want:      intPtr(2021),
+		},
+		{
+			name:      "sixthBirthday == 2021, month > July (August 2021)",
+			birthDate: time.Date(2015, 8, 1, 0, 0, 0, 0, time.UTC),
+			want:      intPtr(2022),
+		},
+		{
+			name:      "sixthBirthday >= 2022, month <= June (June 2022)",
+			birthDate: time.Date(2016, 6, 30, 0, 0, 0, 0, time.UTC),
+			want:      intPtr(2022),
+		},
+		{
+			name:      "sixthBirthday >= 2022, month > June (July 2022 -> +2 = 2024)",
+			birthDate: time.Date(2016, 7, 1, 0, 0, 0, 0, time.UTC),
+			want:      intPtr(2024),
+		},
+		{
+			name:      "sixthBirthday >= 2022, month <= June (March 2024)",
+			birthDate: time.Date(2018, 3, 15, 0, 0, 0, 0, time.UTC),
+			want:      intPtr(2024),
+		},
+		{
+			name:      "sixthBirthday >= 2022, month > June (November 2024 -> +2 = 2026)",
+			birthDate: time.Date(2018, 11, 20, 0, 0, 0, 0, time.UTC),
+			want:      intPtr(2026),
+		},
+		{
+			name:      "leap year birthdate 2016-02-29 (sixthBirthday 2022-03-01 -> 2022)",
+			birthDate: time.Date(2016, 2, 29, 0, 0, 0, 0, time.UTC),
+			want:      intPtr(2022),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := CalculateRegularSchoolEnrollment(tt.birthDate)
+			if (got == nil) != (tt.want == nil) {
+				t.Fatalf("got %v, want %v", got, tt.want)
+			}
+			if got != nil && *got != *tt.want {
+				t.Errorf("got %d, want %d", *got, *tt.want)
+			}
+		})
+	}
+}
+
+func TestChild_SchoolEnrollmentSerialization(t *testing.T) {
+	c := Child{
+		FirstName: "Max",
+		LastName:  "Mustermann",
+		BirthDate: time.Date(2018, 11, 20, 0, 0, 0, 0, time.UTC),
+	}
+
+	data, err := json.Marshal(c)
+	if err != nil {
+		t.Fatalf("json.Marshal failed: %v", err)
+	}
+
+	var m map[string]interface{}
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("json.Unmarshal failed: %v", err)
+	}
+
+	if val, ok := m["school_enrollment_default"].(float64); !ok || int(val) != 2026 {
+		t.Errorf("expected school_enrollment_default=2026, got %v", m["school_enrollment_default"])
+	}
+	if _, ok := m["einschulung_regular"]; ok {
+		t.Errorf("expected einschulung_regular to not be present")
+	}
+	if _, ok := m["school_enrollment_regular"]; ok {
+		t.Errorf("expected school_enrollment_regular to not be present")
+	}
+}
+
 
 
 

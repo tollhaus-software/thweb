@@ -381,6 +381,9 @@ func (s *Store) ListFamilies(ctx context.Context) ([]models.Family, error) {
 		if err := json.Unmarshal(childrenJSON, &f.Children); err != nil {
 			return nil, err
 		}
+		for cIdx := range f.Children {
+			f.Children[cIdx].PopulateComputedFields()
+		}
 		f.FamilyName = f.GetFamilyName()
 		families = append(families, f)
 	}
@@ -634,6 +637,7 @@ func (s *Store) GetChildByID(ctx context.Context, childID uuid.UUID) (*models.Ch
 		}
 		return nil, err
 	}
+	c.PopulateComputedFields()
 	return &c, nil
 }
 

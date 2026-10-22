@@ -992,6 +992,9 @@ func TestStore_FirstNameForAddressList(t *testing.T) {
 	if foundChild.FirstName != "Elisabeth" || foundChild.FirstNameForAddressList != "Lisa" {
 		t.Errorf("expected child FirstName=Elisabeth and FirstNameForAddressList=Lisa, got %q, %q", foundChild.FirstName, foundChild.FirstNameForAddressList)
 	}
+	if foundChild.SchoolEnrollmentDefault == nil || *foundChild.SchoolEnrollmentDefault != 2026 {
+		t.Errorf("expected child SchoolEnrollmentDefault=2026, got %v", foundChild.SchoolEnrollmentDefault)
+	}
 
 	// Update parent and child FirstNameForAddressList
 	foundParent.FirstNameForAddressList = "Maxi"
