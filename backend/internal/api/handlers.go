@@ -588,7 +588,46 @@ func (s *Server) HandleListAuditLogs(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"error": "Forbidden"})
 		return
 	}
-	logs, err := s.Store.ListAuditLogsForUser(r.Context(), user)
+
+	filter := models.AuditLogFilter{}
+
+	// Parse search query parameter (e.g. ?q=... or ?search=...)
+	if q := strings.TrimSpace(r.URL.Query().Get("q")); q != "" {
+		filter.Search = q
+	} else if search := strings.TrimSpace(r.URL.Query().Get("search")); search != "" {
+		filter.Search = search
+	}
+
+	// Parse limit parameter (default 50, max 100)
+	limitStr := r.URL.Query().Get("limit")
+	if limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			if l > 100 {
+				l = 100
+			}
+			filter.Limit = l
+		}
+	} else {
+		filter.Limit = 50
+	}
+
+	// Parse before timestamp parameter
+	if beforeStr := r.URL.Query().Get("before"); beforeStr != "" {
+		if t, err := time.Parse(time.RFC3339Nano, beforeStr); err == nil {
+			filter.Before = &t
+		} else if t, err := time.Parse(time.RFC3339, beforeStr); err == nil {
+			filter.Before = &t
+		}
+	}
+
+	// Parse before_id parameter
+	if beforeIDStr := r.URL.Query().Get("before_id"); beforeIDStr != "" {
+		if id, err := uuid.Parse(beforeIDStr); err == nil {
+			filter.BeforeID = &id
+		}
+	}
+
+	logs, hasMore, err := s.Store.QueryAuditLogsForUser(r.Context(), user, filter)
 	if err != nil {
 		httpErrorLog(w, r, "Failed to list audit logs", http.StatusInternalServerError, err)
 		return
@@ -596,6 +635,26 @@ func (s *Server) HandleListAuditLogs(w http.ResponseWriter, r *http.Request) {
 	if logs == nil {
 		logs = []models.AuditLog{}
 	}
+
+	w.Header().Set("X-Has-More", strconv.FormatBool(hasMore))
+	if len(logs) > 0 {
+		w.Header().Set("X-Next-Before", logs[len(logs)-1].CreatedAt.Format(time.RFC3339Nano))
+		w.Header().Set("X-Next-Before-ID", logs[len(logs)-1].ID.String())
+	}
+
+	if r.URL.Query().Get("format") == "envelope" {
+		resp := map[string]interface{}{
+			"logs":     logs,
+			"has_more": hasMore,
+		}
+		if len(logs) > 0 {
+			resp["next_before"] = logs[len(logs)-1].CreatedAt.Format(time.RFC3339Nano)
+			resp["next_before_id"] = logs[len(logs)-1].ID.String()
+		}
+		jsonResponse(w, resp)
+		return
+	}
+
 	jsonResponse(w, logs)
 }
 

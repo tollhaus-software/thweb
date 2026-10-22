@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
 -- Indexes for history lookup
 CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log (entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_audit_log_family ON audit_log (family_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_created_at_id ON audit_log (created_at DESC, id DESC);
 
 -- Trigger function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()

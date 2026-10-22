@@ -7,7 +7,7 @@ import './App.css';
 import { DataTable } from './components/Table/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import EasyEdit, { Types } from './components/InlineEdit';
-import { Pencil, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, ArrowUpRight, X, Clock, AlertCircle, ChevronLeft, ChevronRight, Plus, ArrowUpDown, Check, Eye } from 'lucide-react';
+import { Pencil, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, ArrowUpRight, X, Clock, AlertCircle, ChevronLeft, ChevronRight, Plus, ArrowUpDown, Check, Eye, RefreshCw } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { MultiValueListEditor, type MultiValueFlagConfig, type MultiValueEntry, type MultiValueItem, getEntryValue, isFlagActive, PHONE_TYPES, getPhoneTypeSymbol, getPhoneTypeLabel } from './components/Table/MultiValueListEditor';
 import { MultiValueCell } from './components/Table/MultiValueCell';
@@ -1268,12 +1268,129 @@ const formatSnapshotDetails = (log: AuditLog, families: Family[] = []) => {
   return parts.join(' | ');
 };
 
-const AuditLogView: React.FC<{ logs: AuditLog[]; loading: boolean; families?: Family[] }> = ({ logs, loading, families = [] }) => {
-  const [filterText, setFilterText] = React.useState('');
+interface AuditLogViewProps {
+  logs?: AuditLog[];
+  loading?: boolean;
+  families?: Family[];
+  getAuthHeaders?: () => Record<string, string>;
+  refreshTrigger?: number;
+}
 
-  if (loading) {
-    return <div style={{ color: '#64748b', padding: '1rem' }}>{t('loading')}</div>;
-  }
+const AuditLogView: React.FC<AuditLogViewProps> = ({
+  logs: propLogs,
+  loading: propLoading,
+  families = [],
+  getAuthHeaders,
+  refreshTrigger,
+}) => {
+  const [internalLogs, setInternalLogs] = React.useState<AuditLog[]>([]);
+  const [internalLoading, setInternalLoading] = React.useState<boolean>(false);
+  const [hasMore, setHasMore] = React.useState<boolean>(false);
+  const [filterText, setFilterText] = React.useState('');
+  const [debouncedQuery, setDebouncedQuery] = React.useState('');
+  const [pageSize, setPageSize] = React.useState<number>(50);
+  const [pageIndex, setPageIndex] = React.useState<number>(0);
+  const [cursorHistory, setCursorHistory] = React.useState<Array<{ before?: string; beforeId?: string } | null>>([null]);
+
+  const isServerSide = !!getAuthHeaders;
+
+  // Debounce search query changes to prevent rapid requests while typing
+  React.useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedQuery(filterText);
+    }, 250);
+    return () => clearTimeout(handler);
+  }, [filterText]);
+
+  const fetchLogs = React.useCallback(
+    (
+      cursor: { before?: string; beforeId?: string } | null,
+      search: string,
+      limit: number,
+      signal?: AbortSignal
+    ) => {
+      if (!getAuthHeaders) return;
+      setInternalLoading(true);
+      const params = new URLSearchParams();
+      params.set('limit', limit.toString());
+      if (search.trim()) {
+        params.set('q', search.trim());
+      }
+      if (cursor?.before) {
+        params.set('before', cursor.before);
+      }
+      if (cursor?.beforeId) {
+        params.set('before_id', cursor.beforeId);
+      }
+
+      fetch(`/api/audit-logs?${params.toString()}`, {
+        headers: getAuthHeaders(),
+        signal,
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error('Failed to fetch audit logs');
+          const hasMoreHeader = res.headers.get('X-Has-More') === 'true';
+          return res.json().then((data) => ({ data, hasMoreHeader }));
+        })
+        .then(({ data, hasMoreHeader }) => {
+          const received = Array.isArray(data) ? data : (data.logs || []);
+          setInternalLogs(received);
+          setHasMore(hasMoreHeader);
+        })
+        .catch((err) => {
+          if (err.name !== 'AbortError') {
+            console.error(err);
+          }
+        })
+        .finally(() => {
+          setInternalLoading(false);
+        });
+    },
+    [getAuthHeaders]
+  );
+
+  // When search query or page size changes, reset pagination and fetch page 1
+  React.useEffect(() => {
+    if (!isServerSide) return;
+    const controller = new AbortController();
+    setCursorHistory([null]);
+    setPageIndex(0);
+    fetchLogs(null, debouncedQuery, pageSize, controller.signal);
+    return () => controller.abort();
+  }, [debouncedQuery, pageSize, fetchLogs, isServerSide]);
+
+  // When external refreshTrigger changes (e.g. WebSocket update on page 1)
+  React.useEffect(() => {
+    if (!isServerSide || refreshTrigger === undefined || refreshTrigger === 0) return;
+    if (pageIndex === 0 && !debouncedQuery) {
+      fetchLogs(null, '', pageSize);
+    }
+  }, [refreshTrigger, isServerSide, fetchLogs, pageIndex, debouncedQuery, pageSize]);
+
+  const handleRefresh = () => {
+    setCursorHistory([null]);
+    setPageIndex(0);
+    fetchLogs(null, debouncedQuery, pageSize);
+  };
+
+  const handleNextPage = () => {
+    if (internalLoading || !hasMore || internalLogs.length === 0) return;
+    const lastLog = internalLogs[internalLogs.length - 1];
+    const nextCursor = { before: lastLog.created_at, beforeId: lastLog.id };
+    const nextHistory = cursorHistory.slice(0, pageIndex + 1);
+    nextHistory.push(nextCursor);
+    setCursorHistory(nextHistory);
+    setPageIndex(pageIndex + 1);
+    fetchLogs(nextCursor, debouncedQuery, pageSize);
+  };
+
+  const handlePrevPage = () => {
+    if (internalLoading || pageIndex <= 0) return;
+    const prevIndex = pageIndex - 1;
+    const prevCursor = cursorHistory[prevIndex] || null;
+    setPageIndex(prevIndex);
+    fetchLogs(prevCursor, debouncedQuery, pageSize);
+  };
 
   const getOperationBadgeStyle = (op: string) => {
     const baseStyle = {
@@ -1315,31 +1432,106 @@ const AuditLogView: React.FC<{ logs: AuditLog[]; loading: boolean; families?: Fa
     }
   };
 
-  const safeLogs = Array.isArray(logs) ? logs : [];
-
-  const filteredLogs = safeLogs.filter((log) => {
-    if (!filterText.trim()) return true;
+  // Client-side fallback if not server-side
+  const displayLogs = React.useMemo(() => {
+    if (isServerSide) {
+      return internalLogs;
+    }
+    const safeLogs = Array.isArray(propLogs) ? propLogs : [];
+    if (!filterText.trim()) return safeLogs;
     const term = filterText.toLowerCase();
-    const email = (log.changed_by_email || '').toLowerCase();
-    const op = (log.operation || '').toLowerCase();
-    const type = (getEntityTypeLabel(log.entity_type) || '').toLowerCase();
-    const details = formatSnapshotDetails(log, families).toLowerCase();
-    const dateStr = new Date(log.created_at).toLocaleString(CURRENT_LOCALE === 'de' ? 'de-DE' : 'en-US').toLowerCase();
-    return email.includes(term) || op.includes(term) || type.includes(term) || details.includes(term) || dateStr.includes(term);
-  });
+    return safeLogs.filter((log) => {
+      const email = (log.changed_by_email || '').toLowerCase();
+      const op = (log.operation || '').toLowerCase();
+      const type = (getEntityTypeLabel(log.entity_type) || '').toLowerCase();
+      const details = formatSnapshotDetails(log, families).toLowerCase();
+      const dateStr = new Date(log.created_at).toLocaleString(CURRENT_LOCALE === 'de' ? 'de-DE' : 'en-US').toLowerCase();
+      return email.includes(term) || op.includes(term) || type.includes(term) || details.includes(term) || dateStr.includes(term);
+    });
+  }, [isServerSide, internalLogs, propLogs, filterText, families]);
+
+  const effectiveLoading = isServerSide ? internalLoading : (propLoading || false);
 
   return (
     <div className="table-container" style={{ overflowX: 'auto', background: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border)', padding: '1.25rem', boxShadow: 'var(--shadow)' }}>
-      <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <input
-          type="text"
-          value={filterText}
-          onChange={(e) => setFilterText(e.target.value)}
-          placeholder={t('searchAudit')}
-          className="search-input"
-          style={{ maxWidth: '300px', marginBottom: 0 }}
-        />
+      <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: '240px' }}>
+          <input
+            type="text"
+            value={filterText}
+            onChange={(e) => setFilterText(e.target.value)}
+            placeholder={t('searchAudit')}
+            className="search-input"
+            style={{ maxWidth: '300px', marginBottom: 0 }}
+          />
+          {filterText && (
+            <button
+              type="button"
+              onClick={() => setFilterText('')}
+              className="fees-family-nav-btn"
+              title="Clear search"
+              style={{ width: '28px', height: '28px' }}
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        {isServerSide && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              <span>{t('perPage')}:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => setPageSize(Number(e.target.value))}
+                style={{ padding: '0.2rem 0.4rem', borderRadius: '4px', border: '1px solid var(--border)', background: 'var(--bg-surface)', color: 'var(--text)' }}
+              >
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={effectiveLoading}
+              className="fees-family-nav-btn"
+              title={t('refresh')}
+              style={{ width: '32px', height: '32px' }}
+            >
+              <RefreshCw size={14} className={effectiveLoading ? 'spin' : ''} />
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <button
+                type="button"
+                onClick={handlePrevPage}
+                disabled={effectiveLoading || pageIndex === 0}
+                className="fees-family-nav-btn"
+                title={t('prevPage')}
+                style={{ width: '32px', height: '32px' }}
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <span style={{ fontSize: '0.85rem', fontWeight: 500, minWidth: '60px', textAlign: 'center' }}>
+                {t('page')} {pageIndex + 1}
+              </span>
+              <button
+                type="button"
+                onClick={handleNextPage}
+                disabled={effectiveLoading || !hasMore}
+                className="fees-family-nav-btn"
+                title={t('nextPage')}
+                style={{ width: '32px', height: '32px' }}
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+
       <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
         <thead>
           <tr style={{ borderBottom: '2px solid var(--border)' }}>
@@ -1351,14 +1543,20 @@ const AuditLogView: React.FC<{ logs: AuditLog[]; loading: boolean; families?: Fa
           </tr>
         </thead>
         <tbody>
-          {filteredLogs.length === 0 ? (
+          {effectiveLoading && displayLogs.length === 0 ? (
+            <tr>
+              <td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>
+                {t('loading')}
+              </td>
+            </tr>
+          ) : displayLogs.length === 0 ? (
             <tr>
               <td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontStyle: 'italic' }}>
                 {CURRENT_LOCALE === 'de' ? 'Keine Einträge vorhanden' : 'No entries found'}
               </td>
             </tr>
           ) : (
-            filteredLogs.map((log) => (
+            displayLogs.map((log) => (
               <tr key={log.id} style={{ borderBottom: '1px solid var(--border)' }}>
                 <td style={{ padding: '0.75rem 0.5rem', color: '#64748b', fontSize: '0.85rem' }}>
                   {new Date(log.created_at).toLocaleString(CURRENT_LOCALE === 'de' ? 'de-DE' : 'en-US')}
@@ -1382,6 +1580,34 @@ const AuditLogView: React.FC<{ logs: AuditLog[]; loading: boolean; families?: Fa
           )}
         </tbody>
       </table>
+
+      {isServerSide && displayLogs.length > 0 && (
+        <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.5rem' }}>
+          <button
+            type="button"
+            onClick={handlePrevPage}
+            disabled={effectiveLoading || pageIndex === 0}
+            className="fees-family-nav-btn"
+            title={t('prevPage')}
+            style={{ width: '32px', height: '32px' }}
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <span style={{ fontSize: '0.85rem', fontWeight: 500, minWidth: '60px', textAlign: 'center' }}>
+            {t('page')} {pageIndex + 1}
+          </span>
+          <button
+            type="button"
+            onClick={handleNextPage}
+            disabled={effectiveLoading || !hasMore}
+            className="fees-family-nav-btn"
+            title={t('nextPage')}
+            style={{ width: '32px', height: '32px' }}
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      )}
     </div>
   );
 };
@@ -2380,8 +2606,7 @@ const Dashboard: React.FC = () => {
   }, [updateScrollButtons]);
 
   // Audit states
-  const [auditLogs, setAuditLogs] = React.useState<AuditLog[]>([]);
-  const [auditLoading, setAuditLoading] = React.useState(false);
+  const [auditRefreshTrigger, setAuditRefreshTrigger] = React.useState(0);
 
   // Modal states
   const [addParentOpen, setAddParentOpen] = React.useState(false);
@@ -3010,22 +3235,6 @@ const Dashboard: React.FC = () => {
     fetchFamilies('');
   }, [fetchFamilies]);
 
-  const fetchAuditLogs = React.useCallback(() => {
-    setAuditLoading(true);
-    fetch('/api/audit-logs', {
-      headers: getAuthHeaders(),
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to fetch audit logs');
-        return res.json();
-      })
-      .then((data) => {
-        setAuditLogs(Array.isArray(data) ? data : []);
-      })
-      .catch((err) => console.error(err))
-      .finally(() => setAuditLoading(false));
-  }, [getAuthHeaders]);
-
   // Fetch data on demand based on the active tab
   React.useEffect(() => {
     switch (activeTab) {
@@ -3061,7 +3270,6 @@ const Dashboard: React.FC = () => {
         break;
       case 'audit':
         if (canReadAudit) {
-          fetchAuditLogs();
           if (families.length === 0 && overviewFamilies.length === 0) {
             if (canReadFamiliesAll) {
               fetchFamilies();
@@ -3091,7 +3299,6 @@ const Dashboard: React.FC = () => {
     fetchFamilies,
     fetchMembers,
     fetchEmployees,
-    fetchAuditLogs,
     families.length,
     overviewFamilies.length,
   ]);
@@ -3225,7 +3432,7 @@ const Dashboard: React.FC = () => {
         if (canReadFamiliesAll) fetchFamilies();
         else if (canReadOverview) fetchOverviewFamilies();
       } else if (activeTab === 'audit') {
-        if (canReadAudit) fetchAuditLogs();
+        if (canReadAudit) setAuditRefreshTrigger((prev) => prev + 1);
       }
     }
     if (
@@ -3243,7 +3450,6 @@ const Dashboard: React.FC = () => {
     fetchOverviewFamilies,
     fetchMembers,
     fetchEmployees,
-    fetchAuditLogs,
     canReadFamiliesAll,
     canReadOverview,
     canReadMembers,
@@ -7064,7 +7270,11 @@ function formatParentsSummary(parents: any[]): string {
             }}
           />
         ) : activeTab === 'audit' && canReadAudit ? (
-          <AuditLogView logs={auditLogs} loading={auditLoading} families={families.length > 0 ? families : (overviewFamilies as any)} />
+          <AuditLogView
+            families={families.length > 0 ? families : (overviewFamilies as any)}
+            getAuthHeaders={getAuthHeaders}
+            refreshTrigger={auditRefreshTrigger}
+          />
         ) : activeTab === 'admin' && canManageUsers ? (
           <AdminView onOpenSimulator={() => setSimulatorModalOpen(true)} />
         ) : activeTab === 'kiosk' && canProvisionKiosk ? (

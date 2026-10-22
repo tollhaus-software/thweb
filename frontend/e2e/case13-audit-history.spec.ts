@@ -115,5 +115,32 @@ test.describe('Test Case 13: Audit Log and History Tracking', () => {
 
     await searchInput.fill('NonExistentTermXYZ');
     await expect(auditTable.locator('tbody tr')).toContainText('Keine Einträge vorhanden');
+
+    // Step 9: Search filtering by user who performed the action
+    await searchInput.fill('developer');
+    await expect(auditTable.locator('tbody tr')).toHaveCount(initialRowsCount);
+
+    // Step 10: Verify backend request receives search query parameter
+    const [auditSearchRequest] = await Promise.all([
+      page.waitForRequest((req) => req.url().includes('/api/audit-logs') && req.url().includes('q=K%C3%B6nigstra%C3%9Fe')),
+      searchInput.fill('Königstraße'),
+    ]);
+    expect(auditSearchRequest.url()).toContain('q=K%C3%B6nigstra%C3%9Fe');
+    await expect(auditTable.locator('tbody tr')).toHaveCount(1);
+
+    // Step 11: Verify pagination controls are present
+    const prevBtn = page.getByRole('button', { name: 'Vorherige Seite' }).first();
+    const nextBtn = page.getByRole('button', { name: 'Nächste Seite' }).first();
+    const refreshBtn = page.getByRole('button', { name: 'Aktualisieren' }).first();
+
+    await expect(prevBtn).toBeVisible();
+    await expect(prevBtn).toBeDisabled(); // On first page, Prev is disabled
+    await expect(nextBtn).toBeVisible();
+    await expect(refreshBtn).toBeVisible();
+
+    // Clear search and refresh
+    await searchInput.fill('');
+    await refreshBtn.click();
+    await expect(auditTable.locator('tbody tr')).toHaveCount(initialRowsCount);
   });
 });
