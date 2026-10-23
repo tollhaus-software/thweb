@@ -796,7 +796,7 @@ func CalculateDefaultSchoolEnrollment(birthDate time.Time) *int {
 		if month <= time.June {
 			result = year
 		} else {
-			result = year + 2
+			result = year + 1
 		}
 	}
 	return &result
