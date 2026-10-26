@@ -182,9 +182,8 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     expect(hansBg).toBe(headerBg);
     expect(hansCol2Bg).toBe(headerBg);
 
-    // Verify Hans Schmidt's 4 columns: Name, 📞 Phone(s) newline-separated, 📧 Email(s) newline-separated, 🏠 Address
+    // Verify Hans Schmidt's 4 columns: Name, Phone(s) newline-separated, 📧 Email(s) newline-separated, 🏠 Address
     await expect(hansRow.locator('td').nth(0)).toHaveText('Hans Schmidt');
-    await expect(hansRow.locator('td').nth(1)).toContainText('📞');
     await expect(hansRow.locator('td').nth(1)).toContainText('0171 1234567');
     await expect(hansRow.locator('td').nth(1)).toContainText('0711 998877');
     await expect(hansRow.locator('td').nth(2)).toContainText('📧');
@@ -194,16 +193,17 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     await expect(hansRow.locator('td').nth(3)).toContainText('🏠');
     await expect(hansRow.locator('td').nth(3)).toContainText('Königstraße 10, 70173 Stuttgart');
 
-    // Only one 📞 and one 📧 symbol for multiple newline-separated entries, vertically centered
-    await expect(hansRow.locator('td').nth(1).locator('.overview-contact-symbol')).toHaveCount(1);
+    // No 📞 symbol because each phone number has its own type-dependent symbol.
+    await expect(hansRow.locator('td').nth(1).locator('.overview-contact-symbol')).toHaveCount(0);
+    // Only one 📧 symbol for multiple newline-separated entries, vertically centered
     await expect(hansRow.locator('td').nth(2).locator('.overview-contact-symbol')).toHaveCount(1);
-    const phoneSymbolBox = await hansRow.locator('td').nth(1).locator('.overview-contact-symbol').boundingBox();
-    const phoneCellBox = await hansRow.locator('td').nth(1).boundingBox();
-    expect(phoneSymbolBox).not.toBeNull();
-    expect(phoneCellBox).not.toBeNull();
-    if (phoneSymbolBox && phoneCellBox) {
-      const symbolCenterY = phoneSymbolBox.y + phoneSymbolBox.height / 2;
-      const cellCenterY = phoneCellBox.y + phoneCellBox.height / 2;
+    const emailSymbolBox = await hansRow.locator('td').nth(2).locator('.overview-contact-symbol').boundingBox();
+    const emailCellBox = await hansRow.locator('td').nth(2).boundingBox();
+    expect(emailSymbolBox).not.toBeNull();
+    expect(emailCellBox).not.toBeNull();
+    if (emailSymbolBox && emailCellBox) {
+      const symbolCenterY = emailSymbolBox.y + emailSymbolBox.height / 2;
+      const cellCenterY = emailCellBox.y + emailCellBox.height / 2;
       expect(Math.abs(symbolCenterY - cellCenterY)).toBeLessThan(4);
     }
 
@@ -217,7 +217,7 @@ test.describe('Test Case 5: Restricted Users Support', () => {
         expect(Math.abs(box1.x - box2.x)).toBeLessThan(1);
       }
     }
-    for (let symCol = 1; symCol <= 3; symCol++) {
+    for (let symCol = 2; symCol <= 3; symCol++) {
       const sym1 = await hansRow.locator('td').nth(symCol).locator('.overview-contact-symbol').boundingBox();
       const sym2 = await lisaRow.locator('td').nth(symCol).locator('.overview-contact-symbol').boundingBox();
       expect(sym1).not.toBeNull();
