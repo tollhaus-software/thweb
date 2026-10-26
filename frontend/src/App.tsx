@@ -6015,19 +6015,6 @@ function formatParentsSummary(parents: any[]): string {
               .filter((ph: any) => isFlagActive(ph, 'address_list', true));
             return (
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
-                <span
-                  className="overview-contact-symbol"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: '1.25rem',
-                    flexShrink: 0,
-                    userSelect: 'none',
-                  }}
-                >
-                  📞
-                </span>
                 {phones.length === 0 ? (
                   <span style={{ color: 'var(--text-muted)' }}>-</span>
                 ) : (
