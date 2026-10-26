@@ -63,7 +63,7 @@ test.describe('Test Case 20: Phone Number Types (Mobile, Landline, Work)', () =>
     const popover = page.locator('.multivalue-popover');
     await expect(popover).toBeVisible();
 
-    // 3. User tries to add a phone number WITHOUT selecting a type
+    // 3. User adds a phone number; type defaults to "Mobil" (mobile)
     const addInput = popover.locator('input[type="text"]').last();
     await addInput.fill('0170 1234567');
 
@@ -75,19 +75,13 @@ test.describe('Test Case 20: Phone Number Types (Mobile, Landline, Work)', () =>
     await expect(landlineBtn).toBeVisible();
     await expect(workBtn).toBeVisible();
 
-    // Attempt to save without selecting type
-    const saveBtn = popover.locator('.save-add-btn');
-    await saveBtn.click();
-
-    // Validation error should appear and saving should be prevented
-    const errorMsg = popover.locator('.phone-type-required-error');
-    await expect(errorMsg).toBeVisible();
-    await expect(errorMsg).toContainText('Bitte wählen Sie einen Typ aus');
-
-    // 4. User selects "Mobil" (mobile) and saves
-    await mobileBtn.click();
-    await expect(errorMsg).not.toBeVisible();
+    // "Mobil" is pre-selected, so there is no validation error and no explicit selection needed
     await expect(mobileBtn).toHaveClass(/active/);
+    await expect(landlineBtn).not.toHaveClass(/active/);
+    await expect(workBtn).not.toHaveClass(/active/);
+
+    // 4. Save without changing the type -> stored as mobile
+    const saveBtn = popover.locator('.save-add-btn');
     await saveBtn.click();
 
     // The newly added mobile phone should be in the list with 📱 symbol

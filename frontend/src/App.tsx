@@ -7930,7 +7930,6 @@ function formatParentsSummary(parents: any[]): string {
           values={activeMultiValueValues}
           flags={activeMultiValueFlags}
           types={activeMultiValueField === 'phones' ? PHONE_TYPES : undefined}
-          requireTypeSelection={activeMultiValueField === 'phones'}
           title={activeMultiValueTitle}
           placeholder={activeMultiValuePlaceholder}
           onSave={handleSaveActiveMultiValue}

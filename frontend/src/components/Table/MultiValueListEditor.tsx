@@ -62,7 +62,6 @@ export interface MultiValueListEditorProps<T extends MultiValueItem = MultiValue
   onSave: (newValues: T[]) => void;
   flags?: MultiValueFlagConfig[];
   types?: MultiValueTypeConfig[];
-  requireTypeSelection?: boolean;
   placeholder?: string;
   title?: string;
   canEditItem?: (item: T, idx: number) => boolean;
@@ -91,7 +90,6 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
   onSave,
   flags,
   types,
-  requireTypeSelection = false,
   placeholder = '',
   title,
   canEditItem,
@@ -104,8 +102,7 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
   const [editType, setEditType] = useState<string>('mobile');
   const [isAdding, setIsAdding] = useState(false);
   const [addValue, setAddValue] = useState('');
-  const [addType, setAddType] = useState<string>('');
-  const [addTypeError, setAddTypeError] = useState(false);
+  const [addType, setAddType] = useState<string>('mobile');
   const [addFlags, setAddFlags] = useState<Record<string, boolean>>({});
 
   const editInputRef = useRef<HTMLInputElement>(null);
@@ -117,7 +114,6 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
   const editTypeRef = useRef(editType);
   const addValueRef = useRef(addValue);
   const addTypeRef = useRef(addType);
-  const addTypeErrorRef = useRef(addTypeError);
   const addFlagsRef = useRef(addFlags);
   const isAddingRef = useRef(isAdding);
   const editingIndexRef = useRef(editingIndex);
@@ -125,7 +121,6 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
   const onSaveRef = useRef(onSave);
   const flagsRef = useRef(flags);
   const typesRef = useRef(types);
-  const requireTypeSelectionRef = useRef(requireTypeSelection);
   const canEditItemRef = useRef(canEditItem);
   const canDeleteItemRef = useRef(canDeleteItem);
   const canToggleFlagRef = useRef(canToggleFlag);
@@ -145,10 +140,6 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
   useEffect(() => {
     addTypeRef.current = addType;
   }, [addType]);
-
-  useEffect(() => {
-    addTypeErrorRef.current = addTypeError;
-  }, [addTypeError]);
 
   useEffect(() => {
     addFlagsRef.current = addFlags;
@@ -179,10 +170,6 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
   }, [types]);
 
   useEffect(() => {
-    requireTypeSelectionRef.current = requireTypeSelection;
-  }, [requireTypeSelection]);
-
-  useEffect(() => {
     canEditItemRef.current = canEditItem;
   }, [canEditItem]);
 
@@ -202,10 +189,8 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
         isAddingRef.current = true;
         setAddValue('');
         addValueRef.current = '';
-        setAddType('');
-        addTypeRef.current = '';
-        setAddTypeError(false);
-        addTypeErrorRef.current = false;
+        setAddType('mobile');
+        addTypeRef.current = 'mobile';
         const initialFlags: Record<string, boolean> = {};
         for (const f of flagsRef.current || []) {
           initialFlags[f.key] = f.defaultValue ?? true;
@@ -214,10 +199,8 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
       } else {
         setIsAdding(false);
         isAddingRef.current = false;
-        setAddType('');
-        addTypeRef.current = '';
-        setAddTypeError(false);
-        addTypeErrorRef.current = false;
+        setAddType('mobile');
+        addTypeRef.current = 'mobile';
       }
       setEditingIndex(null);
       editingIndexRef.current = null;
@@ -337,10 +320,8 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
     isAddingRef.current = false;
     setAddValue('');
     addValueRef.current = '';
-    setAddType('');
-    addTypeRef.current = '';
-    setAddTypeError(false);
-    addTypeErrorRef.current = false;
+    setAddType('mobile');
+    addTypeRef.current = 'mobile';
   }, []);
 
   const commitAdd = useCallback(
@@ -348,11 +329,6 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
       const trimmed = val.trim();
       if (!trimmed) {
         cancelAdd();
-        return;
-      }
-      if (typesRef.current && typesRef.current.length > 0 && requireTypeSelectionRef.current && !addTypeRef.current) {
-        setAddTypeError(true);
-        addTypeErrorRef.current = true;
         return;
       }
       const currentValues = valuesRef.current || [];
@@ -418,11 +394,7 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
 
   const handleClosePopover = useCallback(() => {
     if (isAddingRef.current && addValueRef.current.trim()) {
-      if (typesRef.current && typesRef.current.length > 0 && requireTypeSelectionRef.current && !addTypeRef.current) {
-        cancelAdd();
-      } else {
-        commitAdd(addValueRef.current);
-      }
+      commitAdd(addValueRef.current);
     } else if (editingIndexRef.current !== null) {
       commitEdit(editingIndexRef.current, editValueRef.current);
     }
@@ -430,10 +402,9 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
     setIsAdding(false);
     setEditValue('');
     setAddValue('');
-    setAddType('');
-    setAddTypeError(false);
+    setAddType('mobile');
     onClose();
-  }, [commitAdd, commitEdit, cancelAdd, onClose]);
+  }, [commitAdd, commitEdit, onClose]);
 
   const startEdit = (idx: number, currentVal: string) => {
     const currentValues = valuesRef.current || [];
@@ -478,10 +449,8 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
     isAddingRef.current = true;
     setAddValue('');
     addValueRef.current = '';
-    setAddType('');
-    addTypeRef.current = '';
-    setAddTypeError(false);
-    addTypeErrorRef.current = false;
+    setAddType('mobile');
+    addTypeRef.current = 'mobile';
     const initialFlags: Record<string, boolean> = {};
     for (const f of flagsRef.current || []) {
       initialFlags[f.key] = f.defaultValue ?? true;
@@ -501,12 +470,6 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
   const handleAddBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     const related = e.relatedTarget as Node | null;
     if (related && addWrapperRef.current?.contains(related)) {
-      return;
-    }
-    if (typesRef.current && typesRef.current.length > 0 && requireTypeSelectionRef.current && !addTypeRef.current) {
-      if (!addValueRef.current.trim()) {
-        cancelAdd();
-      }
       return;
     }
     commitAdd(addValueRef.current);
@@ -970,7 +933,7 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
                           minWidth: 0,
                           padding: '3px 6px',
                           fontSize: '0.85rem',
-                          border: addTypeError ? '1px solid #ef4444' : '1px solid var(--primary)',
+                          border: '1px solid var(--primary)',
                           borderRadius: '4px',
                           background: 'var(--input-bg)',
                           color: 'var(--input-text)',
@@ -1099,9 +1062,9 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <span
                             style={{
-                              color: addTypeError ? '#ef4444' : 'var(--text-secondary)',
+                              color: 'var(--text-secondary)',
                               fontSize: '0.75rem',
-                              fontWeight: addTypeError ? 600 : 500,
+                              fontWeight: 500,
                             }}
                           >
                             {t('phoneTypeSelect') || 'Typ'}:
@@ -1118,8 +1081,6 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
                                   onClick={() => {
                                     setAddType(typeOption.key);
                                     addTypeRef.current = typeOption.key;
-                                    setAddTypeError(false);
-                                    addTypeErrorRef.current = false;
                                   }}
                                   style={{
                                     display: 'inline-flex',
@@ -1131,8 +1092,6 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
                                     cursor: 'pointer',
                                     border: isSelected
                                       ? '1px solid var(--primary)'
-                                      : addTypeError
-                                      ? '1px solid #fca5a5'
                                       : '1px solid var(--border)',
                                     backgroundColor: isSelected
                                       ? 'var(--accent-bg, rgba(37, 99, 235, 0.1))'
@@ -1149,14 +1108,6 @@ export const MultiValueListPopover: React.FC<MultiValueListEditorProps> = ({
                             })}
                           </div>
                         </div>
-                        {addTypeError && (
-                          <span
-                            className="phone-type-required-error"
-                            style={{ color: '#ef4444', fontSize: '0.72rem', marginTop: '2px' }}
-                          >
-                            {t('phoneTypeRequired') || 'Bitte Typ auswählen'}
-                          </span>
-                        )}
                       </div>
                     )}
                   </div>
