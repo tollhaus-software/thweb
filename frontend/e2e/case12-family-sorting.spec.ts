@@ -213,8 +213,7 @@ test.describe('Test Case 12: Family Sorting across MGA Tabs', () => {
     };
 
     // 1. Default order: Name A → Z
-    let familyNames = await getVisibleFamilyNames();
-    expect(familyNames).toEqual(['Aalberg', 'Müller', 'Zimmermann']);
+    await expect.poll(getVisibleFamilyNames).toEqual(['Aalberg', 'Müller', 'Zimmermann']);
 
     // Check internal sorting in Aalberg:
     // Parents sub-header should show Benjamin before Zachary
@@ -237,8 +236,7 @@ test.describe('Test Case 12: Family Sorting across MGA Tabs', () => {
     await expect(popover).toBeHidden();
 
     await expect(sortButton).toContainText('Sortierung: Name (Z → A)');
-    familyNames = await getVisibleFamilyNames();
-    expect(familyNames).toEqual(['Zimmermann', 'Müller', 'Aalberg']);
+    await expect.poll(getVisibleFamilyNames).toEqual(['Zimmermann', 'Müller', 'Aalberg']);
 
     // 3. Sort by Most Recent Start Date (youngest child) descending:
     // Müller (2024-01-01), Aalberg (2023-09-01), Zimmermann (2020-03-01)
@@ -248,8 +246,7 @@ test.describe('Test Case 12: Family Sorting across MGA Tabs', () => {
     await expect(popover).toBeHidden();
 
     await expect(sortButton).toContainText('Neueste zuerst (absteigend)');
-    familyNames = await getVisibleFamilyNames();
-    expect(familyNames).toEqual(['Müller', 'Aalberg', 'Zimmermann']);
+    await expect.poll(getVisibleFamilyNames).toEqual(['Müller', 'Aalberg', 'Zimmermann']);
 
     // 4. Sort by First Start Date (family inception) ascending:
     // Zimmermann (2020-03-01), Aalberg (2021-09-01), Müller (2024-01-01)
@@ -259,15 +256,13 @@ test.describe('Test Case 12: Family Sorting across MGA Tabs', () => {
     await expect(popover).toBeHidden();
 
     await expect(sortButton).toContainText('Früheste zuerst (aufsteigend)');
-    familyNames = await getVisibleFamilyNames();
-    expect(familyNames).toEqual(['Zimmermann', 'Aalberg', 'Müller']);
+    await expect.poll(getVisibleFamilyNames).toEqual(['Zimmermann', 'Aalberg', 'Müller']);
 
     // 5. Switch to Eltern(MGA) tab: verify sort persists and applies
     await page.getByRole('button', { name: 'Eltern(MGA)' }).click();
     await expect(sortButton).toBeVisible();
     await expect(sortButton).toContainText('Früheste zuerst (aufsteigend)');
-    familyNames = await getVisibleFamilyNames();
-    expect(familyNames).toEqual(['Zimmermann', 'Aalberg', 'Müller']);
+    await expect.poll(getVisibleFamilyNames).toEqual(['Zimmermann', 'Aalberg', 'Müller']);
 
     // Verify parents within Aalberg are still sorted alphabetically: Benjamin before Zachary
     const aalbergParentRows = page.locator('tbody tr:not(.family-group-row)').filter({ hasText: 'Aalberg' });
@@ -280,8 +275,7 @@ test.describe('Test Case 12: Family Sorting across MGA Tabs', () => {
     await page.getByRole('button', { name: 'Kinder(MGA)' }).click();
     await expect(sortButton).toBeVisible();
     await expect(sortButton).toContainText('Früheste zuerst (aufsteigend)');
-    familyNames = await getVisibleFamilyNames();
-    expect(familyNames).toEqual(['Zimmermann', 'Aalberg', 'Müller']);
+    await expect.poll(getVisibleFamilyNames).toEqual(['Zimmermann', 'Aalberg', 'Müller']);
 
     // Verify children within Aalberg are still sorted by birth date: Aaron before Felix
     const aalbergChildRows = page.locator('tbody tr:not(.family-group-row)').filter({ hasText: 'Aalberg' });
@@ -295,7 +289,6 @@ test.describe('Test Case 12: Family Sorting across MGA Tabs', () => {
     await expect(sortButton).toBeVisible();
     await expect(sortButton).toContainText('Früheste zuerst (aufsteigend)');
     await expect(page.locator('tr.family-group-row').first()).toBeVisible();
-    familyNames = await getVisibleFamilyNames();
-    expect(familyNames).toEqual(['Zimmermann', 'Aalberg', 'Müller']);
+    await expect.poll(getVisibleFamilyNames).toEqual(['Zimmermann', 'Aalberg', 'Müller']);
   });
 });

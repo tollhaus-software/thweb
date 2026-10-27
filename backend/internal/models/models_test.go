@@ -505,9 +505,9 @@ func TestCalculateRegularSchoolEnrollment(t *testing.T) {
 			want:      intPtr(2022),
 		},
 		{
-			name:      "sixthBirthday >= 2022, month > June (July 2022 -> +2 = 2024)",
+			name:      "sixthBirthday >= 2022, month > June (July 2022 -> +1 = 2023)",
 			birthDate: time.Date(2016, 7, 1, 0, 0, 0, 0, time.UTC),
-			want:      intPtr(2024),
+			want:      intPtr(2023),
 		},
 		{
 			name:      "sixthBirthday >= 2022, month <= June (March 2024)",
@@ -515,9 +515,9 @@ func TestCalculateRegularSchoolEnrollment(t *testing.T) {
 			want:      intPtr(2024),
 		},
 		{
-			name:      "sixthBirthday >= 2022, month > June (November 2024 -> +2 = 2026)",
+			name:      "sixthBirthday >= 2022, month > June (November 2024 -> +1 = 2025)",
 			birthDate: time.Date(2018, 11, 20, 0, 0, 0, 0, time.UTC),
-			want:      intPtr(2026),
+			want:      intPtr(2025),
 		},
 		{
 			name:      "leap year birthdate 2016-02-29 (sixthBirthday 2022-03-01 -> 2022)",
@@ -556,8 +556,8 @@ func TestChild_SchoolEnrollmentSerialization(t *testing.T) {
 		t.Fatalf("json.Unmarshal failed: %v", err)
 	}
 
-	if val, ok := m["school_enrollment_default"].(float64); !ok || int(val) != 2026 {
-		t.Errorf("expected school_enrollment_default=2026, got %v", m["school_enrollment_default"])
+	if val, ok := m["school_enrollment_default"].(float64); !ok || int(val) != 2025 {
+		t.Errorf("expected school_enrollment_default=2025, got %v", m["school_enrollment_default"])
 	}
 	if _, ok := m["einschulung_regular"]; ok {
 		t.Errorf("expected einschulung_regular to not be present")

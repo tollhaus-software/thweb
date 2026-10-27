@@ -70,13 +70,13 @@ test.describe('Test Case 15: Members Tab and Read-Only Membership Permissions', 
     });
     expect(memRes.ok()).toBeTruthy();
 
-    // Create user with finanzausschuss role
+    // Create a Finanzausschuss-like user with explicit permissions
     const userRes = await request.post('/api/admin/users', {
       headers: { Authorization: 'Bearer developer@example.com' },
       data: {
         email: 'finanz@example.com',
-        roles: ['finanzausschuss'],
-        permissions: [],
+        roles: [],
+        permissions: ['fees.all.read', 'memberships.all.read'],
       },
     });
     expect(userRes.ok()).toBeTruthy();
@@ -210,13 +210,13 @@ test.describe('Test Case 15: Members Tab and Read-Only Membership Permissions', 
     });
     expect(memRes.ok()).toBeTruthy();
 
-    // Create user with finanzausschuss role
+    // Create a Finanzausschuss-like user with explicit permissions
     const userRes = await request.post('/api/admin/users', {
       headers: { Authorization: 'Bearer developer@example.com' },
       data: {
         email: 'finanz-mobile@example.com',
-        roles: ['finanzausschuss'],
-        permissions: [],
+        roles: [],
+        permissions: ['fees.all.read', 'memberships.all.read'],
       },
     });
     expect(userRes.ok()).toBeTruthy();

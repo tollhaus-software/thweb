@@ -22,6 +22,8 @@ test.describe('Test Case 13: Audit Log and History Tracking', () => {
     await page.locator('#f-p1-first').fill('Johannes');
     await page.locator('#f-p1-last').fill('Bauer');
     await page.locator('form').getByRole('button', { name: 'Familie hinzufügen' }).click();
+    // Wait until the family was created and the add-family form closed
+    await expect(page.locator('#f-p1-first')).toBeHidden();
 
     // Step 2: Navigate to Parents tab ("Eltern(MGA)")
     const parentsTabBtn = page.getByRole('button', { name: 'Eltern(MGA)' });
@@ -32,10 +34,16 @@ test.describe('Test Case 13: Audit Log and History Tracking', () => {
     await expect(johannesRow).toBeVisible();
 
     // Step 3: Edit Johannes's address by double-clicking the address cell
+    // Retry the double-click: right after family creation the table may still be
+    // re-rendering due to concurrent refetches, which can swallow the dblclick.
     const addrCell = johannesRow.locator('td').filter({ hasText: /Adresse hinzufügen/i }).first();
-    await addrCell.dblclick();
     const popover = page.locator('.glass-popup');
-    await expect(popover).toBeVisible();
+    await expect(async () => {
+      if (!(await popover.isVisible())) {
+        await addrCell.dblclick();
+      }
+      await expect(popover).toBeVisible({ timeout: 1000 });
+    }).toPass();
     const sharedInput = popover.getByRole('textbox').first();
     await sharedInput.fill('Königstraße 10');
     await popover.getByRole('button', { name: 'Speichern' }).click();
