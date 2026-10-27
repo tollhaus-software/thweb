@@ -1523,8 +1523,8 @@ func TestAllergies_ChildrenEmployeesSummaryAndAudit(t *testing.T) {
 		t.Fatalf("expected 200 OK when MGA updates child2 allergies, got %d (%s)", rec2.Code, rec2.Body.String())
 	}
 
-	// 2. Parent of fam1 (without allergies.children.read) views GET /api/families/overview:
-	//    Must see fam1 child1's allergies, must NOT see fam2 child2's allergies!
+	// 2. Overview endpoint (/api/families/overview):
+	//    Due to privacy constraints, /api/families/overview must NOT serve allergies per person (not even for own child or admin).
 	parentUser1 := &models.UserWithPermissions{
 		ID:                   testUserID,
 		Email:                "parent1@example.com",
@@ -1538,35 +1538,28 @@ func TestAllergies_ChildrenEmployeesSummaryAndAudit(t *testing.T) {
 	if recOv.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for overview, got %d", recOv.Code)
 	}
-	var ovFamilies []OverviewFamily
-	if err := json.Unmarshal(recOv.Body.Bytes(), &ovFamilies); err != nil {
-		t.Fatalf("failed to unmarshal overview: %v", err)
-	}
-	var foundChild1, foundChild2 *OverviewChild
-	for i := range ovFamilies {
-		for j := range ovFamilies[i].Children {
-			c := &ovFamilies[i].Children[j]
-			if c.ID == child1ID {
-				foundChild1 = c
-			}
-			if c.ID == child2ID {
-				foundChild2 = c
-			}
-		}
-	}
-	if foundChild1 == nil || len(foundChild1.Allergies) != 2 || foundChild1.Allergies[0] != "Erdnuss" || foundChild1.Allergies[1] != "Laktose" {
-		t.Errorf("expected parent of fam1 to see own child1 allergies [Erdnuss Laktose], got %+v", foundChild1)
-	}
-	if foundChild2 == nil || len(foundChild2.Allergies) != 0 {
-		t.Errorf("expected parent of fam1 NOT to see other family's child2 allergies, got %+v", foundChild2)
+	ovBodyStr := recOv.Body.String()
+	if strings.Contains(ovBodyStr, "Erdnuss") || strings.Contains(ovBodyStr, "Laktose") || strings.Contains(ovBodyStr, "allergies") {
+		t.Errorf("expected overview endpoint NOT to serve allergies per person to parent, got: %s", ovBodyStr)
 	}
 
-	// 3. Employee allergies: create employee with allergies and verify summary
 	adminUser := &models.UserWithPermissions{
 		ID:                   testUserID,
 		Email:                userEmail,
 		EffectivePermissions: []string{"*"},
 	}
+	reqAdminOv := httptest.NewRequest("GET", "/api/families/overview", nil)
+	reqAdminOv = reqAdminOv.WithContext(context.WithValue(reqAdminOv.Context(), auth.UserContextKey, adminUser))
+	recAdminOv := httptest.NewRecorder()
+	server.HandleListFamiliesOverview(recAdminOv, reqAdminOv)
+	if recAdminOv.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for admin overview, got %d", recAdminOv.Code)
+	}
+	if strings.Contains(recAdminOv.Body.String(), "Erdnuss") || strings.Contains(recAdminOv.Body.String(), "allergies") {
+		t.Errorf("expected overview endpoint NOT to serve allergies per person even to admin, got: %s", recAdminOv.Body.String())
+	}
+
+	// 3. Employee allergies: create employee with allergies and verify summary
 	empBody := []byte(`{"first_name": "Erika", "last_name": "Koechin", "employee_type": "cook", "allergies": ["Sellerie", "Gluten"]}`)
 	reqEmp := httptest.NewRequest("POST", "/api/employees", bytes.NewReader(empBody))
 	reqEmp = reqEmp.WithContext(context.WithValue(reqEmp.Context(), auth.UserContextKey, adminUser))

@@ -196,8 +196,10 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     // No 📞 symbol because each phone number has its own type-dependent symbol.
     await expect(hansRow.locator('td').nth(1).locator('.overview-contact-symbol')).toHaveCount(0);
     // Only one 📧 symbol for multiple newline-separated entries, vertically centered
-    await expect(hansRow.locator('td').nth(2).locator('.overview-contact-symbol')).toHaveCount(1);
-    const emailSymbolBox = await hansRow.locator('td').nth(2).locator('.overview-contact-symbol').boundingBox();
+    const hansEmailSymbol = hansRow.locator('td').nth(2).locator('.overview-contact-symbol');
+    await expect(hansEmailSymbol).toHaveCount(1);
+    await expect(hansEmailSymbol).toBeVisible();
+    const emailSymbolBox = await hansEmailSymbol.boundingBox();
     const emailCellBox = await hansRow.locator('td').nth(2).boundingBox();
     expect(emailSymbolBox).not.toBeNull();
     expect(emailCellBox).not.toBeNull();
