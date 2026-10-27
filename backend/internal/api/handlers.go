@@ -316,7 +316,6 @@ type OverviewChild struct {
 	CurrentGroup            *int                      `json:"current_group,omitempty"`
 	IsFormer                bool                      `json:"is_former,omitempty"`
 	GroupChanges            []models.ChildGroupChange `json:"group_changes,omitempty"`
-	Allergies               []string                  `json:"allergies,omitempty"`
 }
 
 func computeChildOverviewGroupStatus(changes []models.ChildGroupChange, now time.Time) (*int, bool) {
@@ -381,21 +380,13 @@ func (s *Server) HandleListFamiliesOverview(w http.ResponseWriter, r *http.Reque
 	user := auth.GetUser(r.Context())
 	hasSelfService := user != nil && user.HasPermission("families.self.selfservice")
 	hasFamiliesAll := user != nil && user.HasPermission("families.all.read")
-	hasAllergiesChildrenRead := user != nil && user.HasPermission("allergies.children.read")
 	now := time.Now()
-
-	var allergiesCipher *crypto.RequestCipherContext
-	if s.AllergiesKMSProvider != nil {
-		allergiesCipher = crypto.NewRequestCipherContext(s.AllergiesKMSProvider, s.Store, crypto.PurposeAllergies, "", "")
-		defer allergiesCipher.Close()
-	}
 
 	overview := make([]OverviewFamily, 0, len(families))
 	for _, fam := range families {
 		isOwnFamily := user != nil && user.IsSelfFamily(fam.ID)
 		canViewGroupChanges := (isOwnFamily && hasSelfService) || hasFamiliesAll
 		canViewMemberships := (isOwnFamily && user != nil && user.HasPermission("memberships.self.read")) || (user != nil && user.HasPermission("memberships.all.read"))
-		canViewAllergies := hasAllergiesChildrenRead || isOwnFamily
 
 		ovParents := make([]OverviewParent, 0, len(fam.Parents))
 		for _, p := range fam.Parents {
@@ -464,17 +455,6 @@ func (s *Server) HandleListFamiliesOverview(w http.ResponseWriter, r *http.Reque
 			}
 			if canViewGroupChanges {
 				ovc.GroupChanges = c.GroupChanges
-			}
-			if canViewAllergies && len(c.AllergiesProtected) > 0 && allergiesCipher != nil {
-				if plainJSON, err := allergiesCipher.Decrypt(r.Context(), c.AllergiesProtected); err == nil && len(plainJSON) > 0 {
-					if decoded, err := models.DecodeAllergiesPayload(plainJSON); err == nil {
-						ovc.Allergies = decoded
-					} else {
-						log.Printf("[WARN] Failed to decode decrypted allergies for child %s: %v\n", c.ID, err)
-					}
-				} else if err != nil {
-					log.Printf("[WARN] Failed to decrypt allergies for child %s: %v\n", c.ID, err)
-				}
 			}
 			ovChildren = append(ovChildren, ovc)
 		}

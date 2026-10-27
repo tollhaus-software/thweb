@@ -635,7 +635,6 @@ interface OverviewChild {
   current_group?: number | null;
   is_former?: boolean;
   group_changes?: ChildGroupChange[];
-  allergies?: string[];
 }
 
 const getOverviewChildGroupStatus = (
@@ -6050,13 +6049,6 @@ function formatParentsSummary(parents: any[]): string {
           }
 
           if (item.hide_group) {
-            if (item.allergies && item.allergies.length > 0) {
-              return (
-                <span className="overview-child-allergies-badge" style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                  <strong>{t('allergies')}:</strong> {item.allergies.join(', ')}
-                </span>
-              );
-            }
             return null;
           }
 
@@ -6067,11 +6059,6 @@ function formatParentsSummary(parents: any[]): string {
               <span className="overview-child-group-badge" style={{ color: displayGroup === '-' ? 'var(--text-muted)' : 'var(--text)' }}>
                 {displayGroup}
               </span>
-              {item.allergies && item.allergies.length > 0 && (
-                <span className="overview-child-allergies-badge" style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                  <strong>{t('allergies')}:</strong> {item.allergies.join(', ')}
-                </span>
-              )}
             </div>
           );
         },
