@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { CURRENT_LOCALE } from '../utils/i18n';
-import CalendarDropdown, { parseDateStringToObj } from './CalendarDropdown';
-
-export { CalendarDropdown, parseDateStringToObj };
+import CalendarDropdown from './CalendarDropdown';
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const Types = {
