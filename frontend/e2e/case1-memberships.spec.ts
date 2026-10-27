@@ -564,8 +564,6 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
       },
     });
     expect(createRes.ok()).toBeTruthy();
-    const createdFamily = await createRes.json();
-    const parentId = createdFamily.parents[0].id;
 
     await page.goto('/');
 

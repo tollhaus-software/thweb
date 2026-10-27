@@ -56,8 +56,6 @@ test.describe('Test Case 15: Members Tab and Read-Only Membership Permissions', 
       },
     });
     expect(fam2Res.ok()).toBeTruthy();
-    const fam2 = await fam2Res.json();
-    const erikaParentId = fam2.parents[0].id;
 
     // Add full membership for Maximilian
     const memRes = await request.post('/api/memberships', {

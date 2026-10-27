@@ -2722,7 +2722,7 @@ const Dashboard: React.FC = () => {
 
   const stripVaccination = (child: any): any => {
     if (!child) return child;
-    const { vaccination_checks, vaccination_status_protected, ...rest } = child;
+    const { vaccination_checks: _vc, vaccination_status_protected: _vsp, ...rest } = child;
     return rest;
   };
 
@@ -2730,7 +2730,7 @@ const Dashboard: React.FC = () => {
     if (!Array.isArray(parents)) return parents;
     return parents.map((p) => {
       if (!p) return p;
-      const { vaccination_checks, vaccination_status_protected, ...rest } = p;
+      const { vaccination_checks: _vc, vaccination_status_protected: _vsp, ...rest } = p;
       return rest;
     });
   };
@@ -3099,7 +3099,7 @@ const Dashboard: React.FC = () => {
           }
         }, 100);
       }
-    } catch (e) {
+    } catch {
       alert('Failed to sync undo/redo state with backend.');
     }
   };
@@ -7831,7 +7831,7 @@ function formatParentsSummary(parents: any[]): string {
                       if (input) {
                         try {
                           input.showPicker();
-                        } catch (err) {
+                        } catch {
                           input.click();
                         }
                       }
@@ -7923,7 +7923,7 @@ function formatParentsSummary(parents: any[]): string {
 
         {/* Manage Multi-Values (Emails / Phones / Allergies) Popover */}
         <MultiValueListEditor
-          key={`${(activeParentForMultiValue || activeChildForMultiValue || activeEmployeeForMultiValue)?.id}-${activeMultiValueField}` || 'multivalue-popover'}
+          key={`${(activeParentForMultiValue || activeChildForMultiValue || activeEmployeeForMultiValue)?.id || 'unknown'}-${activeMultiValueField || 'field'}`}
           isOpen={Boolean(multiValuePopoverAnchor && (activeParentForMultiValue || activeChildForMultiValue || activeEmployeeForMultiValue) && activeMultiValueField)}
           anchorEl={multiValuePopoverAnchor}
           onClose={closeManageMultiValue}
