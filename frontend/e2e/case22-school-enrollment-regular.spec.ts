@@ -42,7 +42,7 @@ test.describe('Test Case 22: Einschulung (regulär) Column in Children Tab', () 
     // c5: 2015-07-01 -> 6th bday 2021-07 (==2021, <=Jul) -> 2021
     // c6: 2015-08-01 -> 6th bday 2021-08 (==2021, >Jul)  -> 2022
     // c7: 2016-06-15 -> 6th bday 2022-06 (>=2022, <=Jun) -> 2022
-    // c8: 2016-07-15 -> 6th bday 2022-07 (>=2022, >Jun)  -> 2024 (+2)
+    // c8: 2016-07-15 -> 6th bday 2022-07 (>=2022, >Jun)  -> 2023
     const childrenToCreate = [
       { id: crypto.randomUUID(), first_name: 'ChildOne', birth_date: '2010-05-15', expected: '2016' },
       { id: crypto.randomUUID(), first_name: 'ChildTwo', birth_date: '2010-10-01', expected: '2017' },
@@ -51,7 +51,7 @@ test.describe('Test Case 22: Einschulung (regulär) Column in Children Tab', () 
       { id: crypto.randomUUID(), first_name: 'ChildFive', birth_date: '2015-07-01', expected: '2021' },
       { id: crypto.randomUUID(), first_name: 'ChildSix', birth_date: '2015-08-01', expected: '2022' },
       { id: crypto.randomUUID(), first_name: 'ChildSeven', birth_date: '2016-06-15', expected: '2022' },
-      { id: crypto.randomUUID(), first_name: 'ChildEight', birth_date: '2016-07-15', expected: '2024' },
+      { id: crypto.randomUUID(), first_name: 'ChildEight', birth_date: '2016-07-15', expected: '2023' },
     ];
 
     for (const c of childrenToCreate) {
@@ -91,7 +91,7 @@ test.describe('Test Case 22: Einschulung (regulär) Column in Children Tab', () 
       await expect(cell).toContainText(c.expected);
     }
 
-    // 6. Test updating child seven's birth date from 2016-06-15 (<= June -> 2022) to 2016-07-15 (> June -> 2024)
+    // 6. Test updating child seven's birth date from 2016-06-15 (<= June -> 2022) to 2016-07-15 (> June -> 2023)
     const childSevenRow = page.locator('tr').filter({ hasText: 'ChildSeven' }).first();
     const birthDateCell = childSevenRow.locator('td[data-column-id="birth_date"]');
     await birthDateCell.hover();
@@ -101,8 +101,8 @@ test.describe('Test Case 22: Einschulung (regulär) Column in Children Tab', () 
     await dateInput.fill('15.07.2016');
     await dateInput.press('Enter');
 
-    // Verify Einschulung (regulär) is recomputed by backend to 2024
+    // Verify Einschulung (regulär) is recomputed by backend to 2023
     const childSevenEinschulungCell = childSevenRow.locator('td[data-column-id="school_enrollment_default"]');
-    await expect(childSevenEinschulungCell).toContainText('2024');
+    await expect(childSevenEinschulungCell).toContainText('2023');
   });
 });

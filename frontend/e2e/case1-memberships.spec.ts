@@ -307,9 +307,20 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     const familyId = createdFamily.id;
     const parentId = createdFamily.parents[0].id;
 
-    // 2. Log in as caregiver (lacks families.all.write)
+    // 2. Create a caregiver user with explicit permissions (lacks families.all.write)
+    const caregiverRes = await request.post('/api/admin/users', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        email: 'caregiver-e2e@example.com',
+        roles: [],
+        permissions: ['families.all.read', 'children.all.write', 'hygiene.all.write'],
+      },
+    });
+    expect(caregiverRes.ok()).toBeTruthy();
+
+    // Log in as caregiver
     await page.addInitScript(() => {
-      localStorage.setItem('token', 'caregiver@example.com');
+      localStorage.setItem('token', 'caregiver-e2e@example.com');
     });
     await page.goto('/');
 
@@ -390,7 +401,7 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     // 5. Direct API validation: verify backend blocks caregiver from removing or altering identifier email
     const unauthorizedRemoveRes = await request.put(`/api/families/${familyId}`, {
       headers: {
-        Authorization: 'Bearer caregiver@example.com',
+        Authorization: 'Bearer caregiver-e2e@example.com',
         'Content-Type': 'application/json',
       },
       data: {
@@ -412,7 +423,7 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
 
     const unauthorizedModifyRes = await request.put(`/api/families/${familyId}`, {
       headers: {
-        Authorization: 'Bearer caregiver@example.com',
+        Authorization: 'Bearer caregiver-e2e@example.com',
         'Content-Type': 'application/json',
       },
       data: {
