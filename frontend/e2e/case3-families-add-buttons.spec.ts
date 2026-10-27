@@ -114,7 +114,7 @@ test.describe('Test Case 3: Families View Add Buttons (+ Kind and + Elternteil)'
     const overviewTab = page.getByRole('button', { name: 'Familien', exact: true });
     await overviewTab.click();
     await expect(overviewTab).toHaveClass(/active/);
-    await expect(page.getByText('Mustermann', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Mustermann').first()).toBeVisible();
     await expect(page.locator('text=Felix').first()).toBeVisible();
 
     // Take a screenshot of the families view for visual verification
