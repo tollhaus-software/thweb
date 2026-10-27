@@ -165,6 +165,12 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     await expect(page.locator('table.data-table th')).toHaveCount(0);
     await expect(page.locator('table.data-table td.sticky-col').first()).toBeVisible();
 
+    // Verify default grouping is "Nach Gruppe"
+    await expect(page.getByRole('button', { name: 'Nach Gruppe' })).toHaveAttribute('aria-pressed', 'true');
+
+    // Switch to "Nach Familie" mode to test family view structure
+    await page.getByRole('button', { name: 'Nach Familie' }).click();
+
     // Verify family group header rows are rendered in overview
     const schmidtHeaderRow = page.locator('tr.family-group-row', { hasText: 'Schmidt' });
     await expect(schmidtHeaderRow).toBeVisible();
@@ -403,7 +409,21 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     const overviewTab = page.getByRole('button', { name: 'Familien', exact: true });
     await expect(overviewTab).toBeVisible();
 
-    // 1. In "By Family" grouping:
+    // Verify default grouping is "By Group"
+    await expect(page.getByRole('button', { name: 'Nach Gruppe' })).toHaveAttribute('aria-pressed', 'true');
+
+    // 1. Within "Kleine Gruppe" (default "By Group" mode):
+    // Within "Kleine Gruppe", families are sorted alphabetically: Adams before Becker
+    // In Becker family group, children are sorted by birth date: Ben -> Clara -> Zoe
+    const groupBeckerChildren = page.locator('tr.overview-child-row', { hasText: /Becker/ });
+    await expect(groupBeckerChildren).toHaveCount(3);
+    await expect(groupBeckerChildren.nth(0)).toContainText('Ben Becker');
+    await expect(groupBeckerChildren.nth(1)).toContainText('Clara Becker');
+    await expect(groupBeckerChildren.nth(2)).toContainText('Zoe Becker');
+
+    // 2. Switch to "By Family":
+    await page.getByRole('button', { name: 'Nach Familie' }).click();
+
     // Families sorted alphabetically: Adams before Becker
     const familyHeaders = page.locator('tr.family-group-row');
     await expect(familyHeaders).toHaveCount(2);
@@ -423,16 +443,5 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     await expect(beckerChildren.nth(0)).toContainText('Ben');
     await expect(beckerChildren.nth(1)).toContainText('Clara');
     await expect(beckerChildren.nth(2)).toContainText('Zoe');
-
-    // 2. Switch to "By Group":
-    await page.getByRole('button', { name: 'Nach Gruppe' }).click();
-
-    // Within "Kleine Gruppe", families are sorted alphabetically: Adams before Becker
-    // In Becker family group, children are sorted by birth date: Ben -> Clara -> Zoe
-    const groupBeckerChildren = page.locator('tr.overview-child-row', { hasText: /Becker/ });
-    await expect(groupBeckerChildren).toHaveCount(3);
-    await expect(groupBeckerChildren.nth(0)).toContainText('Ben Becker');
-    await expect(groupBeckerChildren.nth(1)).toContainText('Clara Becker');
-    await expect(groupBeckerChildren.nth(2)).toContainText('Zoe Becker');
   });
 });

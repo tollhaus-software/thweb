@@ -215,6 +215,12 @@ test.describe('Test Case 12: Family Sorting across MGA Tabs', () => {
     // 1. Default order: Name A → Z
     await expect.poll(getVisibleFamilyNames).toEqual(['Aalberg', 'Müller', 'Zimmermann']);
 
+    // Verify table headers in Familien tab do NOT have sort selection (cursor is default, clicking does not add sort indicator)
+    const familiesTh = page.locator('.families-table th').first();
+    await expect(familiesTh).toHaveCSS('cursor', 'default');
+    await familiesTh.click();
+    await expect(familiesTh).not.toContainText(/🔼|🔽/);
+
     // Check internal sorting in Aalberg:
     // Parents sub-header should show Benjamin before Zachary
     const aalbergRow = page.locator('tr.family-group-row', { hasText: 'Aalberg' });
@@ -264,6 +270,12 @@ test.describe('Test Case 12: Family Sorting across MGA Tabs', () => {
     await expect(sortButton).toContainText('Früheste zuerst (aufsteigend)');
     await expect.poll(getVisibleFamilyNames).toEqual(['Zimmermann', 'Aalberg', 'Müller']);
 
+    // Verify table headers in Eltern tab do NOT have sort selection
+    const parentsTh = page.locator('.parents-table th').first();
+    await expect(parentsTh).toHaveCSS('cursor', 'default');
+    await parentsTh.click();
+    await expect(parentsTh).not.toContainText(/🔼|🔽/);
+
     // Verify parents within Aalberg are still sorted alphabetically: Benjamin before Zachary
     const aalbergParentRows = page.locator('tbody tr:not(.family-group-row)').filter({ hasText: 'Aalberg' });
     const p1 = await aalbergParentRows.nth(0).textContent();
@@ -276,6 +288,12 @@ test.describe('Test Case 12: Family Sorting across MGA Tabs', () => {
     await expect(sortButton).toBeVisible();
     await expect(sortButton).toContainText('Früheste zuerst (aufsteigend)');
     await expect.poll(getVisibleFamilyNames).toEqual(['Zimmermann', 'Aalberg', 'Müller']);
+
+    // Verify table headers in Kinder tab do NOT have sort selection
+    const childrenTh = page.locator('.children-table th').first();
+    await expect(childrenTh).toHaveCSS('cursor', 'default');
+    await childrenTh.click();
+    await expect(childrenTh).not.toContainText(/🔼|🔽/);
 
     // Verify children within Aalberg are still sorted by birth date: Aaron before Felix
     const aalbergChildRows = page.locator('tbody tr:not(.family-group-row)').filter({ hasText: 'Aalberg' });

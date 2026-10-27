@@ -31,6 +31,7 @@ interface DataTableProps<TData> {
   getCardHeader?: (item: any) => React.ReactNode;
   getCardActions?: (item: any) => React.ReactNode;
   stickyFirstColumn?: boolean;
+  enableSorting?: boolean;
 }
 
 export function DataTable<TData>({
@@ -50,6 +51,7 @@ export function DataTable<TData>({
   getCardHeader,
   getCardActions,
   stickyFirstColumn = false,
+  enableSorting = true,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
@@ -73,6 +75,7 @@ export function DataTable<TData>({
       expanded: true,
       columnVisibility,
     },
+    enableSorting,
     onSortingChange: setSorting,
     onColumnVisibilityChange: setColumnVisibility,
     getCoreRowModel: getCoreRowModel(),

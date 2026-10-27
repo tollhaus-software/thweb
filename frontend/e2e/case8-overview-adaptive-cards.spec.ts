@@ -100,6 +100,12 @@ test.describe('Test Case 8: Adaptive Card Layout for familiesOverview Tab', () =
     const isHorizontallyScrollable = await tableContainer.evaluate((el) => el.scrollWidth > el.clientWidth);
     expect(isHorizontallyScrollable).toBeFalsy();
 
+    // Verify default grouping is "Nach Gruppe"
+    await expect(page.getByRole('button', { name: 'Nach Gruppe' })).toHaveAttribute('aria-pressed', 'true');
+
+    // Switch to "Nach Familie" mode to verify parent and child card rendering in family mode
+    await page.getByRole('button', { name: 'Nach Familie' }).click();
+
     // In "Nach Familie" mode: Verify parent row is rendered as a vertical card
     const hansRow = page.locator('tr.overview-parent-row', { hasText: 'Hans Schmidt' });
     await expect(hansRow).toBeVisible();

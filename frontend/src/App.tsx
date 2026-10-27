@@ -2310,7 +2310,7 @@ const Dashboard: React.FC = () => {
   const [families, setFamilies] = React.useState<Family[]>([]);
   const [employees, setEmployees] = React.useState<Employee[]>([]);
   const [overviewFamilies, setOverviewFamilies] = React.useState<OverviewFamily[]>([]);
-  const [overviewGroupBy, setOverviewGroupBy] = React.useState<'family' | 'group'>('family');
+  const [overviewGroupBy, setOverviewGroupBy] = React.useState<'family' | 'group'>('group');
   const [expandedGroupParents, setExpandedGroupParents] = React.useState<Record<string, boolean>>({});
 
   const handleToggleGroupParents = React.useCallback((key: string) => {
@@ -5100,7 +5100,8 @@ function formatParentsSummary(parents: any[]): string {
           const childrenInBucket = (f.children || []).filter((c) =>
             bucket.matchesChild(getOverviewChildGroupStatus(c))
           );
-          if (childrenInBucket.length === 0) return;
+          const isChildlessFamily = bucket.key === 'none' && (!f.children || f.children.length === 0);
+          if (childrenInBucket.length === 0 && !isChildlessFamily) return;
 
           const familyName = getFamilyName(f);
           const parentNames = (f.parents || [])
@@ -5164,7 +5165,9 @@ function formatParentsSummary(parents: any[]): string {
           const isExplicitlyExpanded = expandedGroupParents[groupFamilyKey];
           const parentNamesMatch = query ? parentNames.toLowerCase().includes(query) : false;
           const autoExpandSearch = query ? Boolean(parentNamesMatch || parentContactMatch) : false;
-          const isExpanded = isExplicitlyExpanded !== undefined ? isExplicitlyExpanded : autoExpandSearch;
+          const isExpanded =
+            childrenToInclude.length === 0 ||
+            (isExplicitlyExpanded !== undefined ? isExplicitlyExpanded : autoExpandSearch);
 
           const mappedParents = sortedParents.map((p) => ({
             ...p,
@@ -5180,7 +5183,7 @@ function formatParentsSummary(parents: any[]): string {
             groupFamilyKey,
           }));
 
-          const toggleRow = sortedParents.length > 0 ? {
+          const toggleRow = childrenToInclude.length > 0 && sortedParents.length > 0 ? {
             id: `toggle-${groupFamilyKey}`,
             _rowType: 'parents-toggle' as const,
             groupFamilyKey,
@@ -7384,6 +7387,7 @@ function formatParentsSummary(parents: any[]): string {
             jumpToFamilyTitle={t('jumpToFamilyInChildren')}
             highlightedRowId={highlightedRowId}
             stickyFirstColumn
+            enableSorting={false}
             getCardHeader={(parent: any) => `${parent.first_name || ''} ${parent.last_name || ''}`.trim() || '-'}
             getCardActions={(parent: any) => (
               <RowActionsMenu
@@ -7408,6 +7412,7 @@ function formatParentsSummary(parents: any[]): string {
             emptySubRowsText={t('noChildrenYet')}
             highlightedRowId={highlightedRowId}
             stickyFirstColumn
+            enableSorting={false}
             getCardHeader={(child: any) => `${child.first_name || ''} ${child.last_name || ''}`.trim() || '-'}
             getCardActions={(child: any) => (
               <RowActionsMenu
@@ -7430,6 +7435,7 @@ function formatParentsSummary(parents: any[]): string {
             emptySubRowsText={t('noChildrenYet')}
             highlightedRowId={highlightedRowId}
             stickyFirstColumn
+            enableSorting={false}
           />
         ) : activeTab === 'hygieneBelehrung' ? (
           <DataTable
