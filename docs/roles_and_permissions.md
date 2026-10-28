@@ -104,7 +104,7 @@ roles:
 | `memberships.all.read` | Access the "Members" (Vereinsmitglieder) tab and view all active parent memberships | Finanzausschuss, Treasurer, Board |
 | `memberships.self.read` | Scoped access for a parent to see their own family's membership status | Parents |
 | `memberships.all.write` | Create, edit, and delete Förderverein memberships (implies `memberships.all.read`) | Treasurer, Board |
-| `employees.all.read` | Access the "Employees" (*Mitarbeitende*) tab and view employee records | Staff, Board, Caregivers |
+| `employees.all.read` | Access the "Employees" (*Mitarbeitende(PA)*) tab and view employee records | Staff, Board, Caregivers |
 | `employees.all.write` | Create, edit, and delete employee records (implies `employees.all.read`) | Management, Board, Administrators |
 | `vaccination.status.manage` | View and edit vaccination compliance status (*Masernschutzgesetz*) | Authorized MGA Officers |
 | `audit.view` | View change history and audit logs (entity details scoped to domain permissions) | Auditors, Viewers |

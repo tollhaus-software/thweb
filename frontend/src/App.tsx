@@ -206,7 +206,7 @@ const getChildGroupInfo = (changes: ChildGroupChange[] | undefined): ChildGroupI
   const latest = effectiveSoFar[effectiveSoFar.length - 1];
 
   // Case 2: If the child has left the group (the most recent group change, as of today, has target group = 0),
-  // it should say "left <last group name> on <end date>" (en) / "Betreuungsende <end date>, davor <last group name>" (de).
+  // it should say "left <last group name> on <end date>" (en) / "Betreuungsende <end date>, zuletzt <last group name>" (de).
   // If no previous group was recorded, it simply says "Betreuungsende <end date>" (de) / "left on <end date>" (en).
   if (latest.target_group === 0) {
     const prevEnroll = [...sorted].filter((c) => c.target_group > 0 && c.change_date.split('T')[0] <= latest.change_date.split('T')[0]).pop()
@@ -214,7 +214,7 @@ const getChildGroupInfo = (changes: ChildGroupChange[] | undefined): ChildGroupI
     const lastGroupName = prevEnroll ? getGroupShortLabel(prevEnroll.target_group) : '';
     const endDateStr = formatDisplayDate(latest.change_date);
     const groupLabel = CURRENT_LOCALE === 'de'
-      ? (lastGroupName ? `Betreuungsende ${endDateStr}, davor ${lastGroupName}` : `Betreuungsende ${endDateStr}`)
+      ? (lastGroupName ? `Betreuungsende ${endDateStr}, zuletzt ${lastGroupName}` : `Betreuungsende ${endDateStr}`)
       : (lastGroupName ? `left ${lastGroupName} on ${endDateStr}` : `left on ${endDateStr}`);
     return {
       currentGroup: 0,
@@ -1450,7 +1450,7 @@ const AuditLogView: React.FC<AuditLogViewProps> = ({
       case 'th_membership':
         return t('th_membership');
       case 'employee':
-        return t('employees');
+        return t('employee');
       default:
         return etype;
     }
