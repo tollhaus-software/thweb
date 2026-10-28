@@ -291,7 +291,7 @@ export const KioskProvisioning: React.FC<KioskProvisioningProps> = ({ token }) =
             marginTop: '0.5rem',
             padding: '0.75rem 1.25rem',
             background: 'var(--primary)',
-            color: 'white',
+            color: 'var(--primary-contrast, white)',
             border: 'none',
             borderRadius: '6px',
             fontSize: '1rem',
