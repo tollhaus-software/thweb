@@ -597,6 +597,144 @@ func TestHandleListFamiliesOverview_ProjectionAndScoping(t *testing.T) {
 	}
 }
 
+func TestHandleListFamiliesOverview_DateFiltering(t *testing.T) {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := store.NewStore(pool)
+	s := &Server{Store: appStore}
+
+	testUserID := uuid.New()
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2)", testUserID, "test-user-"+testUserID.String()+"@example.com")
+	if err != nil {
+		t.Fatalf("failed to insert test user: %v", err)
+	}
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", testUserID)
+	}()
+
+	now := time.Now()
+
+	// Family A: Child exited > 1 year ago (should be excluded from overview)
+	famAId := uuid.New()
+	_ = appStore.UpdateFamilyParents(ctx, testUserID, famAId, []models.Parent{{ID: uuid.New(), FamilyID: famAId, FirstName: "ParentA", LastName: "FamA"}})
+	defer func() { _ = appStore.DeleteFamily(ctx, testUserID, famAId) }()
+	childAId := uuid.New()
+	_ = appStore.UpdateChild(ctx, testUserID, childAId, models.Child{ID: childAId, FamilyID: famAId, FirstName: "ChildA", LastName: "FamA", BirthDate: now.AddDate(-6, 0, 0)})
+	_, _ = appStore.CreateChildGroupChange(ctx, testUserID, models.ChildGroupChange{Child: childAId, ChangeDate: now.AddDate(-2, 0, 0), TargetGroup: 1})
+	_, _ = appStore.CreateChildGroupChange(ctx, testUserID, models.ChildGroupChange{Child: childAId, ChangeDate: now.AddDate(-1, 0, -5), TargetGroup: 0})
+
+	// Family B: Child exited 6 months ago (within 1 year, should be included in overview)
+	famBId := uuid.New()
+	_ = appStore.UpdateFamilyParents(ctx, testUserID, famBId, []models.Parent{{ID: uuid.New(), FamilyID: famBId, FirstName: "ParentB", LastName: "FamB"}})
+	defer func() { _ = appStore.DeleteFamily(ctx, testUserID, famBId) }()
+	childBId := uuid.New()
+	_ = appStore.UpdateChild(ctx, testUserID, childBId, models.Child{ID: childBId, FamilyID: famBId, FirstName: "ChildB", LastName: "FamB", BirthDate: now.AddDate(-5, 0, 0)})
+	_, _ = appStore.CreateChildGroupChange(ctx, testUserID, models.ChildGroupChange{Child: childBId, ChangeDate: now.AddDate(-2, 0, 0), TargetGroup: 1})
+	_, _ = appStore.CreateChildGroupChange(ctx, testUserID, models.ChildGroupChange{Child: childBId, ChangeDate: now.AddDate(0, -6, 0), TargetGroup: 0})
+
+	// Family C: New family, child planned to start in 100 days (> 12 weeks, should be excluded from overview)
+	famCId := uuid.New()
+	_ = appStore.UpdateFamilyParents(ctx, testUserID, famCId, []models.Parent{{ID: uuid.New(), FamilyID: famCId, FirstName: "ParentC", LastName: "FamC"}})
+	defer func() { _ = appStore.DeleteFamily(ctx, testUserID, famCId) }()
+	childCId := uuid.New()
+	_ = appStore.UpdateChild(ctx, testUserID, childCId, models.Child{ID: childCId, FamilyID: famCId, FirstName: "ChildC", LastName: "FamC", BirthDate: now.AddDate(-3, 0, 0)})
+	_, _ = appStore.CreateChildGroupChange(ctx, testUserID, models.ChildGroupChange{Child: childCId, ChangeDate: now.AddDate(0, 0, 100), TargetGroup: 1})
+
+	// Family D: New family, child planned to start in 20 days (<= 12 weeks, should be included in overview)
+	famDId := uuid.New()
+	_ = appStore.UpdateFamilyParents(ctx, testUserID, famDId, []models.Parent{{ID: uuid.New(), FamilyID: famDId, FirstName: "ParentD", LastName: "FamD"}})
+	defer func() { _ = appStore.DeleteFamily(ctx, testUserID, famDId) }()
+	childDId := uuid.New()
+	_ = appStore.UpdateChild(ctx, testUserID, childDId, models.Child{ID: childDId, FamilyID: famDId, FirstName: "ChildD", LastName: "FamD", BirthDate: now.AddDate(-3, 0, 0)})
+	_, _ = appStore.CreateChildGroupChange(ctx, testUserID, models.ChildGroupChange{Child: childDId, ChangeDate: now.AddDate(0, 0, 20), TargetGroup: 1})
+
+	// Family E: Active child enrolled 2 months ago (should be included in overview)
+	famEId := uuid.New()
+	_ = appStore.UpdateFamilyParents(ctx, testUserID, famEId, []models.Parent{{ID: uuid.New(), FamilyID: famEId, FirstName: "ParentE", LastName: "FamE"}})
+	defer func() { _ = appStore.DeleteFamily(ctx, testUserID, famEId) }()
+	childEId := uuid.New()
+	_ = appStore.UpdateChild(ctx, testUserID, childEId, models.Child{ID: childEId, FamilyID: famEId, FirstName: "ChildE", LastName: "FamE", BirthDate: now.AddDate(-4, 0, 0)})
+	_, _ = appStore.CreateChildGroupChange(ctx, testUserID, models.ChildGroupChange{Child: childEId, ChangeDate: now.AddDate(0, -2, 0), TargetGroup: 1})
+
+	user := &models.UserWithPermissions{
+		ID:                   testUserID,
+		Email:                "staff@example.com",
+		EffectivePermissions: []string{"families.all.read", "families.all.restrictedread"},
+	}
+
+	// 1. Check HandleListFamiliesOverview
+	reqOv := httptest.NewRequest("GET", "/api/families/overview", nil)
+	reqOv = reqOv.WithContext(context.WithValue(reqOv.Context(), auth.UserContextKey, user))
+	recOv := httptest.NewRecorder()
+	s.HandleListFamiliesOverview(recOv, reqOv)
+
+	if recOv.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for overview, got %d", recOv.Code)
+	}
+
+	var overviewFamilies []OverviewFamily
+	if err := json.Unmarshal(recOv.Body.Bytes(), &overviewFamilies); err != nil {
+		t.Fatalf("failed to unmarshal overview response: %v", err)
+	}
+
+	overviewMap := make(map[uuid.UUID]bool)
+	for _, f := range overviewFamilies {
+		overviewMap[f.ID] = true
+	}
+
+	if overviewMap[famAId] {
+		t.Errorf("Family A (child exited > 1 year ago) should NOT be in overview")
+	}
+	if !overviewMap[famBId] {
+		t.Errorf("Family B (child exited 6 months ago) should BE in overview")
+	}
+	if overviewMap[famCId] {
+		t.Errorf("Family C (planned start > 12 weeks away) should NOT be in overview")
+	}
+	if !overviewMap[famDId] {
+		t.Errorf("Family D (planned start <= 12 weeks away) should BE in overview")
+	}
+	if !overviewMap[famEId] {
+		t.Errorf("Family E (active child) should BE in overview")
+	}
+
+	// 2. Check HandleListFamilies (management view should contain all families)
+	reqFam := httptest.NewRequest("GET", "/api/families", nil)
+	reqFam = reqFam.WithContext(context.WithValue(reqFam.Context(), auth.UserContextKey, user))
+	recFam := httptest.NewRecorder()
+	s.HandleListFamilies(recFam, reqFam)
+
+	if recFam.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for families, got %d", recFam.Code)
+	}
+
+	var allFamilies []models.Family
+	if err := json.Unmarshal(recFam.Body.Bytes(), &allFamilies); err != nil {
+		t.Fatalf("failed to unmarshal families response: %v", err)
+	}
+
+	allMap := make(map[uuid.UUID]bool)
+	for _, f := range allFamilies {
+		allMap[f.ID] = true
+	}
+
+	if !allMap[famAId] || !allMap[famBId] || !allMap[famCId] || !allMap[famDId] || !allMap[famEId] {
+		t.Errorf("All families must be present in HandleListFamilies (management view)")
+	}
+}
+
 func TestHandleCalculateFees_RestrictedUser(t *testing.T) {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
@@ -829,6 +967,267 @@ func TestComputeChildOverviewGroupStatus(t *testing.T) {
 	}, now)
 	if cg != nil || !isFormer {
 		t.Errorf("expected nil, true for former child; got %v, %v", cg, isFormer)
+	}
+}
+
+func TestShouldIncludeFamilyInOverview(t *testing.T) {
+	now := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+
+	// 1. Empty family (no children) -> included
+	if !shouldIncludeFamilyInOverview(models.Family{ID: uuid.New()}, now) {
+		t.Errorf("expected empty family to be included")
+	}
+
+	// 2. Family with child having no group changes -> included
+	if !shouldIncludeFamilyInOverview(models.Family{
+		ID: uuid.New(),
+		Children: []models.Child{
+			{ID: uuid.New(), FirstName: "Baby", GroupChanges: nil},
+		},
+	}, now) {
+		t.Errorf("expected family with unassigned child to be included")
+	}
+
+	// 3. Family with active child -> included
+	if !shouldIncludeFamilyInOverview(models.Family{
+		ID: uuid.New(),
+		Children: []models.Child{
+			{
+				ID: uuid.New(),
+				GroupChanges: []models.ChildGroupChange{
+					{ChangeDate: time.Date(2025, 9, 1, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+				},
+			},
+		},
+	}, now) {
+		t.Errorf("expected family with active child to be included")
+	}
+
+	// 4. Former family: child exited 6 months ago (within 1 year) -> included
+	if !shouldIncludeFamilyInOverview(models.Family{
+		ID: uuid.New(),
+		Children: []models.Child{
+			{
+				ID: uuid.New(),
+				GroupChanges: []models.ChildGroupChange{
+					{ChangeDate: time.Date(2024, 9, 1, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+					{ChangeDate: time.Date(2026, 4, 30, 0, 0, 0, 0, time.UTC), TargetGroup: 0},
+				},
+			},
+		},
+	}, now) {
+		t.Errorf("expected family whose child exited 6 months ago to be included")
+	}
+
+	// 5. Former family: child exited exactly 1 year ago (2025-10-28) -> included
+	if !shouldIncludeFamilyInOverview(models.Family{
+		ID: uuid.New(),
+		Children: []models.Child{
+			{
+				ID: uuid.New(),
+				GroupChanges: []models.ChildGroupChange{
+					{ChangeDate: time.Date(2024, 9, 1, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+					{ChangeDate: time.Date(2025, 10, 28, 0, 0, 0, 0, time.UTC), TargetGroup: 0},
+				},
+			},
+		},
+	}, now) {
+		t.Errorf("expected family whose child exited exactly 1 year ago to be included")
+	}
+
+	// 6. Former family: child exited 1 year + 1 day ago (2025-10-27) -> excluded
+	if shouldIncludeFamilyInOverview(models.Family{
+		ID: uuid.New(),
+		Children: []models.Child{
+			{
+				ID: uuid.New(),
+				GroupChanges: []models.ChildGroupChange{
+					{ChangeDate: time.Date(2024, 9, 1, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+					{ChangeDate: time.Date(2025, 10, 27, 0, 0, 0, 0, time.UTC), TargetGroup: 0},
+				},
+			},
+		},
+	}, now) {
+		t.Errorf("expected family whose child exited > 1 year ago to be excluded")
+	}
+
+	// 7. Multiple children: child 1 exited 2 years ago, child 2 exited 3 months ago -> included
+	if !shouldIncludeFamilyInOverview(models.Family{
+		ID: uuid.New(),
+		Children: []models.Child{
+			{
+				ID: uuid.New(),
+				GroupChanges: []models.ChildGroupChange{
+					{ChangeDate: time.Date(2023, 9, 1, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+					{ChangeDate: time.Date(2024, 7, 31, 0, 0, 0, 0, time.UTC), TargetGroup: 0},
+				},
+			},
+			{
+				ID: uuid.New(),
+				GroupChanges: []models.ChildGroupChange{
+					{ChangeDate: time.Date(2024, 9, 1, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+					{ChangeDate: time.Date(2026, 7, 31, 0, 0, 0, 0, time.UTC), TargetGroup: 0},
+				},
+			},
+		},
+	}, now) {
+		t.Errorf("expected family with child 2 exiting 3 months ago to be included")
+	}
+
+	// 8. Multiple children: child 1 exited 3 years ago, child 2 exited 14 months ago -> excluded
+	if shouldIncludeFamilyInOverview(models.Family{
+		ID: uuid.New(),
+		Children: []models.Child{
+			{
+				ID: uuid.New(),
+				GroupChanges: []models.ChildGroupChange{
+					{ChangeDate: time.Date(2022, 9, 1, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+					{ChangeDate: time.Date(2023, 7, 31, 0, 0, 0, 0, time.UTC), TargetGroup: 0},
+				},
+			},
+			{
+				ID: uuid.New(),
+				GroupChanges: []models.ChildGroupChange{
+					{ChangeDate: time.Date(2023, 9, 1, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+					{ChangeDate: time.Date(2025, 8, 31, 0, 0, 0, 0, time.UTC), TargetGroup: 0},
+				},
+			},
+		},
+	}, now) {
+		t.Errorf("expected family with all children exited > 1 year ago to be excluded")
+	}
+
+	// 9. Multiple children: child 1 exited 2 years ago, child 2 is active -> included
+	if !shouldIncludeFamilyInOverview(models.Family{
+		ID: uuid.New(),
+		Children: []models.Child{
+			{
+				ID: uuid.New(),
+				GroupChanges: []models.ChildGroupChange{
+					{ChangeDate: time.Date(2023, 9, 1, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+					{ChangeDate: time.Date(2024, 7, 31, 0, 0, 0, 0, time.UTC), TargetGroup: 0},
+				},
+			},
+			{
+				ID: uuid.New(),
+				GroupChanges: []models.ChildGroupChange{
+					{ChangeDate: time.Date(2025, 9, 1, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+				},
+			},
+		},
+	}, now) {
+		t.Errorf("expected family with active child to be included even if older child exited")
+	}
+
+	// 10. New family: planned start in 13 weeks (> 12 weeks / 84 days) -> excluded
+	// now = 2026-10-28; 12 weeks is 2027-01-20 (84 days); 13 weeks is 2027-01-27
+	if shouldIncludeFamilyInOverview(models.Family{
+		ID: uuid.New(),
+		Children: []models.Child{
+			{
+				ID: uuid.New(),
+				GroupChanges: []models.ChildGroupChange{
+					{ChangeDate: time.Date(2027, 1, 27, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+				},
+			},
+		},
+	}, now) {
+		t.Errorf("expected new family with planned start > 12 weeks away to be excluded")
+	}
+
+	// 11. New family: planned start exactly 12 weeks (84 days) away (2027-01-20) -> included
+	if !shouldIncludeFamilyInOverview(models.Family{
+		ID: uuid.New(),
+		Children: []models.Child{
+			{
+				ID: uuid.New(),
+				GroupChanges: []models.ChildGroupChange{
+					{ChangeDate: time.Date(2027, 1, 20, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+				},
+			},
+		},
+	}, now) {
+		t.Errorf("expected new family with planned start exactly 12 weeks away to be included")
+	}
+
+	// 12. New family: planned start in 4 weeks (2026-11-25) -> included
+	if !shouldIncludeFamilyInOverview(models.Family{
+		ID: uuid.New(),
+		Children: []models.Child{
+			{
+				ID: uuid.New(),
+				GroupChanges: []models.ChildGroupChange{
+					{ChangeDate: time.Date(2026, 11, 25, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+				},
+			},
+		},
+	}, now) {
+		t.Errorf("expected new family with planned start in 4 weeks to be included")
+	}
+
+	// 13. New family with 2 children: child 1 planned in 20 weeks, child 2 planned in 6 weeks -> included
+	if !shouldIncludeFamilyInOverview(models.Family{
+		ID: uuid.New(),
+		Children: []models.Child{
+			{
+				ID: uuid.New(),
+				GroupChanges: []models.ChildGroupChange{
+					{ChangeDate: time.Date(2027, 3, 17, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+				},
+			},
+			{
+				ID: uuid.New(),
+				GroupChanges: []models.ChildGroupChange{
+					{ChangeDate: time.Date(2026, 12, 9, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+				},
+			},
+		},
+	}, now) {
+		t.Errorf("expected new family with earliest child starting in 6 weeks to be included")
+	}
+
+	// 14. Former family (left > 1 year ago) with new child planned in 6 weeks -> included
+	if !shouldIncludeFamilyInOverview(models.Family{
+		ID: uuid.New(),
+		Children: []models.Child{
+			{
+				ID: uuid.New(),
+				GroupChanges: []models.ChildGroupChange{
+					{ChangeDate: time.Date(2023, 9, 1, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+					{ChangeDate: time.Date(2024, 7, 31, 0, 0, 0, 0, time.UTC), TargetGroup: 0},
+				},
+			},
+			{
+				ID: uuid.New(),
+				GroupChanges: []models.ChildGroupChange{
+					{ChangeDate: time.Date(2026, 12, 9, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+				},
+			},
+		},
+	}, now) {
+		t.Errorf("expected family with new child starting in 6 weeks to be included")
+	}
+
+	// 15. Former family (left > 1 year ago) with new child planned in 20 weeks -> excluded
+	if shouldIncludeFamilyInOverview(models.Family{
+		ID: uuid.New(),
+		Children: []models.Child{
+			{
+				ID: uuid.New(),
+				GroupChanges: []models.ChildGroupChange{
+					{ChangeDate: time.Date(2023, 9, 1, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+					{ChangeDate: time.Date(2024, 7, 31, 0, 0, 0, 0, time.UTC), TargetGroup: 0},
+				},
+			},
+			{
+				ID: uuid.New(),
+				GroupChanges: []models.ChildGroupChange{
+					{ChangeDate: time.Date(2027, 3, 17, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+				},
+			},
+		},
+	}, now) {
+		t.Errorf("expected family with child exited > 1 year ago and new child starting > 12 weeks away to be excluded")
 	}
 }
 
