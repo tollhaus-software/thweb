@@ -32,6 +32,7 @@ import { HeaderOverflowMenu } from './components/Header/HeaderOverflowMenu';
 import { CellPopover } from './components/Table/CellPopover';
 import { RowActionsMenu } from './components/Table/RowActionsMenu';
 import { ConfirmDeleteModal } from './components/Table/ConfirmDeleteModal';
+import { MgaLinkIcon } from './components/MgaLinkIcon';
 import { t, CURRENT_LOCALE, formatDisplayDate, parseInputDate, formatTollhausEmail, compareBirthDates } from './utils/i18n';
 import { getFamilyName } from './utils/family';
 
@@ -5946,9 +5947,9 @@ function formatParentsSummary(parents: any[]): string {
                       handleJumpToChild(item.original_id || item.id, item.family_id, item.family_name || '', 'familiesOverview');
                     }}
                     title={t('jumpToChild')}
+                    aria-label={t('jumpToChild')}
                   >
-                    <span>{t('mgaViewLink')}</span>
-                    <ArrowUpRight size={11} className="family-link-icon" />
+                    <MgaLinkIcon />
                   </button>
                 )}
               </span>
@@ -5993,9 +5994,9 @@ function formatParentsSummary(parents: any[]): string {
                     handleJumpToParent(item.original_id || item.id, item.family_id, item.family_name || '', 'familiesOverview');
                   }}
                   title={t('jumpToParent')}
+                  aria-label={t('jumpToParent')}
                 >
-                  <span>{t('mgaViewLink')}</span>
-                  <ArrowUpRight size={11} className="family-link-icon" />
+                  <MgaLinkIcon />
                 </button>
               )}
             </span>
@@ -6183,9 +6184,9 @@ function formatParentsSummary(parents: any[]): string {
                     handleJumpToParent(row.id, row.family_id, row.family_name || '', 'members');
                   }}
                   title={t('jumpToParent')}
+                  aria-label={t('jumpToParent')}
                 >
-                  <span>{t('mgaViewLink')}</span>
-                  <ArrowUpRight size={11} className="family-link-icon" />
+                  <MgaLinkIcon />
                 </button>
               )}
             </div>
@@ -7464,9 +7465,9 @@ function formatParentsSummary(parents: any[]): string {
                         handleJumpToParent(member.id, member.family_id, member.family_name || '', 'members');
                       }}
                       title={t('jumpToParent')}
+                      aria-label={t('jumpToParent')}
                     >
-                      <span>{t('mgaViewLink')}</span>
-                      <ArrowUpRight size={11} className="family-link-icon" />
+                      <MgaLinkIcon />
                     </button>
                   )}
                 </div>

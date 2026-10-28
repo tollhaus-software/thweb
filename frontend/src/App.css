@@ -790,9 +790,15 @@ tr.family-group-row td {
 }
 
 .overview-mga-link {
-  font-size: 0.78rem;
-  font-weight: 500;
-  margin-left: 0.45rem;
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  margin-left: 0.35rem;
+  vertical-align: middle;
+}
+
+.overview-mga-link:hover {
+  text-decoration: none;
 }
 
 .overview-contact-link {

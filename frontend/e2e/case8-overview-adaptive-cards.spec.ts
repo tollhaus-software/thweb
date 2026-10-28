@@ -246,7 +246,7 @@ test.describe('Test Case 8: Adaptive Card Layout for familiesOverview Tab', () =
     // 6. Verify links from familiesOverview to Eltern(MGA) and Kinder(MGA) for users with families.all.read permission
     const hansParentLink = desktopHansRow.locator('.family-parent-link.overview-mga-link');
     await expect(hansParentLink).toBeVisible();
-    await expect(hansParentLink).toHaveText('(MGA Ansicht)');
+    await expect(hansParentLink).toHaveText('MGA');
     await hansParentLink.click();
     await expect(page.getByRole('button', { name: 'Eltern(MGA)', exact: true })).toHaveClass(/active/);
 
@@ -256,7 +256,7 @@ test.describe('Test Case 8: Adaptive Card Layout for familiesOverview Tab', () =
     const desktopMiaRow = page.locator('tr.overview-child-row', { hasText: 'Mia' });
     const miaChildLink = desktopMiaRow.locator('.family-child-link.overview-mga-link');
     await expect(miaChildLink).toBeVisible();
-    await expect(miaChildLink).toHaveText('(MGA Ansicht)');
+    await expect(miaChildLink).toHaveText('MGA');
     await miaChildLink.click();
     await expect(page.getByRole('button', { name: 'Kinder(MGA)', exact: true })).toHaveClass(/active/);
   });
