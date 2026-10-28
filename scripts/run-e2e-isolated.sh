@@ -4,18 +4,18 @@ set -e
 # Repository root directory
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 E2E_PORT="${E2E_PORT:-8088}"
-COMPOSE_FILE="$REPO_ROOT/docker-compose.e2e.yml"
+COMPOSE_ARGS=(-f "$REPO_ROOT/docker-compose.common.yml" -f "$REPO_ROOT/docker-compose.e2e.yml")
 
 cleanup() {
   echo ""
   echo "Tearing down isolated E2E docker stack..."
-  docker compose -f "$COMPOSE_FILE" down -v
+  docker compose "${COMPOSE_ARGS[@]}" down -v
 }
 # Always execute cleanup on exit (normal completion, error, or interruption)
 trap cleanup EXIT
 
 echo "Starting isolated E2E docker stack on port $E2E_PORT..."
-docker compose -f "$COMPOSE_FILE" up -d --build
+docker compose "${COMPOSE_ARGS[@]}" up -d --build
 
 echo "Waiting for isolated E2E application stack to be ready..."
 READY=0
@@ -31,7 +31,7 @@ done
 
 if [ "$READY" -ne 1 ]; then
   echo "Timeout waiting for E2E stack to start on port $E2E_PORT"
-  docker compose -f "$COMPOSE_FILE" logs
+  docker compose "${COMPOSE_ARGS[@]}" logs
   exit 1
 fi
 
