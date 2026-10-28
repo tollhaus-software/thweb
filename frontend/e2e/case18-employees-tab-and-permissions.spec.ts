@@ -43,8 +43,8 @@ test.describe('Test Case 18: Employees Tab and Permissions', () => {
     });
 
     await unauthorizedPage.goto('/');
-    // Check that 'Mitarbeitende' tab is NOT visible
-    await expect(unauthorizedPage.getByRole('button', { name: 'Mitarbeitende' })).toBeHidden();
+    // Check that 'Mitarbeitende(PA)' tab is NOT visible
+    await expect(unauthorizedPage.getByRole('button', { name: 'Mitarbeitende(PA)' })).toBeHidden();
     await unauthorizedPage.close();
 
     // =========================================================================
@@ -56,8 +56,8 @@ test.describe('Test Case 18: Employees Tab and Permissions', () => {
     });
     await readerPage.goto('/');
 
-    // The 'Mitarbeitende' tab should be visible
-    const readerEmpTabBtn = readerPage.getByRole('button', { name: 'Mitarbeitende' });
+    // The 'Mitarbeitende(PA)' tab should be visible
+    const readerEmpTabBtn = readerPage.getByRole('button', { name: 'Mitarbeitende(PA)' });
     await expect(readerEmpTabBtn).toBeVisible();
     await readerEmpTabBtn.click();
 
@@ -84,8 +84,8 @@ test.describe('Test Case 18: Employees Tab and Permissions', () => {
     });
     await page.goto('/');
 
-    // Navigate to Mitarbeitende tab
-    const adminEmpTabBtn = page.getByRole('button', { name: 'Mitarbeitende' });
+    // Navigate to Mitarbeitende(PA) tab
+    const adminEmpTabBtn = page.getByRole('button', { name: 'Mitarbeitende(PA)' });
     await expect(adminEmpTabBtn).toBeVisible();
     await adminEmpTabBtn.click();
 
