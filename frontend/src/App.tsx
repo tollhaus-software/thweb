@@ -1950,7 +1950,7 @@ const AdminView: React.FC<AdminViewProps> = ({ onOpenSimulator }) => {
             style={{
               padding: '0.5rem 1rem',
               background: subTab === 'users' ? 'var(--primary)' : 'var(--bg-subtle)',
-              color: subTab === 'users' ? 'white' : 'var(--text-secondary)',
+              color: subTab === 'users' ? 'var(--primary-contrast, white)' : 'var(--text-secondary)',
               border: 'none',
               borderRadius: '6px',
               fontWeight: 'bold',
@@ -1964,7 +1964,7 @@ const AdminView: React.FC<AdminViewProps> = ({ onOpenSimulator }) => {
             style={{
               padding: '0.5rem 1rem',
               background: subTab === 'roles' ? 'var(--primary)' : 'var(--bg-subtle)',
-              color: subTab === 'roles' ? 'white' : 'var(--text-secondary)',
+              color: subTab === 'roles' ? 'var(--primary-contrast, white)' : 'var(--text-secondary)',
               border: 'none',
               borderRadius: '6px',
               fontWeight: 'bold',
@@ -1999,11 +1999,11 @@ const AdminView: React.FC<AdminViewProps> = ({ onOpenSimulator }) => {
             </button>
           )}
           {subTab === 'users' ? (
-            <button onClick={openAddUserModal} className="btn-primary" style={{ padding: '0.5rem 1rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+            <button onClick={openAddUserModal} className="btn-primary" style={{ padding: '0.5rem 1rem', background: 'var(--primary)', color: 'var(--primary-contrast, white)', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
               + {t('addUser')}
             </button>
           ) : (
-            <button onClick={openAddRoleModal} className="btn-primary" style={{ padding: '0.5rem 1rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+            <button onClick={openAddRoleModal} className="btn-primary" style={{ padding: '0.5rem 1rem', background: 'var(--primary)', color: 'var(--primary-contrast, white)', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
               + {t('addRole')}
             </button>
           )}
@@ -2171,7 +2171,7 @@ const AdminView: React.FC<AdminViewProps> = ({ onOpenSimulator }) => {
                 <button type="button" onClick={() => setUserModalOpen(false)} style={{ padding: '0.5rem 1rem', background: 'var(--bg-subtle)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '4px', cursor: 'pointer' }}>
                   {t('cancel')}
                 </button>
-                <button type="submit" style={{ padding: '0.5rem 1rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+                <button type="submit" style={{ padding: '0.5rem 1rem', background: 'var(--primary)', color: 'var(--primary-contrast, white)', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
                   {t('save')}
                 </button>
               </div>
@@ -2243,7 +2243,7 @@ const AdminView: React.FC<AdminViewProps> = ({ onOpenSimulator }) => {
                 <button type="button" onClick={() => setRoleModalOpen(false)} style={{ padding: '0.5rem 1rem', background: 'var(--bg-subtle)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: '4px', cursor: 'pointer' }}>
                   {t('cancel')}
                 </button>
-                <button type="submit" style={{ padding: '0.5rem 1rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+                <button type="submit" style={{ padding: '0.5rem 1rem', background: 'var(--primary)', color: 'var(--primary-contrast, white)', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
                   {t('save')}
                 </button>
               </div>
@@ -7009,7 +7009,7 @@ function formatParentsSummary(parents: any[]): string {
                     fontWeight: 600,
                     border: 'none',
                     background: 'var(--primary)',
-                    color: '#ffffff',
+                    color: 'var(--primary-contrast, #ffffff)',
                     whiteSpace: 'nowrap',
                     flexShrink: 0,
                     height: '34px',
@@ -7037,7 +7037,7 @@ function formatParentsSummary(parents: any[]): string {
                     fontWeight: 600,
                     border: 'none',
                     background: 'var(--primary)',
-                    color: '#ffffff',
+                    color: 'var(--primary-contrast, #ffffff)',
                     whiteSpace: 'nowrap',
                     flexShrink: 0,
                     height: '34px',
@@ -7076,7 +7076,7 @@ function formatParentsSummary(parents: any[]): string {
                       border: 'none',
                       cursor: 'pointer',
                       background: overviewGroupBy === 'family' ? 'var(--primary)' : 'transparent',
-                      color: overviewGroupBy === 'family' ? '#ffffff' : 'var(--text)',
+                      color: overviewGroupBy === 'family' ? 'var(--primary-contrast, #ffffff)' : 'var(--text)',
                       transition: 'all 0.15s ease',
                     }}
                   >
@@ -7094,7 +7094,7 @@ function formatParentsSummary(parents: any[]): string {
                       borderLeft: '1px solid var(--border)',
                       cursor: 'pointer',
                       background: overviewGroupBy === 'group' ? 'var(--primary)' : 'transparent',
-                      color: overviewGroupBy === 'group' ? '#ffffff' : 'var(--text)',
+                      color: overviewGroupBy === 'group' ? 'var(--primary-contrast, #ffffff)' : 'var(--text)',
                       transition: 'all 0.15s ease',
                     }}
                   >

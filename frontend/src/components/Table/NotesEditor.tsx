@@ -228,11 +228,11 @@ export const NotesEditor: React.FC<NotesEditorProps> = ({
               border: 'none',
               borderRadius: '4px',
               background: 'var(--primary)',
-              color: 'white',
+              color: 'var(--primary-contrast, white)',
               cursor: 'pointer',
               transition: 'all 0.1s',
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#1d4ed8')}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--primary-hover)')}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'var(--primary)')}
           >
             <Check size={12} />

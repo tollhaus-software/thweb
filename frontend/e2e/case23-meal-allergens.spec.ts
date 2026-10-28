@@ -265,6 +265,16 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     const desktopBoxes = page.locator('[data-testid^="meal-allergens-day-box-"]');
     await expect(desktopBoxes).toHaveCount(25);
 
+    // Verify dark theme styling for month selector and default day boxes
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+    const selectorControls = page.locator('.meal-allergens-controls');
+    await expect(selectorControls).toHaveCSS('background-color', 'rgb(41, 42, 45)');
+    const defaultDayBox = page.locator('.meal-allergen-day-box.bg-default:not(.outside-month)').first();
+    if (await defaultDayBox.count() > 0) {
+      await expect(defaultDayBox).toHaveCSS('background-color', 'rgb(41, 42, 45)');
+    }
+    await page.evaluate(() => document.documentElement.removeAttribute('data-theme'));
+
     // 5. Switch to Mobile viewport (390x844 <= 768px) -> verify week selector and 5 vertically stacked boxes
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page.getByTestId('meal-allergens-week-selector')).toBeVisible();

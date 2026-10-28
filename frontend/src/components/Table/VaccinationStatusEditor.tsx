@@ -594,7 +594,7 @@ export const VaccinationStatusPopover: React.FC<VaccinationStatusPopoverProps> =
                   fontSize: '0.875rem',
                   fontWeight: 600,
                   background: newStatus.trim() ? 'var(--primary)' : 'var(--border)',
-                  color: newStatus.trim() ? '#fff' : 'var(--text-muted)',
+                  color: newStatus.trim() ? 'var(--primary-contrast, #fff)' : 'var(--text-muted)',
                   border: 'none',
                   borderRadius: '6px',
                   cursor: newStatus.trim() ? 'pointer' : 'not-allowed',
@@ -920,7 +920,7 @@ export const VaccinationStatusPopover: React.FC<VaccinationStatusPopoverProps> =
                       title={t('save')}
                       style={{
                         background: newStatus.trim() ? 'var(--primary)' : 'var(--border)',
-                        color: newStatus.trim() ? '#fff' : 'var(--text-muted)',
+                        color: newStatus.trim() ? 'var(--primary-contrast, #fff)' : 'var(--text-muted)',
                         border: 'none',
                         borderRadius: '4px',
                         padding: '3px 6px',

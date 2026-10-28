@@ -685,7 +685,7 @@ export const MembershipsModal: React.FC<MembershipsModalProps> = ({
                         title={t('save')}
                         style={{
                           background: 'var(--primary)',
-                          color: '#fff',
+                          color: 'var(--primary-contrast, #fff)',
                           border: 'none',
                           borderRadius: '4px',
                           padding: '3px 6px',

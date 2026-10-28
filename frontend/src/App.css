@@ -146,9 +146,10 @@ header {
   color: var(--text-h) !important;
 }
 
-.primary-button {
+.primary-button,
+.btn-primary {
   background-color: var(--primary) !important;
-  color: white !important;
+  color: var(--primary-contrast, #ffffff) !important;
   border: none !important;
 }
 
@@ -742,7 +743,7 @@ tr.family-group-row td {
 .modal-actions button.submit-btn {
   background: var(--primary);
   border: none;
-  color: white;
+  color: var(--primary-contrast, #ffffff);
 }
 
 .modal-actions button.submit-btn:hover {
@@ -816,7 +817,13 @@ tr.family-group-row td {
 }
 
 :root[data-theme="dark"] .overview-contact-link {
-  text-decoration-color: rgba(59, 130, 246, 0.45);
+  text-decoration-color: rgba(138, 180, 248, 0.45);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .overview-contact-link {
+    text-decoration-color: rgba(138, 180, 248, 0.45);
+  }
 }
 
 .overview-contact-link:hover {
@@ -953,7 +960,7 @@ tr.family-group-row td {
 .context-return-button:hover {
   background-color: var(--primary);
   border-color: var(--primary);
-  color: #ffffff;
+  color: var(--primary-contrast, #ffffff);
 }
 
 .context-return-dismiss {
@@ -1628,7 +1635,7 @@ tr.family-group-row td {
   /* Birthdate styling */
   .data-table.families-table tr:not(.family-group-row):not(.empty-sub-row) td[data-column-id="birth_date"] {
     font-size: 0.85rem !important;
-    color: var(--text-secondary) !important;
+    color: var(--text) !important;
   }
 
   .data-table.families-table .family-card-birthdate-prefix {
@@ -1638,7 +1645,7 @@ tr.family-group-row td {
   /* Group info styling */
   .data-table.families-table tr:not(.family-group-row):not(.empty-sub-row) td[data-column-id="group"] {
     font-size: 0.85rem !important;
-    color: var(--text-secondary) !important;
+    color: var(--text) !important;
   }
 
   .data-table.families-table .child-group-full-view {

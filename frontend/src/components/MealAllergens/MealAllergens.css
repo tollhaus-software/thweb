@@ -21,11 +21,11 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 0.75rem;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 0.65rem 1rem;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  box-shadow: var(--shadow);
 }
 
 .meal-allergens-selector {
@@ -41,22 +41,22 @@
   width: 34px;
   height: 34px;
   border-radius: 8px;
-  border: 1px solid #cbd5e1;
-  background: #f8fafc;
-  color: #1e293b;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text);
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .meal-allergens-nav-arrow:hover {
-  background: #e2e8f0;
-  border-color: #94a3b8;
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
 }
 
 .meal-allergens-period-label {
   font-size: 1.05rem;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--text-h);
   min-width: 180px;
   text-align: center;
 }
@@ -79,17 +79,17 @@
 .meal-allergens-search-input {
   width: 100%;
   padding: 0.45rem 2rem 0.45rem 0.75rem;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--input-border);
   border-radius: 8px;
   font-size: 0.9rem;
-  color: #0f172a;
-  background: #ffffff;
+  color: var(--input-text);
+  background: var(--input-bg);
 }
 
 .meal-allergens-search-input:focus {
   outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(138, 180, 248, 0.25);
 }
 
 .meal-allergens-weekday-headers {
@@ -104,7 +104,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  color: #475569;
+  color: var(--text-secondary);
   text-align: center;
   padding: 0.35rem 0;
 }
@@ -130,8 +130,8 @@
   min-height: 118px;
   padding: 0.7rem 0.8rem;
   border-radius: 10px;
-  border: 1px solid #cbd5e1;
-  background-color: #ffffff;
+  border: 1px solid var(--border);
+  background-color: var(--bg-surface);
   cursor: pointer;
   text-align: left;
   transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
@@ -141,14 +141,14 @@
 
 .meal-allergen-day-box:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
-  border-color: #64748b;
+  box-shadow: var(--shadow);
+  border-color: var(--border-strong);
 }
 
 /* Status-based background colors */
 .meal-allergen-day-box.bg-default {
-  background-color: #ffffff;
-  border-color: #cbd5e1;
+  background-color: var(--bg-surface);
+  border-color: var(--border);
 }
 
 .meal-allergen-day-box.bg-finalized {
@@ -166,20 +166,60 @@
   border-color: #fca5a5;
 }
 
+:root[data-theme="dark"] .meal-allergen-day-box.bg-finalized {
+  background-color: var(--success-bg);
+  border-color: var(--success-border);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .meal-allergen-day-box.bg-finalized {
+    background-color: var(--success-bg);
+    border-color: var(--success-border);
+  }
+}
+
+:root[data-theme="dark"] .meal-allergen-day-box.bg-not_finalized_upcoming {
+  background-color: var(--warning-bg);
+  border-color: var(--warning-border);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .meal-allergen-day-box.bg-not_finalized_upcoming {
+    background-color: var(--warning-bg);
+    border-color: var(--warning-border);
+  }
+}
+
+:root[data-theme="dark"] .meal-allergen-day-box.bg-overdue {
+  background-color: var(--danger-bg);
+  border-color: var(--danger-border);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .meal-allergen-day-box.bg-overdue {
+    background-color: var(--danger-bg);
+    border-color: var(--danger-border);
+  }
+}
+
 /* Search highlight styles */
 .meal-allergen-day-box.search-match {
-  outline: 3px solid #2563eb;
+  outline: 3px solid var(--primary);
   outline-offset: -1px;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 0 0 3px rgba(138, 180, 248, 0.25);
 }
 
 .meal-allergen-day-box.search-active-match {
-  outline: 3px solid #1d4ed8;
-  box-shadow: 0 0 0 5px rgba(29, 78, 216, 0.35);
+  outline: 3px solid var(--primary-hover);
+  box-shadow: 0 0 0 5px rgba(138, 180, 248, 0.35);
 }
 
 .meal-allergen-day-box.outside-month {
-  opacity: 0.82;
+  opacity: 0.6;
+}
+
+.meal-allergen-day-box.outside-month.bg-default {
+  background-color: var(--bg-subtle);
 }
 
 .meal-allergen-day-header {
@@ -187,20 +227,20 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.35rem;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  border-bottom: 1px solid var(--border);
   padding-bottom: 0.3rem;
 }
 
 .meal-allergen-day-date {
   font-size: 0.85rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--text-h);
 }
 
 .meal-allergen-day-cook {
   font-size: 0.8rem;
   font-weight: 600;
-  color: #334155;
+  color: var(--text-secondary);
   display: flex;
   align-items: center;
   gap: 0.25rem;
@@ -214,7 +254,7 @@
   padding: 0;
   list-style: none;
   font-size: 0.82rem;
-  color: #1e293b;
+  color: var(--text);
 }
 
 .meal-allergen-day-component-item {
@@ -229,14 +269,15 @@
   font-size: 0.68rem;
   padding: 0.05rem 0.35rem;
   border-radius: 999px;
-  background: rgba(15, 23, 42, 0.1);
-  color: #0f172a;
+  background: var(--bg-subtle);
+  color: var(--text);
+  border: 1px solid var(--border);
   font-weight: 600;
 }
 
 .meal-allergen-empty-text {
   font-size: 0.78rem;
-  color: #64748b;
+  color: var(--text-muted);
   font-style: italic;
 }
 
@@ -245,11 +286,11 @@
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 1.25rem;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+  box-shadow: var(--shadow);
   width: 100%;
   box-sizing: border-box;
 }
@@ -261,7 +302,7 @@
   flex-wrap: wrap;
   gap: 1rem;
   padding-bottom: 1rem;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--border);
 }
 
 .meal-allergens-editor-title-group {
@@ -277,15 +318,16 @@
   width: 38px;
   height: 38px;
   border-radius: 8px;
-  border: 1px solid #cbd5e1;
-  background: #f8fafc;
-  color: #0f172a;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-h);
   cursor: pointer;
   flex-shrink: 0;
 }
 
 .meal-allergens-back-btn:hover {
-  background: #e2e8f0;
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
 }
 
 .meal-allergens-editor-titles {
@@ -298,12 +340,12 @@
   margin: 0;
   font-size: 1.25rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--text-h);
 }
 
 .meal-allergens-editor-plan-subtitle {
   font-size: 0.92rem;
-  color: #475569;
+  color: var(--text-secondary);
 }
 
 .meal-allergens-editor-actions {
@@ -342,16 +384,17 @@
   gap: 0.45rem;
   padding: 0.55rem 0.95rem;
   border-radius: 8px;
-  border: 1px solid #cbd5e1;
-  background: #f8fafc;
-  color: #1e293b;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text);
   font-weight: 600;
   font-size: 0.9rem;
   cursor: pointer;
 }
 
 .meal-allergens-copy-btn:hover {
-  background: #e2e8f0;
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
 }
 
 .meal-allergens-finalized-warning {
@@ -372,9 +415,9 @@
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 1rem;
   padding: 0.9rem;
-  background: #f8fafc;
+  background: var(--bg-subtle);
   border-radius: 10px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border);
 }
 
 .meal-allergens-field-group {
@@ -386,17 +429,17 @@
 .meal-allergens-field-label {
   font-size: 0.82rem;
   font-weight: 600;
-  color: #475569;
+  color: var(--text-secondary);
 }
 
 .meal-allergens-select,
 .meal-allergens-input {
   padding: 0.48rem 0.7rem;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--input-border);
   border-radius: 8px;
   font-size: 0.9rem;
-  color: #0f172a;
-  background: #ffffff;
+  color: var(--input-text);
+  background: var(--input-bg);
 }
 
 .meal-allergens-components-section {
@@ -410,9 +453,9 @@
   flex-direction: column;
   gap: 0.65rem;
   padding: 0.9rem 1rem;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--border);
   border-radius: 10px;
-  background: #ffffff;
+  background: var(--bg-surface);
 }
 
 .meal-allergens-component-top {
@@ -426,9 +469,10 @@
   flex: 1;
   font-size: 0.98rem;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--input-text);
+  background: var(--input-bg);
   padding: 0.4rem 0.65rem;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--input-border);
   border-radius: 6px;
 }
 
@@ -497,10 +541,10 @@
   right: 0;
   max-height: 220px;
   overflow-y: auto;
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  box-shadow: 0 10px 15px -3px rgba(15, 23, 42, 0.12);
+  box-shadow: var(--shadow);
   z-index: 50;
   display: flex;
   flex-direction: column;
@@ -516,7 +560,7 @@
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: #0f172a;
+  color: var(--text);
   font-size: 0.88rem;
   text-align: left;
   cursor: pointer;
@@ -524,16 +568,16 @@
 
 .meal-allergens-cook-option:hover,
 .meal-allergens-cook-option.selected {
-  background: #eff6ff;
-  color: #1e40af;
+  background: var(--bg-hover);
+  color: var(--primary);
 }
 
 .meal-allergens-cook-option-badge {
   font-size: 0.72rem;
   padding: 0.1rem 0.4rem;
   border-radius: 999px;
-  background: #f1f5f9;
-  color: #475569;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
   font-weight: 600;
 }
 
@@ -546,7 +590,7 @@
 .meal-allergens-component-name-text {
   font-size: 1rem;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--text-h);
 }
 
 .meal-allergens-edit-name-btn {
@@ -558,15 +602,15 @@
   border-radius: 6px;
   border: 1px solid transparent;
   background: transparent;
-  color: #64748b;
+  color: var(--text-muted);
   cursor: pointer;
   padding: 0;
 }
 
 .meal-allergens-edit-name-btn:hover {
-  background: #f1f5f9;
-  border-color: #cbd5e1;
-  color: #0f172a;
+  background: var(--bg-hover);
+  border-color: var(--border);
+  color: var(--text-h);
 }
 
 .meal-allergens-expand-chip {
@@ -575,17 +619,17 @@
   gap: 0.25rem;
   padding: 0.25rem 0.65rem;
   border-radius: 999px;
-  border: 1px solid #cbd5e1;
-  background: #f8fafc;
-  color: #334155;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
 }
 
 .meal-allergens-expand-chip:hover {
-  background: #e2e8f0;
-  border-color: #94a3b8;
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
 }
 
 .meal-allergens-picker-panel {
@@ -594,8 +638,8 @@
   gap: 0.65rem;
   padding: 0.8rem;
   border-radius: 8px;
-  background: #f8fafc;
-  border: 1px solid #cbd5e1;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
   margin-top: 0.25rem;
 }
 
@@ -611,18 +655,18 @@
   gap: 0.5rem;
   padding: 0.45rem 0.6rem;
   border-radius: 6px;
-  border: 1px solid #e2e8f0;
-  background: #ffffff;
-  color: #1e293b;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text);
   font-size: 0.82rem;
   text-align: left;
   cursor: pointer;
 }
 
 .meal-allergens-main-option.selected {
-  background: #eff6ff;
-  border-color: #3b82f6;
-  color: #1e3a8a;
+  background: var(--bg-hover);
+  border-color: var(--primary);
+  color: var(--primary);
   font-weight: 600;
 }
 
@@ -652,7 +696,8 @@
 }
 
 .meal-allergens-modal-content {
-  background: #ffffff;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
   border-radius: 12px;
   max-width: 980px;
   width: 100%;
@@ -662,7 +707,8 @@
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  box-shadow: 0 20px 25px -5px rgba(15, 23, 42, 0.2);
+  box-shadow: var(--shadow);
+  color: var(--text);
 }
 
 .meal-allergens-suggestions-box {
@@ -671,8 +717,8 @@
   gap: 0.5rem;
   padding: 0.85rem;
   border-radius: 8px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
 }
 
 .meal-allergens-suggestions-list {
@@ -687,19 +733,21 @@
   gap: 0.25rem;
   padding: 0.65rem 0.8rem;
   border-radius: 8px;
-  border: 1px solid #cbd5e1;
-  background: #ffffff;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text);
   text-align: left;
   cursor: pointer;
 }
 
 .meal-allergens-suggestion-item:hover {
-  border-color: #2563eb;
-  background: #eff6ff;
+  border-color: var(--primary);
+  background: var(--bg-hover);
 }
 
 .meal-allergens-conflict-dialog {
-  background: #ffffff;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
   border-radius: 12px;
   max-width: 460px;
   width: 100%;
@@ -707,7 +755,8 @@
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  box-shadow: 0 20px 25px -5px rgba(15, 23, 42, 0.25);
+  box-shadow: var(--shadow);
+  color: var(--text);
 }
 
 @media (max-width: __MOBILE_BREAKPOINT__) {

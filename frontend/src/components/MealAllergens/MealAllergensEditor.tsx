@@ -821,7 +821,7 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                borderBottom: '1px solid #e2e8f0',
+                borderBottom: '1px solid var(--border)',
                 paddingBottom: '0.75rem',
               }}
             >
@@ -841,7 +841,7 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
 
             {/* Suggested last 3 entries where the same cook cooked, sorted by similarity */}
             <div className="meal-allergens-suggestions-box" data-testid="copy-suggestions-section">
-              <strong style={{ fontSize: '0.88rem', color: '#334155' }}>
+              <strong style={{ fontSize: '0.88rem', color: 'var(--text-secondary)' }}>
                 {t('copySuggestionsTitle')}
               </strong>
               {suggestedEntries.length > 0 ? (
@@ -860,11 +860,11 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
                         data-testid={`copy-suggestion-item-${sug.date}`}
                         data-date={sug.date}
                       >
-                        <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#0f172a' }}>
+                        <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-h)' }}>
                           {formatDisplayDate(parseDateKey(sug.date))} —{' '}
                           {sug.cook_display_name || sug.plan_cook_name}
                         </div>
-                        <div style={{ fontSize: '0.82rem', color: '#475569' }}>{comps}</div>
+                        <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>{comps}</div>
                       </button>
                     );
                   })}
@@ -895,10 +895,10 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
           data-testid="copy-conflict-dialog"
         >
           <div className="meal-allergens-conflict-dialog">
-            <h4 style={{ margin: 0, fontSize: '1.1rem', color: '#0f172a' }}>
+            <h4 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-h)' }}>
               {t('copyConflictTitle')}
             </h4>
-            <p style={{ margin: 0, fontSize: '0.92rem', color: '#475569' }}>
+            <p style={{ margin: 0, fontSize: '0.92rem', color: 'var(--text-secondary)' }}>
               {t('copyConflictMessage')}
             </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.65rem' }}>
@@ -913,7 +913,7 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
               <button
                 type="button"
                 className="meal-allergens-copy-btn"
-                style={{ borderColor: '#2563eb', color: '#1d4ed8', background: '#eff6ff' }}
+                style={{ borderColor: 'var(--primary)', color: 'var(--primary)', background: 'var(--bg-hover)' }}
                 onClick={handleConfirmCombine}
                 data-testid="copy-combine-btn"
               >

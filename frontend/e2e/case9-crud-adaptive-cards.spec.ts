@@ -375,6 +375,14 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     const groupBeforeDisplay = await groupCellInFam.evaluate((el) => getComputedStyle(el, '::before').display);
     expect(groupBeforeDisplay).toBe('none');
 
+    // Verify children data color in dark mode matches the text color in children-table (var(--text))
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+    const birthColorDark = await birthCell.evaluate((el) => getComputedStyle(el).color);
+    const groupColorDark = await groupCellInFam.evaluate((el) => getComputedStyle(el).color);
+    expect(birthColorDark).toBe('rgb(232, 234, 237)');
+    expect(groupColorDark).toBe('rgb(232, 234, 237)');
+    await page.evaluate(() => document.documentElement.removeAttribute('data-theme'));
+
     // Verify vertical stacking order: Name -> geb. -> Group
     const nameBox = await nameCell.boundingBox();
     const birthBox = await birthCell.boundingBox();

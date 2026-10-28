@@ -432,7 +432,7 @@ export const AddressEditor = <T extends AddressEditorParent>({
               border: 'none',
               borderRadius: '4px',
               background: 'var(--primary)',
-              color: '#ffffff',
+              color: 'var(--primary-contrast, #ffffff)',
               cursor: 'pointer',
               transition: 'opacity 0.1s',
             }}
