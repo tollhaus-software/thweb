@@ -370,6 +370,105 @@ type OverviewFamily struct {
 	Children   []OverviewChild  `json:"children"`
 }
 
+func parseDateOnly(t time.Time) time.Time {
+	d, _ := time.Parse("2006-01-02", t.Format("2006-01-02"))
+	return d
+}
+
+func shouldIncludeFamilyInOverview(fam models.Family, now time.Time) bool {
+	today := parseDateOnly(now)
+	todayStr := today.Format("2006-01-02")
+
+	hasActiveChild := false
+	hasFormerChild := false
+	var maxExitDate time.Time
+
+	hasPlannedStart := false
+	var earliestPlannedStart time.Time
+
+	for _, c := range fam.Children {
+		changes := make([]models.ChildGroupChange, len(c.GroupChanges))
+		copy(changes, c.GroupChanges)
+		sort.SliceStable(changes, func(i, j int) bool {
+			return changes[i].ChangeDate.Before(changes[j].ChangeDate)
+		})
+
+		var effective []models.ChildGroupChange
+		for _, ch := range changes {
+			if ch.ChangeDate.Format("2006-01-02") <= todayStr {
+				effective = append(effective, ch)
+			}
+		}
+
+		if len(effective) > 0 {
+			latest := effective[len(effective)-1]
+			if latest.TargetGroup > 0 {
+				hasActiveChild = true
+			} else {
+				// TargetGroup == 0: exit
+				hasPriorEnroll := false
+				for _, ech := range effective {
+					if ech.TargetGroup > 0 {
+						hasPriorEnroll = true
+						break
+					}
+				}
+				if hasPriorEnroll {
+					hasFormerChild = true
+					exitDate := parseDateOnly(latest.ChangeDate)
+					if maxExitDate.IsZero() || exitDate.After(maxExitDate) {
+						maxExitDate = exitDate
+					}
+				}
+			}
+		}
+
+		// Check for future planned start (TargetGroup > 0)
+		for _, ch := range changes {
+			if ch.ChangeDate.Format("2006-01-02") > todayStr && ch.TargetGroup > 0 {
+				plannedDate := parseDateOnly(ch.ChangeDate)
+				if !hasPlannedStart || plannedDate.Before(earliestPlannedStart) {
+					hasPlannedStart = true
+					earliestPlannedStart = plannedDate
+				}
+				break // Earliest future start for this child
+			}
+		}
+	}
+
+	// 1. If any child is currently active in kindergarten, always show.
+	if hasActiveChild {
+		return true
+	}
+
+	// 2. When all children of a family have left the kindergarten:
+	// familiesOverview should still show that family's data for a year. After that, it should not be shown anymore.
+	if hasFormerChild {
+		oneYearAfterExit := maxExitDate.AddDate(1, 0, 0)
+		isWithinOneYear := !today.After(oneYearAfterExit)
+		if isWithinOneYear {
+			return true
+		}
+		// If more than a year has passed since leaving, but a new child has a planned start:
+		// Display only 12 weeks before that start.
+		if hasPlannedStart {
+			twelveWeeksBefore := earliestPlannedStart.AddDate(0, 0, -12*7)
+			return !today.Before(twelveWeeksBefore)
+		}
+		return false
+	}
+
+	// 3. When a family is new and a first group entry of its first child is planned:
+	// its data should only be displayed in familiesOverview 12 weeks before they actually start. Before that, it should not be there.
+	if hasPlannedStart {
+		twelveWeeksBefore := earliestPlannedStart.AddDate(0, 0, -12*7)
+		return !today.Before(twelveWeeksBefore)
+	}
+
+	// 4. If no children have ever enrolled or planned to enroll (e.g. newly created family without group changes):
+	return true
+}
+
 func (s *Server) HandleListFamiliesOverview(w http.ResponseWriter, r *http.Request) {
 	families, err := s.Store.ListFamilies(r.Context())
 	if err != nil {
@@ -384,6 +483,9 @@ func (s *Server) HandleListFamiliesOverview(w http.ResponseWriter, r *http.Reque
 
 	overview := make([]OverviewFamily, 0, len(families))
 	for _, fam := range families {
+		if !shouldIncludeFamilyInOverview(fam, now) {
+			continue
+		}
 		isOwnFamily := user != nil && user.IsSelfFamily(fam.ID)
 		canViewGroupChanges := (isOwnFamily && hasSelfService) || hasFamiliesAll
 		canViewMemberships := (isOwnFamily && user != nil && user.HasPermission("memberships.self.read")) || (user != nil && user.HasPermission("memberships.all.read"))
