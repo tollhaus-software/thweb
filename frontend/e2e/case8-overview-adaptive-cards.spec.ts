@@ -143,6 +143,14 @@ test.describe('Test Case 8: Adaptive Card Layout for familiesOverview Tab', () =
     await expect(hansEmailLink).toHaveAttribute('href', 'mailto:hans.schmidt@tollhaus-stuttgart.de');
     await expect(hansEmailLink).toHaveText('hans.schmidt@tollhaus-stuttgart.de');
 
+    // Verify e-mail symbol is '@' and home symbol is '🏠' in mobile card view
+    const mobileEmailSymbol = hansRow.locator('td').nth(2).locator('.overview-contact-symbol');
+    await expect(mobileEmailSymbol).toBeVisible();
+    await expect(mobileEmailSymbol).toHaveText('@');
+    const mobileHomeSymbol = hansRow.locator('td').nth(3).locator('.overview-contact-symbol');
+    await expect(mobileHomeSymbol).toBeVisible();
+    await expect(mobileHomeSymbol).toHaveText('🏠');
+
     // Verify child row is rendered as a compact card with group badge
     const miaRow = page.locator('tr.overview-child-row', { hasText: 'Mia' });
     await expect(miaRow).toBeVisible();
@@ -230,6 +238,10 @@ test.describe('Test Case 8: Adaptive Card Layout for familiesOverview Tab', () =
     const dtHansEmailLink = desktopHansRow.locator('a.overview-contact-link[href^="mailto:"]');
     await expect(dtHansEmailLink).toBeVisible();
     await expect(dtHansEmailLink).toHaveAttribute('href', 'mailto:hans.schmidt@tollhaus-stuttgart.de');
+
+    // Verify e-mail symbol and home symbol are NOT visible in desktop table view
+    await expect(desktopHansRow.locator('td').nth(2).locator('.overview-contact-symbol')).not.toBeVisible();
+    await expect(desktopHansRow.locator('td').nth(3).locator('.overview-contact-symbol')).not.toBeVisible();
 
     // 6. Verify links from familiesOverview to Eltern(MGA) and Kinder(MGA) for users with families.all.read permission
     const hansParentLink = desktopHansRow.locator('.family-parent-link.overview-mga-link');

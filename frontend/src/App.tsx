@@ -6086,7 +6086,6 @@ function formatParentsSummary(parents: any[]): string {
               <span
                 className="overview-contact-symbol"
                 style={{
-                  display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   width: '1.25rem',
@@ -6094,7 +6093,7 @@ function formatParentsSummary(parents: any[]): string {
                   userSelect: 'none',
                 }}
               >
-                📧
+                @
               </span>
               {emails.length === 0 ? (
                 <span style={{ color: 'var(--text-muted)' }}>-</span>
@@ -6135,7 +6134,6 @@ function formatParentsSummary(parents: any[]): string {
               <span
                 className="overview-contact-symbol"
                 style={{
-                  display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   width: '1.25rem',
