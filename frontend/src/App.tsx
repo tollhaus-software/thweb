@@ -733,13 +733,28 @@ export const getSortOptionLabel = (order: FamilySortOrder): string => {
 const getMembershipStatus = (memberships: THMembership[] | undefined) => {
   if (!memberships || memberships.length === 0) return { text: '', color: 'inherit' };
   
-  const today = new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const todayStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const endOfCurrentMonthDate = new Date(currentYear, currentMonth, 0);
+  const endOfCurrentMonthStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(endOfCurrentMonthDate.getDate()).padStart(2, '0')}`;
 
-  const active = memberships.find(m => {
+  // 1. First check if there is a membership active today
+  let active = memberships.find(m => {
     const start = m.start_date.split('T')[0];
     const end = m.end_date ? m.end_date.split('T')[0] : null;
-    return start <= today && (!end || end >= today);
+    return start <= todayStr && (!end || end >= todayStr);
   });
+
+  // 2. If no membership is active today, check if there is a membership starting this month
+  if (!active) {
+    active = memberships.find(m => {
+      const start = m.start_date.split('T')[0];
+      const end = m.end_date ? m.end_date.split('T')[0] : null;
+      return start <= endOfCurrentMonthStr && (!end || end >= todayStr);
+    });
+  }
 
   if (active) {
     if (active.membership_type === 'full_member') {
@@ -751,7 +766,7 @@ const getMembershipStatus = (memberships: THMembership[] | undefined) => {
 
   const expired = memberships.some(m => {
     const end = m.end_date ? m.end_date.split('T')[0] : null;
-    return end && end < today;
+    return end && end < todayStr;
   });
 
   if (expired) {
@@ -3742,13 +3757,14 @@ const Dashboard: React.FC = () => {
     if (canReadFamiliesAll) fetchFamilies();
     if (canReadMembers) fetchMembers();
     if (canReadOverview) fetchOverviewFamilies();
-    if (targetParentMemberships && targetParentMemberships.id === parentId) {
-      const existing = targetParentMemberships.memberships || [];
+    setTargetParentMemberships((prev) => {
+      if (!prev || prev.id !== parentId) return prev;
+      const existing = prev.memberships || [];
       const updatedMemberships = [...existing, created].sort(
         (a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
       );
-      setTargetParentMemberships({ ...targetParentMemberships, memberships: updatedMemberships });
-    }
+      return { ...prev, memberships: updatedMemberships };
+    });
   };
 
   const handleUpdateMembership = async (
@@ -3802,13 +3818,14 @@ const Dashboard: React.FC = () => {
     if (canReadFamiliesAll) fetchFamilies();
     if (canReadMembers) fetchMembers();
     if (canReadOverview) fetchOverviewFamilies();
-    if (targetParentMemberships) {
-      const existing = targetParentMemberships.memberships || [];
+    setTargetParentMemberships((prev) => {
+      if (!prev) return prev;
+      const existing = prev.memberships || [];
       const updatedMemberships = existing
         .map((m) => (m.id === membershipId ? updated : m))
         .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
-      setTargetParentMemberships({ ...targetParentMemberships, memberships: updatedMemberships });
-    }
+      return { ...prev, memberships: updatedMemberships };
+    });
   };
 
   const handleDeleteMembership = async (membershipId: string) => {
@@ -3826,8 +3843,11 @@ const Dashboard: React.FC = () => {
     if (canReadFamiliesAll) fetchFamilies();
     if (canReadMembers) fetchMembers();
     if (canReadOverview) fetchOverviewFamilies();
-    const updatedMemberships = (targetParentMemberships.memberships || []).filter((m) => m.id !== membershipId);
-    setTargetParentMemberships({ ...targetParentMemberships, memberships: updatedMemberships });
+    setTargetParentMemberships((prev) => {
+      if (!prev) return prev;
+      const updatedMemberships = (prev.memberships || []).filter((m) => m.id !== membershipId);
+      return { ...prev, memberships: updatedMemberships };
+    });
   };
 
   const openManageHygiene = React.useCallback((parent: ParentWithHygiene, anchor: HTMLElement | string) => {

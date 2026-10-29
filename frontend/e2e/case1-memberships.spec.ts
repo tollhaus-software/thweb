@@ -614,5 +614,117 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     // Verify address list removal is visible in audit log
     await expect(sabineLogs.filter({ hasText: 'Aus Adressliste entfernt (ohne 📋)' })).toBeVisible();
   });
+
+  test('converts full membership to supporting membership via "In Fördermitgliedschaft umwandeln"', async ({ page }) => {
+    // 1. Add a parent
+    await page.getByRole('button', { name: 'Familie hinzufügen' }).click();
+    await page.locator('#f-p1-first').fill('Maria');
+    await page.locator('#f-p1-last').fill('Weber');
+    await page.locator('form').getByRole('button', { name: 'Familie hinzufügen' }).click();
+
+    // 2. Open memberships popover in Eltern tab
+    await page.getByRole('button', { name: 'Eltern(MGA)' }).click();
+    const parentRow = page.locator('tr', { hasText: 'Maria' }).filter({ hasText: 'Weber' });
+    await expect(parentRow).toBeVisible();
+
+    const membershipCell = parentRow.locator('[id^="cell-membership-"]');
+    await membershipCell.dblclick();
+    const popover = page.locator('.memberships-popover');
+    await expect(popover).toBeVisible();
+
+    // Add initial ongoing full membership
+    const startDateInput = popover.locator('td').locator('input[type="text"]').first();
+    await startDateInput.fill('01.01.2025');
+    await popover.locator('button:has(svg.lucide-check)').click();
+
+    // 3. Verify "+" button is disabled and "In Fördermitgliedschaft umwandeln" button is visible
+    const plusBtn = popover.locator('button:has(svg.lucide-plus)');
+    await expect(plusBtn).toBeDisabled();
+
+    const convertBtn = popover.getByRole('button', { name: 'In Fördermitgliedschaft umwandeln' });
+    await expect(convertBtn).toBeVisible();
+    await expect(convertBtn).toBeEnabled();
+
+    // 4. Click conversion button
+    await convertBtn.click();
+
+    // Expect input with label "Fördermitglied ab:"
+    await expect(popover.getByText('Fördermitglied ab:')).toBeVisible();
+    const convertDateInput = popover.locator('div:has-text("Fördermitglied ab:") input[type="text"]');
+    await expect(convertDateInput).toBeVisible();
+
+    // Fill conversion date: 01.06.2025
+    await convertDateInput.fill('01.06.2025');
+    // Click check button to save conversion
+    const checkBtn = popover.locator('div:has-text("Fördermitglied ab:") button:has(svg.lucide-check)');
+    await checkBtn.click();
+
+    // 5. Verify the table now has 2 rows:
+    // First row: Full member with end date 31.05.2025 (one day before 01.06.2025)
+    // Second row: Fördermitglied with start date 01.06.2025 and no end date
+    const rows = popover.locator('tbody tr');
+    await expect(rows).toHaveCount(2);
+
+    const firstRow = rows.first();
+    await expect(firstRow).toContainText('Voll');
+    await expect(firstRow).toContainText('01.01.2025');
+    await expect(firstRow).toContainText('31.05.2025');
+
+    const secondRow = rows.nth(1);
+    await expect(secondRow).toContainText('Förder');
+    await expect(secondRow).toContainText('01.06.2025');
+
+    // Close popover
+    await page.keyboard.press('Escape');
+    await expect(popover).toBeHidden();
+  });
+
+  test('membership starting this month is displayed as member in overview and parents table', async ({ page }) => {
+    // Calculate last day of the current month (guaranteed to be in this month)
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const lastDay = new Date(year, month, 0).getDate();
+    const formattedDate = `${String(lastDay).padStart(2, '0')}.${String(month).padStart(2, '0')}.${year}`;
+
+    // 1. Add a parent
+    await page.getByRole('button', { name: 'Familie hinzufügen' }).click();
+    await page.locator('#f-p1-first').fill('Felix');
+    await page.locator('#f-p1-last').fill('Sommer');
+    await page.locator('form').getByRole('button', { name: 'Familie hinzufügen' }).click();
+
+    // 2. Add membership starting on the last day of this month
+    await page.getByRole('button', { name: 'Eltern(MGA)' }).click();
+    const parentRow = page.locator('tr', { hasText: 'Felix' }).filter({ hasText: 'Sommer' });
+    await expect(parentRow).toBeVisible();
+
+    const membershipCell = parentRow.locator('[id^="cell-membership-"]');
+    await membershipCell.dblclick();
+    const popover = page.locator('.memberships-popover');
+    await expect(popover).toBeVisible();
+
+    const startDateInput = popover.locator('td').locator('input[type="text"]').first();
+    await startDateInput.fill(formattedDate);
+    await popover.locator('button:has(svg.lucide-check)').click();
+    await page.keyboard.press('Escape');
+    await expect(popover).toBeHidden();
+
+    // 3. In parents table, membership status should show "Voll"
+    await expect(parentRow).toContainText('Voll');
+
+    // 4. In Familien (Overview tab), Felix Sommer should have the membership badge displayed
+    await page.getByRole('button', { name: 'Familien', exact: true }).click();
+    const felixOverviewRow = page.locator('.data-table tbody tr', { hasText: 'Felix Sommer' });
+    await expect(felixOverviewRow).toBeVisible();
+    const badge = felixOverviewRow.locator('.overview-membership-badge');
+    await expect(badge).toBeVisible();
+    await expect(badge).toContainText('Voll');
+
+    // 5. In Vereinsmitglieder (Members tab), Felix Sommer should be listed
+    await page.getByRole('button', { name: 'Vereinsmitglieder' }).click();
+    const memberRow = page.locator('.data-table tbody tr', { hasText: 'Felix Sommer' });
+    await expect(memberRow).toBeVisible();
+    await expect(memberRow).toContainText('Voll');
+  });
 });
 
