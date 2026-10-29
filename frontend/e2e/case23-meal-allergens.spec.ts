@@ -323,6 +323,12 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     // 7. Verify meal plan components are NOT transferred to allergens by default
     await expect(page.locator('[data-testid^="meal-component-card-"]')).toHaveCount(0);
 
+    // Cook was matched from plan ("Anna Köchin"), so cook TODO hint should NOT be present
+    await expect(page.getByTestId('cook-todo-hint')).toHaveCount(0);
+
+    // No components have been added yet -> components TODO hint MUST be visible
+    await expect(page.getByTestId('components-todo-hint')).toBeVisible();
+
     // Verify "Finalisieren" button exists under meal components and is initially disabled (no components yet)
     await expect(page.getByTestId('finalize-allergens-btn')).toBeVisible();
     await expect(page.getByTestId('finalize-allergens-btn')).toHaveText('Finalisieren');
@@ -371,6 +377,7 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     await expect(page.getByTestId('allergen-option-0-gluten')).toBeEnabled();
     await page.getByTestId('meal-component-name-input-0').press('Enter');
     await expect(page.getByTestId('meal-component-name-text-0')).toHaveText('Spaghetti Bolognese');
+    await expect(page.getByTestId('components-todo-hint')).toHaveCount(0);
 
     // Add second component (Gurkensalat) from meal plan suggestion
     await addCompBtn.click();
@@ -543,6 +550,34 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     await expect(page.getByTestId('meal-plan-reference-box')).toContainText('Laut Speiseplan:');
     await expect(page.getByTestId('meal-plan-empty-text')).toHaveText('Nichts eingetragen');
     await expect(page.getByTestId('meal-plan-ref-cook')).toHaveCount(0);
+
+    // Both cook and components TODO hints must be visible when neither is selected
+    await expect(page.getByTestId('cook-todo-hint')).toBeVisible();
+    await expect(page.getByTestId('components-todo-hint')).toBeVisible();
+    await expect(page.getByTestId('finalize-allergens-btn')).toBeDisabled();
+
+    // Add a component: components TODO hint disappears, but finalize button MUST still be disabled because cook is not selected
+    const unseededAddCompBtn = page.getByTestId('add-meal-component-btn');
+    await unseededAddCompBtn.click();
+    const unseededCompInput = page.getByTestId('meal-component-name-input-0');
+    await unseededCompInput.fill('Suppe');
+    await unseededCompInput.press('Enter');
+    await expect(page.getByTestId('components-todo-hint')).toHaveCount(0);
+    // Cook is still missing -> Finalize must remain disabled!
+    await expect(page.getByTestId('cook-todo-hint')).toBeVisible();
+    await expect(page.getByTestId('finalize-allergens-btn')).toBeDisabled();
+
+    // Now select a cook -> cook TODO hint disappears, and Finalize button becomes ENABLED!
+    const unseededCookInput = page.getByTestId('cook-combobox-input');
+    await unseededCookInput.fill('Chefkoch Tom');
+    await unseededCookInput.press('Enter');
+    await expect(page.getByTestId('cook-todo-hint')).toHaveCount(0);
+    await expect(page.getByTestId('finalize-allergens-btn')).toBeEnabled();
+
+    // Clear cook -> cook TODO hint reappears, and Finalize button is disabled again!
+    await unseededCookInput.fill('');
+    await unseededCookInput.press('Enter');
+    await expect(page.getByTestId('cook-todo-hint')).toBeVisible();
     await expect(page.getByTestId('finalize-allergens-btn')).toBeDisabled();
   });
 });
