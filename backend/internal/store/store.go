@@ -1118,7 +1118,7 @@ func (s *Store) ListMembers(ctx context.Context) ([]models.MemberRow, error) {
 		WHERE EXISTS (
 			SELECT 1 FROM th_memberships m2 
 			WHERE m2.parent_id = p.id 
-			  AND m2.start_date <= CURRENT_DATE 
+			  AND m2.start_date < (DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month') 
 			  AND (m2.end_date IS NULL OR m2.end_date >= CURRENT_DATE)
 		)
 		ORDER BY p.last_name ASC, p.first_name ASC
@@ -1151,6 +1151,7 @@ func (s *Store) ListMembers(ctx context.Context) ([]models.MemberRow, error) {
 		// Calculate current membership type, first became member date, and last type change date
 		if len(r.Memberships) > 0 {
 			var activeMembership *models.THMembership
+			// 1. Check for membership active today
 			for i := range r.Memberships {
 				m := &r.Memberships[i]
 				mStart := time.Date(m.StartDate.Year(), m.StartDate.Month(), m.StartDate.Day(), 0, 0, 0, 0, time.UTC)
@@ -1162,6 +1163,24 @@ func (s *Store) ListMembers(ctx context.Context) ([]models.MemberRow, error) {
 
 				if !mStart.After(today) && (mEnd == nil || !mEnd.Before(today)) {
 					activeMembership = m
+				}
+			}
+
+			// 2. If none active today, check for membership starting this month
+			if activeMembership == nil {
+				firstOfNextMonth := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, time.UTC)
+				for i := range r.Memberships {
+					m := &r.Memberships[i]
+					mStart := time.Date(m.StartDate.Year(), m.StartDate.Month(), m.StartDate.Day(), 0, 0, 0, 0, time.UTC)
+					var mEnd *time.Time
+					if m.EndDate != nil {
+						e := time.Date(m.EndDate.Year(), m.EndDate.Month(), m.EndDate.Day(), 23, 59, 59, 0, time.UTC)
+						mEnd = &e
+					}
+
+					if mStart.Before(firstOfNextMonth) && (mEnd == nil || !mEnd.Before(today)) {
+						activeMembership = m
+					}
 				}
 			}
 

@@ -146,10 +146,16 @@ export const MembershipsModal: React.FC<MembershipsModalProps> = ({
   const [isStartCalendarOpen, setIsStartCalendarOpen] = useState(!readOnly && isInitiallyEmpty);
   const [isEndCalendarOpen, setIsEndCalendarOpen] = useState(false);
 
+  const [isConvertingToSupporting, setIsConvertingToSupporting] = useState(false);
+  const [convertDate, setConvertDate] = useState<string>('');
+  const [isConvertCalendarOpen, setIsConvertCalendarOpen] = useState(false);
+
   const startDateInputRef = useRef<HTMLInputElement>(null);
   const startDateContainerRef = useRef<HTMLDivElement>(null);
   const endDateInputRef = useRef<HTMLInputElement>(null);
   const endDateContainerRef = useRef<HTMLDivElement>(null);
+  const convertDateInputRef = useRef<HTMLInputElement>(null);
+  const convertDateContainerRef = useRef<HTMLDivElement>(null);
 
   // Focus start date input when adding row
   useEffect(() => {
@@ -164,13 +170,111 @@ export const MembershipsModal: React.FC<MembershipsModalProps> = ({
     }
   }, [isOpen, isAddingRow]);
 
+  // Focus date input when converting to supporting
+  useEffect(() => {
+    if (isOpen && isConvertingToSupporting) {
+      const timer = setTimeout(() => {
+        if (convertDateInputRef.current) {
+          convertDateInputRef.current.focus();
+          convertDateInputRef.current.select();
+        }
+      }, 60);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, isConvertingToSupporting]);
+
   const handleClose = React.useCallback(() => {
     setIsAddingRow(false);
     setIsStartCalendarOpen(false);
     setIsEndCalendarOpen(false);
     setNewEndDate('');
+    setIsConvertingToSupporting(false);
+    setIsConvertCalendarOpen(false);
     onClose();
   }, [onClose]);
+
+  const getInitialConvertDate = (): string => {
+    const now = new Date();
+    if (mostRecentMembership?.start_date) {
+      const parts = mostRecentMembership.start_date.split('T')[0].split('-').map(Number);
+      if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
+        const minStartDate = new Date(parts[0], parts[1] - 1, parts[2] + 2);
+        if (now < minStartDate) {
+          return CURRENT_LOCALE === 'de' ? formatDisplayDate(minStartDate) : minStartDate.toISOString().split('T')[0];
+        }
+      }
+    }
+    return CURRENT_LOCALE === 'de' ? formatDisplayDate(now) : now.toISOString().split('T')[0];
+  };
+
+  const handleStartConvertToSupporting = () => {
+    if (!mostRecentMembership || mostRecentMembership.membership_type !== 'full_member') return;
+    setConvertDate(getInitialConvertDate());
+    setIsConvertingToSupporting(true);
+    setIsConvertCalendarOpen(true);
+  };
+
+  const handleCancelConvertToSupporting = () => {
+    setIsConvertingToSupporting(false);
+    setIsConvertCalendarOpen(false);
+  };
+
+  const handleExecuteConvertToSupporting = async () => {
+    if (!parent || !mostRecentMembership || !onUpdateMembership) return;
+    if (mostRecentMembership.membership_type !== 'full_member') {
+      alert(t('cannotConvertToSupportingNotFull'));
+      return;
+    }
+
+    const parsedDate = parseInputDate(convertDate);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(parsedDate)) {
+      alert(t('invalidDateFormat'));
+      return;
+    }
+
+    // Compute date minus 1 day for full membership end date
+    const [year, month, day] = parsedDate.split('-').map(Number);
+    const prevDateObj = new Date(year, month - 1, day);
+    prevDateObj.setDate(prevDateObj.getDate() - 1);
+    const prevYear = prevDateObj.getFullYear();
+    const prevMonth = String(prevDateObj.getMonth() + 1).padStart(2, '0');
+    const prevDay = String(prevDateObj.getDate()).padStart(2, '0');
+    const prevDateStr = `${prevYear}-${prevMonth}-${prevDay}`;
+
+    const mostRecentStart = mostRecentMembership.start_date.split('T')[0];
+    if (prevDateStr <= mostRecentStart) {
+      alert(t('endDateMustBeAfterStartDate'));
+      return;
+    }
+
+    // Check overlap with other memberships if any
+    for (const existing of sortedMemberships) {
+      if (existing.id === mostRecentMembership.id) continue;
+      const existingStart = existing.start_date.split('T')[0];
+      const existingEnd = existing.end_date ? existing.end_date.split('T')[0] : null;
+      if (checkMembershipOverlap(parsedDate, null, existingStart, existingEnd)) {
+        alert(t('membershipsCannotOverlap'));
+        return;
+      }
+    }
+
+    try {
+      await onUpdateMembership(mostRecentMembership.id, {
+        end_date: `${prevDateStr}T00:00:00Z`,
+      });
+      await onAddMembership(
+        parent.id,
+        `${parsedDate}T00:00:00Z`,
+        null,
+        'supporting_member'
+      );
+      setIsConvertingToSupporting(false);
+      setIsConvertCalendarOpen(false);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to convert membership';
+      alert(message);
+    }
+  };
 
 
 
@@ -740,14 +844,143 @@ export const MembershipsModal: React.FC<MembershipsModalProps> = ({
           </table>
         </div>
 
-        {/* Centered neutral '+' button under the existing rows */}
-        {!isAddingRow && !readOnly && (
+        {/* Inline convert to supporting form */}
+        {isConvertingToSupporting && !readOnly && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              padding: '8px 0 4px 0',
+              flexWrap: 'wrap',
+              borderTop: '1px dashed var(--border)',
+              marginTop: '6px',
+            }}
+          >
+            <span style={{ fontSize: '0.825rem', fontWeight: 600, color: 'var(--text)' }}>
+              {t('convertToSupportingLabel')}:
+            </span>
+            <div
+              ref={convertDateContainerRef}
+              style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: '130px' }}
+            >
+              <input
+                ref={convertDateInputRef}
+                type="text"
+                value={convertDate}
+                onChange={(e) => setConvertDate(e.target.value)}
+                onFocus={() => setIsConvertCalendarOpen(true)}
+                onClick={() => setIsConvertCalendarOpen(true)}
+                placeholder={CURRENT_LOCALE === 'de' ? 'TT.MM.JJJJ' : 'YYYY-MM-DD'}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    setIsConvertCalendarOpen(false);
+                    handleExecuteConvertToSupporting();
+                  }
+                  if (e.key === 'Escape') {
+                    e.stopPropagation();
+                    if (isConvertCalendarOpen) {
+                      setIsConvertCalendarOpen(false);
+                    } else {
+                      handleCancelConvertToSupporting();
+                    }
+                  }
+                  if (e.key === 'F4' || (e.altKey && e.key === 'ArrowDown')) {
+                    e.preventDefault();
+                    setIsConvertCalendarOpen((prev) => !prev);
+                  }
+                }}
+                style={{
+                  padding: '3px 26px 3px 6px',
+                  fontSize: '0.825rem',
+                  border: '1px solid var(--input-border)',
+                  borderRadius: '4px',
+                  background: 'var(--input-bg)',
+                  color: 'var(--input-text)',
+                  width: '100%',
+                  boxSizing: 'border-box',
+                }}
+              />
+              <button
+                type="button"
+                tabIndex={-1}
+                style={{
+                  position: 'absolute',
+                  right: '4px',
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '2px',
+                  color: isConvertCalendarOpen ? 'var(--primary)' : '#64748b',
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsConvertCalendarOpen((prev) => !prev);
+                }}
+                title={t('date')}
+              >
+                <Calendar size={15} />
+              </button>
+              <CalendarDropdown
+                anchorRef={convertDateContainerRef}
+                isOpen={isConvertCalendarOpen}
+                onClose={() => setIsConvertCalendarOpen(false)}
+                selectedDateStr={convertDate}
+                onSelectDate={(formatted) => {
+                  setConvertDate(formatted);
+                  setIsConvertCalendarOpen(false);
+                }}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={handleExecuteConvertToSupporting}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--primary)',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: '2px 4px',
+              }}
+              title={t('save')}
+            >
+              <Check size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={handleCancelConvertToSupporting}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#ef4444',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: '2px 4px',
+              }}
+              title={t('cancel')}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
+
+        {/* Centered neutral '+' button and optional 'In Fördermitgliedschaft umwandeln' button under the existing rows */}
+        {!isAddingRow && !isConvertingToSupporting && !readOnly && (
           <div
             style={{
               display: 'flex',
               justifyContent: 'center',
               alignItems: 'center',
+              gap: '8px',
               padding: '6px 0 2px 0',
+              flexWrap: 'wrap',
             }}
           >
             <button
@@ -787,6 +1020,45 @@ export const MembershipsModal: React.FC<MembershipsModalProps> = ({
             >
               <Plus size={16} />
             </button>
+            {isMostRecentMissingEndDate && (
+              <button
+                type="button"
+                onClick={handleStartConvertToSupporting}
+                disabled={mostRecentMembership?.membership_type !== 'full_member'}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '4px 12px',
+                  fontSize: '0.825rem',
+                  fontWeight: 500,
+                  background: 'var(--bg-subtle)',
+                  color: mostRecentMembership?.membership_type !== 'full_member' ? 'var(--text-muted)' : 'var(--text)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '6px',
+                  cursor: mostRecentMembership?.membership_type !== 'full_member' ? 'not-allowed' : 'pointer',
+                  opacity: mostRecentMembership?.membership_type !== 'full_member' ? 0.5 : 1,
+                  transition: 'background-color 0.15s ease, border-color 0.15s ease',
+                }}
+                onMouseEnter={(e) => {
+                  if (mostRecentMembership?.membership_type === 'full_member') {
+                    e.currentTarget.style.backgroundColor = 'var(--border)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (mostRecentMembership?.membership_type === 'full_member') {
+                    e.currentTarget.style.backgroundColor = 'var(--bg-subtle)';
+                  }
+                }}
+                title={
+                  mostRecentMembership?.membership_type !== 'full_member'
+                    ? t('cannotConvertToSupportingNotFull')
+                    : t('convertToSupporting')
+                }
+              >
+                {t('convertToSupporting')}
+              </button>
+            )}
           </div>
         )}
 
