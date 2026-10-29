@@ -1636,6 +1636,19 @@ const AuditLogView: React.FC<AuditLogViewProps> = ({
   );
 };
 
+const ImpressumFooter: React.FC = () => (
+  <footer className="app-footer">
+    <a
+      href="https://www.tollhaus-stuttgart.de/impressum"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="footer-impressum-link"
+    >
+      {t('impressum')}
+    </a>
+  </footer>
+);
+
 const LandingPage: React.FC = () => {
   const { authError } = useAuth();
 
@@ -1655,6 +1668,9 @@ const LandingPage: React.FC = () => {
         >
           Sign in with a different account
         </a>
+        <div style={{ marginTop: '30px' }}>
+          <ImpressumFooter />
+        </div>
       </div>
     );
   }
@@ -1678,6 +1694,9 @@ const LandingPage: React.FC = () => {
       )}
       <p>Please log in to access the system.</p>
       <LoginButton />
+      <div style={{ marginTop: '30px' }}>
+        <ImpressumFooter />
+      </div>
     </div>
   );
 };
@@ -7530,6 +7549,8 @@ function formatParentsSummary(parents: any[]): string {
           />
         )}
       </main>
+
+      <ImpressumFooter />
 
       {/* Add Employee Modal */}
       {addEmployeeOpen && (

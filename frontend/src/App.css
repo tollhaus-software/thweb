@@ -39,6 +39,28 @@ header h1,
   box-sizing: border-box;
 }
 
+.app-footer {
+  text-align: center;
+  padding: 0.4rem 0;
+  font-size: 0.75rem;
+}
+
+.footer-impressum-link {
+  color: var(--text-muted, #64748b);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.footer-impressum-link:hover {
+  color: var(--text-h, #0f172a);
+  text-decoration: underline;
+}
+
+.dashboard-container.table-view-active .app-footer {
+  flex-shrink: 0;
+  padding: 0.25rem 0 0 0;
+}
+
 header {
   display: flex;
   justify-content: space-between;
@@ -137,6 +159,7 @@ header {
   font-family: inherit !important;
   text-align: left !important;
   cursor: pointer !important;
+  text-decoration: none !important;
   transition: background-color 0.15s, color 0.15s !important;
 }
 
@@ -1030,6 +1053,10 @@ tr.family-group-row td {
 
   .dashboard-container.table-view-active {
     padding: 0.75rem !important;
+  }
+
+  .dashboard-container .app-footer {
+    display: none !important;
   }
 
   .tab-btn {
