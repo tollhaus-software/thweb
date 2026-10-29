@@ -18,6 +18,7 @@ import {
   getAllergenBgColor,
 } from '../../utils/mealAllergens';
 import { AllergenIcon } from './AllergenIcon';
+import { TodoHintIcon } from './TodoHintIcon';
 import { MealAllergensCalendarView } from './MealAllergensCalendarView';
 import { CellPopover } from '../Table/CellPopover';
 import { RowActionsMenu } from '../Table/RowActionsMenu';
@@ -173,7 +174,9 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
     return () => {
       ignore = true;
     };
-  }, [initialDay, token]);
+    // Re-load metadata only when the selected date or auth token changes, not when local edits notify parent
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialDay.date, token]);
 
   const persistChanges = useCallback(
     async (
@@ -485,8 +488,12 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
     persistChanges(next);
   }, [pendingCopySource, persistChanges]);
 
+  const isCookSelected = Boolean(cookInputText.trim());
+  const hasComponents = mealComponents.length > 0;
+  const canFinalize = status !== 'finalized' && hasComponents && isCookSelected;
+
   const handleFinalizeClick = useCallback(async () => {
-    if (!canWrite) return;
+    if (!canWrite || !canFinalize) return;
     if (!window.confirm(t('finalizeConfirm') || 'Allergene finalisieren?')) {
       return;
     }
@@ -499,13 +506,30 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
         headers['Authorization'] = `Bearer ${token}`;
       }
 
+      let finalParentId = cookParentId;
+      let finalEmployeeId = cookEmployeeId;
+      let finalCustomName = cookCustomName;
+      const trimmedCook = cookInputText.trim();
+      if (!finalParentId && !finalEmployeeId) {
+        const exactMatch = cookOptions.find(
+          (o) => o.display_name.toLowerCase() === trimmedCook.toLowerCase()
+        );
+        if (exactMatch) {
+          finalParentId = exactMatch.type === 'parent' ? exactMatch.id : null;
+          finalEmployeeId = exactMatch.type === 'employee' ? exactMatch.id : null;
+          finalCustomName = '';
+        } else {
+          finalCustomName = trimmedCook;
+        }
+      }
+
       const res = await fetch(`/api/meal-allergens/${encodeURIComponent(day.date)}/finalize`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          cook_parent_id: cookParentId,
-          cook_employee_id: cookEmployeeId,
-          cook_custom_name: cookCustomName,
+          cook_parent_id: finalParentId,
+          cook_employee_id: finalEmployeeId,
+          cook_custom_name: finalCustomName,
           meal_components: mealComponents,
           documentation: day.documentation || {},
         }),
@@ -523,7 +547,20 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
     } finally {
       setSaving(false);
     }
-  }, [canWrite, token, day.date, day.documentation, cookParentId, cookEmployeeId, cookCustomName, mealComponents, onDaySaved]);
+  }, [
+    canWrite,
+    canFinalize,
+    token,
+    day.date,
+    day.documentation,
+    cookParentId,
+    cookEmployeeId,
+    cookCustomName,
+    cookInputText,
+    cookOptions,
+    mealComponents,
+    onDaySaved,
+  ]);
 
   const dateObj = parseDateKey(day.date);
   const { dayName } = formatDayHeader(dateObj);
@@ -671,6 +708,17 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
               </div>
             )}
           </div>
+
+          {!isCookSelected && (
+            <div
+              className="meal-allergens-todo-hint"
+              data-testid="cook-todo-hint"
+              title={t('cookTodoHint')}
+              aria-label={t('cookTodoHint')}
+            >
+              <TodoHintIcon size={24} />
+            </div>
+          )}
         </div>
       </div>
 
@@ -762,6 +810,17 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
 
         {canWrite && (
           <div className="meal-allergens-add-component-bar">
+            {!hasComponents && (
+              <div
+                className="meal-allergens-todo-hint"
+                data-testid="components-todo-hint"
+                title={t('componentsTodoHint')}
+                aria-label={t('componentsTodoHint')}
+              >
+                <TodoHintIcon size={24} />
+              </div>
+            )}
+
             <button
               ref={addBtnRef}
               type="button"
@@ -804,7 +863,7 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
             type="button"
             className="meal-allergens-finalize-btn"
             onClick={handleFinalizeClick}
-            disabled={status === 'finalized' || mealComponents.length === 0}
+            disabled={!canFinalize}
             data-testid="finalize-allergens-btn"
           >
             <Check size={16} />
