@@ -333,7 +333,7 @@ export const MealAllergensCalendarView: React.FC<MealAllergensCalendarViewProps>
                 <ul className="meal-allergen-day-components" data-testid={`${testIdPrefix}-day-components-${dateKey}`}>
                   {displayComponents.map((comp, idx) => (
                     <li key={`${comp.name}-${idx}`} className="meal-allergen-day-component-item">
-                      <span>{comp.name}</span>
+                      <span>{comp.name?.trim() || t('unnamedComponent')}</span>
                       {comp.allergens &&
                         comp.allergens.map((allergen) => (
                           <span key={allergen} className="meal-allergen-mini-badge">
