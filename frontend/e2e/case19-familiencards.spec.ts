@@ -165,6 +165,8 @@ test.describe('Test Case 19: Familiencards Tracking and Display', () => {
     await expect(maggieSpan).toHaveCSS('color', 'rgb(128, 128, 128)');
 
     // --- Step 4: Add Familiencard to Lisa via Popover & Test Validation ---
+    const currentYear = new Date().getFullYear();
+
     // Click pencil on Lisa's familiencard cell
     const lisaPencil = lisaCell.locator('.child-familiencard-manage-btn');
     await lisaPencil.click();
@@ -173,14 +175,30 @@ test.describe('Test Case 19: Familiencards Tracking and Display', () => {
     const popover = page.locator('.glass-popup');
     await expect(popover).toBeVisible();
 
-    // Since Lisa had no cards, add row input should be visible with placeholder JJJJ
+    // Since Lisa had no cards, add row dropdown should be visible
+    const yearSelect = popover.locator('select[data-testid="familiencard-year-select"]');
+    await expect(yearSelect).toBeVisible();
+
+    // Default value should be the current year
+    await expect(yearSelect).toHaveValue(String(currentYear));
+
+    // Verify dropdown contains current year, last 10 years, and next 2 years
+    const options = await yearSelect.locator('option').allTextContents();
+    expect(options).toContain(String(currentYear));
+    expect(options).toContain(String(currentYear + 1));
+    expect(options).toContain(String(currentYear + 2));
+    for (let i = 1; i <= 10; i++) {
+      expect(options).toContain(String(currentYear - i));
+    }
+
+    // Switch to entering another year manually via custom option
+    await yearSelect.selectOption('custom');
     const yearInput = popover.locator('input[placeholder="JJJJ"]');
     await expect(yearInput).toBeVisible();
 
     // Test validation: invalid year "20"
     await yearInput.fill('20');
 
-    // Setup dialog listener to verify error alert
     let dialogMessage = '';
     page.once('dialog', async (dialog) => {
       dialogMessage = dialog.message();
@@ -188,6 +206,24 @@ test.describe('Test Case 19: Familiencards Tracking and Display', () => {
     });
 
     const saveBtn = popover.locator('button:has(svg.lucide-check)');
+    await saveBtn.click();
+    expect(dialogMessage).toContain('4-stelliges Jahr');
+
+    // Test validation: year 2000 (must be after 2000)
+    await yearInput.fill('2000');
+    page.once('dialog', async (dialog) => {
+      dialogMessage = dialog.message();
+      await dialog.accept();
+    });
+    await saveBtn.click();
+    expect(dialogMessage).toContain('4-stelliges Jahr');
+
+    // Test validation: current_year + 10 (must be before current_year + 10)
+    await yearInput.fill(String(currentYear + 10));
+    page.once('dialog', async (dialog) => {
+      dialogMessage = dialog.message();
+      await dialog.accept();
+    });
     await saveBtn.click();
     expect(dialogMessage).toContain('4-stelliges Jahr');
 
@@ -241,6 +277,139 @@ test.describe('Test Case 19: Familiencards Tracking and Display', () => {
     await expect(bartPencil).toBeVisible();
     await bartPencil.click();
     await expect(popover).toBeVisible();
+
+    // Verify Bart already has 2026, so adding a card defaults to next year (currentYear + 1)
+    const addCardBtn = popover.locator('button', { hasText: 'Familiencard hinzufügen' });
+    await expect(addCardBtn).toBeVisible();
+    await addCardBtn.click();
+    const bartYearSelect = popover.locator('select[data-testid="familiencard-year-select"]');
+    await expect(bartYearSelect).toBeVisible();
+    await expect(bartYearSelect).toHaveValue(String(currentYear + 1));
+
+    await page.keyboard.press('Escape');
+    await expect(popover).toBeHidden();
+  });
+
+  test('verifies Familiencard dropdown year selection, custom year input, and boundary validation', async ({ request, page }) => {
+    const currentYear = new Date().getFullYear();
+
+    // 1. Create a family with one child
+    const famRes = await request.post('/api/families', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        parents: [{ first_name: 'Ned', last_name: 'Flanders' }],
+      },
+    });
+    expect(famRes.ok()).toBeTruthy();
+    const family = await famRes.json();
+
+    const childId = crypto.randomUUID();
+    const childRes = await request.put(`/api/children/${childId}`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        id: childId,
+        family_id: family.id,
+        first_name: 'Rod',
+        last_name: 'Flanders',
+        birth_date: '2018-04-10',
+        familiencards: [],
+      },
+    });
+    expect(childRes.ok()).toBeTruthy();
+
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+
+    // Navigate to Kinder(MGA)
+    await page.getByRole('button', { name: 'Kinder(MGA)', exact: true }).click();
+
+    const rodRow = page.locator('tr', { hasText: 'Rod' });
+    const rodCell = rodRow.locator('[id^="cell-familiencard-"]');
+    await rodCell.locator('.child-familiencard-manage-btn').click();
+
+    const popover = page.locator('.glass-popup');
+    await expect(popover).toBeVisible();
+
+    // 1. Check dropdown defaults to current year
+    const yearSelect = popover.locator('select[data-testid="familiencard-year-select"]');
+    await expect(yearSelect).toBeVisible();
+    await expect(yearSelect).toHaveValue(String(currentYear));
+
+    // 2. Check dropdown options contain currentYear, last 10 years, next 2 years
+    const options = await yearSelect.locator('option').allTextContents();
+    expect(options).toContain(String(currentYear));
+    expect(options).toContain(String(currentYear + 1));
+    expect(options).toContain(String(currentYear + 2));
+    for (let i = 1; i <= 10; i++) {
+      expect(options).toContain(String(currentYear - i));
+    }
+    // Should NOT contain currentYear - 11 or currentYear + 3
+    expect(options).not.toContain(String(currentYear - 11));
+    expect(options).not.toContain(String(currentYear + 3));
+
+    // 3. Switch to custom year using pencil toggle button
+    const pencilBtn = popover.locator('button[title="Anderes Jahr manuell eingeben"]');
+    await expect(pencilBtn).toBeVisible();
+    await pencilBtn.click();
+
+    const yearInput = popover.locator('input[placeholder="JJJJ"]');
+    await expect(yearInput).toBeVisible();
+
+    // Switch back to list using list toggle button
+    const listBtn = popover.locator('button[title="Aus Liste auswählen"]');
+    await expect(listBtn).toBeVisible();
+    await listBtn.click();
+    await expect(yearSelect).toBeVisible();
+
+    // Switch to custom via dropdown option 'custom'
+    await yearSelect.selectOption('custom');
+    await expect(yearInput).toBeVisible();
+
+    // 4. Test validation boundary: 2000 (must be after 2000)
+    let alertMsg = '';
+    page.once('dialog', async (d) => {
+      alertMsg = d.message();
+      await d.accept();
+    });
+    await yearInput.fill('2000');
+    await popover.locator('button:has(svg.lucide-check)').click();
+    expect(alertMsg).toContain('4-stelliges Jahr');
+
+    // Test validation boundary: currentYear + 10 (must be before currentYear + 10)
+    page.once('dialog', async (d) => {
+      alertMsg = d.message();
+      await d.accept();
+    });
+    await yearInput.fill(String(currentYear + 10));
+    await popover.locator('button:has(svg.lucide-check)').click();
+    expect(alertMsg).toContain('4-stelliges Jahr');
+
+    // 5. Save valid custom year (e.g. 2012)
+    await yearInput.fill('2012');
+    await popover.locator('button:has(svg.lucide-check)').click();
+    await expect(popover.locator('tr', { hasText: '2012' })).toBeVisible();
+
+    // 6. Save currentYear from dropdown
+    const addBtn = popover.locator('button', { hasText: 'Familiencard hinzufügen' });
+    await expect(addBtn).toBeVisible();
+    await addBtn.click();
+
+    // Dropdown should be visible and default to currentYear (since 2012 was added, but not currentYear)
+    await expect(yearSelect).toBeVisible();
+    await expect(yearSelect).toHaveValue(String(currentYear));
+    await popover.locator('button:has(svg.lucide-check)').click();
+    await expect(popover.locator('tr', { hasText: String(currentYear) })).toBeVisible();
+
+    // 7. Click add again - now currentYear is in list, so default value should be next year
+    await addBtn.click();
+    await expect(yearSelect).toBeVisible();
+    await expect(yearSelect).toHaveValue(String(currentYear + 1));
+
+    // Save next year as well
+    await popover.locator('button:has(svg.lucide-check)').click();
+    await expect(popover.locator('tr', { hasText: String(currentYear + 1) })).toBeVisible();
+
+    // Close popover
     await page.keyboard.press('Escape');
     await expect(popover).toBeHidden();
   });
