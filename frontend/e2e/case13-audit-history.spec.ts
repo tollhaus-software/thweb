@@ -107,7 +107,9 @@ test.describe('Test Case 13: Audit Log and History Tracking', () => {
 
     // Step 7: Refresh audit logs (switch away and back to Audit tab)
     await parentsTabBtn.click();
+    const auditRespPromise = page.waitForResponse((resp) => resp.url().includes('/api/audit-logs') && resp.status() === 200);
     await auditTabBtn.click();
+    await auditRespPromise;
     await expect(auditTable).toBeVisible();
 
     // Verify that NO new audit log entry was added for vaccination modification!

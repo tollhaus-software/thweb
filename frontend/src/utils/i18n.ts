@@ -5,6 +5,7 @@ export const CURRENT_LOCALE: Locale = 'de'; // Switch default locale in code her
 const translations: Record<Locale, Record<string, string>> = {
   de: {
     title: 'TH Portal',
+    impressum: 'Impressum',
     logout: 'Abmelden',
     parents: 'Eltern(MGA)',
     overviewParentsBadge: 'Eltern',
@@ -429,6 +430,7 @@ const translations: Record<Locale, Record<string, string>> = {
   },
   en: {
     title: 'TH Portal',
+    impressum: 'Impressum',
     logout: 'Sign out',
     parents: 'Parents(MGA)',
     overviewParentsBadge: 'Parents',

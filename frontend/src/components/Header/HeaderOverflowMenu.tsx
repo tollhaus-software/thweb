@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MoreVertical, LogOut, Eye } from 'lucide-react';
+import { MoreVertical, LogOut, Eye, ExternalLink } from 'lucide-react';
 import { t } from '../../utils/i18n';
 
 export interface HeaderOverflowMenuProps {
@@ -85,6 +85,19 @@ export const HeaderOverflowMenu: React.FC<HeaderOverflowMenuProps> = ({
               <span>{t('simulatePermissions')}</span>
             </button>
           )}
+
+          <a
+            href="https://www.tollhaus-stuttgart.de/impressum"
+            target="_blank"
+            rel="noopener noreferrer"
+            role="menuitem"
+            className="header-overflow-menu-item header-overflow-impressum"
+            data-testid="overflow-impressum-link"
+            onClick={() => setIsOpen(false)}
+          >
+            <ExternalLink size={16} />
+            <span>{t('impressum')}</span>
+          </a>
 
           <button
             type="button"

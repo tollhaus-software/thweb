@@ -37,10 +37,16 @@ test.describe('Test Case 11: Header Responsive Sign Out Overflow Menu & Branding
     const dropdown = overflowMenu.locator('.header-overflow-dropdown');
     await expect(dropdown).toBeVisible();
 
-    // Contains "Berechtigungen simulieren" and "Abmelden"
+    // Contains "Berechtigungen simulieren", "Impressum", and "Abmelden"
     const simulateItem = dropdown.locator('[data-testid="overflow-simulate-button"]');
     await expect(simulateItem).toBeVisible();
     await expect(simulateItem).toHaveText(/Berechtigungen simulieren|Simulate permissions/i);
+
+    const impressumMenuItem = dropdown.locator('[data-testid="overflow-impressum-link"]');
+    await expect(impressumMenuItem).toBeVisible();
+    await expect(impressumMenuItem).toHaveText(/Impressum/i);
+    await expect(impressumMenuItem).toHaveAttribute('href', 'https://www.tollhaus-stuttgart.de/impressum');
+    await expect(impressumMenuItem).toHaveAttribute('target', '_blank');
 
     const signOutMenuItem = dropdown.locator('[data-testid="overflow-signout-button"]');
     await expect(signOutMenuItem).toBeVisible();
@@ -49,6 +55,15 @@ test.describe('Test Case 11: Header Responsive Sign Out Overflow Menu & Branding
     // Test closing via Escape key
     await page.keyboard.press('Escape');
     await expect(dropdown).toHaveCount(0);
+
+    // Footer is visible on desktop layout
+    const desktopFooter = page.locator('.dashboard-container .app-footer');
+    await expect(desktopFooter).toBeVisible();
+    const desktopFooterLink = desktopFooter.locator('a.footer-impressum-link');
+    await expect(desktopFooterLink).toBeVisible();
+    await expect(desktopFooterLink).toHaveText('Impressum');
+    await expect(desktopFooterLink).toHaveAttribute('href', 'https://www.tollhaus-stuttgart.de/impressum');
+    await expect(desktopFooterLink).toHaveAttribute('target', '_blank');
   });
 
   test('on small display layout (<= 768px): 3-dots overflow menu is visible and functional', async ({ page }) => {
@@ -86,13 +101,23 @@ test.describe('Test Case 11: Header Responsive Sign Out Overflow Menu & Branding
     await threeDotsBtn.click();
     await expect(dropdown).toBeVisible();
 
-    // Menu contains Sign out item and Simulate permissions item
+    // Menu contains Sign out item, Simulate permissions item, and Impressum link
     const simulateItem = dropdown.locator('[data-testid="overflow-simulate-button"]');
     await expect(simulateItem).toBeVisible();
+
+    const impressumMenuItem = dropdown.locator('[data-testid="overflow-impressum-link"]');
+    await expect(impressumMenuItem).toBeVisible();
+    await expect(impressumMenuItem).toHaveText(/Impressum/i);
+    await expect(impressumMenuItem).toHaveAttribute('href', 'https://www.tollhaus-stuttgart.de/impressum');
+    await expect(impressumMenuItem).toHaveAttribute('target', '_blank');
 
     const signOutMenuItem = dropdown.locator('[data-testid="overflow-signout-button"]');
     await expect(signOutMenuItem).toBeVisible();
     await expect(signOutMenuItem).toHaveText(/Abmelden|Sign out/i);
+
+    // On mobile layout, footer inside dashboard is hidden to save vertical space
+    const mobileFooter = page.locator('.dashboard-container .app-footer');
+    await expect(mobileFooter).toBeHidden();
 
     // Test closing via Escape key
     await page.keyboard.press('Escape');
@@ -171,5 +196,31 @@ test.describe('Test Case 11: Header Responsive Sign Out Overflow Menu & Branding
 
     const faviconLink = page.locator("link[rel~='icon']");
     await expect(faviconLink).toHaveAttribute('href', '/custom-favicon.ico');
+  });
+
+  test('Impressum link on landing page and oauth2-proxy sign-in page', async ({ page }) => {
+    // 1. Unauthenticated landing page should show Impressum link in footer
+    await page.goto('/');
+    await page.evaluate(() => {
+      localStorage.removeItem('token');
+    });
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+
+    const landingFooter = page.locator('.app-footer');
+    await expect(landingFooter).toBeVisible();
+    const landingImpressumLink = landingFooter.locator('a.footer-impressum-link');
+    await expect(landingImpressumLink).toBeVisible();
+    await expect(landingImpressumLink).toHaveText('Impressum');
+    await expect(landingImpressumLink).toHaveAttribute('href', 'https://www.tollhaus-stuttgart.de/impressum');
+    await expect(landingImpressumLink).toHaveAttribute('target', '_blank');
+
+    // 2. oauth2-proxy sign-in page should contain footer with Impressum link
+    await page.goto('/oauth2/sign_in');
+    const oauthFooter = page.locator('footer');
+    await expect(oauthFooter).toBeVisible();
+    const oauthImpressumLink = oauthFooter.locator('a[href="https://www.tollhaus-stuttgart.de/impressum"]');
+    await expect(oauthImpressumLink).toBeVisible();
+    await expect(oauthImpressumLink).toHaveText('Impressum');
   });
 });

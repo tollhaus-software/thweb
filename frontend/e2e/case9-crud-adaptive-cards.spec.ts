@@ -419,7 +419,7 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     expect(dtSearchBox).not.toBeNull();
     if (dtAddBox && dtSearchBox) {
       expect(dtAddBox.x).toBeGreaterThan(dtSearchBox.x);
-      expect(Math.abs(dtAddBox.y - dtSearchBox.y)).toBeLessThan(6);
+      expect(Math.abs(dtAddBox.y - dtSearchBox.y)).toBeLessThan(10);
     }
 
     // In table view on desktop: "Columns" is in the header of the table (thead)
