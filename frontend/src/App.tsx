@@ -1669,23 +1669,23 @@ const LandingPage: React.FC = () => {
 
   if (authError) {
     return (
-      <div style={{ textAlign: 'center', marginTop: '50px', padding: '20px' }}>
-        <h1 style={{ color: 'var(--text-h)' }}>Access Restricted</h1>
-        <p style={{ color: 'var(--danger-text)', fontSize: '1.1rem', margin: '20px 0', fontWeight: 500 }}>
-          {authError.email
-            ? `The user ${authError.email} does not have access to the application.`
-            : `Access Denied: ${authError.message}`}
-        </p>
-        <a
-          href="/oauth2/start"
-          className="primary-button"
-          style={{ padding: '10px 20px', fontSize: '1rem', cursor: 'pointer', fontWeight: 'bold', textDecoration: 'none', display: 'inline-block' }}
-        >
-          Sign in with a different account
-        </a>
-        <div style={{ marginTop: '30px' }}>
-          <ImpressumFooter />
+      <div className="landing-page-container">
+        <div className="landing-page-content">
+          <h1 style={{ color: 'var(--text-h)' }}>Access Restricted</h1>
+          <p style={{ color: 'var(--danger-text)', fontSize: '1.1rem', margin: '20px 0', fontWeight: 500 }}>
+            {authError.email
+              ? `The user ${authError.email} does not have access to the application.`
+              : `Access Denied: ${authError.message}`}
+          </p>
+          <a
+            href="/oauth2/start"
+            className="primary-button"
+            style={{ padding: '10px 20px', fontSize: '1rem', cursor: 'pointer', fontWeight: 'bold', textDecoration: 'none', display: 'inline-block' }}
+          >
+            Sign in with a different account
+          </a>
         </div>
+        <ImpressumFooter />
       </div>
     );
   }
@@ -1694,24 +1694,24 @@ const LandingPage: React.FC = () => {
   const appTitle = appConfig.title || t('title');
 
   return (
-    <div style={{ textAlign: 'center', marginTop: '50px' }}>
-      {appConfig.logoUrl ? (
-        <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'center' }}>
-          <img
-            src={appConfig.logoUrl}
-            alt={appTitle}
-            title={appTitle}
-            style={{ maxHeight: '80px', maxWidth: '300px', objectFit: 'contain' }}
-          />
-        </div>
-      ) : (
-        <h1>{appTitle}</h1>
-      )}
-      <p>Please log in to access the system.</p>
-      <LoginButton />
-      <div style={{ marginTop: '30px' }}>
-        <ImpressumFooter />
+    <div className="landing-page-container">
+      <div className="landing-page-content">
+        {appConfig.logoUrl ? (
+          <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'center' }}>
+            <img
+              src={appConfig.logoUrl}
+              alt={appTitle}
+              title={appTitle}
+              style={{ maxHeight: '80px', maxWidth: '300px', objectFit: 'contain' }}
+            />
+          </div>
+        ) : (
+          <h1>{appTitle}</h1>
+        )}
+        <p>Please log in to access the system.</p>
+        <LoginButton />
       </div>
+      <ImpressumFooter />
     </div>
   );
 };
@@ -6814,7 +6814,7 @@ function formatParentsSummary(parents: any[]): string {
           />
         </div>
       </header>
-      <main className={isTableTab ? 'main-table-view' : ''}>
+      <main className={isTableTab ? 'main-table-view' : 'main-scroll-view'}>
         {/* Navigation Tabs */}
         <div className="tabs-wrapper">
           {canScrollLeft && (
@@ -7546,27 +7546,31 @@ function formatParentsSummary(parents: any[]): string {
               );
             }}
           />
-        ) : activeTab === 'audit' && canReadAudit ? (
-          <AuditLogView
-            families={families.length > 0 ? families : (overviewFamilies as any)}
-            getAuthHeaders={getAuthHeaders}
-            refreshTrigger={auditRefreshTrigger}
-          />
-        ) : activeTab === 'admin' && canManageUsers ? (
-          <AdminView onOpenSimulator={() => setSimulatorModalOpen(true)} />
-        ) : activeTab === 'kiosk' && canProvisionKiosk ? (
-          <KioskProvisioning token={token} />
-        ) : activeTab === 'mealPlan' && canViewMealPlan ? (
-          <MealPlanTab />
-        ) : activeTab === 'mealAllergens' && canReadMealAllergens ? (
-          <MealAllergensTab />
-        ) : activeTab === 'dashboard' ? (
-          <KioskDashboard embedded={true} />
         ) : (
-          <ChildcareFeesCalculator
-            token={token}
-            families={families.length > 0 ? families : (overviewFamilies as any)}
-          />
+          <div className="tab-scroll-content">
+            {activeTab === 'audit' && canReadAudit ? (
+              <AuditLogView
+                families={families.length > 0 ? families : (overviewFamilies as any)}
+                getAuthHeaders={getAuthHeaders}
+                refreshTrigger={auditRefreshTrigger}
+              />
+            ) : activeTab === 'admin' && canManageUsers ? (
+              <AdminView onOpenSimulator={() => setSimulatorModalOpen(true)} />
+            ) : activeTab === 'kiosk' && canProvisionKiosk ? (
+              <KioskProvisioning token={token} />
+            ) : activeTab === 'mealPlan' && canViewMealPlan ? (
+              <MealPlanTab />
+            ) : activeTab === 'mealAllergens' && canReadMealAllergens ? (
+              <MealAllergensTab />
+            ) : activeTab === 'dashboard' ? (
+              <KioskDashboard embedded={true} />
+            ) : (
+              <ChildcareFeesCalculator
+                token={token}
+                families={families.length > 0 ? families : (overviewFamilies as any)}
+              />
+            )}
+          </div>
         )}
       </main>
 

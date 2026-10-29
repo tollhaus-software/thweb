@@ -223,4 +223,34 @@ test.describe('Test Case 11: Header Responsive Sign Out Overflow Menu & Branding
     await expect(oauthImpressumLink).toBeVisible();
     await expect(oauthImpressumLink).toHaveText('Impressum');
   });
+
+  test('Impressum link is consistently visible at the bottom of the screen across all pages (including mealAllergens and mealPlan)', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto('/');
+    await page.evaluate(() => {
+      localStorage.setItem('token', 'developer@example.com');
+    });
+
+    const testHashes = ['#familiesOverview', '#mealPlan', '#mealAllergens', '#childcareFees', '#members', '#audit', '#admin'];
+
+    for (const hash of testHashes) {
+      await page.goto('/' + hash);
+      await page.waitForLoadState('networkidle');
+
+      const footer = page.locator('.dashboard-container .app-footer');
+      await expect(footer).toBeVisible();
+
+      const footerLink = footer.locator('a.footer-impressum-link');
+      await expect(footerLink).toBeVisible();
+      await expect(footerLink).toHaveText('Impressum');
+      await expect(footerLink).toHaveAttribute('href', 'https://www.tollhaus-stuttgart.de/impressum');
+
+      // Verify the footer is positioned directly at the bottom of the viewport
+      const isInViewport = await footer.evaluate((el) => {
+        const rect = el.getBoundingClientRect();
+        return rect.top >= 0 && rect.bottom <= window.innerHeight;
+      });
+      expect(isInViewport).toBe(true);
+    }
+  });
 });
