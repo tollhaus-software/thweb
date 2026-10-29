@@ -12,6 +12,8 @@ export interface RowActionsMenuProps {
   entityName?: string;
   ariaLabel?: string;
   className?: string;
+  testId?: string;
+  deleteTestId?: string;
 }
 
 export const RowActionsMenu: React.FC<RowActionsMenuProps> = ({
@@ -22,6 +24,8 @@ export const RowActionsMenu: React.FC<RowActionsMenuProps> = ({
   entityName,
   ariaLabel,
   className = '',
+  testId,
+  deleteTestId,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -37,6 +41,7 @@ export const RowActionsMenu: React.FC<RowActionsMenuProps> = ({
         ref={buttonRef}
         type="button"
         className="easy-edit-button row-actions-menu-trigger"
+        data-testid={testId}
         onClick={(e) => {
           e.stopPropagation();
           setIsOpen((prev) => !prev);
@@ -93,6 +98,7 @@ export const RowActionsMenu: React.FC<RowActionsMenuProps> = ({
                 type="button"
                 role="menuitem"
                 className="row-action-menu-item row-action-delete"
+                data-testid={deleteTestId || 'row-action-delete'}
                 disabled={disabled}
                 title={disabled ? (disabledTooltip || t('permissionRequired')) : undefined}
                 onClick={(e) => {

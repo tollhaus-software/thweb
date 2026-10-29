@@ -48,7 +48,7 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
 
     // 3. Verify 14 allergens include all required keys and labels
     const allergenMap = new Map(MAIN_ALLERGENS.map((a) => [a.key, a.label]));
-    expect(allergenMap.get('gluten')).toContain('Glutenhaltiges Getreide');
+    expect(allergenMap.get('gluten')).toBe('Glutenhaltiges Getreide');
     expect(allergenMap.get('eier')).toBe('Eier');
     expect(allergenMap.get('laktose')).toBe('Milch/Laktose');
     expect(allergenMap.get('sellerie')).toBe('Sellerie');
@@ -57,10 +57,12 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     expect(allergenMap.get('krebstiere')).toBe('Krebstiere');
     expect(allergenMap.get('fisch')).toBe('Fisch');
     expect(allergenMap.get('sojabohnen')).toBe('Sojabohnen');
-    expect(allergenMap.get('schalenfruechte')).toContain('Schalenfrüchte');
+    expect(allergenMap.get('schalenfruechte')).toBe('Schalenfrüchte');
     expect(allergenMap.get('senf')).toBe('Senf');
     expect(allergenMap.get('sulfite')).toBe('Sulphite/Schwefeldioxid');
     expect(allergenMap.get('weichtiere')).toBe('Weichtiere');
+    expect(allergenMap.get('erdnuesse')).toBe('Erdnüsse');
+    expect(allergenMap.get('kiwi')).toBe('Kiwi');
 
     // 4. Last 3 entries by same cook sorted by similarity with today's meal plan strings
     const targetDay: MealAllergenDay = {
@@ -137,7 +139,7 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     expect(mostRecent?.date).toBe('2026-10-08');
   });
 
-  test('desktop (5x5 month view) and mobile (5-day week view) layouts, searchable cook dropdown, pencil edit/delete, (mehr)/(weniger) allergens, and copy allergens', async ({
+  test('desktop (5x5 month view) and mobile (5-day week view) layouts, searchable cook dropdown, component popover editor, and copy allergens', async ({
     request,
     page,
   }) => {
@@ -181,6 +183,8 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     const pastMealDate = formatDateKey(prevMonday);
     const past2Date = formatDateKey(prevTuesday);
     const past3Date = formatDateKey(prevWednesday);
+    const prevThursday = new Date(currentMonday.getFullYear(), currentMonday.getMonth(), currentMonday.getDate() - 4);
+    const unseededDate = formatDateKey(prevThursday);
     const futureMealDate = formatDateKey(nextFriday);
 
     // 2. Seed meal_plan_from_sheets via test endpoint
@@ -299,75 +303,135 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     // Verify documentation field is NOT present in the editor
     await expect(page.getByTestId('documentation-pdf-input')).toHaveCount(0);
 
-    // Verify header shows meal name from meal plan
-    await expect(page.getByTestId('allergens-editor-header-title')).toContainText(
-      'Spaghetti Bolognese, Gurkensalat'
-    );
+    // Verify header shows only the day (not the meal name)
+    const headerTitle = page.getByTestId('allergens-editor-header-title');
+    await expect(headerTitle).not.toContainText('Spaghetti Bolognese');
+    await expect(headerTitle).not.toContainText('Gurkensalat');
 
-    // 7. Verify meal components when NOT editing:
-    // Regular text + pencil icon button; NO delete button and NO input box
-    await expect(page.getByTestId('meal-component-name-text-0')).toHaveText('Spaghetti Bolognese');
-    await expect(page.getByTestId('meal-component-name-text-1')).toHaveText('Gurkensalat');
-    await expect(page.getByTestId('edit-meal-component-name-btn-0')).toBeVisible();
-    await expect(page.getByTestId('meal-component-name-input-0')).toHaveCount(0);
-    await expect(page.getByTestId('remove-meal-component-btn-0')).toHaveCount(0);
+    // Verify cook label is "Koch/Köchin" and cook selector is visible
+    const cookField = page.locator('.meal-allergens-field-group');
+    await expect(cookField.locator('.meal-allergens-field-label')).toHaveText('Koch/Köchin');
+    await expect(page.getByTestId('cook-combobox')).toBeVisible();
 
-    // Clicking pencil icon enters edit mode and shows name input + delete button
-    await page.getByTestId('edit-meal-component-name-btn-0').click();
-    await expect(page.getByTestId('meal-component-name-input-0')).toBeVisible();
-    await expect(page.getByTestId('remove-meal-component-btn-0')).toBeVisible();
-    await page.getByTestId('meal-component-name-input-0').press('Enter');
-    await expect(page.getByTestId('meal-component-name-text-0')).toHaveText('Spaghetti Bolognese');
-    await expect(page.getByTestId('remove-meal-component-btn-0')).toHaveCount(0);
+    // Verify read-only meal plan reference box is visible at the top and not editable
+    await expect(page.getByTestId('meal-plan-reference-box')).toBeVisible();
+    await expect(page.getByTestId('meal-plan-reference-box')).toContainText('Laut Speiseplan:');
+    await expect(page.getByTestId('meal-plan-ref-cook')).toHaveText('Anna Köchin');
+    await expect(page.getByTestId('plan-comp-chip-0')).toHaveText('Spaghetti Bolognese');
+    await expect(page.getByTestId('plan-comp-chip-1')).toHaveText('Gurkensalat');
 
-    // 8. Verify expandable predefined allergens section via "(mehr)" / "(weniger)" chip
-    const chip0 = page.getByTestId('toggle-allergens-chip-0');
-    await expect(chip0).toHaveText('(mehr)');
-    await expect(page.getByTestId('allergen-picker-panel-0')).toHaveCount(0);
+    // 7. Verify meal plan components are NOT transferred to allergens by default
+    await expect(page.locator('[data-testid^="meal-component-card-"]')).toHaveCount(0);
 
-    // Expand via "(mehr)" -> chip changes to "(weniger)" and predefined allergens appear
-    await chip0.click();
-    await expect(chip0).toHaveText('(weniger)');
-    await expect(page.getByTestId('allergen-picker-panel-0')).toBeVisible();
+    // Verify "Finalisieren" button exists under meal components and is initially disabled (no components yet)
+    await expect(page.getByTestId('finalize-allergens-btn')).toBeVisible();
+    await expect(page.getByTestId('finalize-allergens-btn')).toHaveText('Finalisieren');
+    await expect(page.getByTestId('finalize-allergens-btn')).toBeDisabled();
 
-    // Add a main allergen ("gluten") and a custom allergen ("Knoblauch") to component 0
-    await page.getByTestId('allergen-option-0-gluten').click();
-    await expect(page.getByTestId('allergen-pill-0-gluten')).toBeVisible();
-
-    await page.getByTestId('custom-allergen-input-0').fill('Knoblauch');
-    await page.getByTestId('custom-allergen-add-btn-0').click();
-    await expect(page.getByTestId('allergen-pill-0-Knoblauch')).toBeVisible();
-
-    // Collapse via "(weniger)" -> chip changes back to "(mehr)"
-    await chip0.click();
-    await expect(chip0).toHaveText('(mehr)');
-    await expect(page.getByTestId('allergen-picker-panel-0')).toHaveCount(0);
-
-    // 9. Verify "+ Komponente" button:
-    // Clicking "+ Komponente" adds a component card with name input open, delete button visible,
-    // and predefined allergens section AUTO-EXPANDED with "(weniger)" chip!
+    // 8. Verify "+ Komponente" button opens editing popover:
     const addCompBtn = page.getByTestId('add-meal-component-btn');
-    await expect(addCompBtn).toContainText('+ Komponente');
+    await expect(addCompBtn).toContainText('Komponente');
     await addCompBtn.click();
 
-    await expect(page.getByTestId('meal-component-name-input-2')).toBeVisible();
-    await expect(page.getByTestId('remove-meal-component-btn-2')).toBeVisible();
-    await expect(page.getByTestId('allergen-picker-panel-2')).toBeVisible();
-    await expect(page.getByTestId('toggle-allergens-chip-2')).toHaveText('(weniger)');
+    // Component popover opens with name input
+    await expect(page.getByTestId('meal-component-name-input-0')).toBeVisible();
 
-    // Type component name and press Enter -> exits name edit mode (shows regular text + pencil, hides delete button)
+    // Verify popover covers 80% of screen height on desktop (800 * 0.8 = 640)
+    const popoverEl = page.locator('.meal-component-popover');
+    await expect(popoverEl).toBeVisible();
+    const popoverBox = await popoverEl.boundingBox();
+    expect(popoverBox).not.toBeNull();
+    if (popoverBox) {
+      expect(Math.round(popoverBox.height)).toBe(640);
+    }
+
+    // Verify discarding empty component:
+    // If the user clicks "+ Komponente" and exits without typing a name, no component is created
+    await page.getByTestId('close-component-popover-btn').click();
+    await expect(page.locator('[data-testid^="meal-component-card-"]')).toHaveCount(0);
+
+    // Click "+ Komponente" again
+    await addCompBtn.click();
+    await expect(page.getByTestId('meal-component-name-input-0')).toBeVisible();
+
+    // Verify allergens section is locked/disabled and shows hint until name is given
+    await expect(page.getByTestId('name-required-hint')).toBeVisible();
+    await expect(page.getByTestId('allergen-option-0-gluten')).toBeDisabled();
+    await expect(page.getByTestId('custom-allergen-input-0')).toBeDisabled();
+    await expect(page.getByTestId('custom-allergen-add-btn-0')).toBeDisabled();
+
+    // Popover footer should NOT have a delete button, only "Fertig"
+    await expect(page.locator('[data-testid^="remove-meal-component-btn-popover"]')).toHaveCount(0);
+    await expect(page.getByTestId('popover-done-btn')).toBeVisible();
+
+    // Verify taking component from meal plan fills into the name input, unlocks allergens, and closing saves
+    await page.getByTestId('take-plan-component-btn-0-0').click();
+    await expect(page.getByTestId('meal-component-name-input-0')).toHaveValue('Spaghetti Bolognese');
+    await expect(page.getByTestId('name-required-hint')).toHaveCount(0);
+    await expect(page.getByTestId('allergen-option-0-gluten')).toBeEnabled();
+    await page.getByTestId('meal-component-name-input-0').press('Enter');
+    await expect(page.getByTestId('meal-component-name-text-0')).toHaveText('Spaghetti Bolognese');
+
+    // Add second component (Gurkensalat) from meal plan suggestion
+    await addCompBtn.click();
+    await page.getByTestId('take-plan-component-btn-1-1').click();
+    await expect(page.getByTestId('meal-component-name-input-1')).toHaveValue('Gurkensalat');
+    await page.getByTestId('meal-component-name-input-1').press('Enter');
+    await expect(page.getByTestId('meal-component-name-text-1')).toHaveText('Gurkensalat');
+
+    // Clicking pencil icon opens component popover
+    await page.getByTestId('edit-meal-component-name-btn-0').click();
+    await expect(page.getByTestId('meal-component-name-input-0')).toBeVisible();
+
+    // 9. Verify allergen list presentation:
+    // - main name in bold
+    // - subtypes in a line under the main allergen name
+    // - icon in front of main allergen name
+    const glutenOption = page.getByTestId('allergen-option-0-gluten');
+    await expect(glutenOption.locator('.meal-allergen-main-name')).toHaveText('Glutenhaltiges Getreide');
+    await expect(glutenOption.locator('.meal-allergen-subtypes')).toContainText('Weizen');
+    await expect(glutenOption.locator('.meal-allergen-icon-wrap')).toBeVisible();
+
+    // Verify Kiwi allergen option exists with icon
+    const kiwiOption = page.getByTestId('allergen-option-0-kiwi');
+    await expect(kiwiOption.locator('.meal-allergen-main-name')).toHaveText('Kiwi');
+    await expect(kiwiOption.locator('.meal-allergen-icon-wrap')).toBeVisible();
+
+    // Add a main allergen ("gluten") and a custom allergen ("Knoblauch") to component 0
+    await glutenOption.click();
+
+    await page.getByTestId('custom-allergen-input-0').fill('Knoblauch');
+    await expect(page.getByTestId('custom-allergen-add-btn-0')).toHaveText('+');
+    await page.getByTestId('custom-allergen-add-btn-0').click();
+
+    // Close popover via Fertig button
+    await page.getByTestId('popover-done-btn').click();
+    await expect(page.getByTestId('allergen-picker-panel-0')).toHaveCount(0);
+
+    // Verify allergen pills visible on the component card (only main label for gluten/schalenfruechte)
+    await expect(page.getByTestId('allergen-pill-0-gluten')).toHaveText('Glutenhaltiges Getreide');
+    await expect(page.getByTestId('allergen-pill-0-Knoblauch')).toHaveText('Knoblauch');
+
+    // 10. Add third component with typed name, then test unnamed component display and delete it
+    await addCompBtn.click();
+    await expect(page.getByTestId('meal-component-name-input-2')).toBeVisible();
     await page.getByTestId('meal-component-name-input-2').fill('Vanillepudding');
     await page.getByTestId('meal-component-name-input-2').press('Enter');
     await expect(page.getByTestId('meal-component-name-text-2')).toHaveText('Vanillepudding');
-    await expect(page.getByTestId('remove-meal-component-btn-2')).toHaveCount(0);
 
-    // Click pencil on component 2 and delete it
+    // Click pencil on component 2, clear name, and press Enter -> displays "Unbenannte Komponente"
     await page.getByTestId('edit-meal-component-name-btn-2').click();
-    await expect(page.getByTestId('remove-meal-component-btn-2')).toBeVisible();
+    await page.getByTestId('meal-component-name-input-2').fill('');
+    await page.getByTestId('meal-component-name-input-2').press('Enter');
+    await expect(page.getByTestId('meal-component-name-text-2')).toHaveText('Unbenannte Komponente');
+
+    // Delete component 2 using the RowActionsMenu (... menu) on the card
+    await page.getByTestId('component-actions-btn-2').click();
     await page.getByTestId('remove-meal-component-btn-2').click();
     await expect(page.getByTestId('meal-component-card-2')).toHaveCount(0);
+    await expect(page.getByTestId('meal-component-card-2')).toHaveCount(0);
 
-    // 10. Test Searchable Cook Combobox:
+    // 11. Test Searchable Cook Combobox:
     // Typing filters the list of options; selecting an option selects it; typing unlisted text implicitly persists as custom cook
     const cookInput = page.getByTestId('cook-combobox-input');
     await cookInput.click();
@@ -382,8 +446,10 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     await cookInput.press('Enter');
     await expect(cookInput).toHaveValue('Anna Köchin');
 
-    // 11. Test "Copy allergens from" ("Allergene kopieren von...")
-    await page.getByTestId('copy-allergens-from-btn').click();
+    // 11. Test "Copy allergens from" (renamed to "Kopieren von...")
+    const copyBtn = page.getByTestId('copy-allergens-from-btn');
+    await expect(copyBtn).toHaveText('Kopieren von...');
+    await copyBtn.click();
     const copyModal = page.getByTestId('copy-allergens-modal');
     await expect(copyModal).toBeVisible();
 
@@ -416,29 +482,67 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     await expect(page.getByTestId('allergen-pill-0-Knoblauch')).toBeVisible();
     await expect(page.getByTestId('allergen-pill-1-senf')).toBeVisible();
 
-    // 12. Finalize via "Allergendokumentation fertig" button
-    await page.getByTestId('finalize-allergens-btn').click();
-    await expect(page.getByTestId('allergens-editor-status')).toContainText('Abgeschlossen');
-    await expect(page.getByTestId('finalized-warning-banner')).toBeVisible();
+    // 12. Test finalization via the "Finalisieren" button under meal components
+    const finalizeBtn = page.getByTestId('finalize-allergens-btn');
+    await expect(finalizeBtn).toBeVisible();
+    await expect(finalizeBtn).toHaveText('Finalisieren');
+    await expect(finalizeBtn).toBeEnabled();
 
-    // 13. Go back to overview and verify the box is greenish (finalized)
+    // Clicking Finalisieren prompts confirmation dialog ("Allergene finalisieren?")
+    let confirmPrompt = '';
+    page.once('dialog', async (dialog) => {
+      confirmPrompt = dialog.message();
+      await dialog.accept();
+    });
+    await finalizeBtn.click();
+    expect(confirmPrompt).toBe('Allergene finalisieren?');
+
+    // Status moves forward to Abgeschlossen
+    await expect(page.getByTestId('allergens-editor-status')).toHaveText('Status: Abgeschlossen');
+    await expect(finalizeBtn).toBeDisabled();
+
+    // Go back to overview and verify the box is greenish (finalized)
     await page.getByTestId('allergens-editor-back-btn').click();
     await expect(page.getByTestId(`meal-allergens-day-box-${futureMealDate}`)).toHaveAttribute(
       'data-bg-variant',
       'finalized'
     );
 
-    // 14. Re-open finalized day, edit allergens -> verify warning is shown and editing resets status to not_finalized
+    // 13. Re-open finalized day -> verify status shows "Abgeschlossen" and NO warning banner is shown
     await page.getByTestId(`meal-allergens-day-box-${futureMealDate}`).click();
-    await expect(page.getByTestId('finalized-warning-banner')).toBeVisible();
-    await page.getByTestId('remove-allergen-btn-0-Knoblauch').click();
-    await expect(page.getByTestId('allergens-editor-status')).toContainText('Entwurf');
+    await expect(page.getByTestId('allergens-editor-status')).toContainText('Abgeschlossen');
     await expect(page.getByTestId('finalized-warning-banner')).toHaveCount(0);
+
+    // Verify exiting edit popover without making changes does NOT reset status to draft
+    await page.getByTestId('edit-meal-component-name-btn-0').click();
+    await expect(page.getByTestId('meal-component-name-input-0')).toBeVisible();
+    await page.getByTestId('popover-done-btn').click();
+    await expect(page.getByTestId('allergens-editor-status')).toHaveText('Status: Abgeschlossen');
+    await expect(finalizeBtn).toBeDisabled();
+
+    // 14. Edit allergens -> verify editing resets status to "Entwurf", and Finalisieren is re-enabled
+    await page.getByTestId('remove-allergen-btn-0-Knoblauch').click();
+    await expect(page.getByTestId('allergens-editor-status')).toHaveText('Status: Entwurf');
+    await expect(page.getByTestId('finalized-warning-banner')).toHaveCount(0);
+    await expect(page.getByTestId('finalize-allergens-btn')).toBeEnabled();
 
     await page.getByTestId('allergens-editor-back-btn').click();
     await expect(page.getByTestId(`meal-allergens-day-box-${futureMealDate}`)).toHaveAttribute(
       'data-bg-variant',
       'not_finalized_upcoming'
     );
+
+    // 15. Open unseeded day without cook or components -> verify reference box displays "Nichts eingetragen" once, and finalize button is disabled
+    let unseededBox = page.getByTestId(`meal-allergens-day-box-${unseededDate}`);
+    if ((await unseededBox.count()) === 0) {
+      await page.getByTestId('meal-allergens-prev-month').click();
+      unseededBox = page.getByTestId(`meal-allergens-day-box-${unseededDate}`);
+    }
+    await unseededBox.click();
+    await expect(page.getByTestId('meal-plan-reference-box')).toBeVisible();
+    await expect(page.getByTestId('meal-plan-reference-box')).toContainText('Laut Speiseplan:');
+    await expect(page.getByTestId('meal-plan-empty-text')).toHaveText('Nichts eingetragen');
+    await expect(page.getByTestId('meal-plan-ref-cook')).toHaveCount(0);
+    await expect(page.getByTestId('finalize-allergens-btn')).toBeDisabled();
   });
 });

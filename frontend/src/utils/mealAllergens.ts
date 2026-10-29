@@ -41,13 +41,15 @@ export interface MainAllergenDefinition {
   key: string;
   label: string;
   shortLabel: string;
+  subtypes?: string;
 }
 
 export const MAIN_ALLERGENS: MainAllergenDefinition[] = [
   {
     key: 'gluten',
-    label: 'Glutenhaltiges Getreide (Weizen, Dinkel-Weizen, Khorasan-Weizen, Roggen, Gerste, Hafer)',
+    label: 'Glutenhaltiges Getreide',
     shortLabel: 'Glutenhaltiges Getreide',
+    subtypes: 'Weizen, Dinkel-Weizen, Khorasan-Weizen, Roggen, Gerste, Hafer',
   },
   {
     key: 'eier',
@@ -91,9 +93,10 @@ export const MAIN_ALLERGENS: MainAllergenDefinition[] = [
   },
   {
     key: 'schalenfruechte',
-    label:
-      'Schalenfrüchte (Mandeln, Haselnüsse, Walnüsse, Cashew-/Kaschunüsse, Pecannüsse, Paranüsse, Macadamianüsse, Pistazien)',
+    label: 'Schalenfrüchte',
     shortLabel: 'Schalenfrüchte',
+    subtypes:
+      'Mandeln, Haselnüsse, Walnüsse, Cashew-/Kaschunüsse, Pecannüsse, Paranüsse, Macadamianüsse, Pistazien',
   },
   {
     key: 'senf',
@@ -115,6 +118,11 @@ export const MAIN_ALLERGENS: MainAllergenDefinition[] = [
     label: 'Erdnüsse',
     shortLabel: 'Erdnüsse',
   },
+  {
+    key: 'kiwi',
+    label: 'Kiwi',
+    shortLabel: 'Kiwi',
+  },
 ];
 
 const MAIN_ALLERGEN_MAP = new Map<string, MainAllergenDefinition>(
@@ -122,13 +130,52 @@ const MAIN_ALLERGEN_MAP = new Map<string, MainAllergenDefinition>(
 );
 
 export function getAllergenDisplayLabel(key: string): string {
-  const found = MAIN_ALLERGEN_MAP.get(key);
+  const norm = key.toLowerCase().trim();
+  if (norm === 'gluten' || norm.startsWith('glutenhaltiges getreide')) {
+    return 'Glutenhaltiges Getreide';
+  }
+  if (
+    norm === 'schalenfruechte' ||
+    norm === 'schalenfrüchte' ||
+    norm.startsWith('schalenfrüchte') ||
+    norm.startsWith('schalenfruechte')
+  ) {
+    return 'Schalenfrüchte';
+  }
+  const found = MAIN_ALLERGEN_MAP.get(norm);
   return found ? found.label : key;
 }
 
 export function getAllergenShortLabel(key: string): string {
-  const found = MAIN_ALLERGEN_MAP.get(key);
-  return found ? found.shortLabel : key;
+  return getAllergenDisplayLabel(key);
+}
+
+export const ALLERGEN_COLORS: Record<string, string> = {
+  gluten: '#d97706', // Golden amber (wheat)
+  krebstiere: '#ea580c', // Coral red (crustaceans/shrimp)
+  eier: '#eab308', // Egg yolk golden yellow
+  fisch: '#0284c7', // Ocean blue (fish)
+  erdnuesse: '#c2410c', // Peanut warm roasted brown
+  sojabohnen: '#65a30d', // Edamame soy green
+  laktose: '#0ea5e9', // Milk sky blue
+  schalenfruechte: '#92400e', // Walnut / tree nut brown
+  sellerie: '#16a34a', // Celery crisp green
+  senf: '#ca8a04', // Mustard seed yellow
+  sesamsamen: '#b45309', // Toasted sesame amber
+  sulfite: '#e11d48', // Wine ruby red
+  lupine: '#9333ea', // Lupine flower purple
+  weichtiere: '#4f46e5', // Mollusc deep sea indigo
+  kiwi: '#059669', // Fresh kiwi emerald green
+};
+
+export function getAllergenColor(allergenKey: string): string {
+  const norm = allergenKey.toLowerCase().trim();
+  return ALLERGEN_COLORS[norm] || '#64748b';
+}
+
+export function getAllergenBgColor(allergenKey: string): string {
+  const color = getAllergenColor(allergenKey);
+  return `${color}18`;
 }
 
 /**
