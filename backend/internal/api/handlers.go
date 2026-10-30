@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -29,7 +30,21 @@ type Server struct {
 	Hub                  *Hub
 	KMSProvider          crypto.KMSProvider
 	AllergiesKMSProvider crypto.KMSProvider
+	AllergiesCipher      *crypto.CachedCipherContext
+	allergiesCipherMu    sync.Mutex
 	KioskGenerator       *kioskcert.Generator
+}
+
+func (s *Server) getAllergiesCipher() *crypto.CachedCipherContext {
+	if s == nil || s.AllergiesKMSProvider == nil {
+		return nil
+	}
+	s.allergiesCipherMu.Lock()
+	defer s.allergiesCipherMu.Unlock()
+	if s.AllergiesCipher == nil {
+		s.AllergiesCipher = crypto.NewCachedCipherContext(s.AllergiesKMSProvider, s.Store, crypto.PurposeAllergies, crypto.DefaultAllergiesKeyTTL)
+	}
+	return s.AllergiesCipher
 }
 
 func jsonResponse(w http.ResponseWriter, data interface{}) {
@@ -671,27 +686,27 @@ func (s *Server) HandleListFamilies(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if s.AllergiesKMSProvider != nil && user != nil {
-		hasAllergiesChildrenRead := user.HasPermission("allergies.children.read")
-		allergiesCipher := crypto.NewRequestCipherContext(s.AllergiesKMSProvider, s.Store, crypto.PurposeAllergies, "", "")
-		defer allergiesCipher.Close()
-
-		for fIdx := range families {
-			canViewAllergies := hasAllergiesChildrenRead || user.IsSelfFamily(families[fIdx].ID)
-			if !canViewAllergies {
-				continue
-			}
-			for cIdx := range families[fIdx].Children {
-				child := &families[fIdx].Children[cIdx]
-				if len(child.AllergiesProtected) > 0 {
-					if plainJSON, err := allergiesCipher.Decrypt(r.Context(), child.AllergiesProtected); err == nil && len(plainJSON) > 0 {
-						if decoded, err := models.DecodeAllergiesPayload(plainJSON); err == nil {
-							child.Allergies = decoded
-						} else {
-							log.Printf("[WARN] Failed to decode decrypted allergies for child %s: %v\n", child.ID, err)
+	if user != nil {
+		allergiesCipher := s.getAllergiesCipher()
+		if allergiesCipher != nil {
+			hasAllergiesChildrenRead := user.HasPermission("allergies.children.read")
+			for fIdx := range families {
+				canViewAllergies := hasAllergiesChildrenRead || user.IsSelfFamily(families[fIdx].ID)
+				if !canViewAllergies {
+					continue
+				}
+				for cIdx := range families[fIdx].Children {
+					child := &families[fIdx].Children[cIdx]
+					if len(child.AllergiesProtected) > 0 {
+						if plainJSON, err := allergiesCipher.Decrypt(r.Context(), child.AllergiesProtected); err == nil && len(plainJSON) > 0 {
+							if decoded, err := models.DecodeAllergiesPayload(plainJSON); err == nil {
+								child.Allergies = decoded
+							} else {
+								log.Printf("[WARN] Failed to decode decrypted allergies for child %s: %v\n", child.ID, err)
+							}
+						} else if err != nil {
+							log.Printf("[WARN] Failed to decrypt allergies for child %s: %v\n", child.ID, err)
 						}
-					} else if err != nil {
-						log.Printf("[WARN] Failed to decrypt allergies for child %s: %v\n", child.ID, err)
 					}
 				}
 			}
@@ -1155,12 +1170,12 @@ func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var existingItems []models.AllergyItem
-		if existingChild != nil && len(existingChild.AllergiesProtected) > 0 && s.AllergiesKMSProvider != nil {
-			allergiesCipher := crypto.NewRequestCipherContext(s.AllergiesKMSProvider, s.Store, crypto.PurposeAllergies, "", "")
-			if plainJSON, err := allergiesCipher.Decrypt(r.Context(), existingChild.AllergiesProtected); err == nil && len(plainJSON) > 0 {
-				existingItems, _ = models.DecodeAllergiesPayloadItems(plainJSON)
+		if existingChild != nil && len(existingChild.AllergiesProtected) > 0 {
+			if allergiesCipher := s.getAllergiesCipher(); allergiesCipher != nil {
+				if plainJSON, err := allergiesCipher.Decrypt(r.Context(), existingChild.AllergiesProtected); err == nil && len(plainJSON) > 0 {
+					existingItems, _ = models.DecodeAllergiesPayloadItems(plainJSON)
+				}
 			}
-			allergiesCipher.Close()
 		}
 
 		allergiesChanged := !models.AllergyItemsEqual(sanitizedItems, existingItems)
@@ -1176,7 +1191,8 @@ func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 				clearAllergies = true
 				allergiesUpdated = true
 			} else {
-				if s.AllergiesKMSProvider == nil {
+				allergiesCipher := s.getAllergiesCipher()
+				if allergiesCipher == nil {
 					httpErrorLog(w, r, "Allergies KMS provider is not configured", http.StatusServiceUnavailable, nil)
 					return
 				}
@@ -1185,9 +1201,7 @@ func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 					httpErrorLog(w, r, "Failed to marshal allergies payload JSON", http.StatusBadRequest, err)
 					return
 				}
-				allergiesCipher := crypto.NewRequestCipherContext(s.AllergiesKMSProvider, s.Store, crypto.PurposeAllergies, "", "")
 				blob, err := allergiesCipher.Encrypt(r.Context(), rawJSON)
-				allergiesCipher.Close()
 				if err != nil {
 					httpErrorLog(w, r, "Failed to encrypt allergies", http.StatusInternalServerError, err)
 					return
@@ -1819,10 +1833,9 @@ func (s *Server) HandleListEmployees(w http.ResponseWriter, r *http.Request) {
 	user := auth.GetUser(r.Context())
 	canViewAllergies := user != nil && user.HasPermission("allergies.employees.read")
 
-	var allergiesCipher *crypto.RequestCipherContext
-	if canViewAllergies && s.AllergiesKMSProvider != nil {
-		allergiesCipher = crypto.NewRequestCipherContext(s.AllergiesKMSProvider, s.Store, crypto.PurposeAllergies, "", "")
-		defer allergiesCipher.Close()
+	var allergiesCipher *crypto.CachedCipherContext
+	if canViewAllergies {
+		allergiesCipher = s.getAllergiesCipher()
 	}
 
 	for i := range employees {
@@ -1859,7 +1872,8 @@ func (s *Server) HandleCreateEmployee(w http.ResponseWriter, r *http.Request) {
 				httpErrorLog(w, r, "Forbidden: allergies.employees.write permission required", http.StatusForbidden, nil)
 				return
 			}
-			if s.AllergiesKMSProvider == nil {
+			allergiesCipher := s.getAllergiesCipher()
+			if allergiesCipher == nil {
 				httpErrorLog(w, r, "Allergies KMS provider is not configured", http.StatusServiceUnavailable, nil)
 				return
 			}
@@ -1868,9 +1882,7 @@ func (s *Server) HandleCreateEmployee(w http.ResponseWriter, r *http.Request) {
 				httpErrorLog(w, r, "Failed to marshal allergies payload JSON", http.StatusBadRequest, err)
 				return
 			}
-			allergiesCipher := crypto.NewRequestCipherContext(s.AllergiesKMSProvider, s.Store, crypto.PurposeAllergies, "", "")
 			blob, err := allergiesCipher.Encrypt(r.Context(), rawJSON)
-			allergiesCipher.Close()
 			if err != nil {
 				httpErrorLog(w, r, "Failed to encrypt employee allergies", http.StatusInternalServerError, err)
 				return
@@ -1950,12 +1962,12 @@ func (s *Server) HandleUpdateEmployee(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var existingItems []models.AllergyItem
-	if len(existingEmp.AllergiesProtected) > 0 && s.AllergiesKMSProvider != nil {
-		allergiesCipher := crypto.NewRequestCipherContext(s.AllergiesKMSProvider, s.Store, crypto.PurposeAllergies, "", "")
-		if plainJSON, err := allergiesCipher.Decrypt(r.Context(), existingEmp.AllergiesProtected); err == nil && len(plainJSON) > 0 {
-			existingItems, _ = models.DecodeAllergiesPayloadItems(plainJSON)
+	if len(existingEmp.AllergiesProtected) > 0 {
+		if allergiesCipher := s.getAllergiesCipher(); allergiesCipher != nil {
+			if plainJSON, err := allergiesCipher.Decrypt(r.Context(), existingEmp.AllergiesProtected); err == nil && len(plainJSON) > 0 {
+				existingItems, _ = models.DecodeAllergiesPayloadItems(plainJSON)
+			}
 		}
-		allergiesCipher.Close()
 	}
 
 	finalAllergies := make([]string, 0, len(existingItems))
@@ -1994,7 +2006,8 @@ func (s *Server) HandleUpdateEmployee(w http.ResponseWriter, r *http.Request) {
 				emp.ClearAllergies = true
 				emp.AllergiesUpdated = true
 			} else {
-				if s.AllergiesKMSProvider == nil {
+				allergiesCipher := s.getAllergiesCipher()
+				if allergiesCipher == nil {
 					httpErrorLog(w, r, "Allergies KMS provider is not configured", http.StatusServiceUnavailable, nil)
 					return
 				}
@@ -2003,9 +2016,7 @@ func (s *Server) HandleUpdateEmployee(w http.ResponseWriter, r *http.Request) {
 					httpErrorLog(w, r, "Failed to marshal allergies payload JSON", http.StatusBadRequest, err)
 					return
 				}
-				allergiesCipher := crypto.NewRequestCipherContext(s.AllergiesKMSProvider, s.Store, crypto.PurposeAllergies, "", "")
 				blob, err := allergiesCipher.Encrypt(r.Context(), rawJSON)
-				allergiesCipher.Close()
 				if err != nil {
 					httpErrorLog(w, r, "Failed to encrypt employee allergies", http.StatusInternalServerError, err)
 					return
@@ -2127,11 +2138,7 @@ func (s *Server) HandleGetAllergiesSummary(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	var allergiesCipher *crypto.RequestCipherContext
-	if s.AllergiesKMSProvider != nil {
-		allergiesCipher = crypto.NewRequestCipherContext(s.AllergiesKMSProvider, s.Store, crypto.PurposeAllergies, "", "")
-		defer allergiesCipher.Close()
-	}
+	allergiesCipher := s.getAllergiesCipher()
 
 	groupLists := map[int][][]string{
 		1: {},

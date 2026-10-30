@@ -16,12 +16,17 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 	if len(allergiesKMSProvider) > 0 {
 		allergiesKMS = allergiesKMSProvider[0]
 	}
+	var allergiesCipher *crypto.CachedCipherContext
+	if allergiesKMS != nil && appStore != nil {
+		allergiesCipher = crypto.NewCachedCipherContext(allergiesKMS, appStore, crypto.PurposeAllergies, crypto.DefaultAllergiesKeyTTL)
+	}
 	server := &Server{
 		Store:                appStore,
 		Authenticator:        authenticator,
 		Hub:                  hub,
 		KMSProvider:          kmsProvider,
 		AllergiesKMSProvider: allergiesKMS,
+		AllergiesCipher:      allergiesCipher,
 		KioskGenerator:       kioskcert.NewGenerator(""),
 	}
 

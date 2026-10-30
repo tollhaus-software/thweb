@@ -2046,6 +2046,139 @@ func TestAllergies_ChildrenEmployeesSummaryAndAudit(t *testing.T) {
 	}
 }
 
+func TestAllergies_CachedCipherContextInServer(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := store.NewStore(pool)
+	_, _ = pool.Exec(ctx, "DELETE FROM data_encryption_keys WHERE purpose = $1", crypto.PurposeAllergies)
+	allergiesKMS := crypto.NewMockKMSProvider()
+	hub := NewHub()
+	server := &Server{
+		Store:                appStore,
+		Hub:                  hub,
+		AllergiesKMSProvider: allergiesKMS,
+	}
+
+	testUserID := uuid.New()
+	userEmail := "cache-tester@example.com"
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING", testUserID, userEmail)
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", testUserID)
+	}()
+
+	fam, err := appStore.CreateFamilyWithParents(ctx, testUserID, []models.Parent{
+		{FirstName: "CacheTester", LastName: "Family"},
+	})
+	if err != nil {
+		t.Fatalf("failed to create family: %v", err)
+	}
+	defer func() {
+		_ = appStore.DeleteFamily(ctx, testUserID, fam.ID)
+	}()
+
+	childID := uuid.New()
+	if err := appStore.UpdateChild(ctx, testUserID, childID, models.Child{
+		ID:        childID,
+		FamilyID:  fam.ID,
+		FirstName: "Leo",
+		LastName:  "Cached",
+		BirthDate: time.Date(2022, 5, 20, 0, 0, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatalf("failed to create child: %v", err)
+	}
+
+	adminUser := &models.UserWithPermissions{
+		ID:    testUserID,
+		Email: userEmail,
+		EffectivePermissions: []string{
+			"children.all.write",
+			"allergies.children.write",
+			"allergies.children.read",
+			"families.all.read",
+		},
+	}
+
+	// 1. Initial write creates and caches DEK
+	putBody := `{"first_name":"Leo","last_name":"Cached","allergies":[{"name":"Erdnüsse","category":"lebensmittel"}]}`
+	req1 := httptest.NewRequest(http.MethodPut, "/api/children/"+childID.String(), strings.NewReader(putBody))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", childID.String())
+	req1 = req1.WithContext(context.WithValue(context.WithValue(req1.Context(), chi.RouteCtxKey, rctx), auth.UserContextKey, adminUser))
+	w1 := httptest.NewRecorder()
+	server.HandleUpdateChild(w1, req1)
+	if w1.Code != http.StatusOK {
+		t.Fatalf("HandleUpdateChild failed with HTTP %d: %s", w1.Code, w1.Body.String())
+	}
+
+	decryptCallsAfterInitialWrite := allergiesKMS.DecryptCalls()
+
+	// 2. Perform 10 GET requests to list families across separate HTTP requests
+	for i := 0; i < 10; i++ {
+		reqGet := httptest.NewRequest(http.MethodGet, "/api/families", nil)
+		reqGet = reqGet.WithContext(context.WithValue(reqGet.Context(), auth.UserContextKey, adminUser))
+		wGet := httptest.NewRecorder()
+		server.HandleListFamilies(wGet, reqGet)
+		if wGet.Code != http.StatusOK {
+			t.Fatalf("HandleListFamilies iteration %d failed: %d", i, wGet.Code)
+		}
+	}
+
+	// Across all 10 requests, KMS Decrypt must NOT have been called again (served from memory cache)
+	if allergiesKMS.DecryptCalls() != decryptCallsAfterInitialWrite {
+		t.Fatalf("Expected 0 KMS Decrypt calls during cached GETs, got %d", allergiesKMS.DecryptCalls()-decryptCallsAfterInitialWrite)
+	}
+
+	// 3. Rotate DEK in the database
+	_, newEncDEK, err := allergiesKMS.GenerateDEK(ctx, "", "")
+	if err != nil {
+		t.Fatalf("GenerateDEK failed: %v", err)
+	}
+	_, _ = pool.Exec(ctx, "UPDATE data_encryption_keys SET is_active = false WHERE purpose = $1", crypto.PurposeAllergies)
+	newKeyID := uuid.New()
+	_, err = pool.Exec(ctx, `
+		INSERT INTO data_encryption_keys (id, purpose, kms_key_path, encrypted_dek, is_active)
+		VALUES ($1, $2, $3, $4, true)
+	`, newKeyID, crypto.PurposeAllergies, allergiesKMS.KeyPath(), newEncDEK)
+	if err != nil {
+		t.Fatalf("Failed to insert rotated DEK: %v", err)
+	}
+
+	// 4. Next write must check active key_id in store, notice the change, unwrap the new active key, and encrypt
+	putBody2 := `{"first_name":"Leo","last_name":"Cached","allergies":[{"name":"Walnüsse","category":"lebensmittel"}]}`
+	req2 := httptest.NewRequest(http.MethodPut, "/api/children/"+childID.String(), strings.NewReader(putBody2))
+	rctx2 := chi.NewRouteContext()
+	rctx2.URLParams.Add("id", childID.String())
+	req2 = req2.WithContext(context.WithValue(context.WithValue(req2.Context(), chi.RouteCtxKey, rctx2), auth.UserContextKey, adminUser))
+	w2 := httptest.NewRecorder()
+	server.HandleUpdateChild(w2, req2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("HandleUpdateChild after rotation failed with HTTP %d: %s", w2.Code, w2.Body.String())
+	}
+
+	// Verify that the child's protected blob in DB uses the new key_id
+	var rawBlob []byte
+	err = pool.QueryRow(ctx, "SELECT allergies_protected FROM children WHERE id = $1", childID).Scan(&rawBlob)
+	if err != nil {
+		t.Fatalf("Query updated child failed: %v", err)
+	}
+	var blobKeyID uuid.UUID
+	copy(blobKeyID[:], rawBlob[1:17])
+	if blobKeyID != newKeyID {
+		t.Fatalf("Expected new blob to be encrypted with rotated key %s, got %s", newKeyID, blobKeyID)
+	}
+}
+
 func TestMealAllergensHandlers(t *testing.T) {
 	ctx := context.Background()
 	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
