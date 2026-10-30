@@ -607,7 +607,7 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
 
   return (
     <div className="meal-allergens-editor" data-testid="meal-allergens-editor" data-loaded={metadataLoaded ? 'true' : 'false'}>
-      {/* Header with back arrow, day */}
+      {/* Merged Header with back arrow, day, status, copy action, and Laut Speiseplan reference */}
       <div className="meal-allergens-editor-header">
         <div className="meal-allergens-editor-title-group">
           <button
@@ -636,6 +636,40 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
                   : t('statusUnspecified')}
               </strong>
             </div>
+
+            {/* Read-only Meal Plan Reference */}
+            <div className="meal-allergens-plan-reference-box" data-testid="meal-plan-reference-box">
+              <div className="meal-allergens-plan-reference-header">
+                <Utensils size={16} />
+                <span className="meal-allergens-plan-reference-title">
+                  {t('mealPlanReferenceTitle')}
+                </span>
+              </div>
+              <div className="meal-allergens-plan-reference-content">
+                {!day.plan_cook_name?.trim() && (!day.plan_meal_components || day.plan_meal_components.length === 0) ? (
+                  <span className="meal-allergen-empty-text" data-testid="meal-plan-empty-text">
+                    {t('nothingEntered')}
+                  </span>
+                ) : (
+                  <>
+                    {day.plan_cook_name?.trim() && (
+                      <div className="meal-allergens-plan-ref-cook" data-testid="meal-plan-ref-cook">
+                        <strong>{day.plan_cook_name}</strong>
+                      </div>
+                    )}
+                    {day.plan_meal_components && day.plan_meal_components.length > 0 && (
+                      <div className="meal-allergens-plan-ref-components" data-testid="meal-plan-ref-components">
+                        {day.plan_meal_components.map((c, i) => (
+                          <div key={i} className="meal-allergens-plan-comp-line" data-testid={`plan-comp-chip-${i}`}>
+                            {c}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -652,40 +686,6 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
             </button>
           </div>
         )}
-      </div>
-
-      {/* Read-only Meal Plan Reference Box */}
-      <div className="meal-allergens-plan-reference-box" data-testid="meal-plan-reference-box">
-        <div className="meal-allergens-plan-reference-header">
-          <Utensils size={16} />
-          <span className="meal-allergens-plan-reference-title">
-            {t('mealPlanReferenceTitle')}
-          </span>
-        </div>
-        <div className="meal-allergens-plan-reference-content">
-          {!day.plan_cook_name?.trim() && (!day.plan_meal_components || day.plan_meal_components.length === 0) ? (
-            <span className="meal-allergen-empty-text" data-testid="meal-plan-empty-text">
-              {t('nothingEntered')}
-            </span>
-          ) : (
-            <>
-              {day.plan_cook_name?.trim() && (
-                <div className="meal-allergens-plan-ref-cook" data-testid="meal-plan-ref-cook">
-                  <strong>{day.plan_cook_name}</strong>
-                </div>
-              )}
-              {day.plan_meal_components && day.plan_meal_components.length > 0 && (
-                <div className="meal-allergens-plan-ref-components" data-testid="meal-plan-ref-components">
-                  {day.plan_meal_components.map((c, i) => (
-                    <div key={i} className="meal-allergens-plan-comp-line" data-testid={`plan-comp-chip-${i}`}>
-                      {c}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </div>
       </div>
 
       {/* Searchable Cook Combobox (filters options while typing, or accepts free text implicitly) */}
@@ -762,176 +762,138 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
               <h4 className="meal-allergens-empty-dropzone-title">{t('componentsEmptyTitle')}</h4>
               <p className="meal-allergens-empty-dropzone-subtitle">{t('componentsEmptySubtitle')}</p>
             </div>
+          </div>
+        ) : (
+          mealComponents.map((comp, compIdx) => (
+            <div
+              key={compIdx}
+              ref={(el) => {
+                cardRefs.current[compIdx] = el;
+              }}
+              className="meal-allergens-component-card"
+              data-testid={`meal-component-card-${compIdx}`}
+            >
+              <div className="meal-allergens-component-top">
+                <div className="meal-allergens-component-title-display">
+                  <span
+                    className={`meal-allergens-component-name-text ${!comp.name?.trim() ? 'unnamed' : ''}`}
+                    data-testid={`meal-component-name-text-${compIdx}`}
+                  >
+                    {comp.name?.trim() || t('unnamedComponent')}
+                  </span>
+                  {canWrite && (
+                    <button
+                      type="button"
+                      className="meal-allergens-edit-name-btn"
+                      onClick={(e) => {
+                        setIsNewComponent(false);
+                        setEditingSnapshot({
+                          name: comp.name || '',
+                          allergens: [...comp.allergens],
+                        });
+                        setAnchorEl(e.currentTarget);
+                        setEditingComponentIdx(compIdx);
+                      }}
+                      title={t('editComponent')}
+                      aria-label={t('editComponent')}
+                      data-testid={`edit-meal-component-name-btn-${compIdx}`}
+                    >
+                      <Pencil size={15} />
+                    </button>
+                  )}
+                </div>
 
-            {canWrite && (
-              <div className="meal-allergens-empty-dropzone-actions">
-                <button
-                  ref={addBtnRef}
-                  type="button"
-                  className="meal-allergens-add-component-btn"
-                  onClick={(e) => handleAddComponentClick('', e.currentTarget)}
-                  data-testid="add-meal-component-btn"
-                >
-                  <Plus size={16} />
-                  <span>{t('addMealComponent')}</span>
-                </button>
-
-                {day.plan_meal_components && day.plan_meal_components.length > 0 && (
-                  <div className="meal-allergens-add-plan-shortcuts">
-                    <span className="meal-allergens-add-plan-label">{t('takeFromPlanLabel')}</span>
-                    <div className="meal-allergens-add-plan-chip-group">
-                      {day.plan_meal_components.map((planComp, pIdx) => (
-                        <button
-                          key={pIdx}
-                          type="button"
-                          className="meal-allergens-add-plan-chip-btn"
-                          onClick={(e) => handleAddComponentClick(planComp, e.currentTarget)}
-                          title={`"${planComp}" aus Speiseplan hinzufügen`}
-                          data-testid={`add-plan-comp-shortcut-${pIdx}`}
-                        >
-                          <Plus size={13} />
-                          <span>{planComp}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                {canWrite && (
+                  <RowActionsMenu
+                    onDelete={() => handleRemoveComponent(compIdx)}
+                    deleteLabel={t('delete')}
+                    entityName={comp.name?.trim() || t('unnamedComponent')}
+                    testId={`component-actions-btn-${compIdx}`}
+                    deleteTestId={`remove-meal-component-btn-${compIdx}`}
+                  />
                 )}
+              </div>
+
+              <div className="meal-allergens-tags-row" data-testid={`meal-component-allergens-${compIdx}`}>
+                {comp.allergens.length === 0 ? (
+                  <span className="meal-allergen-none-text">{t('noAllergensSelected')}</span>
+                ) : (
+                  comp.allergens.map((allergen) => {
+                    const matchingGroups = findMatchingGroupsForComponentAllergen(
+                      allergen,
+                      allergiesContext,
+                      t('employeeAllergiesTitle') || 'Mitarbeitende'
+                    );
+                    const hasMatch = matchingGroups.length > 0;
+                    return (
+                      <div
+                        key={allergen}
+                        className={`meal-allergen-tag-wrapper ${hasMatch ? 'has-warning' : ''}`}
+                      >
+                        <span
+                          className="meal-allergens-tag-pill"
+                          style={{
+                            borderColor: `${getAllergenColor(allergen)}45`,
+                            backgroundColor: getAllergenBgColor(allergen),
+                          }}
+                          data-testid={`allergen-pill-${compIdx}-${allergen}`}
+                        >
+                          <AllergenIcon allergenKey={allergen} size={14} />
+                          <span>{getAllergenDisplayLabel(allergen)}</span>
+                        </span>
+                        {hasMatch && (
+                          <span
+                            className="meal-allergen-match-warning"
+                            data-testid={`allergen-match-warning-${compIdx}-${allergen}`}
+                            title={`${t('allergyPresentIn')}: ${matchingGroups.join(', ')}`}
+                          >
+                            <AlertTriangle size={12} className="meal-allergen-warning-icon" />
+                            <span>{matchingGroups.join(', ')}</span>
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          ))
+        )}
+
+        {canWrite && (
+          <div className="meal-allergens-add-component-bar">
+            <button
+              ref={addBtnRef}
+              type="button"
+              className="meal-allergens-add-component-btn"
+              onClick={(e) => handleAddComponentClick('', e.currentTarget)}
+              data-testid="add-meal-component-btn"
+            >
+              <Plus size={16} />
+              <span>{t('addMealComponent')}</span>
+            </button>
+
+            {day.plan_meal_components && day.plan_meal_components.length > 0 && (
+              <div className="meal-allergens-add-plan-shortcuts">
+                <span className="meal-allergens-add-plan-label">{t('takeFromPlanLabel')}</span>
+                <div className="meal-allergens-add-plan-chip-group">
+                  {day.plan_meal_components.map((planComp, pIdx) => (
+                    <button
+                      key={pIdx}
+                      type="button"
+                      className="meal-allergens-add-plan-chip-btn"
+                      onClick={(e) => handleAddComponentClick(planComp, e.currentTarget)}
+                      title={`"${planComp}" aus Speiseplan hinzufügen`}
+                      data-testid={`add-plan-comp-shortcut-${pIdx}`}
+                    >
+                      <Plus size={13} />
+                      <span>{planComp}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
-        ) : (
-          <>
-            {mealComponents.map((comp, compIdx) => (
-              <div
-                key={compIdx}
-                ref={(el) => {
-                  cardRefs.current[compIdx] = el;
-                }}
-                className="meal-allergens-component-card"
-                data-testid={`meal-component-card-${compIdx}`}
-              >
-                <div className="meal-allergens-component-top">
-                  <div className="meal-allergens-component-title-display">
-                    <span
-                      className={`meal-allergens-component-name-text ${!comp.name?.trim() ? 'unnamed' : ''}`}
-                      data-testid={`meal-component-name-text-${compIdx}`}
-                    >
-                      {comp.name?.trim() || t('unnamedComponent')}
-                    </span>
-                    {canWrite && (
-                      <button
-                        type="button"
-                        className="meal-allergens-edit-name-btn"
-                        onClick={(e) => {
-                          setIsNewComponent(false);
-                          setEditingSnapshot({
-                            name: comp.name || '',
-                            allergens: [...comp.allergens],
-                          });
-                          setAnchorEl(e.currentTarget);
-                          setEditingComponentIdx(compIdx);
-                        }}
-                        title={t('editComponent')}
-                        aria-label={t('editComponent')}
-                        data-testid={`edit-meal-component-name-btn-${compIdx}`}
-                      >
-                        <Pencil size={15} />
-                      </button>
-                    )}
-                  </div>
-
-                  {canWrite && (
-                    <RowActionsMenu
-                      onDelete={() => handleRemoveComponent(compIdx)}
-                      deleteLabel={t('delete')}
-                      entityName={comp.name?.trim() || t('unnamedComponent')}
-                      testId={`component-actions-btn-${compIdx}`}
-                      deleteTestId={`remove-meal-component-btn-${compIdx}`}
-                    />
-                  )}
-                </div>
-
-                <div className="meal-allergens-tags-row" data-testid={`meal-component-allergens-${compIdx}`}>
-                  {comp.allergens.length === 0 ? (
-                    <span className="meal-allergen-none-text">{t('noAllergensSelected')}</span>
-                  ) : (
-                    comp.allergens.map((allergen) => {
-                      const matchingGroups = findMatchingGroupsForComponentAllergen(
-                        allergen,
-                        allergiesContext,
-                        t('employeeAllergiesTitle') || 'Mitarbeitende'
-                      );
-                      const hasMatch = matchingGroups.length > 0;
-                      return (
-                        <div
-                          key={allergen}
-                          className={`meal-allergen-tag-wrapper ${hasMatch ? 'has-warning' : ''}`}
-                        >
-                          <span
-                            className="meal-allergens-tag-pill"
-                            style={{
-                              borderColor: `${getAllergenColor(allergen)}45`,
-                              backgroundColor: getAllergenBgColor(allergen),
-                            }}
-                            data-testid={`allergen-pill-${compIdx}-${allergen}`}
-                          >
-                            <AllergenIcon allergenKey={allergen} size={14} />
-                            <span>{getAllergenDisplayLabel(allergen)}</span>
-                          </span>
-                          {hasMatch && (
-                            <span
-                              className="meal-allergen-match-warning"
-                              data-testid={`allergen-match-warning-${compIdx}-${allergen}`}
-                              title={`${t('allergyPresentIn')}: ${matchingGroups.join(', ')}`}
-                            >
-                              <AlertTriangle size={12} className="meal-allergen-warning-icon" />
-                              <span>{matchingGroups.join(', ')}</span>
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            ))}
-
-            {canWrite && (
-              <div className="meal-allergens-add-component-bar">
-                <button
-                  ref={addBtnRef}
-                  type="button"
-                  className="meal-allergens-add-component-btn"
-                  onClick={(e) => handleAddComponentClick('', e.currentTarget)}
-                  data-testid="add-meal-component-btn"
-                >
-                  <Plus size={16} />
-                  <span>{t('addMealComponent')}</span>
-                </button>
-
-                {day.plan_meal_components && day.plan_meal_components.length > 0 && (
-                  <div className="meal-allergens-add-plan-shortcuts">
-                    <span className="meal-allergens-add-plan-label">{t('takeFromPlanLabel')}</span>
-                    <div className="meal-allergens-add-plan-chip-group">
-                      {day.plan_meal_components.map((planComp, pIdx) => (
-                        <button
-                          key={pIdx}
-                          type="button"
-                          className="meal-allergens-add-plan-chip-btn"
-                          onClick={(e) => handleAddComponentClick(planComp, e.currentTarget)}
-                          title={`"${planComp}" aus Speiseplan hinzufügen`}
-                          data-testid={`add-plan-comp-shortcut-${pIdx}`}
-                        >
-                          <Plus size={13} />
-                          <span>{planComp}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </>
         )}
       </div>
 
