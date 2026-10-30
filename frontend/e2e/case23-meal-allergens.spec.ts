@@ -269,6 +269,18 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     const desktopBoxes = page.locator('[data-testid^="meal-allergens-day-box-"]');
     await expect(desktopBoxes).toHaveCount(25);
 
+    // Verify current day (today) is marked in the calendar
+    const todayKey = formatDateKey(now);
+    const todayBox = page.getByTestId(`meal-allergens-day-box-${todayKey}`);
+    if (now.getDay() >= 1 && now.getDay() <= 5) {
+      await expect(todayBox).toBeVisible();
+      await expect(todayBox).toHaveClass(/is-today/);
+      await expect(todayBox).toHaveAttribute('data-is-today', 'true');
+      await expect(todayBox).toHaveAttribute('aria-current', 'date');
+      await expect(todayBox.locator('[data-testid="meal-allergens-today-badge"]')).toBeVisible();
+      await expect(todayBox.locator('[data-testid="meal-allergens-today-badge"]')).toHaveText('Heute');
+    }
+
     // Verify dark theme styling for month selector and default day boxes
     await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
     const selectorControls = page.locator('.meal-allergens-controls');
@@ -283,6 +295,13 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page.getByTestId('meal-allergens-week-selector')).toBeVisible();
     await expect(page.locator('[data-testid^="meal-allergens-day-box-"]')).toHaveCount(5);
+    if (now.getDay() >= 1 && now.getDay() <= 5) {
+      const mobileTodayBox = page.getByTestId(`meal-allergens-day-box-${todayKey}`);
+      await expect(mobileTodayBox).toBeVisible();
+      await expect(mobileTodayBox).toHaveClass(/is-today/);
+      await expect(mobileTodayBox).toHaveAttribute('data-is-today', 'true');
+      await expect(mobileTodayBox.locator('[data-testid="meal-allergens-today-badge"]')).toBeVisible();
+    }
 
     // Switch back to Desktop viewport (1200x800)
     await page.setViewportSize({ width: 1200, height: 800 });

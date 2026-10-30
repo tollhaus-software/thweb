@@ -27,6 +27,7 @@ import {
 interface MealAllergensCalendarViewProps {
   onSelectDay: (day: MealAllergenDay) => void;
   initialDate?: Date;
+  todayDate?: Date;
   enableSearch?: boolean;
   allEntries?: MealAllergenDay[];
   excludeDateFromSearchJump?: string;
@@ -37,6 +38,7 @@ interface MealAllergensCalendarViewProps {
 export const MealAllergensCalendarView: React.FC<MealAllergensCalendarViewProps> = ({
   onSelectDay,
   initialDate,
+  todayDate,
   enableSearch = false,
   allEntries = [],
   excludeDateFromSearchJump,
@@ -164,7 +166,7 @@ export const MealAllergensCalendarView: React.FC<MealAllergensCalendarViewProps>
     }
   }, [searchQuery, allEntries, daysMap, excludeDateFromSearchJump]);
 
-  const todayKey = formatDateKey(new Date());
+  const todayKey = formatDateKey(todayDate || new Date());
   const { week: weekNo } = getISOWeekNumber(selectedMonday);
   const weekRangeStr = formatWeekRange(selectedMonday);
   const monthYearLabel = formatMonthYearLabel(selectedYearMonth.year, selectedYearMonth.month);
@@ -289,6 +291,7 @@ export const MealAllergensCalendarView: React.FC<MealAllergensCalendarViewProps>
           const isMatched = enableSearch && doesDayMatchSearch(dayData, searchQuery);
           const isActiveJump = activeJumpedDate === dateKey;
           const isOutsideMonth = !isMobile && dateObj.getMonth() !== selectedYearMonth.month;
+          const isToday = dateKey === todayKey;
 
           const cookName = dayData.cook_display_name || dayData.plan_cook_name || '';
           const displayComponents =
@@ -306,6 +309,7 @@ export const MealAllergensCalendarView: React.FC<MealAllergensCalendarViewProps>
               className={[
                 'meal-allergen-day-box',
                 `bg-${bgVariant}`,
+                isToday ? 'is-today' : '',
                 isMatched ? 'search-match' : '',
                 isActiveJump ? 'search-active-match' : '',
                 isOutsideMonth ? 'outside-month' : '',
@@ -316,13 +320,23 @@ export const MealAllergensCalendarView: React.FC<MealAllergensCalendarViewProps>
               data-date={dateKey}
               data-bg-variant={bgVariant}
               data-status={dayData.status}
+              data-is-today={isToday ? 'true' : 'false'}
               data-search-match={isMatched ? 'true' : 'false'}
               data-search-active-match={isActiveJump ? 'true' : 'false'}
+              aria-current={isToday ? 'date' : undefined}
               onClick={() => onSelectDay(dayData)}
             >
               <div className="meal-allergen-day-header">
                 <span className="meal-allergen-day-date">
                   {isMobile ? `${dayName}, ${dateStr}` : dateStr}
+                  {isToday && (
+                    <span
+                      className="meal-allergen-today-badge"
+                      data-testid={`${testIdPrefix}-today-badge`}
+                    >
+                      {t('today')}
+                    </span>
+                  )}
                 </span>
                 <span className="meal-allergen-day-cook" data-testid={`${testIdPrefix}-day-cook-${dateKey}`}>
                   {cookName || '–'}
