@@ -361,30 +361,23 @@
 
 .meal-allergens-finalize-section {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   gap: 0.85rem;
-  padding: 0.25rem 0 0.5rem 0;
+  flex-wrap: wrap;
+  padding: 0.5rem 0;
+  margin-top: 1rem;
+}
+
+@media (max-width: __MOBILE_BREAKPOINT__) {
+  .meal-allergens-finalize-section {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 
 .meal-allergens-completion-checklist {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.meal-allergens-checklist-title {
-  font-size: 0.8rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
 }
 
 .meal-allergens-checklist-items {
@@ -398,53 +391,38 @@
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  padding: 0.4rem 0.75rem;
-  border-radius: 20px;
-  font-size: 0.86rem;
-  font-weight: 500;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
-  border: 1px solid transparent;
   line-height: 1.2;
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  color: #451a03;
 }
 
-.meal-allergens-checklist-item.pending {
-  background: var(--warning-bg);
-  border-color: var(--warning-border);
-  color: var(--warning-text);
+:root[data-theme='dark'] .meal-allergens-checklist-item,
+:root:not([data-theme='light']) .meal-allergens-checklist-item {
+  background: rgba(245, 158, 11, 0.25);
+  border-color: #f59e0b;
+  color: #fef08a;
 }
 
-.meal-allergens-checklist-item.pending:hover {
-  filter: brightness(0.95);
+.meal-allergens-checklist-item:hover {
+  filter: brightness(0.96);
   transform: translateY(-1px);
 }
 
-.meal-allergens-checklist-item.satisfied {
-  background: rgba(34, 197, 94, 0.1);
-  border-color: rgba(34, 197, 94, 0.25);
-  color: #16a34a;
-}
-
-:root[data-theme='dark'] .meal-allergens-checklist-item.satisfied,
-:root:not([data-theme='light']) .meal-allergens-checklist-item.satisfied {
-  background: rgba(34, 197, 94, 0.15);
-  border-color: rgba(34, 197, 94, 0.35);
-  color: #4ade80;
-}
-
-.checklist-icon-check {
-  color: #16a34a;
-  flex-shrink: 0;
-}
-
-:root[data-theme='dark'] .checklist-icon-check,
-:root:not([data-theme='light']) .checklist-icon-check {
-  color: #4ade80;
-}
-
 .checklist-icon-pending {
-  color: var(--warning-text);
+  color: #b45309;
   flex-shrink: 0;
+}
+
+:root[data-theme='dark'] .checklist-icon-pending,
+:root:not([data-theme='light']) .checklist-icon-pending {
+  color: #f59e0b;
 }
 
 .meal-allergens-finalize-btn {
@@ -779,23 +757,126 @@
   gap: 0.45rem;
 }
 
-.meal-allergens-tag-pill {
+.meal-allergens-tag-pill,
+.meal-allergens-pill {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.28rem 0.65rem;
-  border-radius: 999px;
+  gap: 0.45rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 8px;
   background: var(--bg-subtle);
   border: 1px solid var(--border);
   color: var(--text-h);
   font-size: 0.82rem;
   font-weight: 600;
+  line-height: 1.25;
+  box-sizing: border-box;
 }
 
 :root[data-theme='dark'] .meal-allergens-tag-pill,
-:root:not([data-theme='light']) .meal-allergens-tag-pill {
+:root:not([data-theme='light']) .meal-allergens-tag-pill,
+:root[data-theme='dark'] .meal-allergens-pill,
+:root:not([data-theme='light']) .meal-allergens-pill {
   color: var(--text-h);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.meal-allergen-tag-wrapper {
+  display: inline-flex;
+  align-items: stretch;
+  vertical-align: middle;
+  border-radius: 8px;
+  transition: all 0.15s ease;
+}
+
+/* Compound Rounded Rectangle: seamless continuous border with dashed transition to warning badge */
+.meal-allergen-tag-wrapper.has-warning {
+  box-shadow: 0 1px 3px rgba(245, 158, 11, 0.18);
+}
+
+.meal-allergen-tag-wrapper.has-warning .meal-allergens-tag-pill,
+.meal-allergen-tag-wrapper.has-warning .meal-allergens-pill {
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: none;
+  padding-right: 0.65rem;
+  background-image: linear-gradient(to right, transparent, rgba(245, 158, 11, 0.08));
+}
+
+.meal-allergen-tag-wrapper.has-warning .meal-allergen-match-warning {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+  border-left: 1.5px dashed #f59e0b;
+  padding-left: 0.65rem;
+}
+
+.meal-allergen-match-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 8px;
+  background-color: #fef3c7;
+  border: 1px solid #f59e0b;
+  color: #451a03; /* High contrast amber-950 (~14.5:1 ratio on #fef3c7) */
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.25;
+  box-sizing: border-box;
+  animation: warningPopIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root[data-theme='dark'] .meal-allergen-match-warning,
+:root:not([data-theme='light']) .meal-allergen-match-warning {
+  background-color: rgba(245, 158, 11, 0.22);
+  border-color: #f59e0b;
+  color: #fef08a; /* High contrast light amber on dark */
+}
+
+.meal-allergen-match-warning .meal-allergen-warning-icon {
+  color: #b45309;
+  flex-shrink: 0;
+}
+
+:root[data-theme='dark'] .meal-allergen-match-warning .meal-allergen-warning-icon,
+:root:not([data-theme='light']) .meal-allergen-match-warning .meal-allergen-warning-icon {
+  color: #fbbf24;
+}
+
+.meal-allergen-picker-match-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 6px;
+  background-color: #fef3c7;
+  border: 1px solid #f59e0b;
+  color: #451a03; /* High contrast amber-950 */
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+:root[data-theme='dark'] .meal-allergen-picker-match-warning,
+:root:not([data-theme='light']) .meal-allergen-picker-match-warning {
+  background-color: rgba(245, 158, 11, 0.25);
+  border-color: #f59e0b;
+  color: #fef08a;
+}
+
+@keyframes warningPopIn {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .meal-allergens-tag-remove {
@@ -1216,11 +1297,20 @@
   gap: 0.45rem;
   padding: 0.5rem 0.95rem;
   font-size: 0.88rem;
-  font-weight: 600;
+  font-weight: 500;
   border-radius: 8px;
   cursor: pointer;
   line-height: 1;
   box-sizing: border-box;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  transition: all 0.15s ease;
+}
+
+.meal-allergens-add-component-btn:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--border-hover);
 }
 
 .meal-allergens-add-component-btn span {

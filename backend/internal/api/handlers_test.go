@@ -1996,10 +1996,10 @@ func TestAllergies_ChildrenEmployeesSummaryAndAudit(t *testing.T) {
 		}
 	}
 
-	// 4. Test HandleGetAllergiesSummary (/api/dashboard/allergies):
+	// 4. Test HandleGetAllergiesSummary (/api/allergies/summary):
 	//    Group 1 has child1 (Erdnuss, Laktose) and child2 (erdnuss, Haselnuss) -> deduplicated: [Erdnuss, Haselnuss, Laktose]
 	//    Employees has Erika (Sellerie, Gluten) -> deduplicated: [Gluten, Sellerie]
-	reqSum := httptest.NewRequest("GET", "/api/dashboard/allergies?date=2026-06-01", nil)
+	reqSum := httptest.NewRequest("GET", "/api/allergies/summary?date=2026-06-01", nil)
 	reqSum = reqSum.WithContext(context.WithValue(reqSum.Context(), auth.UserContextKey, parentUser1))
 	recSum := httptest.NewRecorder()
 	server.HandleGetAllergiesSummary(recSum, reqSum)

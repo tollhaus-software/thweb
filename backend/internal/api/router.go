@@ -115,7 +115,8 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 
 		// Dashboard / Daily Brief & Allergies Summary
 		r.Get("/api/dashboard/daily-brief", server.HandleGetDailyBrief)
-		r.With(auth.RequirePermission("allergies.summary.read")).Get("/api/dashboard/allergies", server.HandleGetAllergiesSummary)
+		r.With(auth.RequireAnyPermission("allergies.summary.read", "meal_allergens.read")).Get("/api/allergies/summary", server.HandleGetAllergiesSummary)
+		r.With(auth.RequireAnyPermission("allergies.summary.read", "meal_allergens.read")).Get("/api/dashboard/allergies", server.HandleGetAllergiesSummary)
 
 		// Meal Allergens (Essen/Allergene)
 		r.With(auth.RequirePermission("meal_allergens.read")).Get("/api/meal-allergens", server.HandleListMealAllergens)

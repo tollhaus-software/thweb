@@ -710,3 +710,104 @@ export function findMostRecentMatchingDay(
   matches.sort((a, b) => b.date.localeCompare(a.date));
   return matches[0];
 }
+
+export interface GroupAllergySummaryItem {
+  group_id: number;
+  group_name: string;
+  allergies: string[];
+  food_allergies?: string[];
+}
+
+export interface AllergiesMatchContext {
+  date?: string;
+  groups: GroupAllergySummaryItem[];
+  employees: string[];
+  food_employees?: string[];
+}
+
+/**
+ * Checks whether an allergen and an allergy match (case-insensitive).
+ * Supports exact text match, main allergen key vs label/shortLabel,
+ * and allergen icon category normalization.
+ */
+export function allergensMatch(allergenA: string, allergenB: string): boolean {
+  const cleanA = (allergenA || '').trim().toLowerCase();
+  const cleanB = (allergenB || '').trim().toLowerCase();
+  if (!cleanA || !cleanB) return false;
+
+  // 1. Direct case-insensitive string equality
+  if (cleanA === cleanB) return true;
+
+  // 2. Normalized display label equality
+  const labelA = getAllergenDisplayLabel(cleanA).trim().toLowerCase();
+  const labelB = getAllergenDisplayLabel(cleanB).trim().toLowerCase();
+  if (labelA === labelB) return true;
+
+  // 3. Icon category equality (e.g. 'gluten' vs 'weizen', 'laktose' vs 'milch', 'erdnuesse' vs 'erdnuss')
+  const iconA = getAllergenIconKey(cleanA);
+  const iconB = getAllergenIconKey(cleanB);
+  if (iconA !== 'default' && iconB !== 'default' && iconA === iconB) {
+    return true;
+  }
+
+  // 4. Accent-insensitive comparison for custom strings (e.g. Äpfel vs äpfel)
+  if (cleanA.localeCompare(cleanB, undefined, { sensitivity: 'base' }) === 0) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Given a meal component allergen and an allergies context (groups & employees),
+ * returns the list of group names and/or 'Mitarbeitende' where this allergen matches an allergy.
+ */
+export function findMatchingGroupsForComponentAllergen(
+  allergen: string,
+  context?: AllergiesMatchContext | null,
+  employeeLabel: string = 'Mitarbeitende'
+): string[] {
+  if (!context || !allergen) return [];
+  const matches: string[] = [];
+
+  for (const grp of context.groups || []) {
+    if (grp.allergies && grp.allergies.some((a) => allergensMatch(a, allergen))) {
+      const gName = grp.group_name || `Gruppe ${grp.group_id}`;
+      if (!matches.includes(gName)) {
+        matches.push(gName);
+      }
+    }
+  }
+
+  if (context.employees && context.employees.some((a) => allergensMatch(a, allergen))) {
+    if (!matches.includes(employeeLabel)) {
+      matches.push(employeeLabel);
+    }
+  }
+
+  return matches;
+}
+
+/**
+ * Given a known allergy (from a group or employees) and a list of meal components,
+ * returns the names of the meal components that contain an allergen matching this allergy.
+ */
+export function findMatchingComponentsForAllergy(
+  allergy: string,
+  mealComponents?: MealAllergenComponent[] | null
+): string[] {
+  if (!mealComponents || !allergy) return [];
+  const matches: string[] = [];
+
+  for (const comp of mealComponents) {
+    if (comp.allergens && comp.allergens.some((a) => allergensMatch(a, allergy))) {
+      const name = comp.name?.trim() || 'Komponente';
+      if (!matches.includes(name)) {
+        matches.push(name);
+      }
+    }
+  }
+
+  return matches;
+}
+

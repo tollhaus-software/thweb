@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { ArrowLeft, Copy, Pencil, Plus, X, Utensils, Check, CircleDot } from 'lucide-react';
+import { ArrowLeft, Copy, Pencil, Plus, X, Utensils, Check, CircleDot, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useRealtime, type RealtimeMessage } from '../../hooks/useRealtime';
 import { t, formatDisplayDate } from '../../utils/i18n';
 import { parseDateKey, formatDayHeader } from '../../utils/mealPlan';
 import {
@@ -16,6 +17,8 @@ import {
   replaceMealComponents,
   getAllergenColor,
   getAllergenBgColor,
+  findMatchingGroupsForComponentAllergen,
+  type AllergiesMatchContext,
 } from '../../utils/mealAllergens';
 import { AllergenIcon } from './AllergenIcon';
 import { MealAllergensCalendarView } from './MealAllergensCalendarView';
@@ -39,6 +42,7 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
   const [day, setDay] = useState<MealAllergenDay>(initialDay);
   const [cookOptions, setCookOptions] = useState<CookOption[]>([]);
   const [allEntries, setAllEntries] = useState<MealAllergenDay[]>([]);
+  const [allergiesContext, setAllergiesContext] = useState<AllergiesMatchContext | null>(null);
 
   // Cook state (parent, employee, or implicit custom text)
   const [cookParentId, setCookParentId] = useState<string | null>(initialDay.cook_parent_id || null);
@@ -76,6 +80,7 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
   // Copy modal state
   const [isCopyModalOpen, setIsCopyModalOpen] = useState<boolean>(false);
   const [pendingCopySource, setPendingCopySource] = useState<MealAllergenDay | null>(null);
+  const [metadataLoaded, setMetadataLoaded] = useState<boolean>(false);
 
   // Fetch cook options & all historical entries
   useEffect(() => {
@@ -87,10 +92,11 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
 
     const loadMetadata = async () => {
       try {
-        const [cooksRes, entriesRes, freshDayRes] = await Promise.all([
+        const [cooksRes, entriesRes, freshDayRes, allergiesRes] = await Promise.all([
           fetch('/api/meal-allergens/cooks', { headers }),
           fetch('/api/meal-allergens?all=true', { headers }),
           fetch(`/api/meal-allergens/${encodeURIComponent(initialDay.date)}`, { headers }),
+          fetch(`/api/allergies/summary?date=${encodeURIComponent(initialDay.date)}`, { headers }),
         ]);
 
         let loadedCooks: CookOption[] = [];
@@ -105,13 +111,21 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
         if (freshDayRes.ok) {
           loadedDay = await freshDayRes.json();
         }
+        let loadedAllergies: AllergiesMatchContext | null = null;
+        if (allergiesRes.ok) {
+          loadedAllergies = await allergiesRes.json();
+        }
 
         if (!ignore) {
+          setMetadataLoaded(true);
           setCookOptions(loadedCooks);
           setAllEntries(loadedEntries);
           setDay(loadedDay);
           setStatus(loadedDay.status || 'unspecified');
           setHasAllergenRecord(loadedDay.has_allergen_record);
+          if (loadedAllergies) {
+            setAllergiesContext(loadedAllergies);
+          }
 
           if (loadedDay.has_allergen_record) {
             setMealComponents(
@@ -145,7 +159,7 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
             }
           } else {
             // Meal plan components are not transferred by default
-            setMealComponents([]);
+            setMealComponents((prev) => (prev.length > 0 ? prev : []));
             const matched = matchCookFromPlan(loadedDay.plan_cook_name, loadedCooks);
             setCookParentId(matched.cook_parent_id);
             setCookEmployeeId(matched.cook_employee_id);
@@ -177,6 +191,31 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
     // Re-load metadata only when the selected date or auth token changes, not when local edits notify parent
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialDay.date, token]);
+
+  const handleRealtimeMessage = useCallback(
+    (msg: RealtimeMessage) => {
+      if (
+        msg.type === 'CHILD_UPDATED' ||
+        msg.type === 'CHILD_DELETED' ||
+        msg.type === 'EMPLOYEE_CREATED' ||
+        msg.type === 'EMPLOYEE_UPDATED' ||
+        msg.type === 'EMPLOYEE_DELETED' ||
+        msg.type === 'INVALIDATE'
+      ) {
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        fetch(`/api/allergies/summary?date=${encodeURIComponent(day.date)}`, { headers })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((data: AllergiesMatchContext | null) => {
+            if (data) setAllergiesContext(data);
+          })
+          .catch((err) => console.error('Error refreshing allergies context in editor:', err));
+      }
+    },
+    [day.date, token]
+  );
+
+  useRealtime(handleRealtimeMessage);
 
   const persistChanges = useCallback(
     async (
@@ -567,7 +606,7 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
   const formattedDate = formatDisplayDate(dateObj);
 
   return (
-    <div className="meal-allergens-editor" data-testid="meal-allergens-editor">
+    <div className="meal-allergens-editor" data-testid="meal-allergens-editor" data-loaded={metadataLoaded ? 'true' : 'false'}>
       {/* Header with back arrow, day */}
       <div className="meal-allergens-editor-header">
         <div className="meal-allergens-editor-title-group">
@@ -729,7 +768,7 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
                 <button
                   ref={addBtnRef}
                   type="button"
-                  className="primary-button meal-allergens-add-component-btn"
+                  className="meal-allergens-add-component-btn"
                   onClick={(e) => handleAddComponentClick('', e.currentTarget)}
                   data-testid="add-meal-component-btn"
                 >
@@ -816,31 +855,42 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
                   {comp.allergens.length === 0 ? (
                     <span className="meal-allergen-none-text">{t('noAllergensSelected')}</span>
                   ) : (
-                    comp.allergens.map((allergen) => (
-                      <span
-                        key={allergen}
-                        className="meal-allergens-tag-pill"
-                        style={{
-                          borderColor: `${getAllergenColor(allergen)}45`,
-                          backgroundColor: getAllergenBgColor(allergen),
-                        }}
-                        data-testid={`allergen-pill-${compIdx}-${allergen}`}
-                      >
-                        <AllergenIcon allergenKey={allergen} size={14} />
-                        <span>{getAllergenDisplayLabel(allergen)}</span>
-                        {canWrite && (
-                          <button
-                            type="button"
-                            className="meal-allergens-tag-remove"
-                            onClick={() => handleRemoveAllergen(compIdx, allergen)}
-                            aria-label={`Remove ${allergen}`}
-                            data-testid={`remove-allergen-btn-${compIdx}-${allergen}`}
+                    comp.allergens.map((allergen) => {
+                      const matchingGroups = findMatchingGroupsForComponentAllergen(
+                        allergen,
+                        allergiesContext,
+                        t('employeeAllergiesTitle') || 'Mitarbeitende'
+                      );
+                      const hasMatch = matchingGroups.length > 0;
+                      return (
+                        <div
+                          key={allergen}
+                          className={`meal-allergen-tag-wrapper ${hasMatch ? 'has-warning' : ''}`}
+                        >
+                          <span
+                            className="meal-allergens-tag-pill"
+                            style={{
+                              borderColor: `${getAllergenColor(allergen)}45`,
+                              backgroundColor: getAllergenBgColor(allergen),
+                            }}
+                            data-testid={`allergen-pill-${compIdx}-${allergen}`}
                           >
-                            <X size={13} />
-                          </button>
-                        )}
-                      </span>
-                    ))
+                            <AllergenIcon allergenKey={allergen} size={14} />
+                            <span>{getAllergenDisplayLabel(allergen)}</span>
+                          </span>
+                          {hasMatch && (
+                            <span
+                              className="meal-allergen-match-warning"
+                              data-testid={`allergen-match-warning-${compIdx}-${allergen}`}
+                              title={`${t('allergyPresentIn')}: ${matchingGroups.join(', ')}`}
+                            >
+                              <AlertTriangle size={12} className="meal-allergen-warning-icon" />
+                              <span>{matchingGroups.join(', ')}</span>
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })
                   )}
                 </div>
               </div>
@@ -851,7 +901,7 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
                 <button
                   ref={addBtnRef}
                   type="button"
-                  className="primary-button meal-allergens-add-component-btn"
+                  className="meal-allergens-add-component-btn"
                   onClick={(e) => handleAddComponentClick('', e.currentTarget)}
                   data-testid="add-meal-component-btn"
                 >
@@ -888,64 +938,6 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
       {/* Finalize section under meal components */}
       {canWrite && (
         <div className="meal-allergens-finalize-section" data-testid="finalize-section">
-          {status !== 'finalized' && (
-            <div className="meal-allergens-completion-checklist" data-testid="editor-completion-checklist">
-              <span className="meal-allergens-checklist-title">{t('finalizeRequirementsTitle')}</span>
-              <div className="meal-allergens-checklist-items">
-                <button
-                  type="button"
-                  className={`meal-allergens-checklist-item ${isCookSelected ? 'satisfied' : 'pending'}`}
-                  onClick={() => {
-                    cookInputRef.current?.focus();
-                    setIsCookDropdownOpen(true);
-                  }}
-                  title={
-                    isCookSelected
-                      ? `${t('cookRequirementSatisfied')}: ${cookInputText.trim()}`
-                      : t('cookRequirementPending')
-                  }
-                  data-testid="checklist-item-cook"
-                  data-satisfied={isCookSelected}
-                >
-                  {isCookSelected ? (
-                    <Check size={14} className="checklist-icon-check" />
-                  ) : (
-                    <CircleDot size={14} className="checklist-icon-pending" />
-                  )}
-                  <span>
-                    {isCookSelected
-                      ? `${t('cookRequirementSatisfied')}: ${cookInputText.trim()}`
-                      : t('cookRequirementPending')}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  className={`meal-allergens-checklist-item ${hasComponents ? 'satisfied' : 'pending'}`}
-                  onClick={(e) => handleAddComponentClick('', e.currentTarget)}
-                  title={
-                    hasComponents
-                      ? `${mealComponents.length} ${t('componentsRequirementSatisfied')}`
-                      : t('componentsRequirementPending')
-                  }
-                  data-testid="checklist-item-components"
-                  data-satisfied={hasComponents}
-                >
-                  {hasComponents ? (
-                    <Check size={14} className="checklist-icon-check" />
-                  ) : (
-                    <CircleDot size={14} className="checklist-icon-pending" />
-                  )}
-                  <span>
-                    {hasComponents
-                      ? `${mealComponents.length} ${t('componentsRequirementSatisfied')}`
-                      : t('componentsRequirementPending')}
-                  </span>
-                </button>
-              </div>
-            </div>
-          )}
-
           <button
             type="button"
             className="meal-allergens-finalize-btn"
@@ -956,6 +948,43 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
             <Check size={16} />
             <span>{t('finalizeBtn')}</span>
           </button>
+
+          {status !== 'finalized' && (!isCookSelected || !hasComponents) && (
+            <div className="meal-allergens-completion-checklist" data-testid="editor-completion-checklist">
+              <div className="meal-allergens-checklist-items">
+                {!isCookSelected && (
+                  <button
+                    type="button"
+                    className="meal-allergens-checklist-item pending"
+                    onClick={() => {
+                      cookInputRef.current?.focus();
+                      setIsCookDropdownOpen(true);
+                    }}
+                    title={t('cookRequirementPending')}
+                    data-testid="checklist-item-cook"
+                    data-satisfied={false}
+                  >
+                    <CircleDot size={14} className="checklist-icon-pending" />
+                    <span>{t('cookRequirementPending')}</span>
+                  </button>
+                )}
+
+                {!hasComponents && (
+                  <button
+                    type="button"
+                    className="meal-allergens-checklist-item pending"
+                    onClick={(e) => handleAddComponentClick('', e.currentTarget)}
+                    title={t('componentsRequirementPending')}
+                    data-testid="checklist-item-components"
+                    data-satisfied={false}
+                  >
+                    <CircleDot size={14} className="checklist-icon-pending" />
+                    <span>{t('componentsRequirementPending')}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1051,6 +1080,11 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
                     >
                       {MAIN_ALLERGENS.map((item) => {
                         const isSelected = Boolean(currentComp?.allergens.includes(item.key));
+                        const matchingGroups = findMatchingGroupsForComponentAllergen(
+                          item.key,
+                          allergiesContext,
+                          t('employeeAllergiesTitle') || 'Mitarbeitende'
+                        );
                         return (
                           <button
                             key={item.key}
@@ -1075,7 +1109,18 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
                               <AllergenIcon allergenKey={item.key} size={20} />
                             </span>
                             <div className="meal-allergen-info-block">
-                              <strong className="meal-allergen-main-name">{item.shortLabel}</strong>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                                <strong className="meal-allergen-main-name">{item.shortLabel}</strong>
+                                {matchingGroups.length > 0 && (
+                                  <span
+                                    className="meal-allergen-picker-match-warning"
+                                    data-testid={`allergen-picker-warning-${editingComponentIdx}-${item.key}`}
+                                  >
+                                    <AlertTriangle size={11} />
+                                    <span>{matchingGroups.join(', ')}</span>
+                                  </span>
+                                )}
+                              </div>
                               {item.subtypes && (
                                 <span className="meal-allergen-subtypes">{item.subtypes}</span>
                               )}
@@ -1121,6 +1166,80 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
                         +
                       </button>
                     </div>
+
+                    {/* Display custom allergens so they can be viewed and removed from within the editor */}
+                    {(() => {
+                      const customAllergens = (currentComp?.allergens || []).filter(
+                        (a) => !MAIN_ALLERGENS.some((m) => m.key.toLowerCase() === a.toLowerCase())
+                      );
+                      if (customAllergens.length === 0) return null;
+                      return (
+                        <div
+                          className="meal-allergens-popover-custom-tags"
+                          data-testid={`custom-allergens-list-${editingComponentIdx}`}
+                          style={{ marginTop: '0.65rem' }}
+                        >
+                          <div
+                            style={{
+                              fontSize: '0.78rem',
+                              fontWeight: 600,
+                              color: 'var(--text-secondary)',
+                              marginBottom: '0.35rem',
+                            }}
+                          >
+                            {t('customAllergensLabel') || 'Weitere Allergene:'}
+                          </div>
+                          <div className="meal-allergens-tags-container">
+                            {customAllergens.map((customAllergen) => {
+                              const matchingGroups = findMatchingGroupsForComponentAllergen(
+                                customAllergen,
+                                allergiesContext,
+                                t('employeeAllergiesTitle') || 'Mitarbeitende'
+                              );
+                              const hasCustomMatch = matchingGroups.length > 0;
+                              return (
+                                <div
+                                  key={customAllergen}
+                                  className={`meal-allergen-tag-wrapper ${hasCustomMatch ? 'has-warning' : ''}`}
+                                >
+                                  <span
+                                    className="meal-allergens-tag-pill"
+                                    style={{
+                                      borderColor: `${getAllergenColor(customAllergen)}45`,
+                                      backgroundColor: getAllergenBgColor(customAllergen),
+                                    }}
+                                    data-testid={`custom-allergen-pill-${editingComponentIdx}-${customAllergen}`}
+                                  >
+                                    <AllergenIcon allergenKey={customAllergen} size={14} />
+                                    <span>{getAllergenDisplayLabel(customAllergen)}</span>
+                                    <button
+                                      type="button"
+                                      className="meal-allergens-tag-remove"
+                                      onClick={() => handleRemoveAllergen(editingComponentIdx, customAllergen)}
+                                      aria-label={`Remove ${customAllergen}`}
+                                      title={t('remove') || 'Entfernen'}
+                                      data-testid={`remove-allergen-btn-${editingComponentIdx}-${customAllergen}`}
+                                    >
+                                      <X size={13} />
+                                    </button>
+                                  </span>
+                                  {hasCustomMatch && (
+                                    <span
+                                      className="meal-allergen-match-warning"
+                                      data-testid={`allergen-match-warning-${editingComponentIdx}-${customAllergen}`}
+                                      title={`${t('allergyPresentIn')}: ${matchingGroups.join(', ')}`}
+                                    >
+                                      <AlertTriangle size={12} className="meal-allergen-warning-icon" />
+                                      <span>{matchingGroups.join(', ')}</span>
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })()}
