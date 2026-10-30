@@ -142,12 +142,149 @@ export function getAllergenDisplayLabel(key: string): string {
   ) {
     return 'Schalenfrüchte';
   }
+  if (norm === 'erdnuesse' || norm === 'erdnüsse') {
+    return 'Erdnüsse';
+  }
+  if (norm === 'laktose' || norm === 'milch/laktose') {
+    return 'Milch/Laktose';
+  }
+  if (norm === 'sulfite' || norm === 'sulphite/schwefeldioxid') {
+    return 'Sulphite/Schwefeldioxid';
+  }
   const found = MAIN_ALLERGEN_MAP.get(norm);
   return found ? found.label : key;
 }
 
 export function getAllergenShortLabel(key: string): string {
   return getAllergenDisplayLabel(key);
+}
+
+export function getAllergenIconKey(name: string): string {
+  const norm = (name || '').toLowerCase().trim();
+  if (!norm) return 'default';
+  if (
+    norm === 'gluten' ||
+    norm.includes('gluten') ||
+    norm.includes('weizen') ||
+    norm.includes('dinkel') ||
+    norm.includes('roggen') ||
+    norm.includes('gerste') ||
+    norm.includes('hafer')
+  ) {
+    return 'gluten';
+  }
+  if (norm === 'eier' || norm === 'ei' || norm.includes('eier') || norm.includes('hühnerei')) {
+    return 'eier';
+  }
+  if (norm === 'laktose' || norm === 'lactose' || norm.includes('milch') || norm.includes('laktose')) {
+    return 'laktose';
+  }
+  if (norm.includes('sellerie')) {
+    return 'sellerie';
+  }
+  if (norm.includes('sesam')) {
+    return 'sesamsamen';
+  }
+  if (norm.includes('lupin')) {
+    return 'lupine';
+  }
+  if (norm.includes('krebs') || norm.includes('krabbe') || norm.includes('garnele') || norm.includes('shrimp') || norm.includes('hummer')) {
+    return 'krebstiere';
+  }
+  if (norm.includes('fisch')) {
+    return 'fisch';
+  }
+  if (norm.includes('soja')) {
+    return 'sojabohnen';
+  }
+  if (norm.includes('erdnuss') || norm.includes('erdnüss')) {
+    return 'erdnuesse';
+  }
+  if (
+    norm.includes('schalenfr') ||
+    norm.includes('nüss') ||
+    norm.includes('nuss') ||
+    norm.includes('mandel') ||
+    norm.includes('cashew') ||
+    norm.includes('pistazie') ||
+    norm.includes('walnuss') ||
+    norm.includes('haselnuss') ||
+    norm.includes('paranuss') ||
+    norm.includes('pecan') ||
+    norm.includes('macadamia')
+  ) {
+    return 'schalenfruechte';
+  }
+  if (norm.includes('senf')) {
+    return 'senf';
+  }
+  if (norm.includes('sulfit') || norm.includes('sulphit') || norm.includes('schwefeldioxid')) {
+    return 'sulfite';
+  }
+  if (norm.includes('weichtier') || norm.includes('muschel') || norm.includes('schnecke') || norm.includes('auster') || norm.includes('tintenfisch')) {
+    return 'weichtiere';
+  }
+  if (norm.includes('kiwi')) {
+    return 'kiwi';
+  }
+  return 'default';
+}
+
+export function isLebensmittelAllergen(name: string, knownFoodList?: string[]): boolean {
+  if (!name) return false;
+  if (knownFoodList && knownFoodList.some((f) => f.toLowerCase().trim() === name.toLowerCase().trim())) {
+    return true;
+  }
+  const iconKey = getAllergenIconKey(name);
+  if (iconKey !== 'default') {
+    return true;
+  }
+  const norm = name.toLowerCase().trim();
+  const foodKeywords = [
+    'apfel', 'äpfel', 'erdbeer', 'tomate', 'zitrus', 'orange', 'banane',
+    'kakao', 'schokolade', 'honig', 'karotte', 'zwiebel', 'knoblauch',
+    'lebensmittel', 'nahrung'
+  ];
+  return foodKeywords.some((kw) => norm.includes(kw));
+}
+
+export interface AllergyEntryObject {
+  value: string;
+  name?: string;
+  category?: 'lebensmittel' | 'andere' | string;
+  [key: string]: any;
+}
+
+export type AllergyItemValue = string | AllergyEntryObject;
+
+export function getAllergyText(item: AllergyItemValue): string {
+  if (typeof item === 'string') return item;
+  return item?.name || item?.value || '';
+}
+
+export function getAllergyCategory(item: AllergyItemValue): 'lebensmittel' | 'andere' | undefined {
+  if (typeof item === 'object' && item !== null && item.category) {
+    return item.category as 'lebensmittel' | 'andere';
+  }
+  const text = getAllergyText(item);
+  return isLebensmittelAllergen(text) ? 'lebensmittel' : undefined;
+}
+
+export function isKnownFoodAllergy(item: AllergyItemValue): boolean {
+  const category = getAllergyCategory(item);
+  if (category === 'andere') return false;
+  const text = getAllergyText(item);
+  return getAllergenIconKey(text) !== 'default';
+}
+
+export function sortAllergiesList<T extends AllergyItemValue>(items: T[]): T[] {
+  return [...items].sort((a, b) => {
+    const aKnown = isKnownFoodAllergy(a);
+    const bKnown = isKnownFoodAllergy(b);
+    if (aKnown && !bKnown) return -1;
+    if (!aKnown && bKnown) return 1;
+    return 0;
+  });
 }
 
 export const ALLERGEN_COLORS: Record<string, string> = {

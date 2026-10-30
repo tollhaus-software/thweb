@@ -1,4 +1,5 @@
 import React from 'react';
+import { getAllergenIconKey } from '../../utils/mealAllergens';
 
 interface AllergenIconProps {
   allergenKey: string;
@@ -385,7 +386,7 @@ const DefaultTagIllustration: React.FC<{ size: number; className?: string }> = (
 );
 
 export const AllergenIcon: React.FC<AllergenIconProps> = ({ allergenKey, size = 18, className }) => {
-  const norm = (allergenKey || '').toLowerCase().trim();
+  const norm = getAllergenIconKey(allergenKey);
 
   switch (norm) {
     case 'gluten':

@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useRealtime } from '../../hooks/useRealtime';
 import { t, formatDashboardDate } from '../../utils/i18n';
+import { AllergenIcon } from '../MealAllergens/AllergenIcon';
+import { isLebensmittelAllergen, getAllergenDisplayLabel } from '../../utils/mealAllergens';
 import {
   UtensilsCrossed,
   Soup,
@@ -26,12 +28,14 @@ interface GroupAllergiesSummary {
   group_id: number;
   group_name: string;
   allergies: string[];
+  food_allergies?: string[];
 }
 
 interface AllergiesSummaryData {
   date: string;
   groups: GroupAllergiesSummary[];
   employees: string[];
+  food_employees?: string[];
 }
 
 interface RealtimeEvent {
@@ -290,11 +294,35 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
                   </div>
                   <div className="kiosk-allergies-list">
                     {grp.allergies && grp.allergies.length > 0 ? (
-                      grp.allergies.map((allergy, idx) => (
-                        <span key={idx} className="kiosk-allergy-badge">
-                          {allergy}
-                        </span>
-                      ))
+                      grp.allergies.map((allergy, idx) => {
+                        const isFood =
+                          Boolean(grp.food_allergies && grp.food_allergies.includes(allergy)) ||
+                          isLebensmittelAllergen(allergy);
+                        const display = getAllergenDisplayLabel(allergy);
+                        return (
+                          <span
+                            key={idx}
+                            className="kiosk-allergy-badge"
+                            data-testid={`group-allergy-badge-${grp.group_id}-${idx}`}
+                          >
+                            {isFood && (
+                              <span
+                                className="kiosk-allergy-icon"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  marginRight: '0.45rem',
+                                  flexShrink: 0,
+                                }}
+                                data-testid={`group-allergy-icon-${grp.group_id}-${idx}`}
+                              >
+                                <AllergenIcon allergenKey={allergy} size={embedded ? 20 : 30} />
+                              </span>
+                            )}
+                            <span>{display}</span>
+                          </span>
+                        );
+                      })
                     ) : (
                       <span className="kiosk-empty-text">{t('noAllergies')}</span>
                     )}
@@ -309,11 +337,37 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
                 </div>
                 <div className="kiosk-allergies-list">
                   {allergiesData?.employees && allergiesData.employees.length > 0 ? (
-                    allergiesData.employees.map((allergy, idx) => (
-                      <span key={idx} className="kiosk-allergy-badge kiosk-allergy-badge-employee">
-                        {allergy}
-                      </span>
-                    ))
+                    allergiesData.employees.map((allergy, idx) => {
+                      const isFood =
+                        Boolean(
+                          allergiesData.food_employees &&
+                            allergiesData.food_employees.includes(allergy)
+                        ) || isLebensmittelAllergen(allergy);
+                      const display = getAllergenDisplayLabel(allergy);
+                      return (
+                        <span
+                          key={idx}
+                          className="kiosk-allergy-badge kiosk-allergy-badge-employee"
+                          data-testid={`employee-allergy-badge-${idx}`}
+                        >
+                          {isFood && (
+                            <span
+                              className="kiosk-allergy-icon"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                marginRight: '0.45rem',
+                                flexShrink: 0,
+                              }}
+                              data-testid={`employee-allergy-icon-${idx}`}
+                            >
+                              <AllergenIcon allergenKey={allergy} size={embedded ? 20 : 30} />
+                            </span>
+                          )}
+                          <span>{display}</span>
+                        </span>
+                      );
+                    })
                   ) : (
                     <span className="kiosk-empty-text">{t('noAllergies')}</span>
                   )}
