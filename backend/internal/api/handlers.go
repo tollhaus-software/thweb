@@ -2059,10 +2059,11 @@ type GroupAllergiesSummary struct {
 }
 
 type AllergiesSummaryResponse struct {
-	Date          string                  `json:"date"`
-	Groups        []GroupAllergiesSummary `json:"groups"`
-	Employees     []string                `json:"employees"`
-	FoodEmployees []string                `json:"food_employees,omitempty"`
+	Date           string                        `json:"date"`
+	Groups         []GroupAllergiesSummary       `json:"groups"`
+	Employees      []string                      `json:"employees"`
+	FoodEmployees  []string                      `json:"food_employees,omitempty"`
+	MealComponents []models.MealAllergenComponent `json:"meal_components"`
 }
 
 func deduplicateAndSortAllergies(lists ...[]string) []string {
@@ -2209,6 +2210,17 @@ func (s *Server) HandleGetAllergiesSummary(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
+	mealDay, err := s.Store.GetMealAllergenDay(r.Context(), targetDate)
+	mealComponents := make([]models.MealAllergenComponent, 0)
+	if err == nil && mealDay != nil && mealDay.HasAllergenRecord && len(mealDay.MealComponents) > 0 {
+		for _, comp := range mealDay.MealComponents {
+			mealComponents = append(mealComponents, models.MealAllergenComponent{
+				Name:      comp.Name,
+				Allergens: comp.Allergens,
+			})
+		}
+	}
+
 	resp := AllergiesSummaryResponse{
 		Date: targetDate.Format("2006-01-02"),
 		Groups: []GroupAllergiesSummary{
@@ -2231,8 +2243,9 @@ func (s *Server) HandleGetAllergiesSummary(w http.ResponseWriter, r *http.Reques
 				FoodAllergies: deduplicateAndSortAllergies(groupFoodLists[3]...),
 			},
 		},
-		Employees:     deduplicateAndSortAllergies(empLists...),
-		FoodEmployees: deduplicateAndSortAllergies(empFoodLists...),
+		Employees:      deduplicateAndSortAllergies(empLists...),
+		FoodEmployees:  deduplicateAndSortAllergies(empFoodLists...),
+		MealComponents: mealComponents,
 	}
 
 	jsonResponse(w, resp)

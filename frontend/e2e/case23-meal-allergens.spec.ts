@@ -326,13 +326,11 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     // Empty state dropzone is displayed when no components are added yet
     await expect(page.getByTestId('components-empty-dropzone')).toBeVisible();
 
-    // Verify completion checklist above Finalisieren button:
-    const checklist = page.getByTestId('editor-completion-checklist');
-    await expect(checklist).toBeVisible();
-    // Cook was matched from plan ("Anna Köchin"), so cook requirement is satisfied
-    await expect(page.getByTestId('checklist-item-cook')).toHaveAttribute('data-satisfied', 'true');
-    // Components requirement is NOT yet satisfied
-    await expect(page.getByTestId('checklist-item-components')).toHaveAttribute('data-satisfied', 'false');
+    // Verify completion checklist next to Finalisieren button:
+    // Cook was matched from plan ("Anna Köchin"), so cook requirement is satisfied (disappears)
+    await expect(page.getByTestId('checklist-item-cook')).toHaveCount(0);
+    // Components requirement is NOT yet satisfied (shows pending chip)
+    await expect(page.getByTestId('checklist-item-components')).toBeVisible();
 
     // Verify "Finalisieren" button exists under meal components and is initially disabled (no components yet)
     await expect(page.getByTestId('finalize-allergens-btn')).toBeVisible();
@@ -341,7 +339,7 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
 
     // 8. Verify "+ Komponente" button opens editing popover:
     const addCompBtn = page.getByTestId('add-meal-component-btn');
-    await expect(addCompBtn).toContainText('Komponente');
+    await expect(addCompBtn).toContainText('Komponente hinzufügen...');
     await addCompBtn.click();
 
     // Component popover opens with name input
@@ -384,8 +382,10 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     await expect(page.getByTestId('meal-component-name-text-0')).toHaveText('Spaghetti Bolognese');
     // Empty state dropzone disappears once components exist
     await expect(page.getByTestId('components-empty-dropzone')).toHaveCount(0);
-    // Components requirement in checklist is now satisfied!
-    await expect(page.getByTestId('checklist-item-components')).toHaveAttribute('data-satisfied', 'true');
+    // Components requirement in checklist is now satisfied (both cook and components satisfied, so no pending chips)
+    await expect(page.getByTestId('checklist-item-components')).toHaveCount(0);
+    await expect(page.getByTestId('checklist-item-cook')).toHaveCount(0);
+    await expect(page.getByTestId('finalize-allergens-btn')).toBeEnabled();
 
     // Add second component (Gurkensalat) from meal plan suggestion
     await addCompBtn.click();
@@ -536,7 +536,10 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     await expect(finalizeBtn).toBeDisabled();
 
     // 14. Edit allergens -> verify editing resets status to "Entwurf", and Finalisieren is re-enabled
+    await page.getByTestId('edit-meal-component-name-btn-0').click();
+    await expect(page.getByTestId('meal-component-name-input-0')).toBeVisible();
     await page.getByTestId('remove-allergen-btn-0-Knoblauch').click();
+    await page.getByTestId('popover-done-btn').click();
     await expect(page.getByTestId('allergens-editor-status')).toHaveText('Status: Entwurf');
     await expect(page.getByTestId('finalized-warning-banner')).toHaveCount(0);
     await expect(page.getByTestId('finalize-allergens-btn')).toBeEnabled();
@@ -563,8 +566,8 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     await expect(page.getByTestId('components-empty-dropzone')).toBeVisible();
 
     // Both cook and components requirements are pending in the checklist
-    await expect(page.getByTestId('checklist-item-cook')).toHaveAttribute('data-satisfied', 'false');
-    await expect(page.getByTestId('checklist-item-components')).toHaveAttribute('data-satisfied', 'false');
+    await expect(page.getByTestId('checklist-item-cook')).toBeVisible();
+    await expect(page.getByTestId('checklist-item-components')).toBeVisible();
     await expect(page.getByTestId('finalize-allergens-btn')).toBeDisabled();
 
     // Add a component via button inside the empty dropzone
@@ -574,10 +577,10 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     await unseededCompInput.fill('Suppe');
     await unseededCompInput.press('Enter');
 
-    // Dropzone disappears, component checklist item satisfied, but cook is still pending -> Finalize remains disabled
+    // Dropzone disappears, component checklist item satisfied (disappears), but cook is still pending -> Finalize remains disabled
     await expect(page.getByTestId('components-empty-dropzone')).toHaveCount(0);
-    await expect(page.getByTestId('checklist-item-components')).toHaveAttribute('data-satisfied', 'true');
-    await expect(page.getByTestId('checklist-item-cook')).toHaveAttribute('data-satisfied', 'false');
+    await expect(page.getByTestId('checklist-item-components')).toHaveCount(0);
+    await expect(page.getByTestId('checklist-item-cook')).toBeVisible();
     await expect(page.getByTestId('finalize-allergens-btn')).toBeDisabled();
 
     // Clicking cook checklist item focuses the cook input
@@ -585,16 +588,16 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     const unseededCookInput = page.getByTestId('cook-combobox-input');
     await expect(unseededCookInput).toBeFocused();
 
-    // Select cook -> cook requirement satisfied, and Finalize button becomes ENABLED!
+    // Select cook -> cook requirement satisfied (disappears), and Finalize button becomes ENABLED!
     await unseededCookInput.fill('Chefkoch Tom');
     await unseededCookInput.press('Enter');
-    await expect(page.getByTestId('checklist-item-cook')).toHaveAttribute('data-satisfied', 'true');
+    await expect(page.getByTestId('checklist-item-cook')).toHaveCount(0);
     await expect(page.getByTestId('finalize-allergens-btn')).toBeEnabled();
 
-    // Clear cook -> cook requirement becomes pending again, and Finalize button is disabled again!
+    // Clear cook -> cook requirement becomes pending again (reappears), and Finalize button is disabled again!
     await unseededCookInput.fill('');
     await unseededCookInput.press('Enter');
-    await expect(page.getByTestId('checklist-item-cook')).toHaveAttribute('data-satisfied', 'false');
+    await expect(page.getByTestId('checklist-item-cook')).toBeVisible();
     await expect(page.getByTestId('finalize-allergens-btn')).toBeDisabled();
   });
 });
