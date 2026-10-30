@@ -2017,6 +2017,9 @@ func TestAllergies_ChildrenEmployeesSummaryAndAudit(t *testing.T) {
 	if grp1.GroupID != 1 || len(grp1.Allergies) != 3 || grp1.Allergies[0] != "Erdnuss" || grp1.Allergies[1] != "Haselnuss" || grp1.Allergies[2] != "Laktose" {
 		t.Errorf("expected group 1 deduplicated allergies [Erdnuss Haselnuss Laktose], got %+v", grp1.Allergies)
 	}
+	if len(grp1.FoodAllergies) != 3 || grp1.FoodAllergies[0] != "Erdnuss" || grp1.FoodAllergies[1] != "Haselnuss" || grp1.FoodAllergies[2] != "Laktose" {
+		t.Errorf("expected group 1 food allergies [Erdnuss Haselnuss Laktose], got %+v", grp1.FoodAllergies)
+	}
 	if len(sumResp.Employees) < 2 {
 		t.Errorf("expected employee allergies in summary to include Gluten and Sellerie, got %+v", sumResp.Employees)
 	}

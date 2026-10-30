@@ -10,6 +10,8 @@ import EasyEdit, { Types } from './components/InlineEdit';
 import { Pencil, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, ArrowUpRight, X, Clock, AlertCircle, ChevronLeft, ChevronRight, Plus, ArrowUpDown, Check, Eye, RefreshCw } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { MultiValueListEditor, type MultiValueFlagConfig, type MultiValueEntry, type MultiValueItem, getEntryValue, isFlagActive, PHONE_TYPES, getPhoneTypeSymbol, getPhoneTypeLabel } from './components/Table/MultiValueListEditor';
+import { AllergiesListEditor } from './components/Allergies/AllergiesListEditor';
+import { isLebensmittelAllergen } from './utils/mealAllergens';
 import { MultiValueCell } from './components/Table/MultiValueCell';
 import { NotesEditor } from './components/Table/NotesEditor';
 import { AddressEditor } from './components/Table/AddressEditor';
@@ -4338,11 +4340,31 @@ const Dashboard: React.FC = () => {
 
   const handleSaveActiveMultiValue = (newValues: (string | MultiValueEntry)[]) => {
     if (activeMultiValueField === 'allergies') {
-      const cleanStrings = newValues.map((v) => getEntryValue(v).trim()).filter(Boolean);
+      const allergyPayload = newValues
+        .map((v) => {
+          if (typeof v === 'string') {
+            const trimmed = v.trim();
+            if (!trimmed) return null;
+            return {
+              name: trimmed,
+              value: trimmed,
+              category: isLebensmittelAllergen(trimmed) ? 'lebensmittel' : undefined,
+            };
+          }
+          const text = ((v as any).name || (v as any).value || '').trim();
+          if (!text) return null;
+          return {
+            name: text,
+            value: text,
+            category: (v as any).category || (isLebensmittelAllergen(text) ? 'lebensmittel' : undefined),
+          };
+        })
+        .filter(Boolean);
+
       if (activeChildForMultiValue) {
-        handleSaveChildField(activeChildForMultiValue, 'allergies', cleanStrings);
+        handleSaveChildField(activeChildForMultiValue, 'allergies', allergyPayload);
       } else if (activeEmployeeForMultiValue) {
-        handleSaveEmployeeField(activeEmployeeForMultiValue, 'allergies', cleanStrings);
+        handleSaveEmployeeField(activeEmployeeForMultiValue, 'allergies', allergyPayload);
       }
       return;
     }
@@ -7959,22 +7981,38 @@ function formatParentsSummary(parents: any[]): string {
         />
 
         {/* Manage Multi-Values (Emails / Phones / Allergies) Popover */}
-        <MultiValueListEditor
-          key={`${(activeParentForMultiValue || activeChildForMultiValue || activeEmployeeForMultiValue)?.id || 'unknown'}-${activeMultiValueField || 'field'}`}
-          isOpen={Boolean(multiValuePopoverAnchor && (activeParentForMultiValue || activeChildForMultiValue || activeEmployeeForMultiValue) && activeMultiValueField)}
-          anchorEl={multiValuePopoverAnchor}
-          onClose={closeManageMultiValue}
-          values={activeMultiValueValues}
-          flags={activeMultiValueFlags}
-          types={activeMultiValueField === 'phones' ? PHONE_TYPES : undefined}
-          title={activeMultiValueTitle}
-          placeholder={activeMultiValuePlaceholder}
-          onSave={handleSaveActiveMultiValue}
-          canEditItem={canEditMultiValueItem}
-          canDeleteItem={canDeleteMultiValueItem}
-          canToggleFlag={canToggleMultiValueFlag}
-          disabledReason={getMultiValueDisabledReason}
-        />
+        {activeMultiValueField === 'allergies' ? (
+          <AllergiesListEditor
+            key={`${(activeParentForMultiValue || activeChildForMultiValue || activeEmployeeForMultiValue)?.id || 'unknown'}-allergies`}
+            isOpen={Boolean(multiValuePopoverAnchor && (activeParentForMultiValue || activeChildForMultiValue || activeEmployeeForMultiValue) && activeMultiValueField === 'allergies')}
+            anchorEl={multiValuePopoverAnchor}
+            onClose={closeManageMultiValue}
+            values={activeMultiValueValues}
+            title={activeMultiValueTitle}
+            placeholder={activeMultiValuePlaceholder}
+            onSave={handleSaveActiveMultiValue}
+            canDeleteItem={canDeleteMultiValueItem}
+            canEditItem={canEditMultiValueItem}
+            disabledReason={getMultiValueDisabledReason}
+          />
+        ) : (
+          <MultiValueListEditor
+            key={`${(activeParentForMultiValue || activeChildForMultiValue || activeEmployeeForMultiValue)?.id || 'unknown'}-${activeMultiValueField || 'field'}`}
+            isOpen={Boolean(multiValuePopoverAnchor && (activeParentForMultiValue || activeChildForMultiValue || activeEmployeeForMultiValue) && activeMultiValueField)}
+            anchorEl={multiValuePopoverAnchor}
+            onClose={closeManageMultiValue}
+            values={activeMultiValueValues}
+            flags={activeMultiValueFlags}
+            types={activeMultiValueField === 'phones' ? PHONE_TYPES : undefined}
+            title={activeMultiValueTitle}
+            placeholder={activeMultiValuePlaceholder}
+            onSave={handleSaveActiveMultiValue}
+            canEditItem={canEditMultiValueItem}
+            canDeleteItem={canDeleteMultiValueItem}
+            canToggleFlag={canToggleMultiValueFlag}
+            disabledReason={getMultiValueDisabledReason}
+          />
+        )}
 
         {/* Manage Vaccination Status Popover */}
         <VaccinationStatusPopover

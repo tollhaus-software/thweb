@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pencil } from 'lucide-react';
 import { t } from '../../utils/i18n';
+import { getAllergenDisplayLabel, sortAllergiesList } from '../../utils/mealAllergens';
 import { getEntryValue, isFlagActive, getPhoneTypeSymbol, getPhoneTypeLabel, type MultiValueItem } from './MultiValueListEditor';
 
 export interface MultiValueCellProps {
@@ -23,6 +24,13 @@ export const MultiValueCell: React.FC<MultiValueCellProps> = ({
   canEdit = true,
 }) => {
   const cellId = `cell-${field}-${id}`;
+
+  const displayValues = React.useMemo(() => {
+    if (field === 'allergies' && values && values.length > 0) {
+      return sortAllergiesList(values as any[]);
+    }
+    return values;
+  }, [field, values]);
 
   return (
     <div
@@ -50,9 +58,10 @@ export const MultiValueCell: React.FC<MultiValueCellProps> = ({
       title={placeholder}
     >
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px', textAlign: 'left' }}>
-        {values && values.length > 0 ? (
-          values.map((v, i) => {
-            const val = getEntryValue(v);
+        {displayValues && displayValues.length > 0 ? (
+          displayValues.map((v, i) => {
+            const rawVal = getEntryValue(v);
+            const val = field === 'allergies' ? getAllergenDisplayLabel(rawVal) : rawVal;
             const isAddressList = isFlagActive(v, 'address_list', true);
             const isIdentifier = isFlagActive(v, 'identifier_email', false);
             const phoneType = field === 'phones' ? ((typeof v === 'object' && v !== null && (v as any).type) ? (v as any).type : 'mobile') : undefined;

@@ -1,0 +1,278 @@
+/* AllergiesListEditor Styles */
+
+.allergies-popover {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--bg-surface, #ffffff);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  color: var(--text);
+  max-height: 85vh;
+  box-sizing: border-box;
+}
+
+.allergies-popover-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.allergies-popover-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.allergies-popover-close-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: var(--text-secondary, #94a3b8);
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.allergies-popover-close-btn:hover {
+  color: var(--text-h);
+  background-color: var(--bg-hover, rgba(0, 0, 0, 0.05));
+}
+
+/* Current entries list */
+.allergies-current-container {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  max-height: 180px;
+  overflow-y: auto;
+  background: var(--bg-subtle, rgba(0, 0, 0, 0.02));
+}
+
+.allergies-current-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.allergies-current-row {
+  border-bottom: 1px solid var(--border);
+  transition: background-color 0.12s ease;
+}
+
+.allergies-current-row:last-child {
+  border-bottom: none;
+}
+
+.allergies-current-row:hover {
+  background-color: var(--bg-hover);
+}
+
+.allergies-current-cell-content {
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.allergies-current-cell-actions {
+  padding: 6px 10px;
+  text-align: right;
+  white-space: nowrap;
+  width: 50px;
+}
+
+.allergies-empty-notice {
+  padding: 14px;
+  text-align: center;
+  color: var(--text-secondary, #94a3b8);
+  font-style: italic;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+/* Category Navigation / Choice */
+.allergies-category-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px;
+  background: var(--bg-subtle, #f1f5f9);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.allergies-category-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary, #64748b);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.allergies-category-tab.active {
+  background: var(--bg-surface, #ffffff);
+  color: var(--primary, #2563eb);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.allergies-category-tab:hover:not(.active) {
+  color: var(--text-h);
+  background: var(--bg-hover);
+}
+
+/* Top-level choice cards */
+.allergies-choice-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.allergies-choice-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface, #ffffff);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.allergies-choice-card:hover {
+  border-color: var(--primary, #2563eb);
+  background: var(--bg-hover, #f8fafc);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.allergies-choice-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.allergies-choice-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-h);
+}
+
+.allergies-choice-desc {
+  font-size: 0.78rem;
+  color: var(--text-secondary, #64748b);
+  line-height: 1.35;
+}
+
+/* Category header with Back Button */
+.allergies-section-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.allergies-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  font-size: 0.82rem;
+  color: var(--primary, #2563eb);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.allergies-back-btn:hover {
+  text-decoration: underline;
+}
+
+/* Custom allergy other row */
+.allergies-other-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.allergies-other-input {
+  flex: 1;
+  padding: 7px 10px;
+  font-size: 0.875rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--input-bg, #ffffff);
+  color: var(--input-text, var(--text));
+  outline: none;
+  box-sizing: border-box;
+}
+
+.allergies-other-input:focus {
+  border-color: var(--primary, #2563eb);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.allergies-other-add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 14px;
+  background: var(--primary, #2563eb);
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: opacity 0.15s ease;
+}
+
+.allergies-other-add-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.allergies-popover-footer {
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  margin-top: 4px;
+}
+
+.allergies-done-btn {
+  padding: 5px 16px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  background: var(--primary, #2563eb);
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.allergies-done-btn:hover {
+  opacity: 0.9;
+}

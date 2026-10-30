@@ -461,9 +461,10 @@ type VaccinationStatusProtected struct {
 }
 
 // AllergyItem represents an extensible allergy entry inside AllergiesProtectedPayload.
-// It unmarshals from either a JSON object `{"name": "..."}` or a plain JSON string `"..."`.
+// It unmarshals from either a JSON object `{"name": "...", "category": "..."}` or a plain JSON string `"..."`.
 type AllergyItem struct {
-	Name string `json:"name"`
+	Name     string `json:"name"`
+	Category string `json:"category,omitempty"`
 }
 
 func (a *AllergyItem) UnmarshalJSON(data []byte) error {
@@ -473,9 +474,10 @@ func (a *AllergyItem) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 	var obj struct {
-		Name  string `json:"name"`
-		Value string `json:"value"`
-		Type  string `json:"type"`
+		Name     string `json:"name"`
+		Value    string `json:"value"`
+		Type     string `json:"type"`
+		Category string `json:"category"`
 	}
 	if err := json.Unmarshal(data, &obj); err != nil {
 		return err
@@ -487,6 +489,7 @@ func (a *AllergyItem) UnmarshalJSON(data []byte) error {
 	} else {
 		a.Name = strings.TrimSpace(obj.Type)
 	}
+	a.Category = strings.TrimSpace(obj.Category)
 	return nil
 }
 
@@ -520,34 +523,117 @@ func EncodeAllergiesPayload(allergies []string) ([]byte, error) {
 	return json.Marshal(payload)
 }
 
-// DecodeAllergiesPayload deserializes an AllergiesProtectedPayload (or plain JSON string array) into a slice of strings.
-func DecodeAllergiesPayload(rawJSON []byte) ([]string, error) {
+// EncodeAllergiesPayloadItems serializes AllergyItem entries into the extensible JSON payload.
+func EncodeAllergiesPayloadItems(items []AllergyItem) ([]byte, error) {
+	out := make([]AllergyItem, 0, len(items))
+	for _, it := range items {
+		name := strings.TrimSpace(it.Name)
+		if name != "" {
+			out = append(out, AllergyItem{
+				Name:     name,
+				Category: strings.TrimSpace(it.Category),
+			})
+		}
+	}
+	payload := AllergiesProtectedPayload{
+		Allergies: out,
+	}
+	return json.Marshal(payload)
+}
+
+// DecodeAllergiesPayloadItems deserializes an AllergiesProtectedPayload into a slice of AllergyItem.
+func DecodeAllergiesPayloadItems(rawJSON []byte) ([]AllergyItem, error) {
 	if len(rawJSON) == 0 {
-		return []string{}, nil
+		return []AllergyItem{}, nil
 	}
 	var payload AllergiesProtectedPayload
 	if err := json.Unmarshal(rawJSON, &payload); err == nil && payload.Allergies != nil {
-		out := make([]string, 0, len(payload.Allergies))
+		out := make([]AllergyItem, 0, len(payload.Allergies))
 		for _, item := range payload.Allergies {
 			trimmed := strings.TrimSpace(item.Name)
 			if trimmed != "" {
-				out = append(out, trimmed)
+				out = append(out, AllergyItem{
+					Name:     trimmed,
+					Category: strings.TrimSpace(item.Category),
+				})
 			}
 		}
 		return out, nil
 	}
 	var plainSlice []AllergyItem
 	if err := json.Unmarshal(rawJSON, &plainSlice); err == nil {
-		out := make([]string, 0, len(plainSlice))
+		out := make([]AllergyItem, 0, len(plainSlice))
 		for _, item := range plainSlice {
 			trimmed := strings.TrimSpace(item.Name)
 			if trimmed != "" {
-				out = append(out, trimmed)
+				out = append(out, AllergyItem{
+					Name:     trimmed,
+					Category: strings.TrimSpace(item.Category),
+				})
 			}
 		}
 		return out, nil
 	}
 	return nil, fmt.Errorf("invalid allergies payload JSON")
+}
+
+// DecodeAllergiesPayload deserializes an AllergiesProtectedPayload (or plain JSON string array) into a slice of strings.
+func DecodeAllergiesPayload(rawJSON []byte) ([]string, error) {
+	items, err := DecodeAllergiesPayloadItems(rawJSON)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(items))
+	for _, it := range items {
+		out = append(out, it.Name)
+	}
+	return out, nil
+}
+
+// IsKnownFoodAllergen checks if an allergen name corresponds to a known food allergen keyword or subtype.
+func IsKnownFoodAllergen(name string) bool {
+	norm := strings.ToLower(strings.TrimSpace(name))
+	if norm == "" {
+		return false
+	}
+	foodKeywords := []string{
+		"gluten", "weizen", "dinkel", "roggen", "gerste", "hafer", "khorasan",
+		"eier", "ei", "hühnerei",
+		"laktose", "lactose", "milch", "kuhmilch",
+		"sellerie",
+		"sesam",
+		"lupin",
+		"krebstier", "krabbe", "garnele", "shrimp", "hummer",
+		"fisch",
+		"soja",
+		"schalenfr", "nuss", "nüss", "mandel", "cashew", "pistazie", "walnuss", "haselnuss", "pecan", "paranu", "macadamia",
+		"senf",
+		"sulfit", "sulphit", "schwefeldioxid",
+		"weichtier", "muschel", "schnecke", "auster", "tintenfisch",
+		"erdnuss", "erdnüss",
+		"kiwi",
+		"apfel", "äpfel", "erdbeer", "tomate", "zitrus", "orange", "banane", "kakao", "schokolade", "honig", "karotte",
+	}
+	for _, kw := range foodKeywords {
+		if strings.Contains(norm, kw) {
+			return true
+		}
+	}
+	return false
+}
+
+// AllergyItemsEqual returns true if two AllergyItem slices have identical Name and Category in order.
+func AllergyItemsEqual(a, b []AllergyItem) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if strings.TrimSpace(a[i].Name) != strings.TrimSpace(b[i].Name) ||
+			strings.TrimSpace(a[i].Category) != strings.TrimSpace(b[i].Category) {
+			return false
+		}
+	}
+	return true
 }
 
 // StringSlicesEqual returns true if two string slices have identical elements in order.
@@ -691,6 +777,7 @@ type Employee struct {
 	IsKinderschutzbeauftragter bool           `json:"is_kinderschutzbeauftragter"`
 	AllergiesProtected         []byte         `json:"allergies_protected,omitempty"`
 	Allergies                  []string       `json:"allergies,omitempty"`
+	AllergiesItems             []AllergyItem  `json:"allergies_items,omitempty"`
 	AllergiesUpdated           bool           `json:"allergies_updated,omitempty"`
 	ClearAllergies             bool           `json:"-"`
 	CreatedAt                  time.Time      `json:"created_at"`
@@ -728,12 +815,16 @@ func (e *Employee) UnmarshalJSON(data []byte) error {
 	}
 	if aux.AllergiesRaw != nil {
 		allergies := make([]string, 0, len(*aux.AllergiesRaw))
+		items := make([]AllergyItem, 0, len(*aux.AllergiesRaw))
 		for _, item := range *aux.AllergiesRaw {
-			if item.Name != "" {
-				allergies = append(allergies, item.Name)
+			trimmedName := strings.TrimSpace(item.Name)
+			if trimmedName != "" {
+				allergies = append(allergies, trimmedName)
+				items = append(items, AllergyItem{Name: trimmedName, Category: strings.TrimSpace(item.Category)})
 			}
 		}
 		e.Allergies = allergies
+		e.AllergiesItems = items
 	}
 	return nil
 }

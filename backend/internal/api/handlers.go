@@ -1141,22 +1141,29 @@ func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 	var sanitizedAllergies []string
 
 	if req.Allergies != nil {
-		rawItems := make([]string, 0, len(*req.Allergies))
+		sanitizedItems := make([]models.AllergyItem, 0, len(*req.Allergies))
+		sanitizedAllergies = make([]string, 0, len(*req.Allergies))
 		for _, item := range *req.Allergies {
-			rawItems = append(rawItems, item.Name)
+			name := strings.TrimSpace(item.Name)
+			if name != "" {
+				sanitizedItems = append(sanitizedItems, models.AllergyItem{
+					Name:     name,
+					Category: strings.TrimSpace(item.Category),
+				})
+				sanitizedAllergies = append(sanitizedAllergies, name)
+			}
 		}
-		sanitizedAllergies = models.SanitizeAllergiesList(rawItems)
 
-		var existingAllergies []string
+		var existingItems []models.AllergyItem
 		if existingChild != nil && len(existingChild.AllergiesProtected) > 0 && s.AllergiesKMSProvider != nil {
 			allergiesCipher := crypto.NewRequestCipherContext(s.AllergiesKMSProvider, s.Store, crypto.PurposeAllergies, "", "")
 			if plainJSON, err := allergiesCipher.Decrypt(r.Context(), existingChild.AllergiesProtected); err == nil && len(plainJSON) > 0 {
-				existingAllergies, _ = models.DecodeAllergiesPayload(plainJSON)
+				existingItems, _ = models.DecodeAllergiesPayloadItems(plainJSON)
 			}
 			allergiesCipher.Close()
 		}
 
-		allergiesChanged := !models.StringSlicesEqual(sanitizedAllergies, existingAllergies)
+		allergiesChanged := !models.AllergyItemsEqual(sanitizedItems, existingItems)
 		if allergiesChanged || !hasChildrenWrite {
 			if user == nil || !user.HasPermission("allergies.children.write") {
 				httpErrorLog(w, r, "Forbidden: allergies.children.write permission required", http.StatusForbidden, nil)
@@ -1165,7 +1172,7 @@ func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if allergiesChanged {
-			if len(sanitizedAllergies) == 0 {
+			if len(sanitizedItems) == 0 {
 				clearAllergies = true
 				allergiesUpdated = true
 			} else {
@@ -1173,7 +1180,7 @@ func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 					httpErrorLog(w, r, "Allergies KMS provider is not configured", http.StatusServiceUnavailable, nil)
 					return
 				}
-				rawJSON, err := models.EncodeAllergiesPayload(sanitizedAllergies)
+				rawJSON, err := models.EncodeAllergiesPayloadItems(sanitizedItems)
 				if err != nil {
 					httpErrorLog(w, r, "Failed to marshal allergies payload JSON", http.StatusBadRequest, err)
 					return
@@ -1942,19 +1949,40 @@ func (s *Server) HandleUpdateEmployee(w http.ResponseWriter, r *http.Request) {
 		emp.IsKinderschutzbeauftragter = existingEmp.IsKinderschutzbeauftragter
 	}
 
-	var existingAllergies []string
+	var existingItems []models.AllergyItem
 	if len(existingEmp.AllergiesProtected) > 0 && s.AllergiesKMSProvider != nil {
 		allergiesCipher := crypto.NewRequestCipherContext(s.AllergiesKMSProvider, s.Store, crypto.PurposeAllergies, "", "")
 		if plainJSON, err := allergiesCipher.Decrypt(r.Context(), existingEmp.AllergiesProtected); err == nil && len(plainJSON) > 0 {
-			existingAllergies, _ = models.DecodeAllergiesPayload(plainJSON)
+			existingItems, _ = models.DecodeAllergiesPayloadItems(plainJSON)
 		}
 		allergiesCipher.Close()
 	}
 
-	finalAllergies := existingAllergies
-	if emp.Allergies != nil {
-		sanitizedAllergies := models.SanitizeAllergiesList(emp.Allergies)
-		allergiesChanged := !models.StringSlicesEqual(sanitizedAllergies, existingAllergies)
+	finalAllergies := make([]string, 0, len(existingItems))
+	for _, it := range existingItems {
+		finalAllergies = append(finalAllergies, it.Name)
+	}
+
+	if emp.Allergies != nil || len(emp.AllergiesItems) > 0 {
+		var inputItems []models.AllergyItem
+		if len(emp.AllergiesItems) > 0 {
+			inputItems = emp.AllergiesItems
+		} else {
+			for _, s := range emp.Allergies {
+				inputItems = append(inputItems, models.AllergyItem{Name: s})
+			}
+		}
+		sanitizedItems := make([]models.AllergyItem, 0, len(inputItems))
+		for _, it := range inputItems {
+			name := strings.TrimSpace(it.Name)
+			if name != "" {
+				sanitizedItems = append(sanitizedItems, models.AllergyItem{
+					Name:     name,
+					Category: strings.TrimSpace(it.Category),
+				})
+			}
+		}
+		allergiesChanged := !models.AllergyItemsEqual(sanitizedItems, existingItems)
 		if allergiesChanged || !hasEmployeesWrite {
 			if user == nil || !user.HasPermission("allergies.employees.write") {
 				httpErrorLog(w, r, "Forbidden: allergies.employees.write permission required", http.StatusForbidden, nil)
@@ -1962,7 +1990,7 @@ func (s *Server) HandleUpdateEmployee(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if allergiesChanged {
-			if len(sanitizedAllergies) == 0 {
+			if len(sanitizedItems) == 0 {
 				emp.ClearAllergies = true
 				emp.AllergiesUpdated = true
 			} else {
@@ -1970,7 +1998,7 @@ func (s *Server) HandleUpdateEmployee(w http.ResponseWriter, r *http.Request) {
 					httpErrorLog(w, r, "Allergies KMS provider is not configured", http.StatusServiceUnavailable, nil)
 					return
 				}
-				rawJSON, err := models.EncodeAllergiesPayload(sanitizedAllergies)
+				rawJSON, err := models.EncodeAllergiesPayloadItems(sanitizedItems)
 				if err != nil {
 					httpErrorLog(w, r, "Failed to marshal allergies payload JSON", http.StatusBadRequest, err)
 					return
@@ -1986,7 +2014,10 @@ func (s *Server) HandleUpdateEmployee(w http.ResponseWriter, r *http.Request) {
 				emp.AllergiesUpdated = true
 			}
 		}
-		finalAllergies = sanitizedAllergies
+		finalAllergies = make([]string, 0, len(sanitizedItems))
+		for _, it := range sanitizedItems {
+			finalAllergies = append(finalAllergies, it.Name)
+		}
 	} else if !hasEmployeesWrite {
 		httpErrorLog(w, r, "Forbidden: employees.all.write permission required", http.StatusForbidden, nil)
 		return
@@ -2021,15 +2052,17 @@ func (s *Server) HandleUpdateEmployee(w http.ResponseWriter, r *http.Request) {
 }
 
 type GroupAllergiesSummary struct {
-	GroupID   int      `json:"group_id"`
-	GroupName string   `json:"group_name"`
-	Allergies []string `json:"allergies"`
+	GroupID       int      `json:"group_id"`
+	GroupName     string   `json:"group_name"`
+	Allergies     []string `json:"allergies"`
+	FoodAllergies []string `json:"food_allergies,omitempty"`
 }
 
 type AllergiesSummaryResponse struct {
-	Date      string                  `json:"date"`
-	Groups    []GroupAllergiesSummary `json:"groups"`
-	Employees []string                `json:"employees"`
+	Date          string                  `json:"date"`
+	Groups        []GroupAllergiesSummary `json:"groups"`
+	Employees     []string                `json:"employees"`
+	FoodEmployees []string                `json:"food_employees,omitempty"`
 }
 
 func deduplicateAndSortAllergies(lists ...[]string) []string {
@@ -2104,7 +2137,13 @@ func (s *Server) HandleGetAllergiesSummary(w http.ResponseWriter, r *http.Reques
 		2: {},
 		3: {},
 	}
+	groupFoodLists := map[int][][]string{
+		1: {},
+		2: {},
+		3: {},
+	}
 	var empLists [][]string
+	var empFoodLists [][]string
 
 	if allergiesCipher != nil {
 		for _, fam := range families {
@@ -2117,8 +2156,25 @@ func (s *Server) HandleGetAllergiesSummary(w http.ResponseWriter, r *http.Reques
 					continue
 				}
 				if plainJSON, err := allergiesCipher.Decrypt(r.Context(), c.AllergiesProtected); err == nil && len(plainJSON) > 0 {
-					if decoded, err := models.DecodeAllergiesPayload(plainJSON); err == nil && len(decoded) > 0 {
-						groupLists[*currGrp] = append(groupLists[*currGrp], decoded)
+					if decodedItems, err := models.DecodeAllergiesPayloadItems(plainJSON); err == nil && len(decodedItems) > 0 {
+						var allNames []string
+						var foodNames []string
+						for _, it := range decodedItems {
+							name := strings.TrimSpace(it.Name)
+							if name == "" {
+								continue
+							}
+							allNames = append(allNames, name)
+							if it.Category == "lebensmittel" || models.IsKnownFoodAllergen(name) {
+								foodNames = append(foodNames, name)
+							}
+						}
+						if len(allNames) > 0 {
+							groupLists[*currGrp] = append(groupLists[*currGrp], allNames)
+						}
+						if len(foodNames) > 0 {
+							groupFoodLists[*currGrp] = append(groupFoodLists[*currGrp], foodNames)
+						}
 					}
 				}
 			}
@@ -2129,8 +2185,25 @@ func (s *Server) HandleGetAllergiesSummary(w http.ResponseWriter, r *http.Reques
 				continue
 			}
 			if plainJSON, err := allergiesCipher.Decrypt(r.Context(), emp.AllergiesProtected); err == nil && len(plainJSON) > 0 {
-				if decoded, err := models.DecodeAllergiesPayload(plainJSON); err == nil && len(decoded) > 0 {
-					empLists = append(empLists, decoded)
+				if decodedItems, err := models.DecodeAllergiesPayloadItems(plainJSON); err == nil && len(decodedItems) > 0 {
+					var allNames []string
+					var foodNames []string
+					for _, it := range decodedItems {
+						name := strings.TrimSpace(it.Name)
+						if name == "" {
+							continue
+						}
+						allNames = append(allNames, name)
+						if it.Category == "lebensmittel" || models.IsKnownFoodAllergen(name) {
+							foodNames = append(foodNames, name)
+						}
+					}
+					if len(allNames) > 0 {
+						empLists = append(empLists, allNames)
+					}
+					if len(foodNames) > 0 {
+						empFoodLists = append(empFoodLists, foodNames)
+					}
 				}
 			}
 		}
@@ -2140,22 +2213,26 @@ func (s *Server) HandleGetAllergiesSummary(w http.ResponseWriter, r *http.Reques
 		Date: targetDate.Format("2006-01-02"),
 		Groups: []GroupAllergiesSummary{
 			{
-				GroupID:   1,
-				GroupName: "Kleine Gruppe",
-				Allergies: deduplicateAndSortAllergies(groupLists[1]...),
+				GroupID:       1,
+				GroupName:     "Kleine Gruppe",
+				Allergies:     deduplicateAndSortAllergies(groupLists[1]...),
+				FoodAllergies: deduplicateAndSortAllergies(groupFoodLists[1]...),
 			},
 			{
-				GroupID:   2,
-				GroupName: "Große Gruppe",
-				Allergies: deduplicateAndSortAllergies(groupLists[2]...),
+				GroupID:       2,
+				GroupName:     "Große Gruppe",
+				Allergies:     deduplicateAndSortAllergies(groupLists[2]...),
+				FoodAllergies: deduplicateAndSortAllergies(groupFoodLists[2]...),
 			},
 			{
-				GroupID:   3,
-				GroupName: "Hort",
-				Allergies: deduplicateAndSortAllergies(groupLists[3]...),
+				GroupID:       3,
+				GroupName:     "Hort",
+				Allergies:     deduplicateAndSortAllergies(groupLists[3]...),
+				FoodAllergies: deduplicateAndSortAllergies(groupFoodLists[3]...),
 			},
 		},
-		Employees: deduplicateAndSortAllergies(empLists...),
+		Employees:     deduplicateAndSortAllergies(empLists...),
+		FoodEmployees: deduplicateAndSortAllergies(empFoodLists...),
 	}
 
 	jsonResponse(w, resp)
