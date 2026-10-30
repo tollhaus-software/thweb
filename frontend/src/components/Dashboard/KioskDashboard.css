@@ -603,47 +603,96 @@
 
 .kiosk-allergy-item-wrapper {
   display: inline-flex;
-  align-items: center;
-  gap: 0.55rem;
+  align-items: stretch;
+  vertical-align: middle;
+  border-radius: 9999px;
+  transition: all 0.15s ease;
+}
+
+/* Compound Rounded Pill: seamless continuous border with dashed transition to warning badge */
+.kiosk-allergy-item-wrapper.has-warning {
+  box-shadow: 0 1px 3px rgba(245, 158, 11, 0.18);
+  gap: 0;
+}
+
+.kiosk-allergy-item-wrapper.has-warning .kiosk-allergy-badge {
+  border-top-left-radius: 9999px;
+  border-bottom-left-radius: 9999px;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: none;
+  padding-right: 0.85rem;
+  background-image: linear-gradient(to right, transparent, rgba(245, 158, 11, 0.08));
+}
+
+.kiosk-allergy-item-wrapper.has-warning .kiosk-allergy-match-warning {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-top-right-radius: 9999px;
+  border-bottom-right-radius: 9999px;
+  border-left: 2px dashed #f59e0b;
+  padding-left: 0.85rem;
+}
+
+.kiosk-tablet-page.embedded .kiosk-allergy-item-wrapper.has-warning .kiosk-allergy-badge {
+  padding-right: 0.65rem;
+}
+
+.kiosk-tablet-page.embedded .kiosk-allergy-item-wrapper.has-warning .kiosk-allergy-match-warning {
+  border-left: 1.5px dashed #f59e0b;
+  padding-left: 0.65rem;
 }
 
 .kiosk-allergy-match-warning {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  padding: 0.55rem 1.15rem;
+  padding: 0.65rem 1.15rem;
   border-radius: 9999px;
-  background-color: #fffbeb;
+  background-color: #fef3c7;
   border: 2px solid #f59e0b;
   color: #451a03;
   font-size: 1.35rem;
   font-weight: 700;
   line-height: 1.2;
-  box-shadow: 0 2px 4px rgba(245, 158, 11, 0.15);
+  box-sizing: border-box;
   animation: warningPopIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-:root[data-theme='dark'] .kiosk-allergy-match-warning,
-:root:not([data-theme='light']) .kiosk-allergy-match-warning {
+:root[data-theme='dark'] .kiosk-allergy-match-warning {
   background-color: rgba(245, 158, 11, 0.25);
   border-color: #f59e0b;
   color: #fef08a;
 }
 
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .kiosk-allergy-match-warning {
+    background-color: rgba(245, 158, 11, 0.25);
+    border-color: #f59e0b;
+    color: #fef08a;
+  }
+}
+
 .kiosk-allergy-match-warning .kiosk-warning-icon {
-  color: #b45309;
+  color: #92400e;
   flex-shrink: 0;
 }
 
-:root[data-theme='dark'] .kiosk-allergy-match-warning .kiosk-warning-icon,
-:root:not([data-theme='light']) .kiosk-allergy-match-warning .kiosk-warning-icon {
+:root[data-theme='dark'] .kiosk-allergy-match-warning .kiosk-warning-icon {
   color: #fbbf24;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .kiosk-allergy-match-warning .kiosk-warning-icon {
+    color: #fbbf24;
+  }
 }
 
 .kiosk-tablet-page.embedded .kiosk-allergy-match-warning {
   font-size: 0.95rem;
-  padding: 0.35rem 0.75rem;
+  padding: 0.45rem 0.75rem;
   gap: 0.35rem;
+  border-width: 1.5px;
 }
 
 .kiosk-card-header-warning {
@@ -653,7 +702,7 @@
   margin-left: auto;
   padding: 0.3rem 0.85rem;
   border-radius: 9999px;
-  background-color: #fffbeb;
+  background-color: #fef3c7;
   border: 1.5px solid #f59e0b;
   color: #451a03;
   font-size: 1.1rem;
@@ -661,11 +710,18 @@
   line-height: 1.2;
 }
 
-:root[data-theme='dark'] .kiosk-card-header-warning,
-:root:not([data-theme='light']) .kiosk-card-header-warning {
+:root[data-theme='dark'] .kiosk-card-header-warning {
   background-color: rgba(245, 158, 11, 0.25);
   border-color: #f59e0b;
   color: #fef08a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .kiosk-card-header-warning {
+    background-color: rgba(245, 158, 11, 0.25);
+    border-color: #f59e0b;
+    color: #fef08a;
+  }
 }
 
 .kiosk-tablet-page.embedded .kiosk-card-header-warning {

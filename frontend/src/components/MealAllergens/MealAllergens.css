@@ -460,11 +460,18 @@
   color: #451a03;
 }
 
-:root[data-theme='dark'] .meal-allergens-checklist-item,
-:root:not([data-theme='light']) .meal-allergens-checklist-item {
+:root[data-theme='dark'] .meal-allergens-checklist-item {
   background: rgba(245, 158, 11, 0.25);
   border-color: #f59e0b;
   color: #fef08a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .meal-allergens-checklist-item {
+    background: rgba(245, 158, 11, 0.25);
+    border-color: #f59e0b;
+    color: #fef08a;
+  }
 }
 
 .meal-allergens-checklist-item:hover {
@@ -477,9 +484,14 @@
   flex-shrink: 0;
 }
 
-:root[data-theme='dark'] .checklist-icon-pending,
-:root:not([data-theme='light']) .checklist-icon-pending {
+:root[data-theme='dark'] .checklist-icon-pending {
   color: #f59e0b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .checklist-icon-pending {
+    color: #f59e0b;
+  }
 }
 
 .meal-allergens-finalize-btn {
@@ -768,11 +780,18 @@
   color: #1d4ed8;
 }
 
-:root[data-theme='dark'] .meal-allergens-plan-take-chip.active,
-:root:not([data-theme='light']) .meal-allergens-plan-take-chip.active {
+:root[data-theme='dark'] .meal-allergens-plan-take-chip.active {
   background: rgba(59, 130, 246, 0.2);
   border-color: #3b82f6;
   color: #93c5fd;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .meal-allergens-plan-take-chip.active {
+    background: rgba(59, 130, 246, 0.2);
+    border-color: #3b82f6;
+    color: #93c5fd;
+  }
 }
 
 .meal-allergens-component-name-input {
@@ -831,11 +850,17 @@
 }
 
 :root[data-theme='dark'] .meal-allergens-tag-pill,
-:root:not([data-theme='light']) .meal-allergens-tag-pill,
-:root[data-theme='dark'] .meal-allergens-pill,
-:root:not([data-theme='light']) .meal-allergens-pill {
+:root[data-theme='dark'] .meal-allergens-pill {
   color: var(--text-h);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .meal-allergens-tag-pill,
+  :root:not([data-theme='light']) .meal-allergens-pill {
+    color: var(--text-h);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  }
 }
 
 .meal-allergen-tag-wrapper {
@@ -879,7 +904,7 @@
   border-radius: 8px;
   background-color: #fef3c7;
   border: 1px solid #f59e0b;
-  color: #451a03; /* High contrast amber-950 (~14.5:1 ratio on #fef3c7) */
+  color: #451a03; /* High contrast dark amber (~14.5:1 ratio on #fef3c7) */
   font-size: 0.78rem;
   font-weight: 700;
   line-height: 1.25;
@@ -887,21 +912,33 @@
   animation: warningPopIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-:root[data-theme='dark'] .meal-allergen-match-warning,
-:root:not([data-theme='light']) .meal-allergen-match-warning {
+:root[data-theme='dark'] .meal-allergen-match-warning {
   background-color: rgba(245, 158, 11, 0.22);
   border-color: #f59e0b;
   color: #fef08a; /* High contrast light amber on dark */
 }
 
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .meal-allergen-match-warning {
+    background-color: rgba(245, 158, 11, 0.22);
+    border-color: #f59e0b;
+    color: #fef08a;
+  }
+}
+
 .meal-allergen-match-warning .meal-allergen-warning-icon {
-  color: #b45309;
+  color: #92400e;
   flex-shrink: 0;
 }
 
-:root[data-theme='dark'] .meal-allergen-match-warning .meal-allergen-warning-icon,
-:root:not([data-theme='light']) .meal-allergen-match-warning .meal-allergen-warning-icon {
+:root[data-theme='dark'] .meal-allergen-match-warning .meal-allergen-warning-icon {
   color: #fbbf24;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .meal-allergen-match-warning .meal-allergen-warning-icon {
+    color: #fbbf24;
+  }
 }
 
 .meal-allergen-picker-match-warning {
@@ -918,11 +955,18 @@
   line-height: 1.2;
 }
 
-:root[data-theme='dark'] .meal-allergen-picker-match-warning,
-:root:not([data-theme='light']) .meal-allergen-picker-match-warning {
+:root[data-theme='dark'] .meal-allergen-picker-match-warning {
   background-color: rgba(245, 158, 11, 0.25);
   border-color: #f59e0b;
   color: #fef08a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .meal-allergen-picker-match-warning {
+    background-color: rgba(245, 158, 11, 0.25);
+    border-color: #f59e0b;
+    color: #fef08a;
+  }
 }
 
 @keyframes warningPopIn {
@@ -1274,11 +1318,18 @@
   color: var(--text);
 }
 
-:root[data-theme='dark'] .meal-allergens-main-option.selected,
-:root:not([data-theme='light']) .meal-allergens-main-option.selected {
+:root[data-theme='dark'] .meal-allergens-main-option.selected {
   background: rgba(59, 130, 246, 0.18);
   border-color: #3b82f6;
   color: var(--text-h);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .meal-allergens-main-option.selected {
+    background: rgba(59, 130, 246, 0.18);
+    border-color: #3b82f6;
+    color: var(--text-h);
+  }
 }
 
 .meal-allergen-icon-wrap {
@@ -1394,9 +1445,14 @@
   color: var(--text-h);
 }
 
-:root[data-theme='dark'] .meal-allergens-add-plan-label,
-:root:not([data-theme='light']) .meal-allergens-add-plan-label {
+:root[data-theme='dark'] .meal-allergens-add-plan-label {
   color: var(--text-h);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .meal-allergens-add-plan-label {
+    color: var(--text-h);
+  }
 }
 
 .meal-allergens-add-plan-chip-group {
@@ -1426,18 +1482,32 @@
   color: var(--primary);
 }
 
-:root[data-theme='dark'] .meal-allergens-add-plan-chip-btn,
-:root:not([data-theme='light']) .meal-allergens-add-plan-chip-btn {
+:root[data-theme='dark'] .meal-allergens-add-plan-chip-btn {
   background: var(--bg-subtle);
   border-color: var(--border-strong);
   color: var(--text-h);
 }
 
-:root[data-theme='dark'] .meal-allergens-add-plan-chip-btn:hover,
-:root:not([data-theme='light']) .meal-allergens-add-plan-chip-btn:hover {
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .meal-allergens-add-plan-chip-btn {
+    background: var(--bg-subtle);
+    border-color: var(--border-strong);
+    color: var(--text-h);
+  }
+}
+
+:root[data-theme='dark'] .meal-allergens-add-plan-chip-btn:hover {
   background: var(--bg-hover);
   border-color: var(--primary);
   color: var(--primary);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .meal-allergens-add-plan-chip-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--primary);
+    color: var(--primary);
+  }
 }
 
 /* Copy Allergens Popover / Modal */

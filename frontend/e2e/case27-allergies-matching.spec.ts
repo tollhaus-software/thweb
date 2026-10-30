@@ -3,6 +3,7 @@ import {
   allergensMatch,
   findMatchingGroupsForComponentAllergen,
   findMatchingComponentsForAllergy,
+  abbreviateComponentName,
   type AllergiesMatchContext,
   type MealAllergenComponent,
 } from '../src/utils/mealAllergens';
@@ -74,6 +75,12 @@ test.describe('Test Case 27: Allergen & Allergy Matching (MealAllergens Tab & Al
     expect(findMatchingComponentsForAllergy('Tomaten', components)).toEqual(['Snack']);
     expect(findMatchingComponentsForAllergy('Erdnüsse', components)).toEqual(['Snack']);
     expect(findMatchingComponentsForAllergy('Fisch', components)).toEqual([]);
+
+    // 7. abbreviateComponentName
+    expect(abbreviateComponentName('Suppe')).toBe('Suppe');
+    expect(abbreviateComponentName('1234567890123456')).toBe('1234567890123456');
+    expect(abbreviateComponentName('12345678901234567')).toBe('1234567890123456...');
+    expect(abbreviateComponentName('Kartoffelpuffer mit Apfelmus')).toBe('Kartoffelpuffer...');
   });
 
   test('E2E: warning popups in mealAllergens tab and meal component warnings in dashboard Allergies tab', async ({
@@ -204,6 +211,14 @@ test.describe('Test Case 27: Allergen & Allergy Matching (MealAllergens Tab & Al
     const laktoseMatchWarning = page.getByTestId('allergen-match-warning-0-laktose');
     await expect(laktoseMatchWarning).toBeVisible();
     await expect(laktoseMatchWarning).toContainText('Kleine Gruppe');
+    // High contrast dark font color in light mode:
+    await expect(laktoseMatchWarning).toHaveCSS('color', 'rgb(69, 26, 3)');
+
+    // Verify dark mode styling applies light amber text:
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+    await expect(laktoseMatchWarning).toHaveCSS('color', 'rgb(254, 240, 138)');
+    await page.evaluate(() => document.documentElement.removeAttribute('data-theme'));
+    await expect(laktoseMatchWarning).toHaveCSS('color', 'rgb(69, 26, 3)');
 
     // 2. Next to "tomaten", warning says "Kleine Gruppe"
     const tomatenMatchWarning = page.getByTestId('allergen-match-warning-0-tomaten');
@@ -247,15 +262,18 @@ test.describe('Test Case 27: Allergen & Allergy Matching (MealAllergens Tab & Al
     await expect(allergiesView).toBeVisible();
 
     // 7. Verify Group 1 (Kleine Gruppe) shows the meal component warnings:
-    // - Card header warning shows "Suppe"
-    const group1HeaderWarning = page.getByTestId('group-card-warning-1');
-    await expect(group1HeaderWarning).toBeVisible();
-    await expect(group1HeaderWarning).toContainText('Suppe');
+    // - Card header warning is NOT shown (warning is only shown once on the connected allergy pill)
+    await expect(page.getByTestId('group-card-warning-1')).toHaveCount(0);
 
-    // - Next to "Milch/Laktose" badge, warning shows "Suppe"
+    // - Next to "Milch/Laktose" badge, warning shows "Suppe" connected to the badge
+    const laktoseWrapper = page.locator('.kiosk-allergy-item-wrapper.has-warning').first();
+    await expect(laktoseWrapper).toBeVisible();
+
     const group1LaktoseWarning = page.getByTestId('group-allergy-warning-1-0');
     await expect(group1LaktoseWarning).toBeVisible();
     await expect(group1LaktoseWarning).toContainText('Suppe');
+    // Dark font color in light mode:
+    await expect(group1LaktoseWarning).toHaveCSS('color', 'rgb(69, 26, 3)');
 
     // - Next to "Tomaten" badge, warning shows "Suppe"
     const group1TomatenWarning = page.getByTestId('group-allergy-warning-1-1');
@@ -263,15 +281,14 @@ test.describe('Test Case 27: Allergen & Allergy Matching (MealAllergens Tab & Al
     await expect(group1TomatenWarning).toContainText('Suppe');
 
     // 8. Verify Mitarbeitende shows the meal component warning:
-    // - Card header warning shows "Dessert"
-    const empHeaderWarning = page.getByTestId('employee-card-warning');
-    await expect(empHeaderWarning).toBeVisible();
-    await expect(empHeaderWarning).toContainText('Dessert');
+    // - Card header warning is NOT shown
+    await expect(page.getByTestId('employee-card-warning')).toHaveCount(0);
 
     // - Next to "Erdnüsse" badge, warning shows "Dessert"
     const empErdnuesseWarning = page.getByTestId('employee-allergy-warning-0');
     await expect(empErdnuesseWarning).toBeVisible();
     await expect(empErdnuesseWarning).toContainText('Dessert');
+    await expect(empErdnuesseWarning).toHaveCSS('color', 'rgb(69, 26, 3)');
 
     // 9. Verify editing allergens on a date before child's enrollment start date (yesterday):
     // Child is not yet started on yesterday, so child group warning does not appear.
@@ -298,13 +315,13 @@ test.describe('Test Case 27: Allergen & Allergy Matching (MealAllergens Tab & Al
     await expect(page.getByTestId('meal-allergens-editor')).toBeVisible();
     await expect(page.getByTestId('meal-allergens-editor')).toHaveAttribute('data-loaded', 'true');
 
-    // Add component "Käsebrot" with "laktose" and "erdnuesse"
+    // Add component "Käsebrot mit Spezialbelag" (> 16 chars) with "laktose" and "erdnuesse"
     const addCompBtnYesterday = page.getByTestId('add-meal-component-btn').first();
     await addCompBtnYesterday.click();
 
     const compNameInput = page.getByTestId('meal-component-name-input-0');
     await expect(compNameInput).toBeVisible();
-    await compNameInput.fill('Käsebrot');
+    await compNameInput.fill('Käsebrot mit Spezialbelag');
 
     const laktoseYesterday = page.getByTestId('allergen-option-0-laktose');
     await laktoseYesterday.click();
@@ -324,5 +341,20 @@ test.describe('Test Case 27: Allergen & Allergy Matching (MealAllergens Tab & Al
     const erdnuesseYesterdayWarning = page.getByTestId('allergen-match-warning-0-erdnuesse');
     await expect(erdnuesseYesterdayWarning).toBeVisible();
     await expect(erdnuesseYesterdayWarning).toContainText('Mitarbeitende');
+
+    // 10. Navigate back to Dashboard -> toggle Allergies -> navigate to yesterday -> verify component abbreviation
+    await dashboardTab.click();
+    await expect(dashboardTab).toHaveClass(/active/);
+    await toggleAllergiesBtn.click();
+    await expect(allergiesView).toBeVisible();
+
+    const prevDayBtn = embeddedPage.locator('.kiosk-header-nav-btn.left');
+    await prevDayBtn.click();
+
+    // Verify employee allergy warning abbreviates >16 chars component name
+    const empWarningYesterday = page.getByTestId('employee-allergy-warning-0');
+    await expect(empWarningYesterday).toBeVisible();
+    await expect(empWarningYesterday).toContainText('Käsebrot mit Spe...');
+    await expect(empWarningYesterday).toHaveAttribute('title', 'Käsebrot mit Spezialbelag');
   });
 });

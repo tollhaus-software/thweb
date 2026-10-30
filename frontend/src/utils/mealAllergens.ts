@@ -811,3 +811,12 @@ export function findMatchingComponentsForAllergy(
   return matches;
 }
 
+/**
+ * Abbreviates a meal component name to maxLetters (default 16) if it's longer than that.
+ */
+export function abbreviateComponentName(name: string, maxLetters = 16): string {
+  if (!name || name.length <= maxLetters) return name || '';
+  return `${name.slice(0, maxLetters).trimEnd()}...`;
+}
+
+
