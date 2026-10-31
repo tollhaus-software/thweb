@@ -211,7 +211,7 @@ export const MembershipsModal: React.FC<MembershipsModalProps> = ({
     if (!mostRecentMembership || mostRecentMembership.membership_type !== 'full_member') return;
     setConvertDate(getInitialConvertDate());
     setIsConvertingToSupporting(true);
-    setIsConvertCalendarOpen(true);
+    setIsConvertCalendarOpen(false);
   };
 
   const handleCancelConvertToSupporting = () => {
@@ -853,7 +853,7 @@ export const MembershipsModal: React.FC<MembershipsModalProps> = ({
               justifyContent: 'center',
               gap: '8px',
               padding: '8px 0 4px 0',
-              flexWrap: 'wrap',
+              flexWrap: 'nowrap',
               borderTop: '1px dashed var(--border)',
               marginTop: '6px',
             }}
@@ -870,8 +870,6 @@ export const MembershipsModal: React.FC<MembershipsModalProps> = ({
                 type="text"
                 value={convertDate}
                 onChange={(e) => setConvertDate(e.target.value)}
-                onFocus={() => setIsConvertCalendarOpen(true)}
-                onClick={() => setIsConvertCalendarOpen(true)}
                 placeholder={CURRENT_LOCALE === 'de' ? 'TT.MM.JJJJ' : 'YYYY-MM-DD'}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {

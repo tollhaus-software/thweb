@@ -7,7 +7,7 @@ import './App.css';
 import { DataTable } from './components/Table/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import EasyEdit, { Types } from './components/InlineEdit';
-import { Pencil, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, ArrowUpRight, X, Clock, AlertCircle, ChevronLeft, ChevronRight, Plus, ArrowUpDown, Check, Eye, RefreshCw } from 'lucide-react';
+import { Pencil, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, ArrowUpRight, X, Clock, AlertCircle, ChevronLeft, ChevronRight, Plus, ArrowUpDown, Check, Eye, RefreshCw, Menu } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { MultiValueListEditor, type MultiValueFlagConfig, type MultiValueEntry, type MultiValueItem, getEntryValue, isFlagActive, PHONE_TYPES, getPhoneTypeSymbol, getPhoneTypeLabel } from './components/Table/MultiValueListEditor';
 import { AllergiesListEditor } from './components/Allergies/AllergiesListEditor';
@@ -31,6 +31,9 @@ import { PermissionsSimulatorModal } from './components/Admin/PermissionsSimulat
 import { SimulatedRolesPermissionsModal } from './components/Admin/SimulatedRolesPermissionsModal';
 import { getAppConfig } from './config/appConfig';
 import { HeaderOverflowMenu } from './components/Header/HeaderOverflowMenu';
+import { Sidebar } from './components/Navigation/Sidebar';
+import { getCategoryForTab } from './utils/navigation';
+import { SegmentedSubNav } from './components/Navigation/SegmentedSubNav';
 import { CellPopover } from './components/Table/CellPopover';
 import { RowActionsMenu } from './components/Table/RowActionsMenu';
 import { ConfirmDeleteModal } from './components/Table/ConfirmDeleteModal';
@@ -2454,53 +2457,72 @@ const Dashboard: React.FC = () => {
     return 'familiesOverview';
   });
 
+  const [sidebarCollapsed, setSidebarCollapsed] = React.useState<boolean>(() => {
+    return localStorage.getItem('thweb_sidebar_collapsed') === 'true';
+  });
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = React.useState<boolean>(false);
+
   React.useEffect(() => {
+    let fallback: typeof activeTab | null = null;
     if (activeTab === 'families' && !canReadFamiliesAll) {
       if (canReadOverview) {
-        setActiveTab('familiesOverview');
+        fallback = 'familiesOverview';
       } else if (canReadFees) {
-        setActiveTab('childcareFees');
+        fallback = 'childcareFees';
       }
     } else if ((activeTab === 'parents' || activeTab === 'children') && !canReadFamiliesAll) {
       if (canReadOverview) {
-        setActiveTab('familiesOverview');
+        fallback = 'familiesOverview';
       } else if (canReadFees) {
-        setActiveTab('childcareFees');
+        fallback = 'childcareFees';
       }
     } else if (activeTab === 'members' && !canReadMembers) {
       if (canReadOverview) {
-        setActiveTab('familiesOverview');
+        fallback = 'familiesOverview';
       } else if (canReadFees) {
-        setActiveTab('childcareFees');
+        fallback = 'childcareFees';
       } else if (canReadFamiliesAll) {
-        setActiveTab('families');
+        fallback = 'families';
       }
     } else if (activeTab === 'employees' && !canReadEmployees) {
       if (canReadOverview) {
-        setActiveTab('familiesOverview');
+        fallback = 'familiesOverview';
       } else if (canReadFees) {
-        setActiveTab('childcareFees');
+        fallback = 'childcareFees';
       } else if (canReadFamiliesAll) {
-        setActiveTab('families');
+        fallback = 'families';
       }
     } else if (activeTab === 'mealPlan' && !canViewMealPlan) {
       if (canReadOverview) {
-        setActiveTab('familiesOverview');
+        fallback = 'familiesOverview';
       } else if (canReadFees) {
-        setActiveTab('childcareFees');
+        fallback = 'childcareFees';
       } else if (canReadFamiliesAll) {
-        setActiveTab('families');
+        fallback = 'families';
       }
     } else if (activeTab === 'mealAllergens' && !canReadMealAllergens) {
       if (canReadOverview) {
-        setActiveTab('familiesOverview');
+        fallback = 'familiesOverview';
       } else if (canReadFees) {
-        setActiveTab('childcareFees');
+        fallback = 'childcareFees';
       } else if (canReadFamiliesAll) {
-        setActiveTab('families');
+        fallback = 'families';
+      }
+    } else if (activeTab === 'hygieneBelehrung' && !canReadFamiliesAll && !hasPermission('hygiene.all.write')) {
+      if (canReadOverview) {
+        fallback = 'familiesOverview';
+      } else if (canReadFees) {
+        fallback = 'childcareFees';
+      } else if (canReadFamiliesAll) {
+        fallback = 'families';
       }
     }
-  }, [activeTab, canReadFamiliesAll, canReadOverview, canReadFees, canReadMembers, canReadEmployees, canViewMealPlan, canReadMealAllergens]);
+    if (fallback && fallback !== activeTab) {
+      setActiveTab(fallback);
+      localStorage.setItem('thweb_active_tab', fallback);
+      window.location.hash = fallback;
+    }
+  }, [activeTab, canReadFamiliesAll, canReadOverview, canReadFees, canReadMembers, canReadEmployees, canViewMealPlan, canReadMealAllergens, hasPermission]);
 
   // Navigation & Highlighting state (Patterns 2 & 3)
   const [highlightTarget, setHighlightTarget] = React.useState<{ id: string; key: number } | null>(null);
@@ -2613,79 +2635,10 @@ const Dashboard: React.FC = () => {
     setGlobalFilter('');
     setReturnNav(null);
     setHighlightTarget(null);
+    setActiveTab(tab);
+    localStorage.setItem('thweb_active_tab', tab);
     window.location.hash = tab;
   }, []);
-
-  // Horizontal scrollable tabs management
-  const tabsNavRef = React.useRef<HTMLDivElement>(null);
-  const [canScrollLeft, setCanScrollLeft] = React.useState(false);
-  const [canScrollRight, setCanScrollRight] = React.useState(false);
-
-  const updateScrollButtons = React.useCallback(() => {
-    const el = tabsNavRef.current;
-    if (!el) return;
-    const hasOverflow = el.scrollWidth > el.clientWidth + 2;
-    setCanScrollLeft(hasOverflow && el.scrollLeft > 2);
-    setCanScrollRight(hasOverflow && el.scrollWidth - el.scrollLeft - el.clientWidth > 2);
-  }, []);
-
-  const handleTabScroll = (direction: 'left' | 'right') => {
-    const el = tabsNavRef.current;
-    if (!el) return;
-    const scrollAmount = Math.max(160, el.clientWidth * 0.6);
-    el.scrollBy({
-      left: direction === 'left' ? -scrollAmount : scrollAmount,
-      behavior: 'smooth',
-    });
-  };
-
-  React.useEffect(() => {
-    const el = tabsNavRef.current;
-    if (!el) return;
-
-    updateScrollButtons();
-
-    const ro = new ResizeObserver(() => {
-      updateScrollButtons();
-    });
-    ro.observe(el);
-
-    window.addEventListener('resize', updateScrollButtons);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener('resize', updateScrollButtons);
-    };
-  }, [updateScrollButtons]);
-
-  React.useEffect(() => {
-    const el = tabsNavRef.current;
-    if (!el) return;
-    const activeEl = el.querySelector('[data-active="true"]') as HTMLElement | null;
-    if (activeEl) {
-      activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
-    }
-    const timer = setTimeout(updateScrollButtons, 300);
-    return () => clearTimeout(timer);
-  }, [activeTab, updateScrollButtons]);
-
-  React.useEffect(() => {
-    const el = tabsNavRef.current;
-    if (!el) return;
-
-    const onWheel = (e: WheelEvent) => {
-      if (el.scrollWidth <= el.clientWidth) return;
-      if (e.deltaY !== 0 && Math.abs(e.deltaX) < Math.abs(e.deltaY)) {
-        e.preventDefault();
-        el.scrollLeft += e.deltaY;
-        updateScrollButtons();
-      }
-    };
-
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => {
-      el.removeEventListener('wheel', onWheel);
-    };
-  }, [updateScrollButtons]);
 
   // Audit states
   const [auditRefreshTrigger, setAuditRefreshTrigger] = React.useState(0);
@@ -6773,229 +6726,201 @@ function formatParentsSummary(parents: any[]): string {
 
   const isTableTab = activeTab === 'familiesOverview' || activeTab === 'parents' || activeTab === 'children' || activeTab === 'families' || activeTab === 'hygieneBelehrung' || activeTab === 'members' || activeTab === 'employees';
 
+  const currentCategory = getCategoryForTab(activeTab);
+
+  const getCategoryDisplayLabel = (): string => {
+    switch (currentCategory) {
+      case 'families':
+        return t('navFamilies') || 'Families';
+      case 'mga':
+        return t('navMga') || 'MGA';
+      case 'fees':
+        return t('navFees') || 'Gebühren';
+      case 'pa':
+        return t('navPa') || 'PA';
+      case 'kochen':
+        return t('navKochen') || 'Kochen';
+      case 'hygiene':
+        return t('navHygiene') || 'Hygiene';
+      case 'more':
+        return t('navMore') || 'Mehr';
+      default:
+        return '';
+    }
+  };
+
+  const getSubTabDisplayLabel = (): string | null => {
+    switch (activeTab) {
+      case 'families':
+        return t('subtabFamilies') || 'Familien';
+      case 'parents':
+        return t('subtabParents') || 'Eltern';
+      case 'children':
+        return t('subtabChildren') || 'Kinder';
+      case 'members':
+        return t('subtabMembers') || 'Vereinsmitglieder';
+      case 'employees':
+        return t('subtabEmployees') || 'Mitarbeitende';
+      case 'mealAllergens':
+        return t('subtabAllergens') || 'Allergene';
+      case 'mealPlan':
+        return t('subtabMealPlan') || 'Wochenplan';
+      case 'dashboard':
+        return t('dashboard') || 'Dashboard';
+      case 'audit':
+        return t('audit') || 'Historie';
+      case 'admin':
+        return t('admin') || 'Admin';
+      case 'kiosk':
+        return t('kioskCertificates') || 'Kiosk-Zertifikate';
+      default:
+        return null;
+    }
+  };
+
+  const categoryLabel = getCategoryDisplayLabel();
+  const subTabLabel = getSubTabDisplayLabel();
+
   return (
-    <div className={`dashboard-container ${isTableTab ? 'table-view-active' : ''}`}>
-      <header>
-        <div className="header-brand">
-          {appLogoUrl ? (
-            <img
-              src={appLogoUrl}
-              alt={appTitle}
-              title={appTitle}
-              className="app-header-logo"
-            />
-          ) : (
-            <h1>{appTitle}</h1>
-          )}
-        </div>
+    <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+      {isMobileSidebarOpen && (
+        <div
+          className="sidebar-backdrop"
+          onClick={() => setIsMobileSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
 
-        {user?.simulation?.active && (
-          <div className="simulation-header-banner" data-testid="simulation-banner">
-            <div className="simulation-banner-info">
-              <Eye size={16} className="simulation-icon" />
-              <span className="simulation-label">{t('simulationActive')}:</span>
-              {user.simulation.mode === 'user' && user.simulation.simulated_user && (
-                <span
-                  className="simulation-target"
-                  data-testid="simulation-target"
-                  title={user.simulation.simulated_user}
-                >
-                  {user.simulation.simulated_user}
-                </span>
-              )}
-              <button
-                type="button"
-                className="simulation-roles-btn"
-                data-testid="view-simulated-roles-btn"
-                onClick={() => setViewRolesModalOpen(true)}
-                title={t('simulatedRolesAndPermissionsTitle')}
-              >
-                {t('viewSimulatedRolesAndPermissions')}
-              </button>
-            </div>
-            <div className="simulation-banner-actions">
-              <button
-                type="button"
-                className="simulation-leave-button"
-                data-testid="leave-simulation-button"
-                onClick={leaveSimulation}
-                title={t('leaveSimulation')}
-              >
-                {t('leaveSimulation')}
-              </button>
-            </div>
-          </div>
-        )}
+      <Sidebar
+        activeTab={activeTab}
+        onSelectTab={handleTabClick}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => {
+          setSidebarCollapsed((prev) => {
+            const next = !prev;
+            localStorage.setItem('thweb_sidebar_collapsed', String(next));
+            return next;
+          });
+        }}
+        isMobileOpen={isMobileSidebarOpen}
+        onCloseMobile={() => setIsMobileSidebarOpen(false)}
+        canReadOverview={canReadOverview}
+        canReadFamiliesAll={canReadFamiliesAll}
+        canReadFees={canReadFees}
+        canReadMembers={canReadMembers}
+        canReadEmployees={canReadEmployees}
+        canViewMealPlan={canViewMealPlan}
+        canReadMealAllergens={canReadMealAllergens}
+        hasHygieneWrite={hasPermission('hygiene.all.write')}
+        canReadAudit={canReadAudit}
+        canManageUsers={canManageUsers || hasPermission('*')}
+        canProvisionKiosk={canProvisionKiosk}
+        appTitle={appTitle}
+        appLogoUrl={appLogoUrl}
+      />
 
-        <div className="user-info" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <span title={user?.email}>{user?.email}</span>
-          <HeaderOverflowMenu
-            canSimulate={canSimulate}
-            onOpenSimulator={() => setSimulatorModalOpen(true)}
-            onLogout={logout}
-          />
-        </div>
-      </header>
-      <main className={isTableTab ? 'main-table-view' : 'main-scroll-view'}>
-        {/* Navigation Tabs */}
-        <div className="tabs-wrapper">
-          {canScrollLeft && (
-            <div className="tabs-scroll-indicator left">
-              <button
-                type="button"
-                className="tab-scroll-btn"
-                onClick={() => handleTabScroll('left')}
-                aria-label="Scroll left"
-              >
-                <ChevronLeft size={16} />
-              </button>
-            </div>
-          )}
-
-          <div
-            className="tabs"
-            ref={tabsNavRef}
-            onScroll={updateScrollButtons}
-          >
-            {canReadOverview && (
-              <button 
-                onClick={() => handleTabClick('familiesOverview')}
-                className={`tab-btn ${activeTab === 'familiesOverview' ? 'active' : ''}`}
-                data-active={activeTab === 'familiesOverview'}
-              >
-                {t('familiesOverview')}
-              </button>
-            )}
-            {canReadFamiliesAll && (
-              <>
-                <button 
-                  onClick={() => handleTabClick('families')}
-                  className={`tab-btn ${activeTab === 'families' ? 'active' : ''}`}
-                  data-active={activeTab === 'families'}
-                >
-                  {t('families')}
-                </button>
-                <button 
-                  onClick={() => handleTabClick('parents')}
-                  className={`tab-btn ${activeTab === 'parents' ? 'active' : ''}`}
-                  data-active={activeTab === 'parents'}
-                >
-                  {t('parents')}
-                </button>
-                <button 
-                  onClick={() => handleTabClick('children')}
-                  className={`tab-btn ${activeTab === 'children' ? 'active' : ''}`}
-                  data-active={activeTab === 'children'}
-                >
-                  {t('children')}
-                </button>
-              </>
-            )}
-            {canReadFees && (
-              <button 
-                onClick={() => handleTabClick('childcareFees')}
-                className={`tab-btn ${activeTab === 'childcareFees' ? 'active' : ''}`}
-                data-active={activeTab === 'childcareFees'}
-              >
-                {t('childcareFees')}
-              </button>
-            )}
-            {canReadMembers && (
-              <button 
-                type="button"
-                onClick={() => handleTabClick('members')}
-                className={`tab-btn ${activeTab === 'members' ? 'active' : ''}`}
-                data-active={activeTab === 'members'}
-              >
-                {t('members')}
-              </button>
-            )}
-            {canReadEmployees && (
-              <button 
-                type="button"
-                onClick={() => handleTabClick('employees')}
-                className={`tab-btn ${activeTab === 'employees' ? 'active' : ''}`}
-                data-active={activeTab === 'employees'}
-              >
-                {t('employees')}
-              </button>
-            )}
-            {(canReadFamiliesAll || hasPermission('hygiene.all.write')) && (
-              <button 
-                onClick={() => handleTabClick('hygieneBelehrung')}
-                className={`tab-btn ${activeTab === 'hygieneBelehrung' ? 'active' : ''}`}
-                data-active={activeTab === 'hygieneBelehrung'}
-              >
-                {t('hygieneBelehrung')}
-              </button>
-            )}
-            {canViewMealPlan && (
-              <button 
-                onClick={() => handleTabClick('mealPlan')}
-                className={`tab-btn ${activeTab === 'mealPlan' ? 'active' : ''}`}
-                data-active={activeTab === 'mealPlan'}
-              >
-                {t('mealPlan')}
-              </button>
-            )}
-            {canReadMealAllergens && (
-              <button 
-                onClick={() => handleTabClick('mealAllergens')}
-                className={`tab-btn ${activeTab === 'mealAllergens' ? 'active' : ''}`}
-                data-active={activeTab === 'mealAllergens'}
-              >
-                {t('mealAllergens')}
-              </button>
-            )}
-            {canReadAudit && (
-              <button 
-                onClick={() => handleTabClick('audit')}
-                className={`tab-btn ${activeTab === 'audit' ? 'active' : ''}`}
-                data-active={activeTab === 'audit'}
-              >
-                {t('audit')}
-              </button>
-            )}
-            {(hasPermission('users.all.manage') || hasPermission('*')) && (
-              <button 
-                onClick={() => handleTabClick('admin')}
-                className={`tab-btn ${activeTab === 'admin' ? 'active' : ''}`}
-                data-active={activeTab === 'admin'}
-              >
-                {t('admin')}
-              </button>
-            )}
-            {canProvisionKiosk && (
-              <button 
-                onClick={() => handleTabClick('kiosk')}
-                className={`tab-btn ${activeTab === 'kiosk' ? 'active' : ''}`}
-                data-active={activeTab === 'kiosk'}
-              >
-                {t('kioskCertificates')}
-              </button>
-            )}
-            <button 
-              onClick={() => handleTabClick('dashboard')}
-              className={`tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
-              data-active={activeTab === 'dashboard'}
+      <div className={`dashboard-container ${isTableTab ? 'table-view-active' : ''}`}>
+        <header>
+          <div className="header-nav-left">
+            <button
+              type="button"
+              className="sidebar-toggle-btn mobile-only"
+              onClick={() => setIsMobileSidebarOpen((prev) => !prev)}
+              aria-label={t('toggleSidebar') || 'Toggle menu'}
             >
-              {t('kioskDashboard')}
+              <Menu size={20} />
             </button>
+
+            <div className="header-brand">
+              {appLogoUrl ? (
+                <img
+                  src={appLogoUrl}
+                  alt={appTitle}
+                  title={appTitle}
+                  className="app-header-logo"
+                />
+              ) : (
+                <h1>{appTitle}</h1>
+              )}
+            </div>
+
+            <div className="header-breadcrumbs">
+              <ChevronRight size={14} className="breadcrumb-separator" />
+              <span className="breadcrumb-category">{categoryLabel}</span>
+              {subTabLabel && (
+                <>
+                  <ChevronRight size={14} className="breadcrumb-separator" />
+                  <span className="breadcrumb-current">{subTabLabel}</span>
+                </>
+              )}
+            </div>
           </div>
 
-          {canScrollRight && (
-            <div className="tabs-scroll-indicator right">
-              <button
-                type="button"
-                className="tab-scroll-btn"
-                onClick={() => handleTabScroll('right')}
-                aria-label="Scroll right"
-              >
-                <ChevronRight size={16} />
-              </button>
+          {user?.simulation?.active && (
+            <div className="simulation-header-banner" data-testid="simulation-banner">
+              <div className="simulation-banner-info">
+                <Eye size={16} className="simulation-icon" />
+                <span className="simulation-label">{t('simulationActive')}:</span>
+                {user.simulation.mode === 'user' && user.simulation.simulated_user && (
+                  <span
+                    className="simulation-target"
+                    data-testid="simulation-target"
+                    title={user.simulation.simulated_user}
+                  >
+                    {user.simulation.simulated_user}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  className="simulation-roles-btn"
+                  data-testid="view-simulated-roles-btn"
+                  onClick={() => setViewRolesModalOpen(true)}
+                  title={t('simulatedRolesAndPermissionsTitle')}
+                >
+                  {t('viewSimulatedRolesAndPermissions')}
+                </button>
+              </div>
+              <div className="simulation-banner-actions">
+                <button
+                  type="button"
+                  className="simulation-leave-button"
+                  data-testid="leave-simulation-button"
+                  onClick={leaveSimulation}
+                  title={t('leaveSimulation')}
+                >
+                  {t('leaveSimulation')}
+                </button>
+              </div>
             </div>
           )}
-        </div>
+
+          <div className="user-info" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <span className="header-user-email desktop-only" title={user?.email}>{user?.email}</span>
+            <HeaderOverflowMenu
+              userEmail={user?.email}
+              canSimulate={canSimulate}
+              onOpenSimulator={() => setSimulatorModalOpen(true)}
+              onLogout={logout}
+              onSelectTab={handleTabClick}
+              canReadAudit={canReadAudit}
+              canManageUsers={canManageUsers || hasPermission('*')}
+              canProvisionKiosk={canProvisionKiosk}
+              activeTab={activeTab}
+            />
+          </div>
+        </header>
+        <main className={isTableTab ? 'main-table-view' : 'main-scroll-view'}>
+          {/* Segmented Control Sub-Tabs (Hybrid bar directly above table/content) */}
+          <SegmentedSubNav
+            activeTab={activeTab}
+            onSelectTab={handleTabClick}
+            canReadFamiliesAll={canReadFamiliesAll}
+            canReadMembers={canReadMembers}
+            canReadEmployees={canReadEmployees}
+            canViewMealPlan={canViewMealPlan}
+            canReadMealAllergens={canReadMealAllergens}
+            hasHygieneWrite={hasPermission('hygiene.all.write')}
+          />
 
         {/* Navigation Context Banner (Pattern 2) */}
         {returnNav && (activeTab === 'parents' || activeTab === 'children') && (
@@ -8053,6 +7978,7 @@ function formatParentsSummary(parents: any[]): string {
           simulation={user?.simulation}
           effectivePermissions={user?.effective_permissions}
         />
+      </div>
     </div>
   );
 };

@@ -106,7 +106,10 @@ test.describe('Test Case 13: Audit Log and History Tracking', () => {
     expect(updateVacRes.ok()).toBeTruthy();
 
     // Step 7: Refresh audit logs (switch away and back to Audit tab)
-    await parentsTabBtn.click();
+    const mgaTab = page.getByRole('button', { name: 'MGA', exact: true });
+    if (await mgaTab.isVisible()) {
+      await mgaTab.click();
+    }
     const auditRespPromise = page.waitForResponse((resp) => resp.url().includes('/api/audit-logs') && resp.status() === 200);
     await auditTabBtn.click();
     await auditRespPromise;

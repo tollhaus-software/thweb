@@ -258,6 +258,10 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     await page.waitForLoadState('networkidle');
 
     // Click on "Essen/Allergene" tab
+    const kochenTab = page.getByRole('button', { name: 'Kochen', exact: true });
+    if (await kochenTab.isVisible()) {
+      await kochenTab.click();
+    }
     const tabBtn = page.locator('.tabs').getByRole('button', { name: 'Essen/Allergene' });
     await expect(tabBtn).toBeVisible();
     await tabBtn.click();

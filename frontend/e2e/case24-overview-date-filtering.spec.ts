@@ -162,6 +162,10 @@ test.describe('Test Case 24: Families Overview Date-based Filtering', () => {
     await expect(page.locator('tr.family-group-row', { hasText: 'Aktivfam' })).toBeVisible();
 
     // 3. Switch to Familien(MGA) management tab
+    const mgaTab = page.getByRole('button', { name: 'MGA', exact: true });
+    if (await mgaTab.isVisible()) {
+      await mgaTab.click();
+    }
     const familiesMgaTab = page.getByRole('button', { name: 'Familien(MGA)', exact: true });
     await expect(familiesMgaTab).toBeVisible();
     await familiesMgaTab.click();

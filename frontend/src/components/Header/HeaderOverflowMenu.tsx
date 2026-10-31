@@ -1,19 +1,32 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MoreVertical, LogOut, Eye, ExternalLink } from 'lucide-react';
+import { MoreVertical, LogOut, Eye, ExternalLink, LayoutDashboard, History, Shield, Key, User } from 'lucide-react';
 import { t } from '../../utils/i18n';
+import type { TabId } from '../../utils/navigation';
 
 export interface HeaderOverflowMenuProps {
   onLogout: () => void;
   className?: string;
+  userEmail?: string;
   canSimulate?: boolean;
   onOpenSimulator?: () => void;
+  onSelectTab?: (tab: TabId) => void;
+  canReadAudit?: boolean;
+  canManageUsers?: boolean;
+  canProvisionKiosk?: boolean;
+  activeTab?: string;
 }
 
 export const HeaderOverflowMenu: React.FC<HeaderOverflowMenuProps> = ({
   onLogout,
   className = '',
+  userEmail,
   canSimulate = false,
   onOpenSimulator,
+  onSelectTab,
+  canReadAudit = false,
+  canManageUsers = false,
+  canProvisionKiosk = false,
+  activeTab = '',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -68,11 +81,91 @@ export const HeaderOverflowMenu: React.FC<HeaderOverflowMenuProps> = ({
         aria-haspopup="menu"
         aria-expanded={isOpen}
       >
-        <MoreVertical size={20} />
+        <MoreVertical size={20} className="desktop-only" />
+        <User size={20} className="mobile-only" />
       </button>
 
       {isOpen && (
         <div className="header-overflow-dropdown" role="menu" aria-orientation="vertical">
+          {userEmail && (
+            <>
+              <div className="header-overflow-user-info" data-testid="overflow-user-info">
+                <User size={16} className="overflow-user-icon" />
+                <span className="overflow-user-email" title={userEmail}>
+                  {userEmail}
+                </span>
+              </div>
+              <div className="header-overflow-divider" />
+            </>
+          )}
+          {onSelectTab && (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                className={`header-overflow-menu-item ${activeTab === 'dashboard' ? 'active' : ''}`}
+                data-testid="overflow-dashboard-button"
+                onClick={() => {
+                  setIsOpen(false);
+                  onSelectTab('dashboard');
+                }}
+              >
+                <LayoutDashboard size={16} />
+                <span>{t('dashboard')}</span>
+              </button>
+
+              {canReadAudit && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={`header-overflow-menu-item ${activeTab === 'audit' ? 'active' : ''}`}
+                  data-testid="overflow-audit-button"
+                  onClick={() => {
+                    setIsOpen(false);
+                    onSelectTab('audit');
+                  }}
+                >
+                  <History size={16} />
+                  <span>{t('audit')}</span>
+                </button>
+              )}
+
+              {canManageUsers && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={`header-overflow-menu-item ${activeTab === 'admin' ? 'active' : ''}`}
+                  data-testid="overflow-admin-button"
+                  onClick={() => {
+                    setIsOpen(false);
+                    onSelectTab('admin');
+                  }}
+                >
+                  <Shield size={16} />
+                  <span>{t('admin')}</span>
+                </button>
+              )}
+
+              {canProvisionKiosk && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={`header-overflow-menu-item ${activeTab === 'kiosk' ? 'active' : ''}`}
+                  data-testid="overflow-kiosk-button"
+                  onClick={() => {
+                    setIsOpen(false);
+                    onSelectTab('kiosk');
+                  }}
+                >
+                  <Key size={16} />
+                  <span>{t('kioskCertificates')}</span>
+                </button>
+              )}
+
+              <div className="header-overflow-divider" />
+            </>
+          )}
+
           {canSimulate && (
             <button
               type="button"

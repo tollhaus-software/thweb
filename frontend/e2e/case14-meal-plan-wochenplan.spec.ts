@@ -89,6 +89,10 @@ test.describe('Test Case 14: Essen/Wochenplan Tab and Print Layout', () => {
     await page.waitForLoadState('networkidle');
 
     // 4. Verify the tab "Essen/Wochenplan" exists
+    const kochenTab = page.getByRole('button', { name: 'Kochen', exact: true });
+    if (await kochenTab.isVisible()) {
+      await kochenTab.click();
+    }
     const mealPlanTabBtn = page.locator('.tabs').getByRole('button', { name: 'Essen/Wochenplan' });
     await expect(mealPlanTabBtn).toBeVisible();
 

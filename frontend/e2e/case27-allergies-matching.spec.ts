@@ -293,6 +293,10 @@ test.describe('Test Case 27: Allergen & Allergy Matching (MealAllergens Tab & Al
     // 9. Verify editing allergens on a date before child's enrollment start date (yesterday):
     // Child is not yet started on yesterday, so child group warning does not appear.
     // Employee warning does appear because employees are active.
+    const kochenTab = page.getByRole('button', { name: 'Kochen', exact: true });
+    if (await kochenTab.isVisible()) {
+      await kochenTab.click();
+    }
     const mealAllergensTab = page.locator('.tabs').getByRole('button', { name: 'Essen/Allergene' });
     await mealAllergensTab.click();
     await expect(mealAllergensTab).toHaveClass(/active/);

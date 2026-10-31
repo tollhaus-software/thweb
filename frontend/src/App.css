@@ -1,3 +1,5 @@
+@import './components/Navigation/Navigation.css';
+
 body {
   background-color: var(--bg);
   color: var(--text);
@@ -34,6 +36,8 @@ header h1,
 }
 
 .dashboard-container {
+  flex: 1;
+  min-width: 0;
   height: 100vh;
   height: 100dvh;
   max-height: 100dvh;
@@ -276,6 +280,8 @@ tr.overview-parents-toggle-row td {
 /* Full-height layout for dashboard */
 .dashboard-container,
 .dashboard-container.table-view-active {
+  flex: 1;
+  min-width: 0;
   height: 100vh;
   height: 100dvh;
   max-height: 100dvh;

@@ -18,36 +18,27 @@ test.describe('Test Case 6: Horizontal Tabs Scrolling on Narrow Viewports', () =
     await page.goto('/');
     await expect(page.getByRole('button', { name: 'Familie hinzufügen' })).toBeVisible();
 
-    // 5. Verify the tabs container has overflow and the right scroll button is visible
-    const scrollRightBtn = page.getByRole('button', { name: 'Scroll right' });
-    await expect(scrollRightBtn).toBeVisible();
+    // 5. Open responsive drawer on narrow viewport
+    const toggleSidebarBtn = page.getByRole('button', { name: 'Seitenleiste umschalten' });
+    await expect(toggleSidebarBtn).toBeVisible();
+    await toggleSidebarBtn.click();
 
-    // The left scroll button should not be visible when at scrollLeft = 0
-    const scrollLeftBtn = page.getByRole('button', { name: 'Scroll left' });
-    await expect(scrollLeftBtn).toHaveCount(0);
-
-    // 6. Click scroll right button
-    await scrollRightBtn.click();
-
-    // After scrolling right, the scroll left button should appear
-    await expect(scrollLeftBtn).toBeVisible();
-
-    // 7. Click on the far-right tab "Kiosk-Zertifikate"
+    // 6. Click on "Kiosk-Zertifikate" in the drawer
     const kioskTab = page.getByRole('button', { name: 'Kiosk-Zertifikate' });
+    await expect(kioskTab).toBeVisible();
     await kioskTab.click();
 
     // Verify the kiosk tab becomes active
     await expect(kioskTab).toHaveClass(/active/);
     await expect(kioskTab).toHaveAttribute('data-active', 'true');
 
-    // 8. Click scroll left button to scroll back
-    await scrollLeftBtn.click();
-
-    // Verify clicking a tab towards the left (e.g., "Familien(MGA)") works and activates it
-    const familiesMgaTab = page.getByRole('button', { name: 'Familien(MGA)' });
-    await familiesMgaTab.click();
-    await expect(familiesMgaTab).toHaveClass(/active/);
-    await expect(familiesMgaTab).toHaveAttribute('data-active', 'true');
+    // 7. Re-open drawer and click "MGA"
+    await toggleSidebarBtn.click();
+    const mgaTab = page.getByRole('button', { name: 'MGA', exact: true });
+    await expect(mgaTab).toBeVisible();
+    await mgaTab.click();
+    await expect(mgaTab).toHaveClass(/active/);
+    await expect(mgaTab).toHaveAttribute('data-active', 'true');
   });
 
   test('on desktop layout (> 768px): tab bar has reduced vertical padding and default font size', async ({ request, page }) => {

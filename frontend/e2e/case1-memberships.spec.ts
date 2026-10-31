@@ -721,6 +721,10 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     await expect(badge).toContainText('Voll');
 
     // 5. In Vereinsmitglieder (Members tab), Felix Sommer should be listed
+    const mgaTab = page.getByRole('button', { name: 'MGA', exact: true });
+    if (await mgaTab.isVisible()) {
+      await mgaTab.click();
+    }
     await page.getByRole('button', { name: 'Vereinsmitglieder' }).click();
     const memberRow = page.locator('.data-table tbody tr', { hasText: 'Felix Sommer' });
     await expect(memberRow).toBeVisible();

@@ -167,7 +167,12 @@ test.describe('Test Case 21: Custom Address List Given Name for Parents and Chil
     // ==========================================
     await page.setViewportSize({ width: 500, height: 800 });
 
-    // Navigate to Parents tab on mobile
+    // Navigate to Parents tab on mobile (open drawer if on mobile)
+    const toggleSidebarBtn = page.getByRole('button', { name: 'Seitenleiste umschalten' });
+    if (await toggleSidebarBtn.isVisible()) {
+      await toggleSidebarBtn.click();
+      await page.getByRole('button', { name: 'MGA', exact: true }).click();
+    }
     await page.getByRole('button', { name: 'Eltern(MGA)' }).click();
 
     // On mobile card view, locate Marge card
@@ -190,6 +195,9 @@ test.describe('Test Case 21: Custom Address List Given Name for Parents and Chil
     await expect(mobileSheet).toBeHidden();
 
     // Navigate to Familien overview on mobile
+    if (await toggleSidebarBtn.isVisible()) {
+      await toggleSidebarBtn.click();
+    }
     await overviewTabBtn.click();
     await expect(page.locator('.overview-table')).toContainText('Margie');
 
@@ -197,6 +205,10 @@ test.describe('Test Case 21: Custom Address List Given Name for Parents and Chil
     // STEP 5: Clear custom address list given name
     // ==========================================
     await page.setViewportSize({ width: 1280, height: 800 });
+    const mgaBtn = page.getByRole('button', { name: 'MGA', exact: true });
+    if (await mgaBtn.isVisible()) {
+      await mgaBtn.click();
+    }
     await page.getByRole('button', { name: 'Eltern(MGA)' }).click();
 
     const updatedHomerRow = page.locator('tr').filter({ hasText: 'Homer' }).first();

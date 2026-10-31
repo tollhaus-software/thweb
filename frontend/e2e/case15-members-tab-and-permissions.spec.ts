@@ -89,6 +89,10 @@ test.describe('Test Case 15: Members Tab and Read-Only Membership Permissions', 
     await page.goto('/');
 
     // Check that 'Vereinsmitglieder' tab exists and switch to it
+    const mgaTabBtn = page.getByRole('button', { name: 'MGA', exact: true });
+    if (await mgaTabBtn.isVisible()) {
+      await mgaTabBtn.click();
+    }
     const membersTabBtn = page.getByRole('button', { name: 'Vereinsmitglieder' });
     await expect(membersTabBtn).toBeVisible();
     await membersTabBtn.click();
@@ -226,7 +230,12 @@ test.describe('Test Case 15: Members Tab and Read-Only Membership Permissions', 
     await page.setViewportSize({ width: 500, height: 800 });
     await page.goto('/');
 
-    // Switch to Vereinsmitglieder tab
+    // Switch to Vereinsmitglieder tab (open mobile drawer if on mobile viewport)
+    const toggleSidebarBtn = page.getByRole('button', { name: 'Seitenleiste umschalten' });
+    if (await toggleSidebarBtn.isVisible()) {
+      await toggleSidebarBtn.click();
+      await page.getByRole('button', { name: 'MGA', exact: true }).click();
+    }
     const membersTabBtn = page.getByRole('button', { name: 'Vereinsmitglieder' });
     await expect(membersTabBtn).toBeVisible();
     await membersTabBtn.click();

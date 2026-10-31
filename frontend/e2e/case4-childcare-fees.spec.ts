@@ -208,7 +208,11 @@ test.describe('Test Case 4: Childcare Fees Tooltips & Translations', () => {
     await page.setViewportSize({ width: 500, height: 800 });
     await page.goto('/');
 
-    // Open Betreuungsgebühren tab
+    // Open Betreuungsgebühren tab (open mobile drawer if on mobile)
+    const toggleSidebarBtn = page.getByRole('button', { name: 'Seitenleiste umschalten' });
+    if (await toggleSidebarBtn.isVisible()) {
+      await toggleSidebarBtn.click();
+    }
     await page.getByRole('button', { name: 'Betreuungsgebühren' }).click();
     await expect(page.getByRole('heading', { name: 'Monatliche Gebühren pro Familie' })).toBeVisible();
     await expect(page.locator('.fees-month-range-row')).toContainText('Von');
@@ -268,6 +272,9 @@ test.describe('Test Case 4: Childcare Fees Tooltips & Translations', () => {
       localStorage.setItem('token', 'stefan.bauer@tollhaus-stuttgart.de');
     });
     await page.goto('/');
+    if (await toggleSidebarBtn.isVisible()) {
+      await toggleSidebarBtn.click();
+    }
     await page.getByRole('button', { name: 'Betreuungsgebühren' }).click();
     await expect(page.getByRole('heading', { name: 'Monatliche Betreuungsgebühren' })).toBeVisible();
 

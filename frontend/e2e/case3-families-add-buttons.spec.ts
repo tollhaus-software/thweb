@@ -118,6 +118,10 @@ test.describe('Test Case 3: Families View Add Buttons (+ Kind and + Elternteil)'
     await expect(page.locator('text=Felix').first()).toBeVisible();
 
     // Take a screenshot of the families view for visual verification
+    const mgaTab = page.getByRole('button', { name: 'MGA', exact: true });
+    if (await mgaTab.isVisible()) {
+      await mgaTab.click();
+    }
     await page.getByRole('button', { name: 'Familien(MGA)', exact: true }).click();
     await page.screenshot({ path: 'test-results/families-view-buttons.png' });
   });

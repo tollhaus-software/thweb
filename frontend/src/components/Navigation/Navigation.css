@@ -1,0 +1,550 @@
+/* ==========================================================================
+   Navigation Styles: Sidebar & Segmented Controls
+   ========================================================================== */
+
+/* App Shell container */
+.app-shell {
+  display: flex;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
+  width: 100vw;
+  overflow: hidden;
+  background-color: var(--bg);
+}
+
+/* Sidebar structure */
+.app-sidebar {
+  width: 240px;
+  background-color: var(--bg-surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 50;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* Collapsed desktop state */
+.app-sidebar.collapsed {
+  width: 64px;
+}
+
+.app-sidebar.collapsed .sidebar-nav-item {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.app-sidebar.collapsed .mga-collapsed-icon {
+  width: 24px;
+  height: 12px;
+}
+
+/* Sidebar Header */
+.sidebar-header {
+  height: 56px;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0.85rem;
+  border-bottom: 1px solid var(--border);
+  box-sizing: border-box;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow: hidden;
+}
+
+.sidebar-logo {
+  max-height: 32px;
+  max-width: 120px;
+  object-fit: contain;
+}
+
+.sidebar-brand-text {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-h);
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+}
+
+.app-sidebar.collapsed .sidebar-brand-text {
+  display: none;
+}
+
+.sidebar-collapse-btn,
+.sidebar-close-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.4rem;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.sidebar-collapse-btn:hover,
+.sidebar-close-btn:hover {
+  color: var(--text-h);
+  background-color: var(--bg-subtle);
+}
+
+.app-sidebar.collapsed .sidebar-header {
+  justify-content: center;
+  padding: 0;
+}
+
+/* Navigation List */
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem 0.5rem;
+  gap: 0.25rem;
+  flex: 1;
+  min-height: 0;
+  margin-bottom: 0 !important;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.sidebar-nav-group {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Top-level Category Items */
+.sidebar-nav-item,
+button.tab-btn.sidebar-nav-item,
+div.tab-btn.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  border-radius: 6px;
+  border: none !important;
+  border-bottom: none !important;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.925rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+  box-sizing: border-box;
+  gap: 0.75rem;
+  user-select: none;
+}
+
+.sidebar-nav-item:hover,
+button.tab-btn.sidebar-nav-item:hover,
+div.tab-btn.sidebar-nav-item:hover {
+  background-color: var(--bg-subtle);
+  color: var(--text-h);
+  border-bottom: none !important;
+}
+
+.sidebar-nav-item.active,
+button.tab-btn.sidebar-nav-item.active,
+div.tab-btn.sidebar-nav-item.active {
+  background-color: rgba(37, 99, 235, 0.08);
+  color: var(--primary);
+  font-weight: 700;
+  border-bottom: none !important;
+}
+
+.nav-icon {
+  flex-shrink: 0;
+  color: inherit;
+}
+
+.nav-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-sidebar.collapsed .nav-label {
+  display: none;
+}
+
+.accordion-toggle-btn {
+  background: none;
+  border: none;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.accordion-toggle-btn:hover {
+  color: var(--text-h);
+}
+
+/* Sub-tabs Tree */
+.sidebar-sub-tree {
+  display: flex;
+  flex-direction: column;
+  margin-left: 1.15rem;
+  padding-left: 0.65rem;
+  border-left: 1.5px solid var(--border);
+  gap: 0.15rem;
+  margin-top: 0.2rem;
+  margin-bottom: 0.35rem;
+}
+
+.sidebar-sub-item,
+button.tab-btn.sidebar-sub-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 0.4rem 0.5rem !important;
+  border-radius: 5px;
+  border: none !important;
+  border-bottom: none !important;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.85rem !important;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+  gap: 0.5rem;
+}
+
+.sidebar-sub-item:hover,
+button.tab-btn.sidebar-sub-item:hover {
+  background-color: var(--bg-subtle);
+  color: var(--text-h);
+  border-bottom: none !important;
+}
+
+.sidebar-sub-item.active,
+button.tab-btn.sidebar-sub-item.active {
+  background-color: rgba(37, 99, 235, 0.12) !important;
+  color: var(--primary) !important;
+  font-weight: 600 !important;
+  border-bottom: none !important;
+}
+
+.sidebar-sub-item.active .sub-icon,
+.sidebar-sub-item.active .sub-label {
+  color: var(--primary) !important;
+}
+
+.sub-bullet {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.sidebar-sub-item.active .sub-bullet {
+  background-color: var(--primary-contrast);
+}
+
+.sub-icon {
+  flex-shrink: 0;
+}
+
+.sub-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Divider */
+.sidebar-divider {
+  height: 1px;
+  background-color: var(--border);
+  margin: 0.5rem 0.25rem;
+}
+
+/* ==========================================================================
+   Header Breadcrumbs & Navigation Hamburger
+   ========================================================================== */
+
+.header-nav-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.sidebar-toggle-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.35rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.sidebar-toggle-btn:hover {
+  background-color: var(--bg-subtle);
+  color: var(--text-h);
+  border-color: var(--border-strong);
+}
+
+.header-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.925rem;
+  min-width: 0;
+}
+
+.breadcrumb-category {
+  font-weight: 700;
+  color: var(--text-h);
+  white-space: nowrap;
+}
+
+.breadcrumb-separator {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.breadcrumb-current {
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ==========================================================================
+   In-Page Segmented Control Sub-Tabs
+   ========================================================================== */
+
+.dashboard-container .tabs-wrapper.subtabs-bar,
+.dashboard-container.table-view-active .tabs-wrapper.subtabs-bar,
+.tabs-wrapper.subtabs-bar {
+  display: flex;
+  align-items: center;
+  border-bottom: none !important;
+  margin-bottom: 0.45rem !important;
+  padding-bottom: 0 !important;
+  flex-shrink: 0;
+  width: 100%;
+}
+
+.dashboard-container .tabs.segmented-control,
+.dashboard-container.table-view-active .tabs.segmented-control,
+.tabs.segmented-control {
+  display: inline-flex;
+  align-items: center;
+  background-color: var(--bg-subtle);
+  padding: 2px;
+  border-radius: 6px;
+  gap: 2px;
+  border: 1px solid var(--border);
+  overflow-x: auto;
+  max-width: 100%;
+  scrollbar-width: none;
+  margin-bottom: 0 !important;
+}
+
+.segmented-control::-webkit-scrollbar {
+  display: none;
+}
+
+.segmented-control .segment-btn,
+button.tab-btn.segment-btn {
+  padding: 0.22rem 0.65rem !important;
+  border-radius: 4px !important;
+  border: none !important;
+  border-bottom: none !important;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.8125rem !important;
+  line-height: 1.25 !important;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.segmented-control .segment-btn:hover,
+button.tab-btn.segment-btn:hover {
+  color: var(--text-h);
+  background-color: rgba(255, 255, 255, 0.7);
+}
+
+.segmented-control .segment-btn.active,
+button.tab-btn.segment-btn.active,
+button.tab-btn.segment-btn[data-active="true"] {
+  border-bottom: none !important;
+  background-color: var(--bg-surface);
+  color: var(--primary);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* ==========================================================================
+   Header Overflow Dropdown Items (Dashboard, Historie, Admin, Kiosk)
+   ========================================================================== */
+
+.header-overflow-user-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-h);
+  background-color: var(--bg-subtle);
+  border-radius: 4px;
+  margin-bottom: 0.25rem;
+  overflow: hidden;
+}
+
+.overflow-user-icon {
+  flex-shrink: 0;
+  color: var(--primary);
+}
+
+.overflow-user-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-overflow-divider {
+  height: 1px;
+  background-color: var(--border);
+  margin: 0.35rem 0;
+}
+
+.header-overflow-menu-item.active {
+  background-color: rgba(37, 99, 235, 0.08);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   Responsive Mobile Drawer (<= 768px)
+   ========================================================================== */
+
+.mobile-only {
+  display: none;
+}
+
+.desktop-only {
+  display: flex;
+}
+
+@media (max-width: 768px) {
+  .mobile-only {
+    display: flex;
+  }
+
+  .desktop-only {
+    display: none;
+  }
+
+  /* Breadcrumbs on small screen: keep compact so it doesn't wrap or collide */
+  .header-breadcrumbs {
+    font-size: 0.825rem;
+    gap: 0.25rem;
+  }
+
+  .breadcrumb-category,
+  .breadcrumb-current {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* User name text is hidden under breakpoint */
+  .header-user-email {
+    display: none !important;
+  }
+
+  /* Drawer styling */
+  .app-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 270px !important;
+    transform: translateX(-100%);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.18);
+    z-index: 1000;
+  }
+
+  .app-sidebar.mobile-open {
+    transform: translateX(0);
+  }
+
+  /* Ensure mobile drawer displays full descriptions/labels regardless of collapsed state */
+  .app-sidebar.collapsed .nav-label {
+    display: block !important;
+  }
+
+  .app-sidebar.collapsed .sidebar-brand-text {
+    display: inline !important;
+  }
+
+  .app-sidebar.collapsed .sidebar-header {
+    justify-content: space-between !important;
+    padding: 0 0.85rem !important;
+  }
+
+  .app-sidebar.collapsed .sidebar-nav-item {
+    justify-content: flex-start !important;
+    padding: 0.55rem 0.65rem !important;
+  }
+
+  .app-sidebar.collapsed .sidebar-sub-tree {
+    display: flex !important;
+  }
+
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(2px);
+    z-index: 999;
+    animation: fadeIn 0.2s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .dashboard-container .tabs-wrapper.subtabs-bar,
+  .dashboard-container.table-view-active .tabs-wrapper.subtabs-bar,
+  .tabs-wrapper.subtabs-bar {
+    margin-bottom: 0.35rem !important;
+  }
+
+  .segmented-control .segment-btn,
+  button.tab-btn.segment-btn {
+    padding: 0.16rem 0.5rem !important;
+    font-size: 0.775rem !important;
+    line-height: 1.25 !important;
+  }
+}

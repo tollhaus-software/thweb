@@ -123,6 +123,9 @@ test.describe('Test Case 17: Role and Permissions Simulator', () => {
 
     // Verify normal Admin view is restored
     await expect(page.getByRole('button', { name: 'Admin', exact: true })).toBeVisible();
+    const mgaBtn = page.getByRole('button', { name: 'MGA', exact: true });
+    await expect(mgaBtn).toBeVisible();
+    await mgaBtn.click();
     await expect(page.getByRole('button', { name: 'Familien(MGA)', exact: true })).toBeVisible();
 
     // 9. Enter simulator via Mode 2: Custom Roles & Direct Permissions
@@ -163,6 +166,10 @@ test.describe('Test Case 17: Role and Permissions Simulator', () => {
     await expect(rolesModal).toHaveCount(0);
 
     // Verify viewer has mealplan tab
+    const kochenTab = page.getByRole('button', { name: 'Kochen', exact: true });
+    if (await kochenTab.isVisible()) {
+      await kochenTab.click();
+    }
     await expect(page.getByRole('button', { name: 'Essen/Wochenplan', exact: true })).toBeVisible();
     // Verify viewer cannot see Admin tab
     await expect(page.getByRole('button', { name: 'Admin', exact: true })).toHaveCount(0);

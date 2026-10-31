@@ -85,6 +85,10 @@ test.describe('Test Case 8: Adaptive Card Layout for familiesOverview Tab', () =
     await page.setViewportSize({ width: 500, height: 800 });
     await page.goto('/');
 
+    const toggleSidebarBtn = page.getByRole('button', { name: 'Seitenleiste umschalten' });
+    if (await toggleSidebarBtn.isVisible()) {
+      await toggleSidebarBtn.click();
+    }
     const overviewTab = page.getByRole('button', { name: 'Familien', exact: true });
     await expect(overviewTab).toBeVisible();
     await overviewTab.click();
