@@ -130,13 +130,13 @@ div.tab-btn.sidebar-nav-item {
   display: flex;
   align-items: center;
   width: 100%;
-  padding: 0.55rem 0.65rem;
+  padding: 0.5rem 0.65rem;
   border-radius: 6px;
   border: none !important;
   border-bottom: none !important;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 0.925rem;
+  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -319,6 +319,33 @@ button.tab-btn.sidebar-sub-item.active {
   white-space: nowrap;
 }
 
+button.breadcrumb-link.breadcrumb-category,
+a.breadcrumb-link.breadcrumb-category {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-weight: 700;
+  color: var(--text-h);
+  text-decoration: none;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 0.15s ease;
+}
+
+button.breadcrumb-link.breadcrumb-category:hover,
+a.breadcrumb-link.breadcrumb-category:hover {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
+button.breadcrumb-link.breadcrumb-category:focus-visible,
+a.breadcrumb-link.breadcrumb-category:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 .breadcrumb-separator {
   color: var(--text-muted);
   flex-shrink: 0;
@@ -330,6 +357,15 @@ button.tab-btn.sidebar-sub-item.active {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.app-header-favicon {
+  max-height: 28px;
+  max-width: 28px;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 /* ==========================================================================
@@ -447,20 +483,28 @@ button.tab-btn.segment-btn[data-active="true"] {
    ========================================================================== */
 
 .mobile-only {
-  display: none;
+  display: none !important;
 }
 
 .desktop-only {
   display: flex;
 }
 
+img.desktop-only {
+  display: block;
+}
+
 @media (max-width: 768px) {
   .mobile-only {
-    display: flex;
+    display: flex !important;
+  }
+
+  img.mobile-only {
+    display: block !important;
   }
 
   .desktop-only {
-    display: none;
+    display: none !important;
   }
 
   /* Breadcrumbs on small screen: keep compact so it doesn't wrap or collide */
@@ -512,9 +556,16 @@ button.tab-btn.segment-btn[data-active="true"] {
     padding: 0 0.85rem !important;
   }
 
+  .sidebar-nav-item,
+  button.tab-btn.sidebar-nav-item,
+  div.tab-btn.sidebar-nav-item {
+    padding: 0.25rem 0.65rem !important;
+    font-size: 0.85rem !important;
+  }
+
   .app-sidebar.collapsed .sidebar-nav-item {
     justify-content: flex-start !important;
-    padding: 0.55rem 0.65rem !important;
+    padding: 0.25rem 0.65rem !important;
   }
 
   .app-sidebar.collapsed .sidebar-sub-tree {

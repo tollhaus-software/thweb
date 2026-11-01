@@ -32,8 +32,18 @@ import { SimulatedRolesPermissionsModal } from './components/Admin/SimulatedRole
 import { getAppConfig } from './config/appConfig';
 import { HeaderOverflowMenu } from './components/Header/HeaderOverflowMenu';
 import { Sidebar } from './components/Navigation/Sidebar';
-import { getCategoryForTab } from './utils/navigation';
+import {
+  getCategoryForTab,
+  getCategoryConfig,
+  categoryHasLandingPage,
+  getCategoryLabel,
+  getSubItemLabel,
+  getFirstPermittedTabForCategory,
+  type NavigationCategory,
+  type UserPermissionsContext,
+} from './utils/navigation';
 import { SegmentedSubNav } from './components/Navigation/SegmentedSubNav';
+import { CategoryLandingPage } from './components/Navigation/CategoryLandingPage';
 import { CellPopover } from './components/Table/CellPopover';
 import { RowActionsMenu } from './components/Table/RowActionsMenu';
 import { ConfirmDeleteModal } from './components/Table/ConfirmDeleteModal';
@@ -2427,14 +2437,18 @@ const AdminView: React.FC<AdminViewProps> = ({ onOpenSimulator }) => {
 };
 
 import { useRealtime } from './hooks/useRealtime';
+import { useIsMobile } from './hooks/useIsMobile';
 
 const Dashboard: React.FC = () => {
   const { user, token, logout, hasPermission, canSimulate, leaveSimulation } = useAuth();
+  const isMobile = useIsMobile();
   const [simulatorModalOpen, setSimulatorModalOpen] = React.useState(false);
   const [viewRolesModalOpen, setViewRolesModalOpen] = React.useState(false);
   const appConfig = getAppConfig();
   const appTitle = appConfig.title || t('title');
   const appLogoUrl = appConfig.logoUrl;
+  const appFaviconUrl = appConfig.faviconUrl || '/favicon.svg';
+  const displayTitle = isMobile && (appTitle === 'TH Portal' || appTitle === t('title')) ? 'TH' : appTitle;
 
   // KMS Step-up Auth state
   const [kmsAccessToken, setKmsAccessToken] = React.useState<string | null>(() => {
@@ -2531,13 +2545,55 @@ const Dashboard: React.FC = () => {
   const [sortPopoverOpen, setSortPopoverOpen] = React.useState(false);
   const sortButtonRef = React.useRef<HTMLButtonElement>(null);
 
+  const navPerms: UserPermissionsContext = React.useMemo(() => ({
+    canReadOverview,
+    canReadFamiliesAll,
+    canReadFees,
+    canReadMembers,
+    canReadJobs,
+    canReadEmployees,
+    canViewMealPlan,
+    canReadMealAllergens,
+    hasHygieneWrite: hasPermission('hygiene.all.write'),
+    canReadAudit,
+    canManageUsers: canManageUsers || hasPermission('*'),
+    canProvisionKiosk,
+  }), [
+    canReadOverview,
+    canReadFamiliesAll,
+    canReadFees,
+    canReadMembers,
+    canReadJobs,
+    canReadEmployees,
+    canViewMealPlan,
+    canReadMealAllergens,
+    hasPermission,
+    canReadAudit,
+    canManageUsers,
+    canProvisionKiosk,
+  ]);
+
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [activeTab, setActiveTab] = React.useState<
-    'familiesOverview' | 'families' | 'parents' | 'children' | 'members' | 'jobs' | 'employees' | 'childcareFees' | 'hygieneBelehrung' | 'mealPlan' | 'mealAllergens' | 'audit' | 'admin' | 'kiosk' | 'dashboard'
+    'familiesOverview' | 'families' | 'parents' | 'children' | 'members' | 'jobs' | 'employees' | 'childcareFees' | 'hygieneBelehrung' | 'mealPlan' | 'mealAllergens' | 'audit' | 'admin' | 'kiosk' | 'dashboard' | string
   >(() => {
     const rawHash = window.location.hash.replace('#', '');
     const hash = rawHash.split('?')[0];
     const pathname = window.location.pathname.replace(/\/+$/, '');
+    const initialPerms: UserPermissionsContext = {
+      canReadOverview,
+      canReadFamiliesAll,
+      canReadFees,
+      canReadMembers,
+      canReadJobs,
+      canReadEmployees,
+      canViewMealPlan,
+      canReadMealAllergens,
+      hasHygieneWrite: hasPermission('hygiene.all.write'),
+      canReadAudit,
+      canManageUsers: canManageUsers || hasPermission('*'),
+      canProvisionKiosk,
+    };
     if (
       (hash === 'familiesOverview' && canReadOverview) ||
       (hash === 'families' && canReadFamiliesAll) ||
@@ -2553,6 +2609,7 @@ const Dashboard: React.FC = () => {
       (hash === 'audit' && canReadAudit) ||
       (hash === 'admin' && canManageUsers) ||
       (hash === 'kiosk' && canProvisionKiosk) ||
+      categoryHasLandingPage(hash, initialPerms) ||
       hash === 'dashboard' ||
       pathname === '/dashboard'
     ) {
@@ -2574,6 +2631,7 @@ const Dashboard: React.FC = () => {
       (saved === 'audit' && canReadAudit) ||
       (saved === 'admin' && canManageUsers) ||
       (saved === 'kiosk' && canProvisionKiosk) ||
+      (saved && categoryHasLandingPage(saved, initialPerms)) ||
       saved === 'dashboard'
     ) {
       return saved as any;
@@ -2666,13 +2724,17 @@ const Dashboard: React.FC = () => {
       } else if (canReadFamiliesAll) {
         fallback = 'families';
       }
+    } else if (activeTab === 'mga' && !categoryHasLandingPage('mga', navPerms)) {
+      fallback = getFirstPermittedTabForCategory('mga', navPerms);
+    } else if (activeTab === 'kochen' && !categoryHasLandingPage('kochen', navPerms)) {
+      fallback = getFirstPermittedTabForCategory('kochen', navPerms);
     }
     if (fallback && fallback !== activeTab) {
       setActiveTab(fallback);
       localStorage.setItem('thweb_active_tab', fallback);
       window.location.hash = fallback;
     }
-  }, [activeTab, canReadFamiliesAll, canReadOverview, canReadFees, canReadMembers, canReadJobs, canReadEmployees, canViewMealPlan, canReadMealAllergens, hasPermission]);
+  }, [activeTab, canReadFamiliesAll, canReadOverview, canReadFees, canReadMembers, canReadJobs, canReadEmployees, canViewMealPlan, canReadMealAllergens, hasPermission, navPerms]);
 
   // Navigation & Highlighting state (Patterns 2 & 3)
   const [highlightTarget, setHighlightTarget] = React.useState<{ id: string; key: number } | null>(null);
@@ -3690,6 +3752,7 @@ const Dashboard: React.FC = () => {
         (hash === 'audit' && canReadAudit) ||
         (hash === 'admin' && canManageUsers) ||
         (hash === 'kiosk' && canProvisionKiosk) ||
+        categoryHasLandingPage(hash, navPerms) ||
         hash === 'dashboard'
       ) {
         setActiveTab(hash as any);
@@ -3740,7 +3803,7 @@ const Dashboard: React.FC = () => {
       handleHashChange();
     }
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [canReadAudit, canManageUsers, canProvisionKiosk, canReadOverview, canReadFamiliesAll, canReadFees, canReadMembers, canReadJobs, canReadEmployees, canViewMealPlan, canReadMealAllergens, hasPermission]);
+  }, [canReadAudit, canManageUsers, canProvisionKiosk, canReadOverview, canReadFamiliesAll, canReadFees, canReadMembers, canReadJobs, canReadEmployees, canViewMealPlan, canReadMealAllergens, hasPermission, navPerms]);
 
   useRealtime(React.useCallback((message: any) => {
     if (
@@ -7119,64 +7182,16 @@ function formatParentsSummary(parents: any[]): string {
     ]
   );
 
-  const isTableTab = activeTab === 'familiesOverview' || activeTab === 'parents' || activeTab === 'children' || activeTab === 'families' || activeTab === 'hygieneBelehrung' || activeTab === 'members' || activeTab === 'employees' || activeTab === 'jobs';
-
   const currentCategory = getCategoryForTab(activeTab);
+  const currentCategoryConfig = getCategoryConfig(currentCategory as NavigationCategory);
+  const categoryLabel = currentCategoryConfig ? getCategoryLabel(currentCategoryConfig) : '';
+  const hasLandingPage = categoryHasLandingPage(currentCategory, navPerms);
+  const isLandingActive = Boolean(hasLandingPage && activeTab === currentCategory);
+  const currentSubItem = currentCategoryConfig?.items.find((item) => item.id === activeTab);
+  const shouldShowSubTabInBreadcrumbs = hasLandingPage && !isLandingActive && Boolean(currentSubItem);
+  const subTabLabel = shouldShowSubTabInBreadcrumbs && currentSubItem ? getSubItemLabel(currentSubItem) : null;
 
-  const getCategoryDisplayLabel = (): string => {
-    switch (currentCategory) {
-      case 'families':
-        return t('navFamilies') || 'Families';
-      case 'mga':
-        return t('navMga') || 'MGA';
-      case 'fees':
-        return t('navFees') || 'Gebühren';
-      case 'pa':
-        return t('navPa') || 'PA';
-      case 'kochen':
-        return t('navKochen') || 'Kochen';
-      case 'hygiene':
-        return t('navHygiene') || 'Hygiene';
-      case 'more':
-        return t('navMore') || 'Mehr';
-      default:
-        return '';
-    }
-  };
-
-  const getSubTabDisplayLabel = (): string | null => {
-    switch (activeTab) {
-      case 'families':
-        return t('subtabFamilies') || 'Familien';
-      case 'parents':
-        return t('subtabParents') || 'Eltern';
-      case 'children':
-        return t('subtabChildren') || 'Kinder';
-      case 'members':
-        return t('subtabMembers') || 'Vereinsmitglieder';
-      case 'jobs':
-        return t('jobs') || 'Jobs';
-      case 'employees':
-        return t('subtabEmployees') || 'Mitarbeitende';
-      case 'mealAllergens':
-        return t('subtabAllergens') || 'Allergene';
-      case 'mealPlan':
-        return t('subtabMealPlan') || 'Wochenplan';
-      case 'dashboard':
-        return t('dashboard') || 'Dashboard';
-      case 'audit':
-        return t('audit') || 'Historie';
-      case 'admin':
-        return t('admin') || 'Admin';
-      case 'kiosk':
-        return t('kioskCertificates') || 'Kiosk-Zertifikate';
-      default:
-        return null;
-    }
-  };
-
-  const categoryLabel = getCategoryDisplayLabel();
-  const subTabLabel = getSubTabDisplayLabel();
+  const isTableTab = !isLandingActive && (activeTab === 'familiesOverview' || activeTab === 'parents' || activeTab === 'children' || activeTab === 'families' || activeTab === 'hygieneBelehrung' || activeTab === 'members' || activeTab === 'employees' || activeTab === 'jobs');
 
   return (
     <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
@@ -7231,20 +7246,53 @@ function formatParentsSummary(parents: any[]): string {
 
             <div className="header-brand">
               {appLogoUrl ? (
-                <img
-                  src={appLogoUrl}
-                  alt={appTitle}
-                  title={appTitle}
-                  className="app-header-logo"
-                />
+                <>
+                  <img
+                    src={appLogoUrl}
+                    alt={appTitle}
+                    title={appTitle}
+                    className="app-header-logo desktop-only"
+                    onClick={() => handleTabClick('familiesOverview')}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <img
+                    src={appFaviconUrl}
+                    alt={appTitle}
+                    title={appTitle}
+                    className="app-header-favicon mobile-only"
+                    onClick={() => handleTabClick('familiesOverview')}
+                    style={{ cursor: 'pointer' }}
+                  />
+                </>
               ) : (
-                <h1>{appTitle}</h1>
+                <h1
+                  onClick={() => handleTabClick('familiesOverview')}
+                  style={{ cursor: 'pointer' }}
+                >
+                  {displayTitle}
+                </h1>
               )}
             </div>
 
             <div className="header-breadcrumbs">
               <ChevronRight size={14} className="breadcrumb-separator" />
-              <span className="breadcrumb-category">{categoryLabel}</span>
+              {hasLandingPage && !isLandingActive ? (
+                <a
+                  href={`#${currentCategory}`}
+                  className="breadcrumb-link breadcrumb-category"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleTabClick(currentCategory);
+                  }}
+                  aria-label={categoryLabel}
+                >
+                  {categoryLabel}
+                </a>
+              ) : (
+                <span className={`breadcrumb-category ${isLandingActive || !subTabLabel ? 'breadcrumb-current' : ''}`}>
+                  {categoryLabel}
+                </span>
+              )}
               {subTabLabel && (
                 <>
                   <ChevronRight size={14} className="breadcrumb-separator" />
@@ -7312,17 +7360,23 @@ function formatParentsSummary(parents: any[]): string {
           <SegmentedSubNav
             activeTab={activeTab}
             onSelectTab={handleTabClick}
-            canReadFamiliesAll={canReadFamiliesAll}
-            canReadMembers={canReadMembers}
-            canReadJobs={canReadJobs}
-            canReadEmployees={canReadEmployees}
-            canViewMealPlan={canViewMealPlan}
-            canReadMealAllergens={canReadMealAllergens}
-            hasHygieneWrite={hasPermission('hygiene.all.write')}
+            perms={navPerms}
+            currentCategory={currentCategory}
           />
 
+          {/* Category Landing Page */}
+          {isLandingActive && currentCategoryConfig ? (
+            <CategoryLandingPage
+              category={currentCategoryConfig}
+              perms={navPerms}
+              activeTab={activeTab}
+              onSelectTab={handleTabClick}
+            />
+          ) : (
+            <>
+
         {/* Navigation Context Banner (Pattern 2) */}
-        {returnNav && (activeTab === 'parents' || activeTab === 'children') && (
+        {!isLandingActive && returnNav && (activeTab === 'parents' || activeTab === 'children') && (
           <div className="context-return-banner">
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
               <span className="context-return-text">
@@ -7358,7 +7412,7 @@ function formatParentsSummary(parents: any[]): string {
           </div>
         )}
 
-        {activeTab !== 'childcareFees' && activeTab !== 'audit' && activeTab !== 'admin' && activeTab !== 'kiosk' && activeTab !== 'dashboard' && activeTab !== 'mealPlan' && activeTab !== 'mealAllergens' && (
+        {!isLandingActive && activeTab !== 'childcareFees' && activeTab !== 'audit' && activeTab !== 'admin' && activeTab !== 'kiosk' && activeTab !== 'dashboard' && activeTab !== 'mealPlan' && activeTab !== 'mealAllergens' && (
           <div className="controls-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <div className="controls-left" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
               <input
@@ -7964,14 +8018,16 @@ function formatParentsSummary(parents: any[]): string {
               <MealAllergensTab />
             ) : activeTab === 'dashboard' ? (
               <KioskDashboard embedded={true} />
-            ) : (
+            ) : activeTab === 'childcareFees' && canReadFees ? (
               <ChildcareFeesCalculator
                 token={token}
                 families={families.length > 0 ? families : (overviewFamilies as any)}
               />
-            )}
+            ) : null}
           </div>
         )}
+            </>
+          )}
       </main>
 
       <ImpressumFooter />

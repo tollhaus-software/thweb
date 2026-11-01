@@ -1,28 +1,28 @@
 import React, { useState } from 'react';
 import {
-  Users,
-  CircleDollarSign,
-  Briefcase,
-  Utensils,
   ChevronDown,
   ChevronRight,
   PanelLeftClose,
   PanelLeft,
   X,
-  History,
-  Shield,
-  Key,
-  LayoutDashboard,
-  MoreHorizontal,
-  Sparkles,
 } from 'lucide-react';
 import { t } from '../../utils/i18n';
-import { getCategoryForTab, type TabId } from '../../utils/navigation';
+import {
+  getCategoryForTab,
+  getVisibleNavigationCategories,
+  categoryHasLandingPage,
+  getFirstPermittedTabForCategory,
+  getCategoryLabel,
+  getSubItemLabel,
+  type TabId,
+  type NavigationCategory,
+  type UserPermissionsContext,
+} from '../../utils/navigation';
 import { MgaLinkIcon } from '../MgaLinkIcon';
 
 export interface SidebarProps {
   activeTab: TabId | string;
-  onSelectTab: (tabId: TabId) => void;
+  onSelectTab: (tabId: TabId | string) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
   isMobileOpen: boolean;
@@ -67,6 +67,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const currentCategory = getCategoryForTab(activeTab);
 
+  const perms: UserPermissionsContext = {
+    canReadOverview,
+    canReadFamiliesAll,
+    canReadFees,
+    canReadMembers,
+    canReadJobs,
+    canReadEmployees,
+    canViewMealPlan,
+    canReadMealAllergens,
+    hasHygieneWrite,
+    canReadAudit,
+    canManageUsers,
+    canProvisionKiosk,
+  };
+
+  const visibleCategories = getVisibleNavigationCategories(perms);
+
   // Expanded categories state (for More dropdown)
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
     more: true,
@@ -77,67 +94,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setExpandedCategories((prev) => ({ ...prev, [catId]: !prev[catId] }));
   };
 
-  const handleTabClick = (tabId: TabId) => {
+  const handleTabClick = (tabId: TabId | string) => {
     onSelectTab(tabId);
     if (isMobileOpen) {
       onCloseMobile();
     }
   };
 
-  // First permitted MGA tab
-  const getFirstMgaTab = (): TabId => {
-    if (canReadFamiliesAll) return 'families';
-    if (canReadMembers) return 'members';
-    if (canReadJobs) return 'jobs';
-    return 'families';
-  };
-
-  // First permitted Kochen tab
-  const getFirstKochenTab = (): TabId => {
-    if (canReadMealAllergens) return 'mealAllergens';
-    if (canViewMealPlan) return 'mealPlan';
-    return 'mealPlan';
-  };
-
   const isEffectiveCollapsed = collapsed && !isMobileOpen;
 
-  const handleCategoryClick = (catId: string) => {
-    switch (catId) {
-      case 'families':
-        handleTabClick('familiesOverview');
-        break;
-      case 'mga':
-        handleTabClick(getFirstMgaTab());
-        break;
-      case 'fees':
-        handleTabClick('childcareFees');
-        break;
-      case 'pa':
-        handleTabClick('employees');
-        break;
-      case 'kochen':
-        handleTabClick(getFirstKochenTab());
-        break;
-      case 'hygiene':
-        handleTabClick('hygieneBelehrung');
-        break;
-      case 'more':
-        if (isEffectiveCollapsed) {
-          onToggleCollapse();
-          setExpandedCategories((prev) => ({ ...prev, more: true }));
-        } else {
-          setExpandedCategories((prev) => ({ ...prev, more: !prev.more }));
-        }
-        break;
-      default:
-        break;
+  const handleCategoryClick = (catId: NavigationCategory) => {
+    if (catId === 'more') {
+      if (isEffectiveCollapsed) {
+        onToggleCollapse();
+        setExpandedCategories((prev) => ({ ...prev, more: true }));
+      } else {
+        setExpandedCategories((prev) => ({ ...prev, more: !prev.more }));
+      }
+      return;
+    }
+
+    if (categoryHasLandingPage(catId, perms)) {
+      handleTabClick(catId);
+    } else {
+      handleTabClick(getFirstPermittedTabForCategory(catId, perms));
     }
   };
-
-  const canShowMga = canReadFamiliesAll || canReadMembers || canReadJobs;
-  const canShowHygiene = canReadFamiliesAll || hasHygieneWrite;
-  const canShowKochen = canReadMealAllergens || canViewMealPlan;
-  const canShowMore = true; // Dashboard is accessible to all
 
   return (
     <aside
@@ -178,205 +160,94 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Main Navigation Items */}
       <nav className="sidebar-nav tabs">
-        {/* Families Category */}
-        {canReadOverview && (
-          <div className="sidebar-nav-group">
-            <button
-              type="button"
-              className={`sidebar-nav-item category-item tab-btn ${currentCategory === 'families' ? 'active' : ''}`}
-              onClick={() => handleCategoryClick('families')}
-              aria-label={t('familiesOverview') || 'Familien'}
-              data-active={currentCategory === 'families' ? 'true' : 'false'}
-              title={t('navFamilies') || 'Familien'}
-            >
-              <Users size={18} className="nav-icon" />
-              <span className="nav-label">{t('navFamilies') || 'Familien'}</span>
-            </button>
-          </div>
-        )}
+        {visibleCategories.map((cat, idx) => {
+          const isMoreCategory = cat.id === 'more';
+          const CatIcon = cat.icon;
+          const catLabel = getCategoryLabel(cat);
+          const isCatActive = currentCategory === cat.id;
 
-        {/* MGA Category */}
-        {canShowMga && (
-          <div className="sidebar-nav-group">
-            <button
-              type="button"
-              className={`sidebar-nav-item category-item tab-btn ${currentCategory === 'mga' ? 'active' : ''}`}
-              onClick={() => handleCategoryClick('mga')}
-              aria-label={t('navMga') || 'MGA'}
-              data-active={currentCategory === 'mga' ? 'true' : 'false'}
-              title={t('navMga') || 'MGA'}
-            >
-              {isEffectiveCollapsed ? (
-                <MgaLinkIcon hideArrow className="nav-icon mga-collapsed-icon" />
-              ) : (
-                <Users size={18} className="nav-icon" />
-              )}
-              <span className="nav-label">{t('navMga') || 'MGA'}</span>
-            </button>
-          </div>
-        )}
+          return (
+            <React.Fragment key={cat.id}>
+              {/* Divider before More */}
+              {isMoreCategory && idx > 0 && <div className="sidebar-divider" />}
 
-        {/* Gebühren Category */}
-        {canReadFees && (
-          <div className="sidebar-nav-group">
-            <button
-              type="button"
-              className={`sidebar-nav-item category-item tab-btn ${currentCategory === 'fees' ? 'active' : ''}`}
-              onClick={() => handleCategoryClick('fees')}
-              aria-label={t('childcareFees') || 'Betreuungsgebühren'}
-              data-active={currentCategory === 'fees' ? 'true' : 'false'}
-              title={t('navFees') || 'Gebühren'}
-            >
-              <CircleDollarSign size={18} className="nav-icon" />
-              <span className="nav-label">{t('navFees') || 'Gebühren'}</span>
-            </button>
-          </div>
-        )}
+              <div className="sidebar-nav-group">
+                {cat.collapsibleInSidebar ? (
+                  <>
+                    <div
+                      className={`sidebar-nav-item category-header tab-btn ${isCatActive ? 'active' : ''}`}
+                      onClick={() => handleCategoryClick(cat.id)}
+                      title={catLabel}
+                      data-active={isCatActive ? 'true' : 'false'}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleCategoryClick(cat.id);
+                        }
+                      }}
+                    >
+                      <CatIcon size={18} className="nav-icon" />
+                      <span className="nav-label">{catLabel}</span>
+                      {!isEffectiveCollapsed && (
+                        <button
+                          type="button"
+                          className="accordion-toggle-btn"
+                          onClick={(e) => toggleCategory(cat.id, e)}
+                          aria-label={`Toggle ${catLabel} subtabs`}
+                        >
+                          {expandedCategories[cat.id] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                        </button>
+                      )}
+                    </div>
 
-        {/* PA Category */}
-        {canReadEmployees && (
-          <div className="sidebar-nav-group">
-            <button
-              type="button"
-              className={`sidebar-nav-item category-item tab-btn ${currentCategory === 'pa' ? 'active' : ''}`}
-              onClick={() => handleCategoryClick('pa')}
-              aria-label={t('navPa') || 'PA'}
-              data-active={currentCategory === 'pa' ? 'true' : 'false'}
-              title={t('navPa') || 'PA'}
-            >
-              <Briefcase size={18} className="nav-icon" />
-              <span className="nav-label">{t('navPa') || 'PA'}</span>
-            </button>
-          </div>
-        )}
+                    {!isEffectiveCollapsed && expandedCategories[cat.id] && (
+                      <div className="sidebar-sub-tree">
+                        {cat.visibleItems.map((sub) => {
+                          const SubIcon = sub.icon;
+                          const subLabel = getSubItemLabel(sub);
+                          const isSubActive = activeTab === sub.id;
 
-        {/* Kochen Category */}
-        {canShowKochen && (
-          <div className="sidebar-nav-group">
-            <button
-              type="button"
-              className={`sidebar-nav-item category-item tab-btn ${currentCategory === 'kochen' ? 'active' : ''}`}
-              onClick={() => handleCategoryClick('kochen')}
-              aria-label={t('navKochen') || 'Kochen'}
-              data-active={currentCategory === 'kochen' ? 'true' : 'false'}
-              title={t('navKochen') || 'Kochen'}
-            >
-              <Utensils size={18} className="nav-icon" />
-              <span className="nav-label">{t('navKochen') || 'Kochen'}</span>
-            </button>
-          </div>
-        )}
-
-        {/* Hygiene Category */}
-        {canShowHygiene && (
-          <div className="sidebar-nav-group">
-            <button
-              type="button"
-              className={`sidebar-nav-item category-item tab-btn ${currentCategory === 'hygiene' ? 'active' : ''}`}
-              onClick={() => handleCategoryClick('hygiene')}
-              aria-label={t('navHygiene') || 'Hygiene'}
-              data-active={currentCategory === 'hygiene' ? 'true' : 'false'}
-              title={t('navHygiene') || 'Hygiene'}
-            >
-              <Sparkles size={18} className="nav-icon" />
-              <span className="nav-label">{t('navHygiene') || 'Hygiene'}</span>
-            </button>
-          </div>
-        )}
-
-        {/* Divider before More */}
-        <div className="sidebar-divider" />
-
-        {/* Mehr (...) Category */}
-        {canShowMore && (
-          <div className="sidebar-nav-group">
-            <div
-              className={`sidebar-nav-item category-header tab-btn ${currentCategory === 'more' ? 'active' : ''}`}
-              onClick={() => handleCategoryClick('more')}
-              title={t('navMore') || 'Mehr'}
-              data-active={currentCategory === 'more' ? 'true' : 'false'}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  handleCategoryClick('more');
-                }
-              }}
-            >
-              <MoreHorizontal size={18} className="nav-icon" />
-              <span className="nav-label">{t('navMore') || 'Mehr'}</span>
-              {!isEffectiveCollapsed && (
-                <button
-                  type="button"
-                  className="accordion-toggle-btn"
-                  onClick={(e) => toggleCategory('more', e)}
-                  aria-label="Toggle More subtabs"
-                >
-                  {expandedCategories.more ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                </button>
-              )}
-            </div>
-
-            {!isEffectiveCollapsed && expandedCategories.more && (
-              <div className="sidebar-sub-tree">
-                <button
-                  type="button"
-                  className={`sidebar-sub-item tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
-                  onClick={() => handleTabClick('dashboard')}
-                  aria-label={t('dashboard') || 'Dashboard'}
-                  data-active={activeTab === 'dashboard' ? 'true' : 'false'}
-                  title={t('dashboard') || 'Dashboard'}
-                >
-                  <LayoutDashboard size={14} className="sub-icon" />
-                  <span className="sub-label">{t('dashboard') || 'Dashboard'}</span>
-                </button>
-
-                {canReadAudit && (
+                          return (
+                            <button
+                              key={sub.id}
+                              type="button"
+                              className={`sidebar-sub-item tab-btn ${isSubActive ? 'active' : ''}`}
+                              onClick={() => handleTabClick(sub.id)}
+                              aria-label={sub.accessibleName || subLabel}
+                              data-active={isSubActive ? 'true' : 'false'}
+                              title={subLabel}
+                            >
+                              <SubIcon size={14} className="sub-icon" />
+                              <span className="sub-label">{subLabel}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                ) : (
                   <button
                     type="button"
-                    className={`sidebar-sub-item tab-btn ${activeTab === 'audit' ? 'active' : ''}`}
-                    onClick={() => handleTabClick('audit')}
-                    aria-label={t('audit') || 'Historie'}
-                    data-active={activeTab === 'audit' ? 'true' : 'false'}
-                    title={t('audit') || 'Historie'}
+                    className={`sidebar-nav-item category-item tab-btn ${isCatActive ? 'active' : ''}`}
+                    onClick={() => handleCategoryClick(cat.id)}
+                    aria-label={cat.accessibleName || catLabel}
+                    data-active={isCatActive ? 'true' : 'false'}
+                    title={catLabel}
                   >
-                    <History size={14} className="sub-icon" />
-                    <span className="sub-label">{t('audit') || 'Historie'}</span>
-                  </button>
-                )}
-
-                {canManageUsers && (
-                  <button
-                    type="button"
-                    className={`sidebar-sub-item tab-btn ${activeTab === 'admin' ? 'active' : ''}`}
-                    onClick={() => handleTabClick('admin')}
-                    aria-label={t('admin') || 'Admin'}
-                    data-active={activeTab === 'admin' ? 'true' : 'false'}
-                    title={t('admin') || 'Admin'}
-                  >
-                    <Shield size={14} className="sub-icon" />
-                    <span className="sub-label">{t('admin') || 'Admin'}</span>
-                  </button>
-                )}
-
-                {canProvisionKiosk && (
-                  <button
-                    type="button"
-                    className={`sidebar-sub-item tab-btn ${activeTab === 'kiosk' ? 'active' : ''}`}
-                    onClick={() => handleTabClick('kiosk')}
-                    aria-label={t('kioskCertificates') || 'Kiosk-Zertifikate'}
-                    data-active={activeTab === 'kiosk' ? 'true' : 'false'}
-                    title={t('kioskCertificates') || 'Kiosk-Zertifikate'}
-                  >
-                    <Key size={14} className="sub-icon" />
-                    <span className="sub-label">{t('kioskCertificates') || 'Kiosk-Zertifikate'}</span>
+                    {isEffectiveCollapsed && cat.id === 'mga' ? (
+                      <MgaLinkIcon hideArrow className="nav-icon mga-collapsed-icon" />
+                    ) : (
+                      <CatIcon size={18} className="nav-icon" />
+                    )}
+                    <span className="nav-label">{catLabel}</span>
                   </button>
                 )}
               </div>
-            )}
-          </div>
-        )}
+            </React.Fragment>
+          );
+        })}
       </nav>
     </aside>
   );

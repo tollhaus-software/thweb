@@ -80,9 +80,9 @@ test.describe('Test Case 11: Header Responsive Sign Out Overflow Menu & Branding
     const header = page.locator('header');
     await expect(header).toBeVisible();
 
-    // Default title is "TH Portal" and has smaller font size on mobile (< 20px)
+    // Default title is "TH" on mobile and has smaller font size (< 20px)
     const mobileHeaderTitle = header.locator('.header-brand h1');
-    await expect(mobileHeaderTitle).toHaveText('TH Portal');
+    await expect(mobileHeaderTitle).toHaveText('TH');
     const mobileFontSize = await mobileHeaderTitle.evaluate((el) => parseFloat(window.getComputedStyle(el).fontSize));
     expect(mobileFontSize).toBeLessThan(20);
 
