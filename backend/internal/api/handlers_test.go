@@ -2307,6 +2307,269 @@ func TestMealAllergensHandlers(t *testing.T) {
 	}
 }
 
+func TestJobs_APIHandlersAndPermissions(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := store.NewStore(pool)
+	hub := NewHub()
+	authn := auth.NewAuthenticator("mock", true, appStore)
+
+	viewerEmail := "jobs-viewer@example.com"
+	readerEmail := "jobs-reader@example.com"
+	writerEmail := "jobs-writer@example.com"
+
+	viewerID := uuid.New()
+	readerID := uuid.New()
+	writerID := uuid.New()
+
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, permissions) VALUES ($1, $2, '[]'::jsonb) ON CONFLICT (id) DO NOTHING", viewerID, viewerEmail)
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, permissions) VALUES ($1, $2, '[\"jobs.all.read\"]'::jsonb) ON CONFLICT (id) DO NOTHING", readerID, readerEmail)
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, permissions) VALUES ($1, $2, '[\"jobs.all.write\"]'::jsonb) ON CONFLICT (id) DO NOTHING", writerID, writerEmail)
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id IN ($1, $2, $3)", viewerID, readerID, writerID)
+	}()
+
+	router := SetupRouter(appStore, authn, hub, nil)
+
+	// 1. GET /api/jobs permission check
+	reqGet := httptest.NewRequest("GET", "/api/jobs", nil)
+	reqGet.Header.Set("X-Forwarded-Email", viewerEmail)
+	recGetViewer := httptest.NewRecorder()
+	router.ServeHTTP(recGetViewer, reqGet)
+	if recGetViewer.Code != http.StatusForbidden {
+		t.Errorf("expected 403 Forbidden for viewer without jobs.all.read, got %d", recGetViewer.Code)
+	}
+
+	reqGetReader := httptest.NewRequest("GET", "/api/jobs", nil)
+	reqGetReader.Header.Set("X-Forwarded-Email", readerEmail)
+	recGetReader := httptest.NewRecorder()
+	router.ServeHTTP(recGetReader, reqGetReader)
+	if recGetReader.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for reader with jobs.all.read, got %d", recGetReader.Code)
+	}
+
+	// 2. POST /api/jobs permission check & creation
+	newJobJSON := `{"name":"Hygiene Test","description":"Hygiene tasks","contact_email":"hygiene@tollhaus.de"}`
+	reqPostReader := httptest.NewRequest("POST", "/api/jobs", strings.NewReader(newJobJSON))
+	reqPostReader.Header.Set("Content-Type", "application/json")
+	reqPostReader.Header.Set("X-Forwarded-Email", readerEmail)
+	recPostReader := httptest.NewRecorder()
+	router.ServeHTTP(recPostReader, reqPostReader)
+	if recPostReader.Code != http.StatusForbidden {
+		t.Errorf("expected 403 Forbidden for reader attempting POST /api/jobs, got %d", recPostReader.Code)
+	}
+
+	reqPostWriter := httptest.NewRequest("POST", "/api/jobs", strings.NewReader(newJobJSON))
+	reqPostWriter.Header.Set("Content-Type", "application/json")
+	reqPostWriter.Header.Set("X-Forwarded-Email", writerEmail)
+	recPostWriter := httptest.NewRecorder()
+	router.ServeHTTP(recPostWriter, reqPostWriter)
+	if recPostWriter.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created from POST /api/jobs, got %d (%s)", recPostWriter.Code, recPostWriter.Body.String())
+	}
+	var createdJob models.Job
+	_ = json.Unmarshal(recPostWriter.Body.Bytes(), &createdJob)
+	if createdJob.ID == uuid.Nil || createdJob.Name != "Hygiene Test" {
+		t.Fatalf("unexpected created job: %+v", createdJob)
+	}
+	defer func() {
+		_ = appStore.DeleteJob(ctx, writerID, createdJob.ID)
+	}()
+
+	// 3. PUT /api/jobs/{id}
+	updateJobJSON := `{"name":"Hygiene Test Updated","description":"Updated hygiene tasks","contact_email":"updated@tollhaus.de"}`
+	reqPut := httptest.NewRequest("PUT", "/api/jobs/"+createdJob.ID.String(), strings.NewReader(updateJobJSON))
+	reqPut.Header.Set("Content-Type", "application/json")
+	reqPut.Header.Set("X-Forwarded-Email", writerEmail)
+	recPut := httptest.NewRecorder()
+	router.ServeHTTP(recPut, reqPut)
+	if recPut.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK from PUT /api/jobs/{id}, got %d (%s)", recPut.Code, recPut.Body.String())
+	}
+
+	// 4. Create a parent and associate job
+	fam, err := appStore.CreateFamilyWithParents(ctx, writerID, []models.Parent{
+		{
+			FirstName: "TestJobParent",
+			LastName:  "Mustermann",
+		},
+	})
+	if err != nil {
+		t.Fatalf("failed to create family: %v", err)
+	}
+	parentID := fam.Parents[0].ID
+	defer func() {
+		_ = appStore.DeleteFamily(ctx, writerID, fam.ID)
+	}()
+
+	setParentJobsJSON := fmt.Sprintf(`{"job_ids":["%s"]}`, createdJob.ID.String())
+	reqSetParent := httptest.NewRequest("PUT", "/api/parents/"+parentID.String()+"/jobs", strings.NewReader(setParentJobsJSON))
+	reqSetParent.Header.Set("Content-Type", "application/json")
+	reqSetParent.Header.Set("X-Forwarded-Email", writerEmail)
+	recSetParent := httptest.NewRecorder()
+	router.ServeHTTP(recSetParent, reqSetParent)
+	if recSetParent.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK from PUT /api/parents/{id}/jobs, got %d (%s)", recSetParent.Code, recSetParent.Body.String())
+	}
+
+	// 5. DELETE /api/jobs/{id} should fail because parent is associated
+	reqDel := httptest.NewRequest("DELETE", "/api/jobs/"+createdJob.ID.String(), nil)
+	reqDel.Header.Set("X-Forwarded-Email", writerEmail)
+	recDelBlocked := httptest.NewRecorder()
+	router.ServeHTTP(recDelBlocked, reqDel)
+	if recDelBlocked.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 Bad Request when deleting job with active assignments, got %d", recDelBlocked.Code)
+	}
+
+	// 6. Verify HandleListFamiliesOverview includes the job
+	reqOv := httptest.NewRequest("GET", "/api/families/overview", nil)
+	reqOv.Header.Set("X-Forwarded-Email", "developer@example.com")
+	recOv := httptest.NewRecorder()
+	router.ServeHTTP(recOv, reqOv)
+	if recOv.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK from /api/families/overview, got %d", recOv.Code)
+	}
+	var ovData []OverviewFamily
+	_ = json.Unmarshal(recOv.Body.Bytes(), &ovData)
+	var foundOvParent *OverviewParent
+	for _, f := range ovData {
+		for i := range f.Parents {
+			if f.Parents[i].ID == parentID {
+				foundOvParent = &f.Parents[i]
+				break
+			}
+		}
+	}
+	if foundOvParent == nil {
+		t.Fatalf("parent not found in /api/families/overview")
+	}
+	if len(foundOvParent.Jobs) != 1 || foundOvParent.Jobs[0].ID != createdJob.ID {
+		t.Fatalf("expected 1 job on parent in overview, got %+v", foundOvParent.Jobs)
+	}
+
+	// 7. Clear parent association and delete job
+	clearParentJobsJSON := `{"job_ids":[]}`
+	reqClearParent := httptest.NewRequest("PUT", "/api/parents/"+parentID.String()+"/jobs", strings.NewReader(clearParentJobsJSON))
+	reqClearParent.Header.Set("Content-Type", "application/json")
+	reqClearParent.Header.Set("X-Forwarded-Email", writerEmail)
+	recClearParent := httptest.NewRecorder()
+	router.ServeHTTP(recClearParent, reqClearParent)
+	if recClearParent.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK clearing parent jobs, got %d", recClearParent.Code)
+	}
+
+	recDelSuccess := httptest.NewRecorder()
+	router.ServeHTTP(recDelSuccess, reqDel)
+	if recDelSuccess.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 No Content when deleting unassociated job, got %d (%s)", recDelSuccess.Code, recDelSuccess.Body.String())
+	}
+
+	// 6. Test GET /api/jobs/people
+	reqPeopleViewer := httptest.NewRequest("GET", "/api/jobs/people", nil)
+	reqPeopleViewer.Header.Set("X-Forwarded-Email", viewerEmail)
+	recPeopleViewer := httptest.NewRecorder()
+	router.ServeHTTP(recPeopleViewer, reqPeopleViewer)
+	if recPeopleViewer.Code != http.StatusForbidden {
+		t.Errorf("expected 403 Forbidden for viewer on GET /api/jobs/people, got %d", recPeopleViewer.Code)
+	}
+
+	reqPeopleReader := httptest.NewRequest("GET", "/api/jobs/people", nil)
+	reqPeopleReader.Header.Set("X-Forwarded-Email", readerEmail)
+	recPeopleReader := httptest.NewRecorder()
+	router.ServeHTTP(recPeopleReader, reqPeopleReader)
+	if recPeopleReader.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for reader on GET /api/jobs/people, got %d", recPeopleReader.Code)
+	}
+
+	var peopleRes struct {
+		Parents   []models.JobAssigneeParent   `json:"parents"`
+		Employees []models.JobAssigneeEmployee `json:"employees"`
+	}
+	if err := json.Unmarshal(recPeopleReader.Body.Bytes(), &peopleRes); err != nil {
+		t.Fatalf("failed to decode GET /api/jobs/people response: %v", err)
+	}
+
+	// 7. Test PUT /api/jobs/{id}/assignees
+	// Create another job to test assignees
+	newJob2JSON := `{"name":"Assignees Test Job","description":"Desc","contact_email":"assignees@example.com"}`
+	reqPostJob2 := httptest.NewRequest("POST", "/api/jobs", strings.NewReader(newJob2JSON))
+	reqPostJob2.Header.Set("X-Forwarded-Email", writerEmail)
+	recPostJob2 := httptest.NewRecorder()
+	router.ServeHTTP(recPostJob2, reqPostJob2)
+	if recPostJob2.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created from POST /api/jobs, got %d", recPostJob2.Code)
+	}
+	var job2 models.Job
+	_ = json.Unmarshal(recPostJob2.Body.Bytes(), &job2)
+	defer func() {
+		_ = appStore.DeleteJob(ctx, writerID, job2.ID)
+	}()
+
+	setAssigneesJSON := fmt.Sprintf(`{"parent_ids":["%s"],"employee_ids":[]}`, parentID.String())
+	reqSetAssigneesReader := httptest.NewRequest("PUT", "/api/jobs/"+job2.ID.String()+"/assignees", strings.NewReader(setAssigneesJSON))
+	reqSetAssigneesReader.Header.Set("X-Forwarded-Email", readerEmail)
+	recSetAssigneesReader := httptest.NewRecorder()
+	router.ServeHTTP(recSetAssigneesReader, reqSetAssigneesReader)
+	if recSetAssigneesReader.Code != http.StatusForbidden {
+		t.Errorf("expected 403 Forbidden for reader on PUT /api/jobs/{id}/assignees, got %d", recSetAssigneesReader.Code)
+	}
+
+	reqSetAssigneesWriter := httptest.NewRequest("PUT", "/api/jobs/"+job2.ID.String()+"/assignees", strings.NewReader(setAssigneesJSON))
+	reqSetAssigneesWriter.Header.Set("X-Forwarded-Email", writerEmail)
+	recSetAssigneesWriter := httptest.NewRecorder()
+	router.ServeHTTP(recSetAssigneesWriter, reqSetAssigneesWriter)
+	if recSetAssigneesWriter.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK from PUT /api/jobs/{id}/assignees, got %d (%s)", recSetAssigneesWriter.Code, recSetAssigneesWriter.Body.String())
+	}
+	var updatedJob2 models.JobWithAssignees
+	_ = json.Unmarshal(recSetAssigneesWriter.Body.Bytes(), &updatedJob2)
+	if len(updatedJob2.Parents) != 1 || updatedJob2.Parents[0].ID != parentID {
+		t.Fatalf("expected 1 parent assigned to job, got %d", len(updatedJob2.Parents))
+	}
+
+	var auditBefore, auditAfter []byte
+	err = pool.QueryRow(ctx, "SELECT before_snapshot, after_snapshot FROM audit_log WHERE entity_id = $1 AND operation = 'UPDATE_ASSIGNEES' ORDER BY created_at DESC LIMIT 1", job2.ID).Scan(&auditBefore, &auditAfter)
+	if err != nil {
+		t.Fatalf("failed to query audit log for UPDATE_ASSIGNEES: %v", err)
+	}
+	if !strings.Contains(string(auditAfter), "Assignees Test Job") {
+		t.Errorf("expected after_snapshot to contain job name 'Assignees Test Job', got %s", string(auditAfter))
+	}
+	if !strings.Contains(string(auditAfter), `"added"`) || !strings.Contains(string(auditAfter), parentID.String()) {
+		t.Errorf("expected after_snapshot to contain added parent, got %s", string(auditAfter))
+	}
+
+	// Clear assignees
+	clearAssigneesJSON := `{"parent_ids":[],"employee_ids":[]}`
+	reqClear := httptest.NewRequest("PUT", "/api/jobs/"+job2.ID.String()+"/assignees", strings.NewReader(clearAssigneesJSON))
+	reqClear.Header.Set("X-Forwarded-Email", writerEmail)
+	recClear := httptest.NewRecorder()
+	router.ServeHTTP(recClear, reqClear)
+	if recClear.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK clearing assignees, got %d", recClear.Code)
+	}
+
+	err = pool.QueryRow(ctx, "SELECT before_snapshot, after_snapshot FROM audit_log WHERE entity_id = $1 AND operation = 'UPDATE_ASSIGNEES' ORDER BY created_at DESC LIMIT 1", job2.ID).Scan(&auditBefore, &auditAfter)
+	if err != nil {
+		t.Fatalf("failed to query audit log for clear assignees: %v", err)
+	}
+	if !strings.Contains(string(auditAfter), `"removed"`) || !strings.Contains(string(auditAfter), parentID.String()) {
+		t.Errorf("expected after_snapshot to contain removed parent, got %s", string(auditAfter))
+	}
+}
+
+
 
 
 

@@ -11,8 +11,15 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pavolmarko/thweb-backend/internal/crypto"
+	"github.com/pavolmarko/thweb-backend/internal/database"
 	"github.com/pavolmarko/thweb-backend/internal/models"
 )
+
+func TestMain(m *testing.M) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	database.ApplySchemaMigrations(context.Background(), dbURL)
+	os.Exit(m.Run())
+}
 
 func TestGetDailyBrief(t *testing.T) {
 	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
@@ -1274,6 +1281,191 @@ func TestStore_DEKStore(t *testing.T) {
 		t.Fatalf("GetDEKByID allergies mismatch: %+v, err=%v", fetchedAllergies, err)
 	}
 }
+
+func TestJobs_CRUDAndAssignments(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	appStore := NewStore(pool)
+	testUserID := uuid.New()
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, 'jobs-tester@example.com') ON CONFLICT (id) DO NOTHING", testUserID)
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", testUserID)
+	}()
+
+	// 1. Create jobs
+	job1, err := appStore.CreateJob(ctx, testUserID, models.Job{
+		Name:         "Hygiene",
+		Description:  "Hygiene management and instructions",
+		ContactEmail: "hygiene@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateJob 1 failed: %v", err)
+	}
+	if job1.Name != "Hygiene" || job1.ContactEmail != "hygiene@example.com" {
+		t.Fatalf("unexpected job1: %+v", job1)
+	}
+
+	job2, err := appStore.CreateJob(ctx, testUserID, models.Job{
+		Name:         "Garten",
+		Description:  "Garden maintenance",
+		ContactEmail: "garten@example.com",
+	})
+	if err != nil {
+		t.Fatalf("CreateJob 2 failed: %v", err)
+	}
+
+	defer func() {
+		_ = appStore.DeleteJob(ctx, testUserID, job1.ID)
+		_ = appStore.DeleteJob(ctx, testUserID, job2.ID)
+	}()
+
+	// Validate non-empty name
+	_, err = appStore.CreateJob(ctx, testUserID, models.Job{Name: "   "})
+	if err == nil {
+		t.Fatalf("expected error creating job with empty name")
+	}
+
+	// 2. Update job
+	job1.Description = "Updated hygiene description"
+	updated1, err := appStore.UpdateJob(ctx, testUserID, job1)
+	if err != nil {
+		t.Fatalf("UpdateJob failed: %v", err)
+	}
+	if updated1.Description != "Updated hygiene description" {
+		t.Fatalf("expected updated description, got %q", updated1.Description)
+	}
+
+	// 3. Create parent & employee to test assignments
+	fam, err := appStore.CreateFamilyWithParents(ctx, testUserID, []models.Parent{
+		{
+			FirstName: "Johannes",
+			LastName:  "TestEltern",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateFamilyWithParents failed: %v", err)
+	}
+	parentID := fam.Parents[0].ID
+	defer func() {
+		_ = appStore.DeleteFamily(ctx, testUserID, fam.ID)
+	}()
+
+	emp, err := appStore.CreateEmployee(ctx, testUserID, models.Employee{
+		FirstName:    "Maria",
+		LastName:     "TestEmployee",
+		EmployeeType: "caregiver",
+	})
+	if err != nil {
+		t.Fatalf("CreateEmployee failed: %v", err)
+	}
+	defer func() {
+		_ = appStore.DeleteEmployee(ctx, testUserID, emp.ID)
+	}()
+
+	// 4. Assign jobs to parent and employee
+	if err := appStore.SetParentJobs(ctx, testUserID, parentID, []uuid.UUID{job1.ID, job2.ID}); err != nil {
+		t.Fatalf("SetParentJobs failed: %v", err)
+	}
+	if err := appStore.SetEmployeeJobs(ctx, testUserID, emp.ID, []uuid.UUID{job1.ID}); err != nil {
+		t.Fatalf("SetEmployeeJobs failed: %v", err)
+	}
+
+	// 5. Verify ListJobs shows assignees
+	jobsWithAssignees, err := appStore.ListJobs(ctx)
+	if err != nil {
+		t.Fatalf("ListJobs failed: %v", err)
+	}
+	var foundJ1 *models.JobWithAssignees
+	for i := range jobsWithAssignees {
+		if jobsWithAssignees[i].ID == job1.ID {
+			foundJ1 = &jobsWithAssignees[i]
+			break
+		}
+	}
+	if foundJ1 == nil {
+		t.Fatalf("job1 not found in ListJobs")
+	}
+	if len(foundJ1.Parents) != 1 || foundJ1.Parents[0].ID != parentID {
+		t.Fatalf("expected 1 parent assigned to job1, got %+v", foundJ1.Parents)
+	}
+	if len(foundJ1.Employees) != 1 || foundJ1.Employees[0].ID != emp.ID {
+		t.Fatalf("expected 1 employee assigned to job1, got %+v", foundJ1.Employees)
+	}
+
+	// 6. Verify ListFamilies includes parent's jobs
+	fams, err := appStore.ListFamilies(ctx)
+	if err != nil {
+		t.Fatalf("ListFamilies failed: %v", err)
+	}
+	var foundParent *models.Parent
+	for _, f := range fams {
+		if f.ID == fam.ID {
+			for i := range f.Parents {
+				if f.Parents[i].ID == parentID {
+					foundParent = &f.Parents[i]
+					break
+				}
+			}
+		}
+	}
+	if foundParent == nil {
+		t.Fatalf("parent not found in ListFamilies")
+	}
+	if len(foundParent.Jobs) != 2 {
+		t.Fatalf("expected 2 jobs on parent, got %d", len(foundParent.Jobs))
+	}
+
+	// 7. Verify ListEmployees includes employee's jobs
+	employees, err := appStore.ListEmployees(ctx)
+	if err != nil {
+		t.Fatalf("ListEmployees failed: %v", err)
+	}
+	var foundEmp *models.Employee
+	for i := range employees {
+		if employees[i].ID == emp.ID {
+			foundEmp = &employees[i]
+			break
+		}
+	}
+	if foundEmp == nil {
+		t.Fatalf("employee not found in ListEmployees")
+	}
+	if len(foundEmp.Jobs) != 1 || foundEmp.Jobs[0].ID != job1.ID {
+		t.Fatalf("expected 1 job on employee, got %+v", foundEmp.Jobs)
+	}
+
+	// 8. DeleteJob should fail while associations exist
+	err = appStore.DeleteJob(ctx, testUserID, job1.ID)
+	if err == nil {
+		t.Fatalf("expected error deleting job with active associations")
+	}
+	if !strings.Contains(err.Error(), "active associations") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+
+	// 9. Clear associations and delete
+	if err := appStore.SetParentJobs(ctx, testUserID, parentID, []uuid.UUID{}); err != nil {
+		t.Fatalf("SetParentJobs clear failed: %v", err)
+	}
+	if err := appStore.SetEmployeeJobs(ctx, testUserID, emp.ID, []uuid.UUID{}); err != nil {
+		t.Fatalf("SetEmployeeJobs clear failed: %v", err)
+	}
+
+	if err := appStore.DeleteJob(ctx, testUserID, job1.ID); err != nil {
+		t.Fatalf("DeleteJob failed after clearing associations: %v", err)
+	}
+	if err := appStore.DeleteJob(ctx, testUserID, job2.ID); err != nil {
+		t.Fatalf("DeleteJob 2 failed: %v", err)
+	}
+}
+
 
 
 

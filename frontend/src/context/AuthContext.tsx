@@ -190,6 +190,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (perm === 'meal_allergens.read' && user.effective_permissions.includes('meal_allergens.write')) {
       return true;
     }
+    if (perm === 'jobs.all.read' && user.effective_permissions.includes('jobs.all.write')) {
+      return true;
+    }
     return false;
   };
 

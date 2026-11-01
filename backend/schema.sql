@@ -235,3 +235,36 @@ CREATE TABLE IF NOT EXISTS meal_allergens (
 DROP TRIGGER IF EXISTS update_meal_allergens_updated_at ON meal_allergens;
 CREATE TRIGGER update_meal_allergens_updated_at BEFORE UPDATE ON meal_allergens FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
+-- Jobs table
+CREATE TABLE IF NOT EXISTS jobs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    contact_email TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+DROP TRIGGER IF EXISTS update_jobs_updated_at ON jobs;
+CREATE TRIGGER update_jobs_updated_at BEFORE UPDATE ON jobs FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+
+-- Association between parents and jobs
+CREATE TABLE IF NOT EXISTS parent_jobs (
+    parent_id UUID NOT NULL REFERENCES parents(id) ON DELETE CASCADE,
+    job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE RESTRICT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (parent_id, job_id)
+);
+
+-- Association between employees and jobs
+CREATE TABLE IF NOT EXISTS employee_jobs (
+    employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE RESTRICT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (employee_id, job_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_parent_jobs_job_id ON parent_jobs (job_id);
+CREATE INDEX IF NOT EXISTS idx_employee_jobs_job_id ON employee_jobs (job_id);
+
+

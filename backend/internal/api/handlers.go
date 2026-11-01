@@ -376,6 +376,7 @@ type OverviewParent struct {
 	Phones                  models.MultiValueList  `json:"phones"`
 	Address                 string                 `json:"address"`
 	Memberships             *[]models.THMembership `json:"memberships,omitempty"`
+	Jobs                    []models.Job           `json:"jobs"`
 }
 
 type OverviewFamily struct {
@@ -534,6 +535,10 @@ func (s *Server) HandleListFamiliesOverview(w http.ResponseWriter, r *http.Reque
 			if strings.TrimSpace(p.FirstNameForAddressList) != "" {
 				displayFirstName = p.FirstNameForAddressList
 			}
+			pJobs := p.Jobs
+			if pJobs == nil {
+				pJobs = []models.Job{}
+			}
 			ovParents = append(ovParents, OverviewParent{
 				ID:                      p.ID,
 				FirstName:               displayFirstName,
@@ -543,6 +548,7 @@ func (s *Server) HandleListFamiliesOverview(w http.ResponseWriter, r *http.Reque
 				Phones:                  filteredPhones,
 				Address:                 p.Address,
 				Memberships:             pMemberships,
+				Jobs:                    pJobs,
 			})
 		}
 
@@ -2547,6 +2553,275 @@ func (s *Server) HandleFinalizeMealAllergens(w http.ResponseWriter, r *http.Requ
 
 	jsonResponse(w, updated)
 }
+
+func (s *Server) HandleListJobs(w http.ResponseWriter, r *http.Request) {
+	jobs, err := s.Store.ListJobs(r.Context())
+	if err != nil {
+		httpErrorLog(w, r, "Failed to list jobs", http.StatusInternalServerError, err)
+		return
+	}
+	if jobs == nil {
+		jobs = []models.JobWithAssignees{}
+	}
+	jsonResponse(w, jobs)
+}
+
+func (s *Server) HandleCreateJob(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	var job models.Job
+	if err := json.NewDecoder(r.Body).Decode(&job); err != nil {
+		httpErrorLog(w, r, "Invalid request body", http.StatusBadRequest, err)
+		return
+	}
+	if strings.TrimSpace(job.Name) == "" {
+		httpErrorLog(w, r, "Job name is required", http.StatusBadRequest, fmt.Errorf("job name is required"))
+		return
+	}
+
+	created, err := s.Store.CreateJob(r.Context(), user.ID, job)
+	if err != nil {
+		httpErrorLog(w, r, "Failed to create job", http.StatusInternalServerError, err)
+		return
+	}
+
+	if s.Hub != nil {
+		s.Hub.Broadcast(WSMessage{
+			Type:    "JOB_CREATED",
+			Payload: map[string]string{"id": created.ID.String()},
+		})
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	jsonResponse(w, created)
+}
+
+func (s *Server) HandleUpdateJob(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		httpErrorLog(w, r, "Invalid job ID", http.StatusBadRequest, err)
+		return
+	}
+
+	var job models.Job
+	if err := json.NewDecoder(r.Body).Decode(&job); err != nil {
+		httpErrorLog(w, r, "Invalid request body", http.StatusBadRequest, err)
+		return
+	}
+	job.ID = id
+	if strings.TrimSpace(job.Name) == "" {
+		httpErrorLog(w, r, "Job name is required", http.StatusBadRequest, fmt.Errorf("job name is required"))
+		return
+	}
+
+	updated, err := s.Store.UpdateJob(r.Context(), user.ID, job)
+	if err != nil {
+		httpErrorLog(w, r, "Failed to update job", http.StatusInternalServerError, err)
+		return
+	}
+
+	if s.Hub != nil {
+		s.Hub.Broadcast(WSMessage{
+			Type:    "JOB_UPDATED",
+			Payload: map[string]string{"id": updated.ID.String()},
+		})
+	}
+
+	jsonResponse(w, updated)
+}
+
+func (s *Server) HandleDeleteJob(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		httpErrorLog(w, r, "Invalid job ID", http.StatusBadRequest, err)
+		return
+	}
+
+	err = s.Store.DeleteJob(r.Context(), user.ID, id)
+	if err != nil {
+		if strings.Contains(err.Error(), "active associations") {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		httpErrorLog(w, r, "Failed to delete job", http.StatusInternalServerError, err)
+		return
+	}
+
+	if s.Hub != nil {
+		s.Hub.Broadcast(WSMessage{
+			Type:    "JOB_DELETED",
+			Payload: map[string]string{"id": id.String()},
+		})
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) HandleSetParentJobs(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	idStr := chi.URLParam(r, "id")
+	parentID, err := uuid.Parse(idStr)
+	if err != nil {
+		httpErrorLog(w, r, "Invalid parent ID", http.StatusBadRequest, err)
+		return
+	}
+
+	var req struct {
+		JobIDs []uuid.UUID `json:"job_ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpErrorLog(w, r, "Invalid request body", http.StatusBadRequest, err)
+		return
+	}
+	if req.JobIDs == nil {
+		req.JobIDs = []uuid.UUID{}
+	}
+
+	err = s.Store.SetParentJobs(r.Context(), user.ID, parentID, req.JobIDs)
+	if err != nil {
+		httpErrorLog(w, r, "Failed to set parent jobs", http.StatusInternalServerError, err)
+		return
+	}
+
+	if s.Hub != nil {
+		s.Hub.Broadcast(WSMessage{
+			Type: "PARENT_JOBS_UPDATED",
+			Payload: map[string]interface{}{
+				"parent_id": parentID.String(),
+			},
+		})
+	}
+
+	jsonResponse(w, map[string]interface{}{
+		"parent_id": parentID,
+		"job_ids":   req.JobIDs,
+	})
+}
+
+func (s *Server) HandleSetEmployeeJobs(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	idStr := chi.URLParam(r, "id")
+	employeeID, err := uuid.Parse(idStr)
+	if err != nil {
+		httpErrorLog(w, r, "Invalid employee ID", http.StatusBadRequest, err)
+		return
+	}
+
+	var req struct {
+		JobIDs []uuid.UUID `json:"job_ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpErrorLog(w, r, "Invalid request body", http.StatusBadRequest, err)
+		return
+	}
+	if req.JobIDs == nil {
+		req.JobIDs = []uuid.UUID{}
+	}
+
+	err = s.Store.SetEmployeeJobs(r.Context(), user.ID, employeeID, req.JobIDs)
+	if err != nil {
+		httpErrorLog(w, r, "Failed to set employee jobs", http.StatusInternalServerError, err)
+		return
+	}
+
+	if s.Hub != nil {
+		s.Hub.Broadcast(WSMessage{
+			Type: "EMPLOYEE_JOBS_UPDATED",
+			Payload: map[string]interface{}{
+				"employee_id": employeeID.String(),
+			},
+		})
+	}
+
+	jsonResponse(w, map[string]interface{}{
+		"employee_id": employeeID,
+		"job_ids":     req.JobIDs,
+	})
+}
+
+func (s *Server) HandleListJobPeople(w http.ResponseWriter, r *http.Request) {
+	people, err := s.Store.ListJobPeopleOptions(r.Context())
+	if err != nil {
+		httpErrorLog(w, r, "Failed to list people for jobs", http.StatusInternalServerError, err)
+		return
+	}
+	jsonResponse(w, people)
+}
+
+func (s *Server) HandleSetJobAssignees(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	idStr := chi.URLParam(r, "id")
+	jobID, err := uuid.Parse(idStr)
+	if err != nil {
+		httpErrorLog(w, r, "Invalid job ID", http.StatusBadRequest, err)
+		return
+	}
+
+	var req struct {
+		ParentIDs   []uuid.UUID `json:"parent_ids"`
+		EmployeeIDs []uuid.UUID `json:"employee_ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpErrorLog(w, r, "Invalid request body", http.StatusBadRequest, err)
+		return
+	}
+	if req.ParentIDs == nil {
+		req.ParentIDs = []uuid.UUID{}
+	}
+	if req.EmployeeIDs == nil {
+		req.EmployeeIDs = []uuid.UUID{}
+	}
+
+	err = s.Store.SetJobAssignees(r.Context(), user.ID, jobID, req.ParentIDs, req.EmployeeIDs)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			httpErrorLog(w, r, "Job not found", http.StatusNotFound, err)
+			return
+		}
+		httpErrorLog(w, r, "Failed to set job assignees", http.StatusInternalServerError, err)
+		return
+	}
+
+	if s.Hub != nil {
+		s.Hub.Broadcast(WSMessage{
+			Type: "JOB_UPDATED",
+			Payload: map[string]interface{}{
+				"job_id": jobID.String(),
+			},
+		})
+		s.Hub.Broadcast(WSMessage{
+			Type: "PARENT_JOBS_UPDATED",
+			Payload: map[string]interface{}{
+				"job_id": jobID.String(),
+			},
+		})
+		s.Hub.Broadcast(WSMessage{
+			Type: "EMPLOYEE_JOBS_UPDATED",
+			Payload: map[string]interface{}{
+				"job_id": jobID.String(),
+			},
+		})
+	}
+
+	updatedJob, err := s.Store.GetJobByID(r.Context(), jobID)
+	if err != nil || updatedJob == nil {
+		jsonResponse(w, map[string]interface{}{
+			"job_id":       jobID,
+			"parent_ids":   req.ParentIDs,
+			"employee_ids": req.EmployeeIDs,
+		})
+		return
+	}
+
+	jsonResponse(w, updatedJob)
+}
+
+
 
 
 

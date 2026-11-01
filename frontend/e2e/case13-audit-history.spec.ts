@@ -156,4 +156,83 @@ test.describe('Test Case 13: Audit Log and History Tracking', () => {
     await refreshBtn.click();
     await expect(auditTable.locator('tbody tr')).toHaveCount(initialRowsCount);
   });
+
+  test('displays details for UPDATE_ASSIGNEES when updating job assignees', async ({ page, request }) => {
+    // 1. Create a parent (via family)
+    const famRes = await request.post('/api/families', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        parents: [
+          {
+            first_name: 'Sabine',
+            last_name: 'Koch',
+            emails: [{ value: 'sabine@example.com' }],
+          },
+        ],
+      },
+    });
+    expect(famRes.ok()).toBeTruthy();
+    const fam = await famRes.json();
+    const parentId = fam.parents[0].id;
+
+    // 2. Create a job "Finanzen"
+    const jobRes = await request.post('/api/jobs', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        name: 'Finanzen',
+        description: 'Finanzverwaltung',
+        contact_email: 'finanzen@example.com',
+      },
+    });
+    expect(jobRes.ok()).toBeTruthy();
+    const job = await jobRes.json();
+
+    // 3. Assign Sabine Koch to the job
+    const assignRes = await request.put(`/api/jobs/${job.id}/assignees`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        parent_ids: [parentId],
+        employee_ids: [],
+      },
+    });
+    expect(assignRes.ok()).toBeTruthy();
+
+    // 4. Remove Sabine Koch from the job
+    const unassignRes = await request.put(`/api/jobs/${job.id}/assignees`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        parent_ids: [],
+        employee_ids: [],
+      },
+    });
+    expect(unassignRes.ok()).toBeTruthy();
+
+    // 5. Navigate to History tab
+    const auditTabBtn = page.getByRole('button', { name: 'Historie' });
+    await expect(auditTabBtn).toBeVisible();
+    await auditTabBtn.click();
+
+    const auditTable = page.locator('.data-table');
+    await expect(auditTable).toBeVisible();
+
+    // Verify row for assignee addition
+    const addRow = auditTable.locator('tbody tr', { hasText: 'UPDATE_ASSIGNEES' }).filter({ hasText: 'Hinzugefügt: Sabine Koch' });
+    await expect(addRow).toBeVisible();
+    await expect(addRow).toContainText('Job: Finanzen');
+    await expect(addRow).toContainText('Job');
+
+    // Verify row for assignee removal
+    const removeRow = auditTable.locator('tbody tr', { hasText: 'UPDATE_ASSIGNEES' }).filter({ hasText: 'Entfernt: Sabine Koch' });
+    await expect(removeRow).toBeVisible();
+    await expect(removeRow).toContainText('Job: Finanzen');
+
+    // 6. Test searching for job name in history
+    const searchInput = page.locator('input[placeholder="Historie durchsuchen..."]');
+    await searchInput.fill('Finanzen');
+    await expect(auditTable.locator('tbody tr', { hasText: 'UPDATE_ASSIGNEES' })).toHaveCount(2);
+
+    // 7. Test searching for assignee name in history
+    await searchInput.fill('Sabine Koch');
+    await expect(auditTable.locator('tbody tr', { hasText: 'UPDATE_ASSIGNEES' })).toHaveCount(2);
+  });
 });

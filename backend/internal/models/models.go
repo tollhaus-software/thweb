@@ -65,6 +65,9 @@ func (s *UserWithPermissions) HasPermission(perm string) bool {
 		if perm == "meal_allergens.read" && (p == "meal_allergens.write" || p == "*") {
 			return true
 		}
+		if perm == "jobs.all.read" && (p == "jobs.all.write" || p == "*") {
+			return true
+		}
 	}
 	return false
 }
@@ -228,6 +231,8 @@ var AllKnownPermissions = []string{
 	"provision.kiosk.cert",
 	"dashboard.read",
 	"permissions.simulate",
+	"jobs.all.read",
+	"jobs.all.write",
 }
 
 // IntersectPermissions returns the intersection of effective permissions between actual and simulated.
@@ -433,6 +438,7 @@ type Parent struct {
 	VaccinationChecks          []VaccinationCheck      `json:"vaccination_checks,omitempty"`
 	Events                     []HygieneBelehrungEvent `json:"events"`
 	Memberships                []THMembership          `json:"memberships"`
+	Jobs                       []Job                   `json:"jobs,omitempty"`
 	CreatedAt                  time.Time               `json:"created_at"`
 	UpdatedAt                  time.Time               `json:"updated_at"`
 }
@@ -780,6 +786,7 @@ type Employee struct {
 	AllergiesItems             []AllergyItem  `json:"allergies_items,omitempty"`
 	AllergiesUpdated           bool           `json:"allergies_updated,omitempty"`
 	ClearAllergies             bool           `json:"-"`
+	Jobs                       []Job          `json:"jobs,omitempty"`
 	CreatedAt                  time.Time      `json:"created_at"`
 	UpdatedAt                  time.Time      `json:"updated_at"`
 }
@@ -1026,6 +1033,37 @@ type CookOption struct {
 	LastName    string    `json:"last_name"`
 	DisplayName string    `json:"display_name"`
 }
+
+type Job struct {
+	ID           uuid.UUID `json:"id"`
+	Name         string    `json:"name"`
+	Description  string    `json:"description"`
+	ContactEmail string    `json:"contact_email"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+type JobAssigneeParent struct {
+	ID         uuid.UUID  `json:"id"`
+	FamilyID   *uuid.UUID `json:"family_id,omitempty"`
+	FamilyName string     `json:"family_name,omitempty"`
+	FirstName  string     `json:"first_name"`
+	LastName   string     `json:"last_name"`
+}
+
+type JobAssigneeEmployee struct {
+	ID           uuid.UUID `json:"id"`
+	FirstName    string    `json:"first_name"`
+	LastName     string    `json:"last_name"`
+	EmployeeType string    `json:"employee_type"`
+}
+
+type JobWithAssignees struct {
+	Job
+	Parents   []JobAssigneeParent   `json:"parents"`
+	Employees []JobAssigneeEmployee `json:"employees"`
+}
+
 
 
 

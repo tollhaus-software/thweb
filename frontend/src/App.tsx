@@ -38,6 +38,8 @@ import { CellPopover } from './components/Table/CellPopover';
 import { RowActionsMenu } from './components/Table/RowActionsMenu';
 import { ConfirmDeleteModal } from './components/Table/ConfirmDeleteModal';
 import { MgaLinkIcon } from './components/MgaLinkIcon';
+import { JobsPopover, JobsCell, type PersonWithJobs, type JobItem } from './components/Table/JobsPopover';
+import { JobsTab, type JobWithAssignees } from './components/Jobs/JobsTab';
 import { t, CURRENT_LOCALE, formatDisplayDate, parseInputDate, formatTollhausEmail, compareBirthDates } from './utils/i18n';
 import { getFamilyName } from './utils/family';
 
@@ -77,6 +79,7 @@ interface Parent {
   vaccination_checks?: VaccinationCheck[];
   events?: HygieneBelehrungEvent[];
   memberships?: THMembership[];
+  jobs?: JobItem[];
   family_name?: string;
 }
 
@@ -102,6 +105,7 @@ interface Employee {
   address?: string;
   is_kinderschutzbeauftragter?: boolean;
   allergies?: string[];
+  jobs?: JobItem[];
   created_at?: string;
   updated_at?: string;
 }
@@ -631,6 +635,7 @@ interface OverviewParent {
   phones?: MultiValueEntry[];
   address?: string;
   memberships?: THMembership[];
+  jobs?: JobItem[];
 }
 
 interface OverviewChild {
@@ -1128,6 +1133,24 @@ const diffMembershipSnapshots = (before: any, after: any): string[] => {
   return changes;
 };
 
+const diffJobSnapshots = (before: any, after: any): string[] => {
+  const changes: string[] = [];
+
+  if ((before.name || '') !== (after.name || '')) {
+    changes.push(`${t('jobName') || 'Job-Name'}: "${before.name || ''}" → "${after.name || ''}"`);
+  }
+
+  if ((before.description || '') !== (after.description || '')) {
+    changes.push(`${t('jobDescription') || 'Beschreibung'}: "${before.description || ''}" → "${after.description || ''}"`);
+  }
+
+  if ((before.contact_email || '') !== (after.contact_email || '')) {
+    changes.push(`${t('jobContactEmail') || 'Kontakt-E-Mail'}: "${before.contact_email || ''}" → "${after.contact_email || ''}"`);
+  }
+
+  return changes;
+};
+
 const formatSnapshotDetails = (log: AuditLog, families: Family[] = []) => {
   const data = log.after_snapshot || log.before_snapshot;
   if (!data) return '-';
@@ -1307,6 +1330,113 @@ const formatSnapshotDetails = (log: AuditLog, families: Family[] = []) => {
     }
   }
 
+  if (log.entity_type === 'job') {
+    const jobName = data.job_name || data.name;
+    if (jobName) {
+      parts.push(`${t('job') || 'Job'}: ${jobName}`);
+    } else {
+      parts.push(`Job ID: ${log.entity_id}`);
+    }
+
+    if (log.operation === 'UPDATE_ASSIGNEES') {
+      const changeParts: string[] = [];
+
+      let addedNames: string[] = [];
+      let removedNames: string[] = [];
+
+      if (Array.isArray(log.after_snapshot?.added)) {
+        addedNames = log.after_snapshot.added
+          .map((item: any) => (typeof item === 'string' ? item : item?.name))
+          .filter(Boolean);
+      }
+      if (Array.isArray(log.after_snapshot?.removed)) {
+        removedNames = log.after_snapshot.removed
+          .map((item: any) => (typeof item === 'string' ? item : item?.name))
+          .filter(Boolean);
+      }
+
+      if (addedNames.length === 0 && removedNames.length === 0 && (log.before_snapshot || log.after_snapshot)) {
+        const getPeopleNames = (snapshot: any): { id: string; name: string }[] => {
+          if (!snapshot) return [];
+          const list: { id: string; name: string }[] = [];
+          if (Array.isArray(snapshot.parents)) {
+            snapshot.parents.forEach((p: any) => {
+              const name = p.name || `${p.first_name || ''} ${p.last_name || ''}`.trim() || findParentName(p.id);
+              list.push({ id: p.id, name: name || p.id });
+            });
+          }
+          if (Array.isArray(snapshot.employees)) {
+            snapshot.employees.forEach((e: any) => {
+              const name = e.name || `${e.first_name || ''} ${e.last_name || ''}`.trim();
+              list.push({ id: e.id, name: name || e.id });
+            });
+          }
+          if (list.length === 0) {
+            if (Array.isArray(snapshot.parent_ids)) {
+              snapshot.parent_ids.forEach((pId: string) => {
+                const name = findParentName(pId);
+                list.push({ id: pId, name: name || pId });
+              });
+            }
+            if (Array.isArray(snapshot.employee_ids)) {
+              snapshot.employee_ids.forEach((eId: string) => {
+                list.push({ id: eId, name: eId });
+              });
+            }
+          }
+          return list;
+        };
+
+        const beforeList = getPeopleNames(log.before_snapshot);
+        const afterList = getPeopleNames(log.after_snapshot);
+
+        const beforeMap = new Map(beforeList.map((p) => [p.id, p.name]));
+        const afterMap = new Map(afterList.map((p) => [p.id, p.name]));
+
+        afterList.forEach((p) => {
+          if (!beforeMap.has(p.id)) {
+            addedNames.push(p.name);
+          }
+        });
+        beforeList.forEach((p) => {
+          if (!afterMap.has(p.id)) {
+            removedNames.push(p.name);
+          }
+        });
+      }
+
+      if (addedNames.length > 0) {
+        changeParts.push(`${t('added') || 'Hinzugefügt'}: ${addedNames.join(', ')}`);
+      }
+      if (removedNames.length > 0) {
+        changeParts.push(`${t('removed') || 'Entfernt'}: ${removedNames.join(', ')}`);
+      }
+
+      if (changeParts.length > 0) {
+        parts.push(`${t('changes')}: ${changeParts.join(', ')}`);
+      } else {
+        parts.push(`${t('changes')}: ${t('noChanges') || 'Keine Änderungen'}`);
+      }
+
+      return parts.join(' | ');
+    }
+
+    if (log.operation === 'UPDATE' && log.before_snapshot && log.after_snapshot) {
+      const changes = diffJobSnapshots(log.before_snapshot, log.after_snapshot);
+      if (changes.length > 0) {
+        parts.push(`${t('changes')}: ${changes.join(', ')}`);
+        return parts.join(' | ');
+      }
+    }
+
+    if (data.description) {
+      parts.push(`${t('jobDescription') || 'Beschreibung'}: ${data.description}`);
+    }
+    if (data.contact_email) {
+      parts.push(`${t('jobContactEmail') || 'Kontakt-E-Mail'}: ${data.contact_email}`);
+    }
+  }
+
   return parts.join(' | ');
 };
 
@@ -1446,7 +1576,7 @@ const AuditLogView: React.FC<AuditLogViewProps> = ({
     if (op === 'INSERT' || op === 'CREATE') {
       return { ...baseStyle, backgroundColor: 'var(--success-bg)', color: 'var(--success-text)' };
     }
-    if (op === 'UPDATE') {
+    if (op === 'UPDATE' || op === 'UPDATE_ASSIGNEES') {
       return { ...baseStyle, backgroundColor: 'var(--accent-bg)', color: 'var(--accent)' };
     }
     if (op === 'DELETE') {
@@ -1471,6 +1601,8 @@ const AuditLogView: React.FC<AuditLogViewProps> = ({
         return t('th_membership');
       case 'employee':
         return t('employee');
+      case 'job':
+        return t('job') || 'Job';
       default:
         return etype;
     }
@@ -2346,9 +2478,14 @@ const Dashboard: React.FC = () => {
   const canWriteEmployeeAllergies = hasPermission('allergies.employees.write');
   const canReadEmployees = hasPermission('employees.all.read') || canReadEmployeeAllergies;
   const canWriteEmployees = hasPermission('employees.all.write');
+  const canReadJobs = hasPermission('jobs.all.read') || hasPermission('jobs.all.write');
+  const canWriteJobs = hasPermission('jobs.all.write');
 
   const [families, setFamilies] = React.useState<Family[]>([]);
   const [employees, setEmployees] = React.useState<Employee[]>([]);
+  const [jobs, setJobs] = React.useState<JobWithAssignees[]>([]);
+  const [jobsPopoverAnchor, setJobsPopoverAnchor] = React.useState<HTMLElement | null>(null);
+  const [activePersonForJobs, setActivePersonForJobs] = React.useState<PersonWithJobs | null>(null);
   const [overviewFamilies, setOverviewFamilies] = React.useState<OverviewFamily[]>([]);
   const [overviewGroupBy, setOverviewGroupBy] = React.useState<'family' | 'group'>('group');
   const [expandedGroupParents, setExpandedGroupParents] = React.useState<Record<string, boolean>>({});
@@ -2396,7 +2533,7 @@ const Dashboard: React.FC = () => {
 
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [activeTab, setActiveTab] = React.useState<
-    'familiesOverview' | 'families' | 'parents' | 'children' | 'members' | 'employees' | 'childcareFees' | 'hygieneBelehrung' | 'mealPlan' | 'mealAllergens' | 'audit' | 'admin' | 'kiosk' | 'dashboard'
+    'familiesOverview' | 'families' | 'parents' | 'children' | 'members' | 'jobs' | 'employees' | 'childcareFees' | 'hygieneBelehrung' | 'mealPlan' | 'mealAllergens' | 'audit' | 'admin' | 'kiosk' | 'dashboard'
   >(() => {
     const rawHash = window.location.hash.replace('#', '');
     const hash = rawHash.split('?')[0];
@@ -2407,6 +2544,7 @@ const Dashboard: React.FC = () => {
       (hash === 'parents' && canReadFamiliesAll) ||
       (hash === 'children' && canReadFamiliesAll) ||
       (hash === 'members' && canReadMembers) ||
+      (hash === 'jobs' && canReadJobs) ||
       (hash === 'employees' && canReadEmployees) ||
       (hash === 'childcareFees' && canReadFees) ||
       (hash === 'hygieneBelehrung' && (canReadFamiliesAll || hasPermission('hygiene.all.write'))) ||
@@ -2427,6 +2565,7 @@ const Dashboard: React.FC = () => {
       (saved === 'parents' && canReadFamiliesAll) ||
       (saved === 'children' && canReadFamiliesAll) ||
       (saved === 'members' && canReadMembers) ||
+      (saved === 'jobs' && canReadJobs) ||
       (saved === 'employees' && canReadEmployees) ||
       (saved === 'childcareFees' && canReadFees) ||
       (saved === 'hygieneBelehrung' && (canReadFamiliesAll || hasPermission('hygiene.all.write'))) ||
@@ -2450,6 +2589,9 @@ const Dashboard: React.FC = () => {
     }
     if (canReadMembers) {
       return 'members';
+    }
+    if (canReadJobs) {
+      return 'jobs';
     }
     if (canReadEmployees) {
       return 'employees';
@@ -2477,6 +2619,14 @@ const Dashboard: React.FC = () => {
         fallback = 'childcareFees';
       }
     } else if (activeTab === 'members' && !canReadMembers) {
+      if (canReadOverview) {
+        fallback = 'familiesOverview';
+      } else if (canReadFees) {
+        fallback = 'childcareFees';
+      } else if (canReadFamiliesAll) {
+        fallback = 'families';
+      }
+    } else if (activeTab === 'jobs' && !canReadJobs) {
       if (canReadOverview) {
         fallback = 'familiesOverview';
       } else if (canReadFees) {
@@ -2522,7 +2672,7 @@ const Dashboard: React.FC = () => {
       localStorage.setItem('thweb_active_tab', fallback);
       window.location.hash = fallback;
     }
-  }, [activeTab, canReadFamiliesAll, canReadOverview, canReadFees, canReadMembers, canReadEmployees, canViewMealPlan, canReadMealAllergens, hasPermission]);
+  }, [activeTab, canReadFamiliesAll, canReadOverview, canReadFees, canReadMembers, canReadJobs, canReadEmployees, canViewMealPlan, canReadMealAllergens, hasPermission]);
 
   // Navigation & Highlighting state (Patterns 2 & 3)
   const [highlightTarget, setHighlightTarget] = React.useState<{ id: string; key: number } | null>(null);
@@ -2664,6 +2814,7 @@ const Dashboard: React.FC = () => {
   const [newChildBirthDate, setNewChildBirthDate] = React.useState('');
 
   const [addEmployeeOpen, setAddEmployeeOpen] = React.useState(false);
+  const [addJobOpen, setAddJobOpen] = React.useState(false);
   const [empFirstName, setEmpFirstName] = React.useState('');
   const [empLastName, setEmpLastName] = React.useState('');
   const [empType, setEmpType] = React.useState<'caregiver' | 'cook' | 'bufdi'>('caregiver');
@@ -3198,6 +3349,135 @@ const Dashboard: React.FC = () => {
       .catch((err) => console.error(err));
   }, [canReadEmployees, getAuthHeaders]);
 
+  const fetchJobs = React.useCallback(() => {
+    if (!canReadJobs) return Promise.resolve([]);
+    return fetch('/api/jobs', {
+      headers: getAuthHeaders(),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch jobs');
+        return res.json();
+      })
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setJobs(data);
+        }
+        return data;
+      })
+      .catch((err) => console.error(err));
+  }, [canReadJobs, getAuthHeaders]);
+
+  const handleCreateJob = React.useCallback(async (jobData: { name: string; description: string; contact_email: string }) => {
+    const res = await fetch('/api/jobs', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(jobData),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to create job');
+    }
+    await fetchJobs();
+    if (canReadFamiliesAll) fetchFamilies();
+    if (canReadOverview) fetchOverviewFamilies();
+    if (canReadEmployees) fetchEmployees();
+  }, [getAuthHeaders, fetchJobs, canReadFamiliesAll, fetchFamilies, canReadOverview, fetchOverviewFamilies, canReadEmployees, fetchEmployees]);
+
+  const handleUpdateJob = React.useCallback(async (id: string, jobData: { name: string; description: string; contact_email: string }) => {
+    const res = await fetch(`/api/jobs/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(jobData),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to update job');
+    }
+    await fetchJobs();
+    if (canReadFamiliesAll) fetchFamilies();
+    if (canReadOverview) fetchOverviewFamilies();
+    if (canReadEmployees) fetchEmployees();
+  }, [getAuthHeaders, fetchJobs, canReadFamiliesAll, fetchFamilies, canReadOverview, fetchOverviewFamilies, canReadEmployees, fetchEmployees]);
+
+  const handleDeleteJob = React.useCallback(async (id: string) => {
+    const res = await fetch(`/api/jobs/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to delete job');
+    }
+    await fetchJobs();
+    if (canReadFamiliesAll) fetchFamilies();
+    if (canReadOverview) fetchOverviewFamilies();
+    if (canReadEmployees) fetchEmployees();
+  }, [getAuthHeaders, fetchJobs, canReadFamiliesAll, fetchFamilies, canReadOverview, fetchOverviewFamilies, canReadEmployees, fetchEmployees]);
+
+  const handleUpdateJobAssignees = React.useCallback(async (jobId: string, parentIds: string[], employeeIds: string[]) => {
+    const res = await fetch(`/api/jobs/${jobId}/assignees`, {
+      method: 'PUT',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ parent_ids: parentIds, employee_ids: employeeIds }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to update job assignees');
+    }
+    await fetchJobs();
+    if (canReadFamiliesAll) fetchFamilies();
+    if (canReadOverview) fetchOverviewFamilies();
+    if (canReadEmployees) fetchEmployees();
+  }, [getAuthHeaders, fetchJobs, canReadFamiliesAll, fetchFamilies, canReadOverview, fetchOverviewFamilies, canReadEmployees, fetchEmployees]);
+
+  const handleFetchJobPeople = React.useCallback(async () => {
+    const res = await fetch('/api/jobs/people', {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to fetch people for jobs');
+    }
+    return res.json();
+  }, [getAuthHeaders]);
+
+  const handleSavePersonJobs = React.useCallback(async (personId: string, jobIds: string[], personType?: 'parent' | 'employee') => {
+    const endpoint = personType === 'employee' ? `/api/employees/${personId}/jobs` : `/api/parents/${personId}/jobs`;
+    const res = await fetch(endpoint, {
+      method: 'PUT',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ job_ids: jobIds }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to save person jobs');
+    }
+    if (personType === 'employee') {
+      await fetchEmployees();
+    } else {
+      if (canReadFamiliesAll) await fetchFamilies();
+      if (canReadOverview) await fetchOverviewFamilies();
+    }
+    if (canReadJobs) await fetchJobs();
+
+    const updatedJobsList = jobs.filter((j) => jobIds.includes(j.id)).map((j) => ({
+      id: j.id,
+      name: j.name,
+      description: j.description,
+      contact_email: j.contact_email,
+    }));
+    setActivePersonForJobs((prev) => (prev && prev.id === personId ? { ...prev, jobs: updatedJobsList } : prev));
+  }, [getAuthHeaders, fetchEmployees, canReadFamiliesAll, fetchFamilies, canReadOverview, fetchOverviewFamilies, canReadJobs, fetchJobs, jobs]);
+
+  const openManageJobs = React.useCallback((person: PersonWithJobs, anchor: HTMLElement | string) => {
+    setActivePersonForJobs(person);
+    const anchorEl = typeof anchor === 'string' ? document.getElementById(anchor) : anchor;
+    setJobsPopoverAnchor(anchorEl);
+    if (canReadJobs && jobs.length === 0) {
+      fetchJobs();
+    }
+  }, [canReadJobs, jobs.length, fetchJobs]);
+
 
 
   const applyKmsToken = React.useCallback(async (tokenToApply: string) => {
@@ -3286,15 +3566,26 @@ const Dashboard: React.FC = () => {
         if (canReadFamiliesAll) {
           fetchFamilies();
         }
+        if (canReadJobs) {
+          fetchJobs();
+        }
         break;
       case 'members':
         if (canReadMembers) {
           fetchMembers();
         }
         break;
+      case 'jobs':
+        if (canReadJobs) {
+          fetchJobs();
+        }
+        break;
       case 'employees':
         if (canReadEmployees) {
           fetchEmployees();
+        }
+        if (canReadJobs) {
+          fetchJobs();
         }
         break;
       case 'childcareFees':
@@ -3330,11 +3621,13 @@ const Dashboard: React.FC = () => {
     canReadFamiliesAll,
     canReadMembers,
     canReadEmployees,
+    canReadJobs,
     canReadAudit,
     fetchOverviewFamilies,
     fetchFamilies,
     fetchMembers,
     fetchEmployees,
+    fetchJobs,
     families.length,
     overviewFamilies.length,
   ]);
@@ -3388,6 +3681,7 @@ const Dashboard: React.FC = () => {
         (hash === 'children' && canReadFamiliesAll) ||
         (hash === 'families' && canReadFamiliesAll) ||
         (hash === 'members' && canReadMembers) ||
+        (hash === 'jobs' && canReadJobs) ||
         (hash === 'employees' && canReadEmployees) ||
         (hash === 'childcareFees' && canReadFees) ||
         (hash === 'hygieneBelehrung' && (canReadFamiliesAll || hasPermission('hygiene.all.write'))) ||
@@ -3446,7 +3740,7 @@ const Dashboard: React.FC = () => {
       handleHashChange();
     }
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [canReadAudit, canManageUsers, canProvisionKiosk, canReadOverview, canReadFamiliesAll, canReadFees, canReadMembers, canReadEmployees, canViewMealPlan, canReadMealAllergens, hasPermission]);
+  }, [canReadAudit, canManageUsers, canProvisionKiosk, canReadOverview, canReadFamiliesAll, canReadFees, canReadMembers, canReadJobs, canReadEmployees, canViewMealPlan, canReadMealAllergens, hasPermission]);
 
   useRealtime(React.useCallback((message: any) => {
     if (
@@ -3481,16 +3775,37 @@ const Dashboard: React.FC = () => {
         fetchEmployees();
       }
     }
+    if (
+      message.type === 'JOB_CREATED' ||
+      message.type === 'JOB_UPDATED' ||
+      message.type === 'JOB_DELETED'
+    ) {
+      if (canReadJobs) fetchJobs();
+      if (canReadFamiliesAll) fetchFamilies();
+      if (canReadOverview) fetchOverviewFamilies();
+      if (canReadEmployees) fetchEmployees();
+    }
+    if (message.type === 'PARENT_JOBS_UPDATED') {
+      if (canReadFamiliesAll) fetchFamilies();
+      if (canReadOverview) fetchOverviewFamilies();
+      if (canReadJobs) fetchJobs();
+    }
+    if (message.type === 'EMPLOYEE_JOBS_UPDATED') {
+      if (canReadEmployees) fetchEmployees();
+      if (canReadJobs) fetchJobs();
+    }
   }, [
     activeTab,
     fetchFamilies,
     fetchOverviewFamilies,
     fetchMembers,
     fetchEmployees,
+    fetchJobs,
     canReadFamiliesAll,
     canReadOverview,
     canReadMembers,
     canReadEmployees,
+    canReadJobs,
     canReadAudit,
   ]));
 
@@ -3501,15 +3816,16 @@ const Dashboard: React.FC = () => {
         setAddFamilyOpen(false);
         setAddChildOpen(false);
         setAddEmployeeOpen(false);
+        setAddJobOpen(false);
       }
     };
-    if (addParentOpen || addFamilyOpen || addChildOpen || addEmployeeOpen) {
+    if (addParentOpen || addFamilyOpen || addChildOpen || addEmployeeOpen || addJobOpen) {
       window.addEventListener('keydown', handleKeyDown);
     }
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [addParentOpen, addFamilyOpen, addChildOpen, addEmployeeOpen]);
+  }, [addParentOpen, addFamilyOpen, addChildOpen, addEmployeeOpen, addJobOpen]);
 
   const openAddParent = (familyId: string, familyName: string) => {
     setTargetFamily({ id: familyId, name: familyName });
@@ -5128,7 +5444,8 @@ function formatParentsSummary(parents: any[]): string {
             const emailMatch = (p.emails || []).some((e: any) => getEntryValue(e).toLowerCase().includes(query));
             const phoneMatch = (p.phones || []).some((ph: any) => getEntryValue(ph).toLowerCase().includes(query));
             const addressMatch = (p.address || '').toLowerCase().includes(query);
-            return emailMatch || phoneMatch || addressMatch;
+            const jobMatch = (p.jobs || []).some((j: any) => (j.name || '').toLowerCase().includes(query));
+            return emailMatch || phoneMatch || addressMatch || jobMatch;
           });
 
           const familyMatch =
@@ -5290,7 +5607,8 @@ function formatParentsSummary(parents: any[]): string {
         const emailMatch = (p.emails || []).some((e: any) => getEntryValue(e).toLowerCase().includes(query));
         const phoneMatch = (p.phones || []).some((ph: any) => getEntryValue(ph).toLowerCase().includes(query));
         const addressMatch = (p.address || '').toLowerCase().includes(query);
-        return emailMatch || phoneMatch || addressMatch;
+        const jobMatch = (p.jobs || []).some((j: any) => (j.name || '').toLowerCase().includes(query));
+        return emailMatch || phoneMatch || addressMatch || jobMatch;
       });
 
       const familyMatch = familyName.toLowerCase().includes(query) || parentNames.toLowerCase().includes(query) || parentContactMatch;
@@ -5494,6 +5812,24 @@ function formatParentsSummary(parents: any[]): string {
         }
       },
       {
+        header: t('jobs'),
+        id: 'jobs',
+        size: 200,
+        cell: (info) => {
+          const parent = info.row.original;
+          if (!parent || !parent.id) return null;
+          const isCurrentActive = Boolean(jobsPopoverAnchor && activePersonForJobs?.id === parent.id);
+          return (
+            <JobsCell
+              person={{ id: parent.id, first_name: parent.first_name, last_name: parent.last_name, jobs: parent.jobs, type: 'parent' }}
+              isActive={isCurrentActive}
+              onOpenManage={openManageJobs}
+              readOnly={!(canWriteParents || canWriteJobs)}
+            />
+          );
+        },
+      },
+      {
         header: t('th_membership'),
         id: 'th_membership',
         size: 180,
@@ -5557,7 +5893,7 @@ function formatParentsSummary(parents: any[]): string {
         }
       }
     ],
-    [families, handleSaveParentField, handleSaveParentNames, handleSaveFamilyParents, handleDeleteParent, canWriteParents, isVaccinationUnlocked, handleRequestKmsAuth, hasPermission, user?.email, membershipPopoverAnchor, targetParentMemberships, openManageMemberships, multiValuePopoverAnchor, activeParentForMultiValue, activeMultiValueField, openManageMultiValue, vaccinationPopoverAnchor, targetVaccinationPerson, openManageVaccination]
+    [families, handleSaveParentField, handleSaveParentNames, handleSaveFamilyParents, handleDeleteParent, canWriteParents, canWriteJobs, isVaccinationUnlocked, handleRequestKmsAuth, hasPermission, user?.email, membershipPopoverAnchor, targetParentMemberships, openManageMemberships, multiValuePopoverAnchor, activeParentForMultiValue, activeMultiValueField, openManageMultiValue, vaccinationPopoverAnchor, targetVaccinationPerson, openManageVaccination, jobsPopoverAnchor, activePersonForJobs, openManageJobs]
   );
 
   const childGroupColumn = React.useMemo<ColumnDef<any>>(
@@ -6023,7 +6359,7 @@ function formatParentsSummary(parents: any[]): string {
         size: 220,
         minSize: 180,
         meta: {
-          getColSpan: (row: any) => (row._rowType === 'child' ? 3 : 1),
+          getColSpan: (row: any) => (row._rowType === 'child' ? 4 : 1),
         },
         cell: (info) => {
           const item = info.row.original;
@@ -6166,6 +6502,43 @@ function formatParentsSummary(parents: any[]): string {
               >
                 {address || '-'}
               </span>
+            </div>
+          );
+        },
+      },
+      {
+        id: 'overview_jobs',
+        header: '',
+        size: 260,
+        minSize: 200,
+        meta: {
+          skipCell: (row: any) => row._rowType === 'child',
+        },
+        cell: (info) => {
+          const item = info.row.original;
+          if (item._rowType !== 'parent') return null;
+          const parentJobs: JobItem[] = item.jobs || [];
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+              {parentJobs.length === 0 ? (
+                <span style={{ color: 'var(--text-muted)' }}>-</span>
+              ) : (
+                <span style={{ whiteSpace: 'pre-line', minWidth: 0 }}>
+                  {parentJobs.map((j: JobItem, idx: number) => (
+                    <React.Fragment key={j.id || idx}>
+                      {idx > 0 && '\n'}
+                      <span
+                        className="job-type-symbol"
+                        title={j.description || j.name}
+                        style={{ marginRight: '4px', userSelect: 'none' }}
+                      >
+                        🔨
+                      </span>
+                      <span title={j.description || j.name}>{j.name}</span>
+                    </React.Fragment>
+                  ))}
+                </span>
+              )}
             </div>
           );
         },
@@ -6693,6 +7066,24 @@ function formatParentsSummary(parents: any[]): string {
         }
       ] : []),
       {
+        header: t('jobs'),
+        id: 'jobs',
+        size: 200,
+        cell: (info) => {
+          const emp = info.row.original;
+          if (!emp || !emp.id) return null;
+          const isCurrentActive = Boolean(jobsPopoverAnchor && activePersonForJobs?.id === emp.id);
+          return (
+            <JobsCell
+              person={{ id: emp.id, first_name: emp.first_name, last_name: emp.last_name, jobs: emp.jobs, type: 'employee' }}
+              isActive={isCurrentActive}
+              onOpenManage={openManageJobs}
+              readOnly={!(canWriteEmployees || canWriteJobs)}
+            />
+          );
+        },
+      },
+      {
         id: 'actions',
         header: '',
         size: 50,
@@ -6716,6 +7107,10 @@ function formatParentsSummary(parents: any[]): string {
       canWriteEmployees,
       canReadEmployeeAllergies,
       canWriteEmployeeAllergies,
+      canWriteJobs,
+      jobsPopoverAnchor,
+      activePersonForJobs,
+      openManageJobs,
       activeEmployeeForMultiValue,
       activeMultiValueField,
       openManageEmployeeMultiValue,
@@ -6724,7 +7119,7 @@ function formatParentsSummary(parents: any[]): string {
     ]
   );
 
-  const isTableTab = activeTab === 'familiesOverview' || activeTab === 'parents' || activeTab === 'children' || activeTab === 'families' || activeTab === 'hygieneBelehrung' || activeTab === 'members' || activeTab === 'employees';
+  const isTableTab = activeTab === 'familiesOverview' || activeTab === 'parents' || activeTab === 'children' || activeTab === 'families' || activeTab === 'hygieneBelehrung' || activeTab === 'members' || activeTab === 'employees' || activeTab === 'jobs';
 
   const currentCategory = getCategoryForTab(activeTab);
 
@@ -6759,6 +7154,8 @@ function formatParentsSummary(parents: any[]): string {
         return t('subtabChildren') || 'Kinder';
       case 'members':
         return t('subtabMembers') || 'Vereinsmitglieder';
+      case 'jobs':
+        return t('jobs') || 'Jobs';
       case 'employees':
         return t('subtabEmployees') || 'Mitarbeitende';
       case 'mealAllergens':
@@ -6808,6 +7205,7 @@ function formatParentsSummary(parents: any[]): string {
         canReadFamiliesAll={canReadFamiliesAll}
         canReadFees={canReadFees}
         canReadMembers={canReadMembers}
+        canReadJobs={canReadJobs}
         canReadEmployees={canReadEmployees}
         canViewMealPlan={canViewMealPlan}
         canReadMealAllergens={canReadMealAllergens}
@@ -6916,6 +7314,7 @@ function formatParentsSummary(parents: any[]): string {
             onSelectTab={handleTabClick}
             canReadFamiliesAll={canReadFamiliesAll}
             canReadMembers={canReadMembers}
+            canReadJobs={canReadJobs}
             canReadEmployees={canReadEmployees}
             canViewMealPlan={canViewMealPlan}
             canReadMealAllergens={canReadMealAllergens}
@@ -6969,6 +7368,8 @@ function formatParentsSummary(parents: any[]): string {
                 placeholder={
                   activeTab === 'employees'
                     ? (t('searchEmployees') || 'Mitarbeiter suchen...')
+                    : activeTab === 'jobs'
+                    ? (t('searchJobs') || 'Jobs suchen...')
                     : activeTab === 'members'
                     ? t('searchMembers')
                     : activeTab === 'families' || activeTab === 'familiesOverview'
@@ -7033,6 +7434,34 @@ function formatParentsSummary(parents: any[]): string {
                 >
                   <Plus size={14} />
                   <span>{t('addEmployee') || 'Mitarbeiter/-in hinzufügen'}</span>
+                </button>
+              )}
+
+              {activeTab === 'jobs' && canWriteJobs && (
+                <button
+                  type="button"
+                  onClick={() => setAddJobOpen(true)}
+                  className="primary-button add-job-button"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    padding: '0.45rem 0.85rem',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    border: 'none',
+                    background: 'var(--primary)',
+                    color: 'var(--primary-contrast, #ffffff)',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                    height: '34px',
+                    boxSizing: 'border-box',
+                    fontSize: '0.85rem',
+                  }}
+                >
+                  <Plus size={14} />
+                  <span>{t('addJobBtn') || 'Job'}</span>
                 </button>
               )}
 
@@ -7491,6 +7920,30 @@ function formatParentsSummary(parents: any[]): string {
                   entityName={fullName}
                 />
               );
+            }}
+          />
+        ) : activeTab === 'jobs' && canReadJobs ? (
+          <JobsTab
+            jobs={jobs}
+            canWriteJobs={canWriteJobs}
+            searchQuery={globalFilter}
+            isCreateModalOpen={addJobOpen}
+            onOpenCreateModal={() => setAddJobOpen(true)}
+            onCloseCreateModal={() => setAddJobOpen(false)}
+            onCreateJob={handleCreateJob}
+            onUpdateJob={handleUpdateJob}
+            onDeleteJob={handleDeleteJob}
+            onUpdateJobAssignees={handleUpdateJobAssignees}
+            onFetchPeople={handleFetchJobPeople}
+            onJumpToPerson={(personId, type, familyId, familyName) => {
+              if (type === 'parent' && canReadFamiliesAll) {
+                handleJumpToParent(personId, familyId || '', familyName || '', 'jobs' as any);
+              } else if (type === 'employee' && canReadEmployees) {
+                setGlobalFilter('');
+                setActiveTab('employees');
+                setHighlightTarget({ id: personId, key: Date.now() });
+                window.location.hash = `employees?highlight=${personId}`;
+              }
             }}
           />
         ) : (
@@ -7963,6 +8416,25 @@ function formatParentsSummary(parents: any[]): string {
           onUpdateEvent={handleUpdateHygieneEvent}
           onDeleteEvent={handleDeleteHygieneEvent}
           readOnly={!canWriteHygiene}
+        />
+
+        {/* Manage Jobs Popover */}
+        <JobsPopover
+          key={activePersonForJobs?.id || 'jobs-popover'}
+          isOpen={Boolean(jobsPopoverAnchor && activePersonForJobs)}
+          anchorEl={jobsPopoverAnchor}
+          onClose={() => {
+            setJobsPopoverAnchor(null);
+            setActivePersonForJobs(null);
+          }}
+          person={activePersonForJobs}
+          availableJobs={jobs}
+          onSaveJobs={handleSavePersonJobs}
+          readOnly={
+            activePersonForJobs?.type === 'employee'
+              ? !(canWriteEmployees || canWriteJobs)
+              : !(canWriteParents || canWriteJobs)
+          }
         />
 
         {/* Permissions Simulator Modal */}

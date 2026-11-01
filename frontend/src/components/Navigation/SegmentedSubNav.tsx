@@ -7,6 +7,7 @@ export interface SegmentedSubNavProps {
   onSelectTab: (tabId: TabId) => void;
   canReadFamiliesAll: boolean;
   canReadMembers: boolean;
+  canReadJobs?: boolean;
   canReadEmployees: boolean;
   canViewMealPlan: boolean;
   canReadMealAllergens: boolean;
@@ -25,6 +26,7 @@ export const SegmentedSubNav: React.FC<SegmentedSubNavProps> = ({
   onSelectTab,
   canReadFamiliesAll,
   canReadMembers,
+  canReadJobs = false,
   canReadEmployees,
   canViewMealPlan,
   canReadMealAllergens,
@@ -58,6 +60,12 @@ export const SegmentedSubNav: React.FC<SegmentedSubNavProps> = ({
         label: t('subtabMembers') || 'Vereinsmitglieder',
         accessibleName: 'Vereinsmitglieder',
         visible: canReadMembers,
+      },
+      {
+        id: 'jobs',
+        label: t('subtabJobs') || 'Jobs',
+        accessibleName: 'Jobs(MGA)',
+        visible: canReadJobs,
       },
     ];
     subTabs = items.filter((s) => s.visible);

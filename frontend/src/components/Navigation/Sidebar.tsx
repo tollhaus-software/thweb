@@ -31,6 +31,7 @@ export interface SidebarProps {
   canReadFamiliesAll: boolean;
   canReadFees: boolean;
   canReadMembers: boolean;
+  canReadJobs?: boolean;
   canReadEmployees: boolean;
   canViewMealPlan: boolean;
   canReadMealAllergens: boolean;
@@ -53,6 +54,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   canReadFamiliesAll,
   canReadFees,
   canReadMembers,
+  canReadJobs = false,
   canReadEmployees,
   canViewMealPlan,
   canReadMealAllergens,
@@ -86,6 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const getFirstMgaTab = (): TabId => {
     if (canReadFamiliesAll) return 'families';
     if (canReadMembers) return 'members';
+    if (canReadJobs) return 'jobs';
     return 'families';
   };
 
@@ -131,7 +134,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
-  const canShowMga = canReadFamiliesAll || canReadMembers;
+  const canShowMga = canReadFamiliesAll || canReadMembers || canReadJobs;
   const canShowHygiene = canReadFamiliesAll || hasHygieneWrite;
   const canShowKochen = canReadMealAllergens || canViewMealPlan;
   const canShowMore = true; // Dashboard is accessible to all

@@ -45,6 +45,8 @@ roles:
       - memberships.all.write
       - fees.all.read
       - audit.view
+      - jobs.all.read
+      - jobs.all.write
 
   - id: kiosk
     name: Kiosk

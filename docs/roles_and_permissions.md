@@ -15,6 +15,7 @@ A user can only access an application feature or API endpoint if their effective
    - `memberships.all.write` implies `memberships.all.read`.
    - `memberships.all.read` implies `memberships.self.read`.
    - `employees.all.write` implies `employees.all.read`.
+   - `jobs.all.write` implies `jobs.all.read`.
 3. **Dynamic Roles**: Roles are defined declaratively in a YAML file (`local_dev_roles.yaml` for local development, or `roles.yaml` on deployment side) and loaded via `ROLES_FILE` (falling back to built-in `default_roles.yaml`).
 4. **Explicit Denials (`deny_permissions`)**: Roles can define `deny_permissions` to explicitly strip specific permissions from a user's effective permissions. This takes precedence over additive permissions (such as auto-granted parent self-service permissions), allowing educators who are also parents to retain self-service access without gaining access to fee calculation.
 5. **Database Synchronization**: Upon startup, the Go backend reads `ROLES_FILE` (or falls back to built-in defaults) and performs an idempotent upsert into the PostgreSQL `roles` table.
@@ -114,4 +115,6 @@ roles:
 | `mealplan.view` | View weekly meal plans (*Kochplan*) | Staff, Parents, Kiosks |
 | `meal_allergens.read` | View meal allergens overview and documentation | Staff, Cooks, Parents |
 | `meal_allergens.write` | Edit and finalize meal allergens documentation (implies `meal_allergens.read`) | Staff, Cooks, Parents |
+| `jobs.all.read` | View jobs list and job assignments in MGA Jobs tab | MGA, Staff, Board |
+| `jobs.all.write` | Create, edit, and delete jobs, and manage job assignments (implies `jobs.all.read`) | MGA, Board, Administrators |
 | `permissions.simulate` | Access the role & permissions simulator to test view and API scoping | Administrators |

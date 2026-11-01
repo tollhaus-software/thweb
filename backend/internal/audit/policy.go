@@ -174,6 +174,14 @@ var AuditRegistry = map[string]EntityPolicy{
 			return snapshot
 		},
 	},
+	"job": {
+		CanUserView: func(user *models.UserWithPermissions, familyID *uuid.UUID) bool {
+			return user.HasPermission("jobs.all.read") || user.HasPermission("jobs.all.write")
+		},
+		SanitizeSnapshot: func(user *models.UserWithPermissions, snapshot map[string]interface{}) map[string]interface{} {
+			return snapshot
+		},
+	},
 }
 
 // AllowedEntityTypesForUser returns a list of entity type strings that the user is potentially authorized to view.
@@ -201,6 +209,9 @@ func AllowedEntityTypesForUser(user *models.UserWithPermissions) []string {
 	}
 	if user.HasPermission("employees.all.read") || user.HasPermission("employees.all.write") || user.HasPermission("allergies.employees.read") || user.HasPermission("allergies.employees.write") {
 		allowed = append(allowed, "employee")
+	}
+	if user.HasPermission("jobs.all.read") || user.HasPermission("jobs.all.write") {
+		allowed = append(allowed, "job")
 	}
 
 	return allowed

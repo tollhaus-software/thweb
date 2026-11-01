@@ -331,6 +331,19 @@ func (s *Store) ListFamilies(ctx context.Context) ([]models.Family, error) {
 						   ) ORDER BY m.start_date DESC)
 						   FROM th_memberships m WHERE m.parent_id = p.id
 					   ), '[]'),
+					   'jobs', COALESCE((
+						   SELECT json_agg(json_build_object(
+							   'id', j.id,
+							   'name', j.name,
+							   'description', j.description,
+							   'contact_email', j.contact_email,
+							   'created_at', j.created_at,
+							   'updated_at', j.updated_at
+						   ) ORDER BY j.name ASC)
+						   FROM parent_jobs pj
+						   JOIN jobs j ON j.id = pj.job_id
+						   WHERE pj.parent_id = p.id
+					   ), '[]'),
 					   'created_at', p.created_at,
 					   'updated_at', p.updated_at
 				   )) FROM parents p WHERE p.family_id = f.id
@@ -1828,9 +1841,22 @@ func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*model
 
 func (s *Store) ListEmployees(ctx context.Context) ([]models.Employee, error) {
 	query := `
-		SELECT id, first_name, last_name, employee_type, emails, phones, address, is_kinderschutzbeauftragter, allergies_protected, created_at, updated_at
-		FROM employees
-		ORDER BY last_name ASC, first_name ASC, created_at ASC
+		SELECT e.id, e.first_name, e.last_name, e.employee_type, e.emails, e.phones, e.address, e.is_kinderschutzbeauftragter, e.allergies_protected, e.created_at, e.updated_at,
+			COALESCE((
+				SELECT json_agg(json_build_object(
+					'id', j.id,
+					'name', j.name,
+					'description', j.description,
+					'contact_email', j.contact_email,
+					'created_at', j.created_at,
+					'updated_at', j.updated_at
+				) ORDER BY j.name ASC)
+				FROM employee_jobs ej
+				JOIN jobs j ON j.id = ej.job_id
+				WHERE ej.employee_id = e.id
+			), '[]')
+		FROM employees e
+		ORDER BY e.last_name ASC, e.first_name ASC, e.created_at ASC
 	`
 	rows, err := s.db.Query(ctx, query)
 	if err != nil {
@@ -1841,7 +1867,7 @@ func (s *Store) ListEmployees(ctx context.Context) ([]models.Employee, error) {
 	employees := []models.Employee{}
 	for rows.Next() {
 		var emp models.Employee
-		var emailsRaw, phonesRaw []byte
+		var emailsRaw, phonesRaw, jobsRaw []byte
 		if err := rows.Scan(
 			&emp.ID,
 			&emp.FirstName,
@@ -1854,6 +1880,7 @@ func (s *Store) ListEmployees(ctx context.Context) ([]models.Employee, error) {
 			&emp.AllergiesProtected,
 			&emp.CreatedAt,
 			&emp.UpdatedAt,
+			&jobsRaw,
 		); err != nil {
 			return nil, err
 		}
@@ -1862,6 +1889,9 @@ func (s *Store) ListEmployees(ctx context.Context) ([]models.Employee, error) {
 		}
 		if len(phonesRaw) > 0 {
 			_ = json.Unmarshal(phonesRaw, &emp.Phones)
+		}
+		if len(jobsRaw) > 0 {
+			_ = json.Unmarshal(jobsRaw, &emp.Jobs)
 		}
 		emp.Emails = sanitizeSlice(emp.Emails)
 		emp.Phones = sanitizePhones(emp.Phones)
@@ -1872,12 +1902,25 @@ func (s *Store) ListEmployees(ctx context.Context) ([]models.Employee, error) {
 
 func (s *Store) GetEmployeeByID(ctx context.Context, id uuid.UUID) (*models.Employee, error) {
 	query := `
-		SELECT id, first_name, last_name, employee_type, emails, phones, address, is_kinderschutzbeauftragter, allergies_protected, created_at, updated_at
-		FROM employees
-		WHERE id = $1
+		SELECT e.id, e.first_name, e.last_name, e.employee_type, e.emails, e.phones, e.address, e.is_kinderschutzbeauftragter, e.allergies_protected, e.created_at, e.updated_at,
+			COALESCE((
+				SELECT json_agg(json_build_object(
+					'id', j.id,
+					'name', j.name,
+					'description', j.description,
+					'contact_email', j.contact_email,
+					'created_at', j.created_at,
+					'updated_at', j.updated_at
+				) ORDER BY j.name ASC)
+				FROM employee_jobs ej
+				JOIN jobs j ON j.id = ej.job_id
+				WHERE ej.employee_id = e.id
+			), '[]')
+		FROM employees e
+		WHERE e.id = $1
 	`
 	var emp models.Employee
-	var emailsRaw, phonesRaw []byte
+	var emailsRaw, phonesRaw, jobsRaw []byte
 	err := s.db.QueryRow(ctx, query, id).Scan(
 		&emp.ID,
 		&emp.FirstName,
@@ -1890,6 +1933,7 @@ func (s *Store) GetEmployeeByID(ctx context.Context, id uuid.UUID) (*models.Empl
 		&emp.AllergiesProtected,
 		&emp.CreatedAt,
 		&emp.UpdatedAt,
+		&jobsRaw,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -1902,6 +1946,9 @@ func (s *Store) GetEmployeeByID(ctx context.Context, id uuid.UUID) (*models.Empl
 	}
 	if len(phonesRaw) > 0 {
 		_ = json.Unmarshal(phonesRaw, &emp.Phones)
+	}
+	if len(jobsRaw) > 0 {
+		_ = json.Unmarshal(jobsRaw, &emp.Jobs)
 	}
 	emp.Emails = sanitizeSlice(emp.Emails)
 	emp.Phones = sanitizePhones(emp.Phones)
@@ -2145,6 +2192,9 @@ func (s *Store) CreateActiveDEK(ctx context.Context, rec crypto.DEKRecord) (*cry
 func (s *Store) ResetTestData(ctx context.Context) error {
 	_, err := s.db.Exec(ctx, `
 		TRUNCATE TABLE 
+			employee_jobs,
+			parent_jobs,
+			jobs,
 			meal_allergens,
 			meal_plan_from_sheets,
 			data_encryption_keys,
@@ -2618,5 +2668,567 @@ func (s *Store) FinalizeMealAllergens(ctx context.Context, targetDate time.Time)
 		&finalizedStatus,
 	)
 }
+
+func (s *Store) ListJobs(ctx context.Context) ([]models.JobWithAssignees, error) {
+	query := `
+		SELECT 
+			j.id, j.name, j.description, j.contact_email, j.created_at, j.updated_at,
+			COALESCE((
+				SELECT json_agg(json_build_object(
+					'id', p.id,
+					'first_name', p.first_name,
+					'last_name', p.last_name
+				) ORDER BY p.last_name ASC, p.first_name ASC)
+				FROM parent_jobs pj
+				JOIN parents p ON p.id = pj.parent_id
+				WHERE pj.job_id = j.id
+			), '[]'),
+			COALESCE((
+				SELECT json_agg(json_build_object(
+					'id', e.id,
+					'first_name', e.first_name,
+					'last_name', e.last_name,
+					'employee_type', e.employee_type
+				) ORDER BY e.last_name ASC, e.first_name ASC)
+				FROM employee_jobs ej
+				JOIN employees e ON e.id = ej.employee_id
+				WHERE ej.job_id = j.id
+			), '[]')
+		FROM jobs j
+		ORDER BY j.name ASC
+	`
+	rows, err := s.db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var jobs []models.JobWithAssignees
+	for rows.Next() {
+		var j models.JobWithAssignees
+		var parentsRaw, employeesRaw []byte
+		if err := rows.Scan(
+			&j.ID,
+			&j.Name,
+			&j.Description,
+			&j.ContactEmail,
+			&j.CreatedAt,
+			&j.UpdatedAt,
+			&parentsRaw,
+			&employeesRaw,
+		); err != nil {
+			return nil, err
+		}
+		if len(parentsRaw) > 0 {
+			_ = json.Unmarshal(parentsRaw, &j.Parents)
+		}
+		if len(employeesRaw) > 0 {
+			_ = json.Unmarshal(employeesRaw, &j.Employees)
+		}
+		if j.Parents == nil {
+			j.Parents = []models.JobAssigneeParent{}
+		}
+		if j.Employees == nil {
+			j.Employees = []models.JobAssigneeEmployee{}
+		}
+		jobs = append(jobs, j)
+	}
+	return jobs, rows.Err()
+}
+
+func (s *Store) GetJobByID(ctx context.Context, id uuid.UUID) (*models.JobWithAssignees, error) {
+	query := `
+		SELECT 
+			j.id, j.name, j.description, j.contact_email, j.created_at, j.updated_at,
+			COALESCE((
+				SELECT json_agg(json_build_object(
+					'id', p.id,
+					'first_name', p.first_name,
+					'last_name', p.last_name
+				) ORDER BY p.last_name ASC, p.first_name ASC)
+				FROM parent_jobs pj
+				JOIN parents p ON p.id = pj.parent_id
+				WHERE pj.job_id = j.id
+			), '[]'),
+			COALESCE((
+				SELECT json_agg(json_build_object(
+					'id', e.id,
+					'first_name', e.first_name,
+					'last_name', e.last_name,
+					'employee_type', e.employee_type
+				) ORDER BY e.last_name ASC, e.first_name ASC)
+				FROM employee_jobs ej
+				JOIN employees e ON e.id = ej.employee_id
+				WHERE ej.job_id = j.id
+			), '[]')
+		FROM jobs j
+		WHERE j.id = $1
+	`
+	var j models.JobWithAssignees
+	var parentsRaw, employeesRaw []byte
+	err := s.db.QueryRow(ctx, query, id).Scan(
+		&j.ID,
+		&j.Name,
+		&j.Description,
+		&j.ContactEmail,
+		&j.CreatedAt,
+		&j.UpdatedAt,
+		&parentsRaw,
+		&employeesRaw,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if len(parentsRaw) > 0 {
+		_ = json.Unmarshal(parentsRaw, &j.Parents)
+	}
+	if len(employeesRaw) > 0 {
+		_ = json.Unmarshal(employeesRaw, &j.Employees)
+	}
+	if j.Parents == nil {
+		j.Parents = []models.JobAssigneeParent{}
+	}
+	if j.Employees == nil {
+		j.Employees = []models.JobAssigneeEmployee{}
+	}
+	return &j, nil
+}
+
+func (s *Store) CreateJob(ctx context.Context, userID uuid.UUID, job models.Job) (models.Job, error) {
+	job.Name = strings.TrimSpace(job.Name)
+	job.Description = strings.TrimSpace(job.Description)
+	job.ContactEmail = strings.TrimSpace(job.ContactEmail)
+	if job.Name == "" {
+		return models.Job{}, fmt.Errorf("job name is required")
+	}
+	if job.ID == uuid.Nil {
+		job.ID = uuid.New()
+	}
+	transactionID := uuid.New()
+
+	var created models.Job
+	err := s.WithTx(ctx, func(tx pgx.Tx) error {
+		query := `
+			INSERT INTO jobs (id, name, description, contact_email)
+			VALUES ($1, $2, $3, $4)
+			RETURNING id, name, description, contact_email, created_at, updated_at
+		`
+		if err := tx.QueryRow(ctx, query, job.ID, job.Name, job.Description, job.ContactEmail).Scan(
+			&created.ID,
+			&created.Name,
+			&created.Description,
+			&created.ContactEmail,
+			&created.CreatedAt,
+			&created.UpdatedAt,
+		); err != nil {
+			return err
+		}
+		return s.recordAudit(ctx, tx, transactionID, nil, "job", created.ID, "INSERT", nil, created, userID)
+	})
+	if err != nil {
+		return models.Job{}, err
+	}
+	return created, nil
+}
+
+func (s *Store) UpdateJob(ctx context.Context, userID uuid.UUID, job models.Job) (models.Job, error) {
+	job.Name = strings.TrimSpace(job.Name)
+	job.Description = strings.TrimSpace(job.Description)
+	job.ContactEmail = strings.TrimSpace(job.ContactEmail)
+	if job.Name == "" {
+		return models.Job{}, fmt.Errorf("job name is required")
+	}
+	transactionID := uuid.New()
+
+	var updated models.Job
+	err := s.WithTx(ctx, func(tx pgx.Tx) error {
+		oldJob, err := s.GetJobByID(ctx, job.ID)
+		if err != nil {
+			return err
+		}
+		if oldJob == nil {
+			return fmt.Errorf("job not found")
+		}
+
+		query := `
+			UPDATE jobs
+			SET name = $1, description = $2, contact_email = $3, updated_at = NOW()
+			WHERE id = $4
+			RETURNING id, name, description, contact_email, created_at, updated_at
+		`
+		if err := tx.QueryRow(ctx, query, job.Name, job.Description, job.ContactEmail, job.ID).Scan(
+			&updated.ID,
+			&updated.Name,
+			&updated.Description,
+			&updated.ContactEmail,
+			&updated.CreatedAt,
+			&updated.UpdatedAt,
+		); err != nil {
+			return err
+		}
+		return s.recordAudit(ctx, tx, transactionID, nil, "job", updated.ID, "UPDATE", oldJob.Job, updated, userID)
+	})
+	if err != nil {
+		return models.Job{}, err
+	}
+	return updated, nil
+}
+
+func (s *Store) DeleteJob(ctx context.Context, userID uuid.UUID, jobID uuid.UUID) error {
+	transactionID := uuid.New()
+	return s.WithTx(ctx, func(tx pgx.Tx) error {
+		oldJob, err := s.GetJobByID(ctx, jobID)
+		if err != nil {
+			return err
+		}
+		if oldJob == nil {
+			return fmt.Errorf("job not found")
+		}
+
+		var parentCount, employeeCount int
+		if err := tx.QueryRow(ctx, "SELECT COUNT(*) FROM parent_jobs WHERE job_id = $1", jobID).Scan(&parentCount); err != nil {
+			return err
+		}
+		if err := tx.QueryRow(ctx, "SELECT COUNT(*) FROM employee_jobs WHERE job_id = $1", jobID).Scan(&employeeCount); err != nil {
+			return err
+		}
+		totalAssigned := parentCount + employeeCount
+		if totalAssigned > 0 {
+			return fmt.Errorf("cannot delete job with active associations: %d persons are assigned to this job", totalAssigned)
+		}
+
+		if _, err := tx.Exec(ctx, "DELETE FROM jobs WHERE id = $1", jobID); err != nil {
+			return err
+		}
+		return s.recordAudit(ctx, tx, transactionID, nil, "job", jobID, "DELETE", oldJob.Job, nil, userID)
+	})
+}
+
+func (s *Store) SetParentJobs(ctx context.Context, userID uuid.UUID, parentID uuid.UUID, jobIDs []uuid.UUID) error {
+	transactionID := uuid.New()
+	return s.WithTx(ctx, func(tx pgx.Tx) error {
+		var familyID uuid.UUID
+		err := tx.QueryRow(ctx, "SELECT family_id FROM parents WHERE id = $1", parentID).Scan(&familyID)
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				return fmt.Errorf("parent not found")
+			}
+			return err
+		}
+
+		if _, err := tx.Exec(ctx, "DELETE FROM parent_jobs WHERE parent_id = $1", parentID); err != nil {
+			return err
+		}
+		for _, jID := range jobIDs {
+			if _, err := tx.Exec(ctx, "INSERT INTO parent_jobs (parent_id, job_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", parentID, jID); err != nil {
+				return err
+			}
+		}
+		return s.recordAudit(ctx, tx, transactionID, &familyID, "parent", parentID, "UPDATE", nil, map[string]interface{}{"assigned_job_ids": jobIDs}, userID)
+	})
+}
+
+func (s *Store) SetEmployeeJobs(ctx context.Context, userID uuid.UUID, employeeID uuid.UUID, jobIDs []uuid.UUID) error {
+	transactionID := uuid.New()
+	return s.WithTx(ctx, func(tx pgx.Tx) error {
+		var exists bool
+		err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM employees WHERE id = $1)", employeeID).Scan(&exists)
+		if err != nil || !exists {
+			return fmt.Errorf("employee not found")
+		}
+
+		if _, err := tx.Exec(ctx, "DELETE FROM employee_jobs WHERE employee_id = $1", employeeID); err != nil {
+			return err
+		}
+		for _, jID := range jobIDs {
+			if _, err := tx.Exec(ctx, "INSERT INTO employee_jobs (employee_id, job_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", employeeID, jID); err != nil {
+				return err
+			}
+		}
+		return s.recordAudit(ctx, tx, transactionID, nil, "employee", employeeID, "UPDATE", nil, map[string]interface{}{"assigned_job_ids": jobIDs}, userID)
+	})
+}
+
+type JobPeopleOptions struct {
+	Parents   []models.JobAssigneeParent   `json:"parents"`
+	Employees []models.JobAssigneeEmployee `json:"employees"`
+}
+
+func (s *Store) ListJobPeopleOptions(ctx context.Context) (JobPeopleOptions, error) {
+	options := JobPeopleOptions{
+		Parents:   []models.JobAssigneeParent{},
+		Employees: []models.JobAssigneeEmployee{},
+	}
+
+	pRows, err := s.db.Query(ctx, `
+		SELECT 
+			p.id, 
+			p.family_id, 
+			p.first_name, 
+			p.last_name,
+			COALESCE((
+				SELECT string_agg(DISTINCT TRIM(p2.last_name), ' / ' ORDER BY TRIM(p2.last_name) ASC)
+				FROM parents p2
+				WHERE p2.family_id = p.family_id AND TRIM(p2.last_name) != ''
+			), 'Familie') AS family_name
+		FROM parents p
+		ORDER BY family_name ASC, p.first_name ASC, p.last_name ASC
+	`)
+	if err != nil {
+		return options, fmt.Errorf("failed to query parents for jobs: %w", err)
+	}
+	defer pRows.Close()
+
+	for pRows.Next() {
+		var p models.JobAssigneeParent
+		if err := pRows.Scan(&p.ID, &p.FamilyID, &p.FirstName, &p.LastName, &p.FamilyName); err != nil {
+			return options, err
+		}
+		options.Parents = append(options.Parents, p)
+	}
+	if err := pRows.Err(); err != nil {
+		return options, err
+	}
+
+	eRows, err := s.db.Query(ctx, `
+		SELECT id, first_name, last_name, employee_type
+		FROM employees
+		ORDER BY first_name ASC, last_name ASC
+	`)
+	if err != nil {
+		return options, fmt.Errorf("failed to query employees for jobs: %w", err)
+	}
+	defer eRows.Close()
+
+	for eRows.Next() {
+		var e models.JobAssigneeEmployee
+		if err := eRows.Scan(&e.ID, &e.FirstName, &e.LastName, &e.EmployeeType); err != nil {
+			return options, err
+		}
+		options.Employees = append(options.Employees, e)
+	}
+	if err := eRows.Err(); err != nil {
+		return options, err
+	}
+
+	return options, nil
+}
+
+func (s *Store) SetJobAssignees(ctx context.Context, userID uuid.UUID, jobID uuid.UUID, parentIDs []uuid.UUID, employeeIDs []uuid.UUID) error {
+	transactionID := uuid.New()
+	return s.WithTx(ctx, func(tx pgx.Tx) error {
+		var jobName string
+		err := tx.QueryRow(ctx, "SELECT name FROM jobs WHERE id = $1", jobID).Scan(&jobName)
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				return fmt.Errorf("job not found")
+			}
+			return err
+		}
+
+		type AssigneeItem struct {
+			ID   uuid.UUID `json:"id"`
+			Name string    `json:"name"`
+			Type string    `json:"type"`
+		}
+
+		var oldParents []AssigneeItem
+		oldParentIDs := make([]uuid.UUID, 0)
+		pRows, err := tx.Query(ctx, `
+			SELECT p.id, p.first_name, p.last_name
+			FROM parent_jobs pj
+			JOIN parents p ON p.id = pj.parent_id
+			WHERE pj.job_id = $1
+			ORDER BY p.last_name ASC, p.first_name ASC
+		`, jobID)
+		if err != nil {
+			return err
+		}
+		for pRows.Next() {
+			var id uuid.UUID
+			var first, last string
+			if err := pRows.Scan(&id, &first, &last); err != nil {
+				pRows.Close()
+				return err
+			}
+			name := strings.TrimSpace(first + " " + last)
+			oldParents = append(oldParents, AssigneeItem{ID: id, Name: name, Type: "parent"})
+			oldParentIDs = append(oldParentIDs, id)
+		}
+		pRows.Close()
+		if err := pRows.Err(); err != nil {
+			return err
+		}
+
+		var oldEmployees []AssigneeItem
+		oldEmployeeIDs := make([]uuid.UUID, 0)
+		eRows, err := tx.Query(ctx, `
+			SELECT e.id, e.first_name, e.last_name
+			FROM employee_jobs ej
+			JOIN employees e ON e.id = ej.employee_id
+			WHERE ej.job_id = $1
+			ORDER BY e.last_name ASC, e.first_name ASC
+		`, jobID)
+		if err != nil {
+			return err
+		}
+		for eRows.Next() {
+			var id uuid.UUID
+			var first, last string
+			if err := eRows.Scan(&id, &first, &last); err != nil {
+				eRows.Close()
+				return err
+			}
+			name := strings.TrimSpace(first + " " + last)
+			oldEmployees = append(oldEmployees, AssigneeItem{ID: id, Name: name, Type: "employee"})
+			oldEmployeeIDs = append(oldEmployeeIDs, id)
+		}
+		eRows.Close()
+		if err := eRows.Err(); err != nil {
+			return err
+		}
+
+		if _, err := tx.Exec(ctx, "DELETE FROM parent_jobs WHERE job_id = $1", jobID); err != nil {
+			return err
+		}
+		for _, pID := range parentIDs {
+			if _, err := tx.Exec(ctx, "INSERT INTO parent_jobs (parent_id, job_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", pID, jobID); err != nil {
+				return err
+			}
+		}
+
+		if _, err := tx.Exec(ctx, "DELETE FROM employee_jobs WHERE job_id = $1", jobID); err != nil {
+			return err
+		}
+		for _, eID := range employeeIDs {
+			if _, err := tx.Exec(ctx, "INSERT INTO employee_jobs (employee_id, job_id) VALUES ($1, $2) ON CONFLICT DO NOTHING", eID, jobID); err != nil {
+				return err
+			}
+		}
+
+		var newParents []AssigneeItem
+		if len(parentIDs) > 0 {
+			npRows, err := tx.Query(ctx, `
+				SELECT id, first_name, last_name
+				FROM parents
+				WHERE id = ANY($1)
+				ORDER BY last_name ASC, first_name ASC
+			`, parentIDs)
+			if err != nil {
+				return err
+			}
+			for npRows.Next() {
+				var id uuid.UUID
+				var first, last string
+				if err := npRows.Scan(&id, &first, &last); err != nil {
+					npRows.Close()
+					return err
+				}
+				name := strings.TrimSpace(first + " " + last)
+				newParents = append(newParents, AssigneeItem{ID: id, Name: name, Type: "parent"})
+			}
+			npRows.Close()
+			if err := npRows.Err(); err != nil {
+				return err
+			}
+		}
+
+		var newEmployees []AssigneeItem
+		if len(employeeIDs) > 0 {
+			neRows, err := tx.Query(ctx, `
+				SELECT id, first_name, last_name
+				FROM employees
+				WHERE id = ANY($1)
+				ORDER BY last_name ASC, first_name ASC
+			`, employeeIDs)
+			if err != nil {
+				return err
+			}
+			for neRows.Next() {
+				var id uuid.UUID
+				var first, last string
+				if err := neRows.Scan(&id, &first, &last); err != nil {
+					neRows.Close()
+					return err
+				}
+				name := strings.TrimSpace(first + " " + last)
+				newEmployees = append(newEmployees, AssigneeItem{ID: id, Name: name, Type: "employee"})
+			}
+			neRows.Close()
+			if err := neRows.Err(); err != nil {
+				return err
+			}
+		}
+
+		oldMap := make(map[uuid.UUID]AssigneeItem)
+		for _, item := range oldParents {
+			oldMap[item.ID] = item
+		}
+		for _, item := range oldEmployees {
+			oldMap[item.ID] = item
+		}
+
+		newMap := make(map[uuid.UUID]AssigneeItem)
+		for _, item := range newParents {
+			newMap[item.ID] = item
+		}
+		for _, item := range newEmployees {
+			newMap[item.ID] = item
+		}
+
+		var added []AssigneeItem
+		for _, item := range newParents {
+			if _, exists := oldMap[item.ID]; !exists {
+				added = append(added, item)
+			}
+		}
+		for _, item := range newEmployees {
+			if _, exists := oldMap[item.ID]; !exists {
+				added = append(added, item)
+			}
+		}
+
+		var removed []AssigneeItem
+		for _, item := range oldParents {
+			if _, exists := newMap[item.ID]; !exists {
+				removed = append(removed, item)
+			}
+		}
+		for _, item := range oldEmployees {
+			if _, exists := oldMap[item.ID]; !exists {
+				removed = append(removed, item)
+			}
+		}
+
+		beforeSnapshot := map[string]interface{}{
+			"job_id":       jobID,
+			"job_name":     jobName,
+			"name":         jobName,
+			"parent_ids":   oldParentIDs,
+			"employee_ids": oldEmployeeIDs,
+			"parents":      oldParents,
+			"employees":    oldEmployees,
+		}
+
+		afterSnapshot := map[string]interface{}{
+			"job_id":       jobID,
+			"job_name":     jobName,
+			"name":         jobName,
+			"parent_ids":   parentIDs,
+			"employee_ids": employeeIDs,
+			"parents":      newParents,
+			"employees":    newEmployees,
+			"added":        added,
+			"removed":      removed,
+		}
+
+		return s.recordAudit(ctx, tx, transactionID, nil, "job", jobID, "UPDATE_ASSIGNEES", beforeSnapshot, afterSnapshot, userID)
+	})
+}
+
+
 
 

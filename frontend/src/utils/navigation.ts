@@ -4,6 +4,7 @@ export type TabId =
   | 'parents'
   | 'children'
   | 'members'
+  | 'jobs'
   | 'employees'
   | 'childcareFees'
   | 'hygieneBelehrung'
@@ -24,6 +25,7 @@ export const getCategoryForTab = (tab: TabId | string): NavigationCategory | '' 
     case 'parents':
     case 'children':
     case 'members':
+    case 'jobs':
       return 'mga';
     case 'childcareFees':
       return 'fees';
