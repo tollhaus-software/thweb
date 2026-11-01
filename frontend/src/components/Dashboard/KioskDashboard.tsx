@@ -112,8 +112,8 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
     if (!canViewAllergiesSummary) return;
     try {
       const url = dateParam
-        ? `/api/allergies/summary?date=${encodeURIComponent(dateParam)}`
-        : `/api/allergies/summary`;
+        ? `/api/dashboard/allergies?date=${encodeURIComponent(dateParam)}`
+        : `/api/dashboard/allergies`;
 
       const headers: Record<string, string> = {};
       if (token) {
