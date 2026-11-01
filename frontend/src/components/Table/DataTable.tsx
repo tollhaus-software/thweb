@@ -32,6 +32,7 @@ interface DataTableProps<TData> {
   getCardActions?: (item: any) => React.ReactNode;
   stickyFirstColumn?: boolean;
   enableSorting?: boolean;
+  familyCardMode?: 'family' | 'group';
 }
 
 export function DataTable<TData>({
@@ -52,6 +53,7 @@ export function DataTable<TData>({
   getCardActions,
   stickyFirstColumn = false,
   enableSorting = true,
+  familyCardMode,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
@@ -89,6 +91,229 @@ export function DataTable<TData>({
     'data-table-wrapper',
     ...(className ? className.split(' ').filter(Boolean).map((c) => `${c}-wrapper`) : []),
   ].join(' ');
+
+  const renderGroupedRow = (row: any) => {
+    const familyId = (row.original as any).id;
+    const familyName = (row.original as any).family_name;
+    const subHeader = (row.original as any).sub_header;
+    const hasSubRows = row.subRows && row.subRows.length > 0;
+    return (
+      <Fragment key={row.id}>
+        <tr className={`family-group-row ${familyId === highlightedRowId ? 'highlighted-row' : ''}`} id={`row-${familyId}`}>
+          <td colSpan={table.getVisibleLeafColumns().length}>
+            <div className="family-group-row-container">
+              <div
+                className="family-group-row-left"
+                style={{
+                  display: 'inline-flex',
+                  flexDirection: subHeader ? 'column' : 'row',
+                  alignItems: subHeader ? 'flex-start' : 'center',
+                  gap: subHeader ? '0.2rem' : '0.75rem',
+                  position: 'sticky',
+                  left: '0.6rem',
+                  flexShrink: 0,
+                }}
+              >
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <span className="family-name-text">{familyName}</span>
+                  {onJumpToFamily && jumpToFamilyLabel && (
+                    <button
+                      type="button"
+                      className="family-header-link"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onJumpToFamily(familyId, familyName);
+                      }}
+                      title={jumpToFamilyTitle}
+                    >
+                      {jumpToFamilyLabel}
+                    </button>
+                  )}
+                  {onAddRow && !onAddChild && !onAddParent && (
+                    <button
+                      type="button"
+                      className="family-add-button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddRow(familyId, familyName);
+                      }}
+                      title="Add"
+                    >
+                      <Plus size={14} />
+                    </button>
+                  )}
+                </div>
+                {subHeader && (
+                  <div className="family-sub-header-parents">
+                    {subHeader}
+                  </div>
+                )}
+              </div>
+
+              {(onAddChild || onAddParent) && (
+                <div
+                  className="family-group-actions"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    position: 'sticky',
+                    right: '0.6rem',
+                    marginLeft: 'auto',
+                    flexShrink: 0,
+                  }}
+                >
+                  {onAddChild && (
+                    <button
+                      type="button"
+                      className="family-action-button family-add-button family-add-child-button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddChild(familyId, familyName);
+                      }}
+                      aria-label={`+ ${t('addChildShort')}`}
+                      title={`${t('addChildTo')} ${familyName}`}
+                    >
+                      <Plus size={13} />
+                      <span>{t('addChildShort')}</span>
+                    </button>
+                  )}
+                  {onAddParent && (
+                    <button
+                      type="button"
+                      className={`family-action-button ${!onAddChild ? 'family-add-button ' : ''}family-add-parent-button`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddParent(familyId, familyName);
+                      }}
+                      aria-label={`+ ${t('addParentShort')}`}
+                      title={`${t('addParentTo')} ${familyName}`}
+                    >
+                      <Plus size={13} />
+                      <span>{t('addParentShort')}</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </td>
+        </tr>
+        {!hasSubRows && emptySubRowsText && (
+          <tr className="empty-sub-row">
+            <td colSpan={table.getVisibleLeafColumns().length} style={{ padding: '0.75rem 1.5rem', color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.85rem' }}>
+              <span style={{ position: 'sticky', left: '1.5rem' }}>{emptySubRowsText}</span>
+            </td>
+          </tr>
+        )}
+      </Fragment>
+    );
+  };
+
+  const renderRow = (row: any) => {
+    const rowId = (row.original as any).id;
+    const rowType = (row.original as any)._rowType;
+
+    if (rowType === 'parents-toggle') {
+      const item = row.original as any;
+      const isExpanded = Boolean(item.isExpanded);
+      return (
+        <tr
+          key={row.id}
+          id={`row-${item.id}`}
+          className={`overview-parents-toggle-row ${isExpanded ? 'expanded' : 'collapsed'}`}
+        >
+          <td colSpan={table.getVisibleLeafColumns().length}>
+            <button
+              type="button"
+              className="overview-parents-toggle-btn"
+              onClick={item.onToggle}
+              aria-expanded={isExpanded}
+            >
+              <span className="overview-parents-toggle-chevron">
+                {isExpanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+              </span>
+              <span className="overview-parents-toggle-label">
+                {item.summaryText}
+              </span>
+            </button>
+          </td>
+        </tr>
+      );
+    }
+
+    const noSpecialBg = Boolean((row.original as any).no_special_bg);
+    const isGroupModeParent = Boolean((row.original as any).isGroupModeParent);
+    const isParentExpanded = Boolean((row.original as any).isExpanded);
+    const rowClasses = [
+      rowId === highlightedRowId ? 'highlighted-row' : '',
+      rowType === 'parent' ? 'overview-parent-row' : '',
+      rowType === 'child' ? 'overview-child-row' : '',
+      noSpecialBg ? 'no-special-bg' : '',
+      isGroupModeParent ? 'overview-group-parent-row' : '',
+      isGroupModeParent && !isParentExpanded ? 'group-parent-collapsed' : '',
+      isGroupModeParent && isParentExpanded ? 'group-parent-expanded' : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+    return (
+      <tr key={row.id} id={`row-${rowId}`} className={rowClasses || undefined}>
+        {(() => {
+          if (!isMobile || !getCardHeader) return null;
+          const headerContent = getCardHeader(row.original);
+          if (!headerContent) return null;
+          const headerActions = getCardActions?.(row.original);
+          return (
+            <td className="card-person-header" data-card-header="true">
+              <div className="card-person-header-content">
+                {headerContent}
+              </div>
+              {headerActions && (
+                <div className="card-person-header-actions">
+                  {headerActions}
+                </div>
+              )}
+            </td>
+          );
+        })()}
+        {row.getVisibleCells().map((cell: any) => {
+          const meta = cell.column.columnDef.meta as any;
+          if (meta?.skipCell?.(row.original)) {
+            return null;
+          }
+          if (isMobile && cell.column.id === 'actions' && meta?.hideOnMobile) {
+            return null;
+          }
+          const colSpan = meta?.getColSpan?.(row.original) ?? 1;
+          const isFixed = Boolean(stickyFirstColumn) && (
+            cell.column.id === 'first_name' ||
+            cell.column.id === 'child_name' ||
+            cell.column.id === 'overview_name' ||
+            cell.column.id === 'name'
+          );
+          const colHeader = cell.column.columnDef.header;
+          const headerText = typeof colHeader === 'string' ? colHeader : '';
+          const labelText = meta?.cardLabel ?? headerText;
+          return (
+            <td
+              key={cell.id}
+              data-label={labelText}
+              data-column-id={cell.column.id}
+              colSpan={colSpan > 1 ? colSpan : undefined}
+              className={isFixed ? 'sticky-col' : undefined}
+              style={{
+                width: colSpan > 1 ? undefined : isFixed ? '1%' : `${cell.column.getSize()}px`,
+                minWidth: colSpan > 1 ? undefined : `${cell.column.getSize()}px`,
+                boxSizing: 'border-box',
+                whiteSpace: isFixed ? 'nowrap' : undefined,
+              }}
+            >
+              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+            </td>
+          );
+        })}
+      </tr>
+    );
+  };
 
   const hasActionsCol = table.getAllLeafColumns().some((col) => col.id === 'actions');
   const targetSlot = cardsSlotEl || (typeof document !== 'undefined' ? document.getElementById('cards-view-columns-slot') : null);
@@ -262,235 +487,79 @@ export function DataTable<TData>({
               ))}
             </thead>
           )}
-          <tbody>
-            {table.getRowModel().rows.map((row) => {
-              const isGroupedRow = getSubRows && row.depth === 0;
-
-              if (isGroupedRow) {
-                const familyId = (row.original as any).id;
-                const familyName = (row.original as any).family_name;
-                const subHeader = (row.original as any).sub_header;
-                const hasSubRows = row.subRows && row.subRows.length > 0;
+          {(() => {
+            if (familyCardMode === 'family') {
+              const topRows = table.getRowModel().rows.filter((r) => r.depth === 0);
+              return topRows.map((familyRow, familyIndex) => {
+                const isEven = familyIndex % 2 === 0;
                 return (
-                  <Fragment key={row.id}>
-                    <tr className={`family-group-row ${familyId === highlightedRowId ? 'highlighted-row' : ''}`} id={`row-${familyId}`}>
-                      <td colSpan={table.getVisibleLeafColumns().length}>
-                        <div className="family-group-row-container">
-                          <div
-                            className="family-group-row-left"
-                            style={{
-                              display: 'inline-flex',
-                              flexDirection: subHeader ? 'column' : 'row',
-                              alignItems: subHeader ? 'flex-start' : 'center',
-                              gap: subHeader ? '0.2rem' : '0.75rem',
-                              position: 'sticky',
-                              left: '0.6rem',
-                              flexShrink: 0,
-                            }}
-                          >
-                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem' }}>
-                              <span className="family-name-text">{familyName}</span>
-                              {onJumpToFamily && jumpToFamilyLabel && (
-                                <button
-                                  type="button"
-                                  className="family-header-link"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onJumpToFamily(familyId, familyName);
-                                  }}
-                                  title={jumpToFamilyTitle}
-                                >
-                                  {jumpToFamilyLabel}
-                                </button>
-                              )}
-                              {onAddRow && !onAddChild && !onAddParent && (
-                                <button
-                                  type="button"
-                                  className="family-add-button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onAddRow(familyId, familyName);
-                                  }}
-                                  title="Add"
-                                >
-                                  <Plus size={14} />
-                                </button>
-                              )}
-                            </div>
-                            {subHeader && (
-                              <div className="family-sub-header-parents">
-                                {subHeader}
-                              </div>
-                            )}
-                          </div>
+                  <tbody
+                    key={familyRow.id}
+                    className={`family-card ${isEven ? 'family-card-even' : 'family-card-odd'}`}
+                  >
+                    {renderGroupedRow(familyRow)}
+                    {familyRow.subRows && familyRow.subRows.map((subRow) => renderRow(subRow))}
+                  </tbody>
+                );
+              });
+            }
 
-                          {(onAddChild || onAddParent) && (
-                            <div
-                              className="family-group-actions"
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.5rem',
-                                position: 'sticky',
-                                right: '0.6rem',
-                                marginLeft: 'auto',
-                                flexShrink: 0,
-                              }}
-                            >
-                              {onAddChild && (
-                                <button
-                                  type="button"
-                                  className="family-action-button family-add-button family-add-child-button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onAddChild(familyId, familyName);
-                                  }}
-                                  aria-label={`+ ${t('addChildShort')}`}
-                                  title={`${t('addChildTo')} ${familyName}`}
-                                >
-                                  <Plus size={13} />
-                                  <span>{t('addChildShort')}</span>
-                                </button>
-                              )}
-                              {onAddParent && (
-                                <button
-                                  type="button"
-                                  className={`family-action-button ${!onAddChild ? 'family-add-button ' : ''}family-add-parent-button`}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onAddParent(familyId, familyName);
-                                  }}
-                                  aria-label={`+ ${t('addParentShort')}`}
-                                  title={`${t('addParentTo')} ${familyName}`}
-                                >
-                                  <Plus size={13} />
-                                  <span>{t('addParentShort')}</span>
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                    {!hasSubRows && emptySubRowsText && (
-                      <tr className="empty-sub-row">
-                        <td colSpan={table.getVisibleLeafColumns().length} style={{ padding: '0.75rem 1.5rem', color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.85rem' }}>
-                          <span style={{ position: 'sticky', left: '1.5rem' }}>{emptySubRowsText}</span>
-                        </td>
-                      </tr>
-                    )}
+            if (familyCardMode === 'group') {
+              const topRows = table.getRowModel().rows.filter((r) => r.depth === 0);
+              return topRows.map((groupRow, groupIndex) => {
+                const familyBlocks: { familyId: string; rows: any[] }[] = [];
+                let currentFamId: string | null = null;
+                let currentBlock: any[] = [];
+
+                (groupRow.subRows || []).forEach((subRow) => {
+                  const famId = (subRow.original as any)?.family_id || (subRow.original as any)?.id;
+                  if (famId !== currentFamId) {
+                    if (currentBlock.length > 0) {
+                      familyBlocks.push({ familyId: currentFamId!, rows: currentBlock });
+                    }
+                    currentFamId = famId;
+                    currentBlock = [subRow];
+                  } else {
+                    currentBlock.push(subRow);
+                  }
+                });
+                if (currentBlock.length > 0) {
+                  familyBlocks.push({ familyId: currentFamId!, rows: currentBlock });
+                }
+
+                return (
+                  <Fragment key={groupRow.id}>
+                    <tbody className={`overview-group-header-block ${groupIndex > 0 ? 'not-first-group' : 'first-group'}`}>
+                      {renderGroupedRow(groupRow)}
+                    </tbody>
+                    {familyBlocks.map((block, blockIndex) => {
+                      const isEven = blockIndex % 2 === 0;
+                      return (
+                        <tbody
+                          key={`${groupRow.id}-${block.familyId}`}
+                          className={`family-card ${isEven ? 'family-card-even' : 'family-card-odd'}`}
+                        >
+                          {block.rows.map((subRow) => renderRow(subRow))}
+                        </tbody>
+                      );
+                    })}
                   </Fragment>
                 );
-              }
+              });
+            }
 
-              const rowId = (row.original as any).id;
-              const rowType = (row.original as any)._rowType;
-
-              if (rowType === 'parents-toggle') {
-                const item = row.original as any;
-                const isExpanded = Boolean(item.isExpanded);
-                return (
-                  <tr
-                    key={row.id}
-                    id={`row-${item.id}`}
-                    className={`overview-parents-toggle-row ${isExpanded ? 'expanded' : 'collapsed'}`}
-                  >
-                    <td colSpan={table.getVisibleLeafColumns().length}>
-                      <button
-                        type="button"
-                        className="overview-parents-toggle-btn"
-                        onClick={item.onToggle}
-                        aria-expanded={isExpanded}
-                      >
-                        <span className="overview-parents-toggle-chevron">
-                          {isExpanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-                        </span>
-                        <span className="overview-parents-toggle-label">
-                          {item.summaryText}
-                        </span>
-                        <span className="overview-parents-toggle-badge">
-                          {t('overviewParentsBadge')}
-                        </span>
-                      </button>
-                    </td>
-                  </tr>
-                );
-              }
-
-              const noSpecialBg = Boolean((row.original as any).no_special_bg);
-              const isGroupModeParent = Boolean((row.original as any).isGroupModeParent);
-              const isParentExpanded = Boolean((row.original as any).isExpanded);
-              const rowClasses = [
-                rowId === highlightedRowId ? 'highlighted-row' : '',
-                rowType === 'parent' ? 'overview-parent-row' : '',
-                rowType === 'child' ? 'overview-child-row' : '',
-                noSpecialBg ? 'no-special-bg' : '',
-                isGroupModeParent ? 'overview-group-parent-row' : '',
-                isGroupModeParent && !isParentExpanded ? 'group-parent-collapsed' : '',
-                isGroupModeParent && isParentExpanded ? 'group-parent-expanded' : '',
-              ]
-                .filter(Boolean)
-                .join(' ');
-              return (
-                <tr key={row.id} id={`row-${rowId}`} className={rowClasses || undefined}>
-                  {(() => {
-                    if (!isMobile || !getCardHeader) return null;
-                    const headerContent = getCardHeader(row.original);
-                    if (!headerContent) return null;
-                    const headerActions = getCardActions?.(row.original);
-                    return (
-                      <td className="card-person-header" data-card-header="true">
-                        <div className="card-person-header-content">
-                          {headerContent}
-                        </div>
-                        {headerActions && (
-                          <div className="card-person-header-actions">
-                            {headerActions}
-                          </div>
-                        )}
-                      </td>
-                    );
-                  })()}
-                  {row.getVisibleCells().map((cell) => {
-                    const meta = cell.column.columnDef.meta as any;
-                    if (meta?.skipCell?.(row.original)) {
-                      return null;
-                    }
-                    if (isMobile && cell.column.id === 'actions' && meta?.hideOnMobile) {
-                      return null;
-                    }
-                    const colSpan = meta?.getColSpan?.(row.original) ?? 1;
-                    const isFixed = Boolean(stickyFirstColumn) && (
-                      cell.column.id === 'first_name' ||
-                      cell.column.id === 'child_name' ||
-                      cell.column.id === 'overview_name' ||
-                      cell.column.id === 'name'
-                    );
-                    const colHeader = cell.column.columnDef.header;
-                    const headerText = typeof colHeader === 'string' ? colHeader : '';
-                    const labelText = meta?.cardLabel ?? headerText;
-                    return (
-                      <td
-                        key={cell.id}
-                        data-label={labelText}
-                        data-column-id={cell.column.id}
-                        colSpan={colSpan > 1 ? colSpan : undefined}
-                        className={isFixed ? 'sticky-col' : undefined}
-                        style={{
-                          width: colSpan > 1 ? undefined : isFixed ? '1%' : `${cell.column.getSize()}px`,
-                          minWidth: colSpan > 1 ? undefined : `${cell.column.getSize()}px`,
-                          boxSizing: 'border-box',
-                          whiteSpace: isFixed ? 'nowrap' : undefined,
-                        }}
-                      >
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-          </tbody>
+            return (
+              <tbody>
+                {table.getRowModel().rows.map((row) => {
+                  const isGroupedRow = getSubRows && row.depth === 0;
+                  if (isGroupedRow) {
+                    return renderGroupedRow(row);
+                  }
+                  return renderRow(row);
+                })}
+              </tbody>
+            );
+          })()}
         </table>
       </div>
     </div>

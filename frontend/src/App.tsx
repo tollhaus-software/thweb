@@ -5582,6 +5582,7 @@ function formatParentsSummary(parents: any[]): string {
             id: `toggle-${groupFamilyKey}`,
             _rowType: 'parents-toggle' as const,
             groupFamilyKey,
+            family_id: f.id,
             summaryText: formatParentsSummary(sortedParents),
             isExpanded,
             onToggle: () => handleToggleGroupParents(groupFamilyKey),
@@ -7842,6 +7843,7 @@ function formatParentsSummary(parents: any[]): string {
             hideHeader
             highlightedRowId={highlightedRowId}
             stickyFirstColumn
+            familyCardMode={overviewGroupBy}
           />
         ) : activeTab === 'parents' ? (
           <DataTable
@@ -7904,6 +7906,7 @@ function formatParentsSummary(parents: any[]): string {
             highlightedRowId={highlightedRowId}
             stickyFirstColumn
             enableSorting={false}
+            familyCardMode="family"
           />
         ) : activeTab === 'hygieneBelehrung' ? (
           <DataTable

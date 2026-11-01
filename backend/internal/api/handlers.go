@@ -391,98 +391,85 @@ func parseDateOnly(t time.Time) time.Time {
 	return d
 }
 
-func shouldIncludeFamilyInOverview(fam models.Family, now time.Time) bool {
+// shouldIncludeChildInOverview determines whether an individual child should be shown in familiesOverview.
+// Rules:
+// 1. If child is actively enrolled in a group today (TargetGroup > 0): included.
+// 2. If child exited (TargetGroup == 0 after prior enrollment): included if exit date was within the last 1 year.
+// 3. For children that have not started yet: only show them if they start in the next 4 months.
+// 4. If no group start date is configured yet (no changes or no TargetGroup > 0): excluded.
+func shouldIncludeChildInOverview(c models.Child, now time.Time) bool {
+	changes := make([]models.ChildGroupChange, len(c.GroupChanges))
+	copy(changes, c.GroupChanges)
+	sort.SliceStable(changes, func(i, j int) bool {
+		if changes[i].ChangeDate.Equal(changes[j].ChangeDate) {
+			return changes[i].ID.String() < changes[j].ID.String()
+		}
+		return changes[i].ChangeDate.Before(changes[j].ChangeDate)
+	})
+
 	today := parseDateOnly(now)
 	todayStr := today.Format("2006-01-02")
 
-	hasActiveChild := false
-	hasFormerChild := false
-	var maxExitDate time.Time
-
-	hasPlannedStart := false
-	var earliestPlannedStart time.Time
-
-	for _, c := range fam.Children {
-		changes := make([]models.ChildGroupChange, len(c.GroupChanges))
-		copy(changes, c.GroupChanges)
-		sort.SliceStable(changes, func(i, j int) bool {
-			return changes[i].ChangeDate.Before(changes[j].ChangeDate)
-		})
-
-		var effective []models.ChildGroupChange
-		for _, ch := range changes {
-			if ch.ChangeDate.Format("2006-01-02") <= todayStr {
-				effective = append(effective, ch)
-			}
-		}
-
-		if len(effective) > 0 {
-			latest := effective[len(effective)-1]
-			if latest.TargetGroup > 0 {
-				hasActiveChild = true
-			} else {
-				// TargetGroup == 0: exit
-				hasPriorEnroll := false
-				for _, ech := range effective {
-					if ech.TargetGroup > 0 {
-						hasPriorEnroll = true
-						break
-					}
-				}
-				if hasPriorEnroll {
-					hasFormerChild = true
-					exitDate := parseDateOnly(latest.ChangeDate)
-					if maxExitDate.IsZero() || exitDate.After(maxExitDate) {
-						maxExitDate = exitDate
-					}
-				}
-			}
-		}
-
-		// Check for future planned start (TargetGroup > 0)
-		for _, ch := range changes {
-			if ch.ChangeDate.Format("2006-01-02") > todayStr && ch.TargetGroup > 0 {
-				plannedDate := parseDateOnly(ch.ChangeDate)
-				if !hasPlannedStart || plannedDate.Before(earliestPlannedStart) {
-					hasPlannedStart = true
-					earliestPlannedStart = plannedDate
-				}
-				break // Earliest future start for this child
-			}
+	var effective []models.ChildGroupChange
+	for _, ch := range changes {
+		if ch.ChangeDate.Format("2006-01-02") <= todayStr {
+			effective = append(effective, ch)
 		}
 	}
 
-	// 1. If any child is currently active in kindergarten, always show.
-	if hasActiveChild {
-		return true
-	}
-
-	// 2. When all children of a family have left the kindergarten:
-	// familiesOverview should still show that family's data for a year. After that, it should not be shown anymore.
-	if hasFormerChild {
-		oneYearAfterExit := maxExitDate.AddDate(1, 0, 0)
-		isWithinOneYear := !today.After(oneYearAfterExit)
-		if isWithinOneYear {
+	if len(effective) > 0 {
+		latest := effective[len(effective)-1]
+		if latest.TargetGroup > 0 {
 			return true
 		}
-		// If more than a year has passed since leaving, but a new child has a planned start:
-		// Display only 12 weeks before that start.
-		if hasPlannedStart {
-			twelveWeeksBefore := earliestPlannedStart.AddDate(0, 0, -12*7)
-			return !today.Before(twelveWeeksBefore)
+		// TargetGroup == 0: check if there was a prior enrollment
+		hasPriorEnroll := false
+		for _, ech := range effective {
+			if ech.TargetGroup > 0 {
+				hasPriorEnroll = true
+				break
+			}
 		}
-		return false
+		if hasPriorEnroll {
+			exitDate := parseDateOnly(latest.ChangeDate)
+			oneYearAfterExit := exitDate.AddDate(1, 0, 0)
+			if !today.After(oneYearAfterExit) {
+				return true
+			}
+			// If exited > 1 year ago, check below if there is a new planned start
+		}
 	}
 
-	// 3. When a family is new and a first group entry of its first child is planned:
-	// its data should only be displayed in familiesOverview 12 weeks before they actually start. Before that, it should not be there.
+	// Check for future planned start (TargetGroup > 0 with ChangeDate > todayStr)
+	var earliestPlannedStart time.Time
+	hasPlannedStart := false
+	for _, ch := range changes {
+		if ch.ChangeDate.Format("2006-01-02") > todayStr && ch.TargetGroup > 0 {
+			plannedDate := parseDateOnly(ch.ChangeDate)
+			if !hasPlannedStart || plannedDate.Before(earliestPlannedStart) {
+				hasPlannedStart = true
+				earliestPlannedStart = plannedDate
+			}
+		}
+	}
+
 	if hasPlannedStart {
-		twelveWeeksBefore := earliestPlannedStart.AddDate(0, 0, -12*7)
-		return !today.Before(twelveWeeksBefore)
+		fourMonthsBefore := earliestPlannedStart.AddDate(0, -4, 0)
+		return !today.Before(fourMonthsBefore)
 	}
 
-	// 4. If no children have ever enrolled or planned to enroll (e.g. newly created family without group changes):
-	return true
+	return false
+}
+
+// shouldIncludeFamilyInOverview determines whether a family should be shown in familiesOverview.
+// A family is only shown if it has at least one child that is eligible to be displayed in familiesOverview.
+func shouldIncludeFamilyInOverview(fam models.Family, now time.Time) bool {
+	for _, c := range fam.Children {
+		if shouldIncludeChildInOverview(c, now) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) HandleListFamiliesOverview(w http.ResponseWriter, r *http.Request) {
@@ -563,6 +550,9 @@ func (s *Server) HandleListFamiliesOverview(w http.ResponseWriter, r *http.Reque
 
 		ovChildren := make([]OverviewChild, 0, len(famChildren))
 		for _, c := range famChildren {
+			if !shouldIncludeChildInOverview(c, now) {
+				continue
+			}
 			currGrp, isFormer := computeChildOverviewGroupStatus(c.GroupChanges, now)
 			displayFirstName := c.FirstName
 			if strings.TrimSpace(c.FirstNameForAddressList) != "" {

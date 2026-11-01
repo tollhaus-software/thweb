@@ -77,6 +77,58 @@ test.describe('Test Case 8: Adaptive Card Layout for familiesOverview Tab', () =
     });
     expect(addGcRes.ok()).toBeTruthy();
 
+    // 2b. Seed a second family (Weber) in the same group to verify alternating family cards
+    const createWeberRes = await request.post('/api/families', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        parents: [
+          {
+            first_name: 'Thomas',
+            last_name: 'Weber',
+            address: 'Schillerplatz 5, 70173 Stuttgart',
+            emails: [
+              {
+                value: 'thomas.weber@tollhaus-stuttgart.de',
+                identifier_email: true,
+                address_list: true,
+              },
+            ],
+            phones: [
+              {
+                value: '0171 9998887',
+                address_list: true,
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(createWeberRes.ok()).toBeTruthy();
+    const weberFam = await createWeberRes.json();
+
+    const felixChildId = crypto.randomUUID();
+    const createFelixRes = await request.post(`/api/families/${weberFam.id}/children`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        id: felixChildId,
+        family_id: weberFam.id,
+        first_name: 'Felix',
+        last_name: 'Weber',
+        birth_date: '2022-01-15',
+      },
+    });
+    expect(createFelixRes.ok()).toBeTruthy();
+
+    const addFelixGcRes = await request.post(`/api/children/${felixChildId}/group_changes`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        child_id: felixChildId,
+        change_date: todayStr,
+        target_group: 1,
+      },
+    });
+    expect(addFelixGcRes.ok()).toBeTruthy();
+
     // 3. Authenticate and set mobile viewport (< 768px)
     await page.addInitScript(() => {
       localStorage.setItem('token', 'developer@example.com');
@@ -162,6 +214,36 @@ test.describe('Test Case 8: Adaptive Card Layout for familiesOverview Tab', () =
     expect(miaDisplay).toBe('flex');
     await expect(miaRow.locator('.overview-child-group-badge')).toContainText('Kleine Gr.');
 
+    // Verify one card per family with alternating backgrounds in per-family mode
+    const familyCards = page.locator('.data-table.overview-table tbody.family-card');
+    await expect(familyCards).toHaveCount(2);
+
+    // Card 0 (Schmidt): header is family name, people are within card
+    const schmidtCard = familyCards.filter({ has: page.locator('tr.family-group-row', { hasText: 'Schmidt' }) });
+    await expect(schmidtCard).toHaveClass(/family-card-even/);
+    await expect(schmidtCard.locator('tr.overview-parent-row', { hasText: 'Hans Schmidt' })).toBeVisible();
+    await expect(schmidtCard.locator('tr.overview-child-row', { hasText: 'Mia' })).toBeVisible();
+
+    // Card 1 (Weber): header is family name, people are within card
+    const weberCard = familyCards.filter({ has: page.locator('tr.family-group-row', { hasText: 'Weber' }) });
+    await expect(weberCard).toHaveClass(/family-card-odd/);
+    await expect(weberCard.locator('tr.overview-parent-row', { hasText: 'Thomas Weber' })).toBeVisible();
+    await expect(weberCard.locator('tr.overview-child-row', { hasText: 'Felix' })).toBeVisible();
+
+    // Verify alternating background colors between the two cards
+    const schmidtBg = await schmidtCard.evaluate((el) => getComputedStyle(el).backgroundColor);
+    const weberBg = await weberCard.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(schmidtBg).not.toBe(weberBg);
+
+    // Verify parent header and parent rows in "by family" mode do not have separate backgrounds
+    const schmidtHeaderTd = schmidtCard.locator('tr.family-group-row td');
+    const schmidtHeaderBg = await schmidtHeaderTd.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(['rgba(0, 0, 0, 0)', 'transparent']).toContain(schmidtHeaderBg);
+
+    const schmidtParentTd = schmidtCard.locator('tr.overview-parent-row td').first();
+    const schmidtParentBg = await schmidtParentTd.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(['rgba(0, 0, 0, 0)', 'transparent']).toContain(schmidtParentBg);
+
     // 4. Test "Nach Gruppe" grouping toggle in mobile card view with expandable parents
     await page.getByRole('button', { name: 'Nach Gruppe' }).click();
     const groupHeaderRow = page.locator('tr.family-group-row', { hasText: 'Kleine Gruppe' });
@@ -169,15 +251,74 @@ test.describe('Test Case 8: Adaptive Card Layout for familiesOverview Tab', () =
     const groupHeaderDisplay = await groupHeaderRow.evaluate((el) => getComputedStyle(el).display);
     expect(groupHeaderDisplay).toBe('block');
 
+    // Verify group sub headings: uppercase, bold, no separate background, not in a box
+    const ghTextTransform = await groupHeaderRow.locator('td').evaluate((el) => getComputedStyle(el).textTransform);
+    expect(ghTextTransform).toBe('uppercase');
+    const ghFontWeight = await groupHeaderRow.locator('td').evaluate((el) => parseInt(getComputedStyle(el).fontWeight, 10));
+    expect(ghFontWeight).toBeGreaterThanOrEqual(600);
+    const ghBorder = await groupHeaderRow.locator('td').evaluate((el) => getComputedStyle(el).borderStyle);
+    expect(['none', 'hidden']).toContain(ghBorder);
+    const ghBg = await groupHeaderRow.locator('td').evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(['rgba(0, 0, 0, 0)', 'transparent']).toContain(ghBg);
+
+    // First group header should not have a horizontal line above it
+    const firstGroupTbody = page.locator('tbody.overview-group-header-block').first();
+    const firstGroupBorderTop = await firstGroupTbody.evaluate((el) => getComputedStyle(el).borderTopStyle);
+    expect(['none', 'hidden']).toContain(firstGroupBorderTop);
+
+    // In "Nach Gruppe" mode: under the group header, each family is in its own card
+    // Cards alternate background colors, start directly with the children, and have no family header
+    const groupFamilyCards = page.locator('.data-table.overview-table tbody.family-card');
+    await expect(groupFamilyCards).toHaveCount(2);
+
+    const groupCard0 = groupFamilyCards.nth(0);
+    const groupCard1 = groupFamilyCards.nth(1);
+
+    await expect(groupCard0).toHaveClass(/family-card-even/);
+    await expect(groupCard1).toHaveClass(/family-card-odd/);
+
+    // No family group header inside the card in per-group layout
+    await expect(groupCard0.locator('tr.family-group-row')).toHaveCount(0);
+    await expect(groupCard1.locator('tr.family-group-row')).toHaveCount(0);
+
+    // Cards start directly with the children of that family in that group
+    await expect(groupCard0.locator('tr.overview-child-row', { hasText: 'Mia Schmidt' })).toBeVisible();
+    await expect(groupCard1.locator('tr.overview-child-row', { hasText: 'Felix Weber' })).toBeVisible();
+
+    // Verify alternating background colors between the cards in group mode
+    const gBg0 = await groupCard0.evaluate((el) => getComputedStyle(el).backgroundColor);
+    const gBg1 = await groupCard1.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(gBg0).not.toBe(gBg1);
+
     // Mia child card is visible
     const miaGroupCard = page.locator('tr.overview-child-row', { hasText: 'Mia Schmidt' });
     await expect(miaGroupCard).toBeVisible();
 
-    // Expandable toggle button shows summary "Hans & Laura Schmidt" and exact badge "Eltern" (not "Eltern(MGA)")
-    const parentsToggleBtn = page.locator('.overview-parents-toggle-btn');
+    // Verify no horizontal separator between child and parents
+    const parentsToggleRow = page.locator('tr.overview-parents-toggle-row').first();
+    const toggleRowBorderTop = await parentsToggleRow.evaluate((el) => getComputedStyle(el).borderTopStyle);
+    expect(['none', 'hidden']).toContain(toggleRowBorderTop);
+
+    // Expandable toggle button shows summary "Hans & Laura Schmidt" without "Eltern" label and without a box around it
+    const parentsToggleBtn = page.locator('.overview-parents-toggle-btn').filter({ hasText: 'Hans & Laura Schmidt' });
     await expect(parentsToggleBtn).toBeVisible();
     await expect(parentsToggleBtn).toContainText('Hans & Laura Schmidt');
-    await expect(parentsToggleBtn.locator('.overview-parents-toggle-badge')).toHaveText('Eltern');
+    await expect(parentsToggleBtn.locator('.overview-parents-toggle-badge')).toHaveCount(0);
+    expect(await parentsToggleBtn.innerText()).not.toContain('Eltern');
+
+    const toggleBorder = await parentsToggleBtn.evaluate((el) => getComputedStyle(el).borderStyle);
+    expect(['none', 'hidden']).toContain(toggleBorder);
+
+    const toggleBtnBg = await parentsToggleBtn.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(['rgba(0, 0, 0, 0)', 'transparent']).toContain(toggleBtnBg);
+
+    // Verify background remains constant on hover and click
+    await parentsToggleBtn.hover();
+    const hoverBtnBg = await parentsToggleBtn.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(hoverBtnBg).toBe(toggleBtnBg);
+
+    const toggleRowHoverBg = await parentsToggleRow.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(['rgba(0, 0, 0, 0)', 'transparent']).toContain(toggleRowHoverBg);
 
     // While collapsed: parent cards in group mode are hidden
     const collapsedHansRow = page.locator('tr.overview-group-parent-row', { hasText: 'Hans Schmidt' });
@@ -189,6 +330,16 @@ test.describe('Test Case 8: Adaptive Card Layout for familiesOverview Tab', () =
     await parentsToggleBtn.click();
     await expect(collapsedHansRow).toBeVisible();
     await expect(collapsedLauraRow).toBeVisible();
+
+    const afterClickBtnBg = await parentsToggleBtn.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(afterClickBtnBg).toBe(toggleBtnBg);
+
+    // Expanded parent card has no box (no border-left) and no separate background
+    const expandedHansBorderLeft = await collapsedHansRow.evaluate((el) => getComputedStyle(el).borderLeftStyle);
+    expect(['none', 'hidden']).toContain(expandedHansBorderLeft);
+
+    const expandedHansBg = await collapsedHansRow.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(['rgba(0, 0, 0, 0)', 'transparent']).toContain(expandedHansBg);
 
     // Verify parent cards are visually indented to the right relative to child card
     const miaBox = await miaGroupCard.boundingBox();
@@ -208,7 +359,7 @@ test.describe('Test Case 8: Adaptive Card Layout for familiesOverview Tab', () =
     await page.setViewportSize({ width: 1200, height: 800 });
 
     // On desktop in "Nach Gruppe": toggle button is hidden, parent rows are visible as table rows
-    await expect(page.locator('.overview-parents-toggle-row')).toBeHidden();
+    await expect(page.locator('.overview-parents-toggle-row').first()).toBeHidden();
     const desktopHansRow = page.locator('tr.overview-parent-row', { hasText: 'Hans Schmidt' });
     await expect(desktopHansRow).toBeVisible();
     const desktopHansDisplay = await desktopHansRow.evaluate((el) => getComputedStyle(el).display);

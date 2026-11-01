@@ -521,6 +521,11 @@ func TestHandleListFamiliesOverview_ProjectionAndScoping(t *testing.T) {
 		ChangeDate:  changeDate,
 		TargetGroup: 1,
 	})
+	_, _ = appStore.CreateChildGroupChange(ctx, testUserID, models.ChildGroupChange{
+		Child:       childID2,
+		ChangeDate:  changeDate,
+		TargetGroup: 1,
+	})
 
 	// User representing Family 1 with self-service
 	restrictedUser := &models.UserWithPermissions{
@@ -644,21 +649,21 @@ func TestHandleListFamiliesOverview_DateFiltering(t *testing.T) {
 	_, _ = appStore.CreateChildGroupChange(ctx, testUserID, models.ChildGroupChange{Child: childBId, ChangeDate: now.AddDate(-2, 0, 0), TargetGroup: 1})
 	_, _ = appStore.CreateChildGroupChange(ctx, testUserID, models.ChildGroupChange{Child: childBId, ChangeDate: now.AddDate(0, -6, 0), TargetGroup: 0})
 
-	// Family C: New family, child planned to start in 100 days (> 12 weeks, should be excluded from overview)
+	// Family C: New family, child planned to start in 5 months (> 4 months, should be excluded from overview)
 	famCId := uuid.New()
 	_ = appStore.UpdateFamilyParents(ctx, testUserID, famCId, []models.Parent{{ID: uuid.New(), FamilyID: famCId, FirstName: "ParentC", LastName: "FamC"}})
 	defer func() { _ = appStore.DeleteFamily(ctx, testUserID, famCId) }()
 	childCId := uuid.New()
 	_ = appStore.UpdateChild(ctx, testUserID, childCId, models.Child{ID: childCId, FamilyID: famCId, FirstName: "ChildC", LastName: "FamC", BirthDate: now.AddDate(-3, 0, 0)})
-	_, _ = appStore.CreateChildGroupChange(ctx, testUserID, models.ChildGroupChange{Child: childCId, ChangeDate: now.AddDate(0, 0, 100), TargetGroup: 1})
+	_, _ = appStore.CreateChildGroupChange(ctx, testUserID, models.ChildGroupChange{Child: childCId, ChangeDate: now.AddDate(0, 5, 0), TargetGroup: 1})
 
-	// Family D: New family, child planned to start in 20 days (<= 12 weeks, should be included in overview)
+	// Family D: New family, child planned to start in 2 months (<= 4 months, should be included in overview)
 	famDId := uuid.New()
 	_ = appStore.UpdateFamilyParents(ctx, testUserID, famDId, []models.Parent{{ID: uuid.New(), FamilyID: famDId, FirstName: "ParentD", LastName: "FamD"}})
 	defer func() { _ = appStore.DeleteFamily(ctx, testUserID, famDId) }()
 	childDId := uuid.New()
 	_ = appStore.UpdateChild(ctx, testUserID, childDId, models.Child{ID: childDId, FamilyID: famDId, FirstName: "ChildD", LastName: "FamD", BirthDate: now.AddDate(-3, 0, 0)})
-	_, _ = appStore.CreateChildGroupChange(ctx, testUserID, models.ChildGroupChange{Child: childDId, ChangeDate: now.AddDate(0, 0, 20), TargetGroup: 1})
+	_, _ = appStore.CreateChildGroupChange(ctx, testUserID, models.ChildGroupChange{Child: childDId, ChangeDate: now.AddDate(0, 2, 0), TargetGroup: 1})
 
 	// Family E: Active child enrolled 2 months ago (should be included in overview)
 	famEId := uuid.New()
@@ -667,6 +672,13 @@ func TestHandleListFamiliesOverview_DateFiltering(t *testing.T) {
 	childEId := uuid.New()
 	_ = appStore.UpdateChild(ctx, testUserID, childEId, models.Child{ID: childEId, FamilyID: famEId, FirstName: "ChildE", LastName: "FamE", BirthDate: now.AddDate(-4, 0, 0)})
 	_, _ = appStore.CreateChildGroupChange(ctx, testUserID, models.ChildGroupChange{Child: childEId, ChangeDate: now.AddDate(0, -2, 0), TargetGroup: 1})
+
+	// Family F: New family, child has NO group start date configured yet (should be excluded from overview)
+	famFId := uuid.New()
+	_ = appStore.UpdateFamilyParents(ctx, testUserID, famFId, []models.Parent{{ID: uuid.New(), FamilyID: famFId, FirstName: "ParentF", LastName: "FamF"}})
+	defer func() { _ = appStore.DeleteFamily(ctx, testUserID, famFId) }()
+	childFId := uuid.New()
+	_ = appStore.UpdateChild(ctx, testUserID, childFId, models.Child{ID: childFId, FamilyID: famFId, FirstName: "ChildF", LastName: "FamF", BirthDate: now.AddDate(-2, 0, 0)})
 
 	user := &models.UserWithPermissions{
 		ID:                   testUserID,
@@ -701,13 +713,16 @@ func TestHandleListFamiliesOverview_DateFiltering(t *testing.T) {
 		t.Errorf("Family B (child exited 6 months ago) should BE in overview")
 	}
 	if overviewMap[famCId] {
-		t.Errorf("Family C (planned start > 12 weeks away) should NOT be in overview")
+		t.Errorf("Family C (planned start > 4 months away) should NOT be in overview")
 	}
 	if !overviewMap[famDId] {
-		t.Errorf("Family D (planned start <= 12 weeks away) should BE in overview")
+		t.Errorf("Family D (planned start <= 4 months away) should BE in overview")
 	}
 	if !overviewMap[famEId] {
 		t.Errorf("Family E (active child) should BE in overview")
+	}
+	if overviewMap[famFId] {
+		t.Errorf("Family F (no group start date configured) should NOT be in overview")
 	}
 
 	// 2. Check HandleListFamilies (management view should contain all families)
@@ -973,19 +988,19 @@ func TestComputeChildOverviewGroupStatus(t *testing.T) {
 func TestShouldIncludeFamilyInOverview(t *testing.T) {
 	now := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
 
-	// 1. Empty family (no children) -> included
-	if !shouldIncludeFamilyInOverview(models.Family{ID: uuid.New()}, now) {
-		t.Errorf("expected empty family to be included")
+	// 1. Empty family (no children) -> excluded
+	if shouldIncludeFamilyInOverview(models.Family{ID: uuid.New()}, now) {
+		t.Errorf("expected empty family to be excluded")
 	}
 
-	// 2. Family with child having no group changes -> included
-	if !shouldIncludeFamilyInOverview(models.Family{
+	// 2. Family with child having no group changes -> excluded
+	if shouldIncludeFamilyInOverview(models.Family{
 		ID: uuid.New(),
 		Children: []models.Child{
 			{ID: uuid.New(), FirstName: "Baby", GroupChanges: nil},
 		},
 	}, now) {
-		t.Errorf("expected family with unassigned child to be included")
+		t.Errorf("expected family with unassigned child to be excluded")
 	}
 
 	// 3. Family with active child -> included
@@ -1119,35 +1134,35 @@ func TestShouldIncludeFamilyInOverview(t *testing.T) {
 		t.Errorf("expected family with active child to be included even if older child exited")
 	}
 
-	// 10. New family: planned start in 13 weeks (> 12 weeks / 84 days) -> excluded
-	// now = 2026-10-28; 12 weeks is 2027-01-20 (84 days); 13 weeks is 2027-01-27
+	// 10. New family: planned start in 5 months (> 4 months) -> excluded
+	// now = 2026-10-28; 4 months is 2027-02-28; 5 months is 2027-03-28
 	if shouldIncludeFamilyInOverview(models.Family{
 		ID: uuid.New(),
 		Children: []models.Child{
 			{
 				ID: uuid.New(),
 				GroupChanges: []models.ChildGroupChange{
-					{ChangeDate: time.Date(2027, 1, 27, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+					{ChangeDate: time.Date(2027, 3, 28, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
 				},
 			},
 		},
 	}, now) {
-		t.Errorf("expected new family with planned start > 12 weeks away to be excluded")
+		t.Errorf("expected new family with planned start > 4 months away to be excluded")
 	}
 
-	// 11. New family: planned start exactly 12 weeks (84 days) away (2027-01-20) -> included
+	// 11. New family: planned start exactly 4 months away (2027-02-28) -> included
 	if !shouldIncludeFamilyInOverview(models.Family{
 		ID: uuid.New(),
 		Children: []models.Child{
 			{
 				ID: uuid.New(),
 				GroupChanges: []models.ChildGroupChange{
-					{ChangeDate: time.Date(2027, 1, 20, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+					{ChangeDate: time.Date(2027, 2, 28, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
 				},
 			},
 		},
 	}, now) {
-		t.Errorf("expected new family with planned start exactly 12 weeks away to be included")
+		t.Errorf("expected new family with planned start exactly 4 months away to be included")
 	}
 
 	// 12. New family: planned start in 4 weeks (2026-11-25) -> included
@@ -1165,14 +1180,14 @@ func TestShouldIncludeFamilyInOverview(t *testing.T) {
 		t.Errorf("expected new family with planned start in 4 weeks to be included")
 	}
 
-	// 13. New family with 2 children: child 1 planned in 20 weeks, child 2 planned in 6 weeks -> included
+	// 13. New family with 2 children: child 1 planned in 6 months, child 2 planned in 6 weeks -> included
 	if !shouldIncludeFamilyInOverview(models.Family{
 		ID: uuid.New(),
 		Children: []models.Child{
 			{
 				ID: uuid.New(),
 				GroupChanges: []models.ChildGroupChange{
-					{ChangeDate: time.Date(2027, 3, 17, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+					{ChangeDate: time.Date(2027, 4, 28, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
 				},
 			},
 			{
@@ -1208,7 +1223,7 @@ func TestShouldIncludeFamilyInOverview(t *testing.T) {
 		t.Errorf("expected family with new child starting in 6 weeks to be included")
 	}
 
-	// 15. Former family (left > 1 year ago) with new child planned in 20 weeks -> excluded
+	// 15. Former family (left > 1 year ago) with new child planned in 5 months -> excluded
 	if shouldIncludeFamilyInOverview(models.Family{
 		ID: uuid.New(),
 		Children: []models.Child{
@@ -1222,12 +1237,12 @@ func TestShouldIncludeFamilyInOverview(t *testing.T) {
 			{
 				ID: uuid.New(),
 				GroupChanges: []models.ChildGroupChange{
-					{ChangeDate: time.Date(2027, 3, 17, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+					{ChangeDate: time.Date(2027, 3, 28, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
 				},
 			},
 		},
 	}, now) {
-		t.Errorf("expected family with child exited > 1 year ago and new child starting > 12 weeks away to be excluded")
+		t.Errorf("expected family with child exited > 1 year ago and new child starting > 4 months away to be excluded")
 	}
 }
 
@@ -2412,6 +2427,20 @@ func TestJobs_APIHandlersAndPermissions(t *testing.T) {
 	defer func() {
 		_ = appStore.DeleteFamily(ctx, writerID, fam.ID)
 	}()
+
+	jobChildID := uuid.New()
+	_ = appStore.UpdateChild(ctx, writerID, jobChildID, models.Child{
+		ID:        jobChildID,
+		FamilyID:  fam.ID,
+		FirstName: "JobChild",
+		LastName:  "Mustermann",
+		BirthDate: time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC),
+	})
+	_, _ = appStore.CreateChildGroupChange(ctx, writerID, models.ChildGroupChange{
+		Child:       jobChildID,
+		ChangeDate:  time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		TargetGroup: 1,
+	})
 
 	setParentJobsJSON := fmt.Sprintf(`{"job_ids":["%s"]}`, createdJob.ID.String())
 	reqSetParent := httptest.NewRequest("PUT", "/api/parents/"+parentID.String()+"/jobs", strings.NewReader(setParentJobsJSON))

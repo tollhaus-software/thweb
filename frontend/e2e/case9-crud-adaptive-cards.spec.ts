@@ -610,5 +610,102 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     await expect(dtGroupExit).toContainText('(-> bis 01.09.2028)');
     await expect(dtGroupExit).not.toContainText(/J.*M/);
   });
+
+  test('renders one card per family with alternating backgrounds on small screens in MGA > Families', async ({ request, page }) => {
+    // 1. Reset DB state
+    const resetRes = await request.post('/api/test/reset');
+    expect(resetRes.ok()).toBeTruthy();
+
+    // 2. Create family 1: Müller with child Tim
+    const createFam1Res = await request.post('/api/families', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        parents: [
+          {
+            first_name: 'Sabine',
+            last_name: 'Müller',
+            emails: [{ value: 'sabine@example.com', identifier_email: true, address_list: true }],
+          },
+        ],
+      },
+    });
+    expect(createFam1Res.ok()).toBeTruthy();
+    const fam1 = await createFam1Res.json();
+
+    const timId = crypto.randomUUID();
+    await request.post(`/api/families/${fam1.id}/children`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        id: timId,
+        family_id: fam1.id,
+        first_name: 'Tim',
+        last_name: 'Müller',
+        birth_date: '2020-05-12',
+      },
+    });
+
+    // 3. Create family 2: Schneider with child Lena
+    const createFam2Res = await request.post('/api/families', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        parents: [
+          {
+            first_name: 'Frank',
+            last_name: 'Schneider',
+            emails: [{ value: 'frank@example.com', identifier_email: true, address_list: true }],
+          },
+        ],
+      },
+    });
+    expect(createFam2Res.ok()).toBeTruthy();
+    const fam2 = await createFam2Res.json();
+
+    const lenaId = crypto.randomUUID();
+    await request.post(`/api/families/${fam2.id}/children`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        id: lenaId,
+        family_id: fam2.id,
+        first_name: 'Lena',
+        last_name: 'Schneider',
+        birth_date: '2021-08-20',
+      },
+    });
+
+    // 4. Set mobile viewport and authenticate
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+    });
+    await page.setViewportSize({ width: 500, height: 800 });
+    await page.goto('/#families');
+
+    const familiesTab = page.getByRole('button', { name: 'Familien(MGA)', exact: true });
+    await expect(familiesTab).toBeVisible();
+    await expect(familiesTab).toHaveClass(/active/);
+    await page.waitForLoadState('networkidle');
+
+    // Verify exactly one card per family
+    const familyCards = page.locator('.families-table tbody.family-card');
+    await expect(familyCards).toHaveCount(2);
+
+    const card0 = familyCards.nth(0);
+    const card1 = familyCards.nth(1);
+
+    await expect(card0).toHaveClass(/family-card-even/);
+    await expect(card1).toHaveClass(/family-card-odd/);
+
+    // Card header is the family name
+    await expect(card0.locator('tr.family-group-row .family-name-text')).toHaveText('Müller');
+    await expect(card1.locator('tr.family-group-row .family-name-text')).toHaveText('Schneider');
+
+    // Children of that family are within that card
+    await expect(card0.locator('tr:not(.family-group-row)', { hasText: 'Tim Müller' })).toBeVisible();
+    await expect(card1.locator('tr:not(.family-group-row)', { hasText: 'Lena Schneider' })).toBeVisible();
+
+    // Verify alternating background colors (almost white and light gray in light layout)
+    const bg0 = await card0.evaluate((el) => getComputedStyle(el).backgroundColor);
+    const bg1 = await card1.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(bg0).not.toBe(bg1);
+  });
 });
 

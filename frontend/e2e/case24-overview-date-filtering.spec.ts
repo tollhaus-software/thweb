@@ -127,6 +127,46 @@ test.describe('Test Case 24: Families Overview Date-based Filtering', () => {
       data: { child_id: child5Id, change_date: date60DaysAgo, target_group: 1 },
     });
 
+    // Seed Family 6: New family without configured group start date (MUST NOT be in familiesOverview)
+    const fam6Res = await request.post('/api/families', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        parents: [{ first_name: 'Frank', last_name: 'Keinstart', emails: [{ value: 'frank@example.com', identifier_email: true, address_list: true }] }],
+      },
+    });
+    expect(fam6Res.ok()).toBeTruthy();
+    const fam6 = await fam6Res.json();
+    const child6Id = crypto.randomUUID();
+    await request.post(`/api/families/${fam6.id}/children`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: { id: child6Id, family_id: fam6.id, first_name: 'ChildKein', last_name: 'Keinstart', birth_date: '2022-08-01' },
+    });
+
+    // Seed Family 7: Multi-child family (1 active child, 1 unconfigured child)
+    // The family must be in familiesOverview, showing the active child, but NOT the unconfigured child.
+    const fam7Res = await request.post('/api/families', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        parents: [{ first_name: 'Gerda', last_name: 'Mischfam', emails: [{ value: 'gerda@example.com', identifier_email: true, address_list: true }] }],
+      },
+    });
+    expect(fam7Res.ok()).toBeTruthy();
+    const fam7 = await fam7Res.json();
+    const child7ActiveId = crypto.randomUUID();
+    await request.post(`/api/families/${fam7.id}/children`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: { id: child7ActiveId, family_id: fam7.id, first_name: 'KindAktiv', last_name: 'Mischfam', birth_date: '2020-04-01' },
+    });
+    await request.post(`/api/children/${child7ActiveId}/group_changes`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: { child_id: child7ActiveId, change_date: date60DaysAgo, target_group: 1 },
+    });
+    const child7UnconfId = crypto.randomUUID();
+    await request.post(`/api/families/${fam7.id}/children`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: { id: child7UnconfId, family_id: fam7.id, first_name: 'KindOhneGruppe', last_name: 'Mischfam', birth_date: '2023-01-01' },
+    });
+
     // Login as admin developer
     await page.addInitScript(() => {
       localStorage.setItem('token', 'developer@example.com');
@@ -161,6 +201,15 @@ test.describe('Test Case 24: Families Overview Date-based Filtering', () => {
     // Family 5 (Aktivfam: currently active) MUST be visible
     await expect(page.locator('tr.family-group-row', { hasText: 'Aktivfam' })).toBeVisible();
 
+    // Family 6 (Keinstart: no group start date configured) MUST NOT be visible
+    await expect(page.locator('tr.family-group-row', { hasText: 'Keinstart' })).toHaveCount(0);
+
+    // Family 7 (Mischfam: 1 active child, 1 unconfigured child)
+    // The family must be visible, the active child must be visible, but the unconfigured child must not be visible
+    await expect(page.locator('tr.family-group-row', { hasText: 'Mischfam' })).toBeVisible();
+    await expect(page.locator('.data-table.overview-table tr.overview-child-row', { hasText: 'KindAktiv' })).toBeVisible();
+    await expect(page.locator('.data-table.overview-table tr.overview-child-row', { hasText: 'KindOhneGruppe' })).toHaveCount(0);
+
     // 3. Switch to Familien(MGA) management tab
     const mgaTab = page.getByRole('button', { name: 'MGA', exact: true });
     if (await mgaTab.isVisible()) {
@@ -177,5 +226,8 @@ test.describe('Test Case 24: Families Overview Date-based Filtering', () => {
     await expect(page.locator('tr.family-group-row', { hasText: 'Weitgeplant' })).toBeVisible();
     await expect(page.locator('tr.family-group-row', { hasText: 'Baldstart' })).toBeVisible();
     await expect(page.locator('tr.family-group-row', { hasText: 'Aktivfam' })).toBeVisible();
+    await expect(page.locator('tr.family-group-row', { hasText: 'Keinstart' })).toBeVisible();
+    await expect(page.locator('tr.family-group-row', { hasText: 'Mischfam' })).toBeVisible();
+    await expect(page.locator('.data-table.families-table tr', { hasText: 'KindOhneGruppe' })).toBeVisible();
   });
 });
