@@ -679,7 +679,7 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     await expect(popover).toBeHidden();
   });
 
-  test('membership starting this month is displayed as member in overview and parents table', async ({ page }) => {
+  test('membership starting this month is displayed as member in overview and parents table', async ({ request, page }) => {
     // Calculate last day of the current month (guaranteed to be in this month)
     const now = new Date();
     const year = now.getFullYear();
@@ -687,14 +687,36 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     const lastDay = new Date(year, month, 0).getDate();
     const formattedDate = `${String(lastDay).padStart(2, '0')}.${String(month).padStart(2, '0')}.${year}`;
 
-    // 1. Add a parent
-    await page.getByRole('button', { name: 'Familie hinzufügen' }).click();
-    await page.locator('#f-p1-first').fill('Felix');
-    await page.locator('#f-p1-last').fill('Sommer');
-    await page.locator('form').getByRole('button', { name: 'Familie hinzufügen' }).click();
+    // 1. Add a family with parent and active child
+    const famRes = await request.post('/api/families', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        parents: [{ first_name: 'Felix', last_name: 'Sommer', emails: [{ value: 'felix@example.com', identifier_email: true, address_list: true }] }],
+      },
+    });
+    expect(famRes.ok()).toBeTruthy();
+    const fam = await famRes.json();
+    const childId = crypto.randomUUID();
+    await request.post(`/api/families/${fam.id}/children`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: { id: childId, family_id: fam.id, first_name: 'Tim', last_name: 'Sommer', birth_date: '2020-01-01' },
+    });
+    await request.post(`/api/children/${childId}/group_changes`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: { child_id: childId, change_date: '2024-01-01', target_group: 1 },
+    });
+
+    await page.goto('/');
 
     // 2. Add membership starting on the last day of this month
-    await page.getByRole('button', { name: 'Eltern(MGA)' }).click();
+    const mgaTab = page.getByRole('button', { name: 'MGA', exact: true });
+    if (await mgaTab.isVisible()) {
+      await mgaTab.click();
+    }
+    const elternBtn = page.getByRole('button', { name: 'Eltern(MGA)' });
+    if (await elternBtn.isVisible()) {
+      await elternBtn.click();
+    }
     const parentRow = page.locator('tr', { hasText: 'Felix' }).filter({ hasText: 'Sommer' });
     await expect(parentRow).toBeVisible();
 
@@ -712,22 +734,29 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     // 3. In parents table, membership status should show "Voll"
     await expect(parentRow).toContainText('Voll');
 
-    // 4. In Familien (Overview tab), Felix Sommer should have the membership badge displayed
+    // 4. In Familien (Overview tab), Felix Sommer should NOT have membership status displayed
     await page.getByRole('button', { name: 'Familien', exact: true }).click();
+    const nachFamilieBtn = page.getByRole('button', { name: 'Nach Familie' });
+    if (await nachFamilieBtn.isVisible()) {
+      await nachFamilieBtn.click();
+    }
     const felixOverviewRow = page.locator('.data-table tbody tr', { hasText: 'Felix Sommer' });
     await expect(felixOverviewRow).toBeVisible();
     const badge = felixOverviewRow.locator('.overview-membership-badge');
-    await expect(badge).toBeVisible();
-    await expect(badge).toContainText('Voll');
+    await expect(badge).toHaveCount(0);
+    await expect(felixOverviewRow).not.toContainText('Voll');
 
     // 5. In Vereinsmitglieder (Members tab), Felix Sommer should be listed
-    const mgaTab = page.getByRole('button', { name: 'MGA', exact: true });
     if (await mgaTab.isVisible()) {
       await mgaTab.click();
     }
-    await page.getByRole('button', { name: 'Vereinsmitglieder' }).click();
+    const membersTabBtn = page.getByRole('button', { name: 'Vereinsmitglieder' });
+    if (await membersTabBtn.isVisible()) {
+      await membersTabBtn.click();
+    }
     const memberRow = page.locator('.data-table tbody tr', { hasText: 'Felix Sommer' });
     await expect(memberRow).toBeVisible();
+    await expect(memberRow).toContainText('Voll');
     await expect(memberRow).toContainText('Voll');
   });
 });

@@ -38,6 +38,16 @@ test.describe('Test Case 20: Phone Number Types (Mobile, Landline, Work)', () =>
       },
     });
     expect(famRes.ok()).toBeTruthy();
+    const fam = await famRes.json();
+    const childId = crypto.randomUUID();
+    await request.post(`/api/families/${fam.id}/children`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: { id: childId, family_id: fam.id, first_name: 'Bart', last_name: 'Simpson', birth_date: '2020-01-01' },
+    });
+    await request.post(`/api/children/${childId}/group_changes`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: { child_id: childId, change_date: '2024-01-01', target_group: 1 },
+    });
 
     // Reload page to see created family
     await page.reload();
@@ -145,6 +155,10 @@ test.describe('Test Case 20: Phone Number Types (Mobile, Landline, Work)', () =>
     // 8. Check Overview tab (Familien)
     const overviewTabBtn = page.getByRole('button', { name: 'Familien', exact: true });
     await overviewTabBtn.click();
+    const nachFamilieBtn = page.getByRole('button', { name: 'Nach Familie' });
+    if (await nachFamilieBtn.isVisible()) {
+      await nachFamilieBtn.click();
+    }
 
     const overviewHomerRow = page.locator('tr').filter({ hasText: 'Homer' });
     await expect(overviewHomerRow).toBeVisible();

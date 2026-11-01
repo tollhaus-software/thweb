@@ -110,10 +110,25 @@ test.describe('Test Case 3: Families View Add Buttons (+ Kind and + Elternteil)'
     await expect(childrenAddChildBtn).toHaveClass(/family-action-button/);
     await expect(childrenAddChildBtn).toHaveClass(/family-add-child-button/);
 
+    // Configure group change for Felix so the family is active and shown in overview
+    const felixRowAgain = page.locator('tr', { hasText: 'Felix' });
+    await expect(felixRowAgain).toBeVisible();
+    await felixRowAgain.locator('button[title="Gruppenwechsel verwalten"]').first().click();
+    const popover = page.locator('div[style*="position: fixed"]');
+    const felixDateInput = popover.locator('input[type="text"]').first();
+    await expect(felixDateInput).toBeVisible();
+    await felixDateInput.fill('01.09.2024');
+    await popover.locator('button:has(svg.lucide-check)').click();
+    await page.keyboard.press('Escape');
+
     // --- Step 7: Switch to Familien (familiesOverview) and verify data is fetched and updates are present ---
     const overviewTab = page.getByRole('button', { name: 'Familien', exact: true });
     await overviewTab.click();
     await expect(overviewTab).toHaveClass(/active/);
+    const nachFamilieBtn = page.getByRole('button', { name: 'Nach Familie' });
+    if (await nachFamilieBtn.isVisible()) {
+      await nachFamilieBtn.click();
+    }
     await expect(page.getByText('Mustermann').first()).toBeVisible();
     await expect(page.locator('text=Felix').first()).toBeVisible();
 

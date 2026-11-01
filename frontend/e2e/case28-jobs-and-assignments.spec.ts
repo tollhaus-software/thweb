@@ -43,6 +43,22 @@ test.describe('Test Case 28: Jobs and Assignments (MGA)', () => {
       },
     });
     expect(familyRes.ok()).toBeTruthy();
+    const famData = await familyRes.json();
+    const lukasId = crypto.randomUUID();
+    await request.post(`/api/families/${famData.id}/children`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        id: lukasId,
+        family_id: famData.id,
+        first_name: 'Lukas',
+        last_name: 'Schmidt',
+        birth_date: '2020-04-12',
+      },
+    });
+    await request.post(`/api/children/${lukasId}/group_changes`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: { child_id: lukasId, change_date: '2024-01-01', target_group: 1 },
+    });
 
     const familyRes2 = await request.post('/api/families', {
       headers: { Authorization: 'Bearer developer@example.com' },
@@ -424,6 +440,10 @@ test.describe('Test Case 28: Jobs and Assignments (MGA)', () => {
     const overviewTabBtn = page.getByRole('button', { name: 'Familien', exact: true });
     await expect(overviewTabBtn).toBeVisible();
     await overviewTabBtn.click();
+    const nachFamilieBtn = page.getByRole('button', { name: 'Nach Familie' });
+    if (await nachFamilieBtn.isVisible()) {
+      await nachFamilieBtn.click();
+    }
 
     // In Overview table, find Anna Schmidt's parent row
     const overviewAnnaRow = page.locator('.overview-table tr', { hasText: 'Anna Schmidt' });

@@ -67,6 +67,15 @@ test.describe('Test Case 21: Custom Address List Given Name for Parents and Chil
     });
     expect(child2Res.ok()).toBeTruthy();
 
+    await request.post(`/api/children/${child1Id}/group_changes`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: { child_id: child1Id, change_date: '2024-01-01', target_group: 1 },
+    });
+    await request.post(`/api/children/${child2Id}/group_changes`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: { child_id: child2Id, change_date: '2024-01-01', target_group: 2 },
+    });
+
     // Reload page to display seeded data
     await page.reload();
 
@@ -144,6 +153,10 @@ test.describe('Test Case 21: Custom Address List Given Name for Parents and Chil
     const overviewTabBtn = page.getByRole('button', { name: 'Familien', exact: true });
     await overviewTabBtn.click();
     await expect(overviewTabBtn).toHaveClass(/active/);
+    const nachFamilieBtn = page.getByRole('button', { name: 'Nach Familie' });
+    if (await nachFamilieBtn.isVisible()) {
+      await nachFamilieBtn.click();
+    }
 
     // On the address list:
     // Homer should display as "Homie"
@@ -199,6 +212,10 @@ test.describe('Test Case 21: Custom Address List Given Name for Parents and Chil
       await toggleSidebarBtn.click();
     }
     await overviewTabBtn.click();
+    const nachFamilieMobileBtn = page.getByRole('button', { name: 'Nach Familie' });
+    if (await nachFamilieMobileBtn.isVisible()) {
+      await nachFamilieMobileBtn.click();
+    }
     await expect(page.locator('.overview-table')).toContainText('Margie');
 
     // ==========================================

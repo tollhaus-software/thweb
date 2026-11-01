@@ -2485,7 +2485,6 @@ const Dashboard: React.FC = () => {
   const canReadMealAllergens = hasPermission('meal_allergens.read') || hasPermission('meal_allergens.write');
   const canReadMembers = hasPermission('memberships.all.read');
   const canWriteMemberships = hasPermission('memberships.all.write');
-  const canReadOwnMemberships = hasPermission('memberships.self.read');
   const canReadChildAllergies = hasPermission('allergies.children.read') || hasPermission('allergies.children.write');
   const canWriteChildAllergies = hasPermission('allergies.children.write');
   const canReadEmployeeAllergies = hasPermission('allergies.employees.read') || hasPermission('allergies.employees.write');
@@ -6370,35 +6369,9 @@ function formatParentsSummary(parents: any[]): string {
             );
           }
           const fullName = `${effectiveFn} ${item.last_name || ''}`.trim() || '-';
-          const membershipStatus = item.memberships ? getMembershipStatus(item.memberships) : null;
           return (
             <span className="overview-person-name" style={isIndented ? { paddingLeft: '1.25rem', display: 'inline-block' } : undefined}>
               {fullName}
-              {membershipStatus && membershipStatus.text && (
-                <span
-                  className="overview-membership-badge"
-                  style={{
-                    marginLeft: '0.5rem',
-                    fontSize: '0.75rem',
-                    padding: '2px 6px',
-                    borderRadius: '4px',
-                    border: '1px solid var(--border)',
-                    backgroundColor: 'var(--bg-subtle)',
-                    color: membershipStatus.color,
-                    fontWeight: (membershipStatus as any).fontWeight || 'normal',
-                    cursor: (canReadOwnMemberships || canReadMembers) ? 'pointer' : 'default',
-                  }}
-                  onClick={(e) => {
-                    if (canReadOwnMemberships || canReadMembers) {
-                      e.stopPropagation();
-                      openManageMemberships(item, e.currentTarget);
-                    }
-                  }}
-                  title={t('th_membership')}
-                >
-                  {membershipStatus.text}
-                </span>
-              )}
               {canReadFamiliesAll && (
                 <button
                   type="button"
@@ -6608,7 +6581,7 @@ function formatParentsSummary(parents: any[]): string {
         },
       },
     ],
-    [canReadFamiliesAll, canReadOwnMemberships, canReadMembers, handleJumpToChild, handleJumpToParent, openManageMemberships]
+    [canReadFamiliesAll, handleJumpToChild, handleJumpToParent]
   );
 
   const memberColumns = React.useMemo<ColumnDef<MemberRow>[]>(

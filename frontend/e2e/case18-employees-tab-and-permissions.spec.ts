@@ -43,8 +43,9 @@ test.describe('Test Case 18: Employees Tab and Permissions', () => {
     });
 
     await unauthorizedPage.goto('/');
-    // Check that 'Mitarbeitende(PA)' tab is NOT visible
+    // Check that 'Mitarbeitende(PA)' tab and 'PA' are NOT visible
     await expect(unauthorizedPage.getByRole('button', { name: 'Mitarbeitende(PA)' })).toBeHidden();
+    await expect(unauthorizedPage.getByRole('button', { name: 'PA', exact: true })).toBeHidden();
     await unauthorizedPage.close();
 
     // =========================================================================
@@ -56,10 +57,13 @@ test.describe('Test Case 18: Employees Tab and Permissions', () => {
     });
     await readerPage.goto('/');
 
-    // The 'Mitarbeitende(PA)' tab should be visible
+    // The 'Mitarbeitende(PA)' tab or PA category button should be visible
     const readerEmpTabBtn = readerPage.getByRole('button', { name: 'Mitarbeitende(PA)' });
-    await expect(readerEmpTabBtn).toBeVisible();
-    await readerEmpTabBtn.click();
+    if (await readerEmpTabBtn.isVisible()) {
+      await readerEmpTabBtn.click();
+    } else {
+      await readerPage.getByRole('button', { name: 'PA', exact: true }).click();
+    }
 
     // Verify seeded employee Sabine Koch is in the table
     const sabineRow = readerPage.locator('tr', { hasText: 'Sabine' }).filter({ hasText: 'Koch' });
@@ -86,8 +90,11 @@ test.describe('Test Case 18: Employees Tab and Permissions', () => {
 
     // Navigate to Mitarbeitende(PA) tab
     const adminEmpTabBtn = page.getByRole('button', { name: 'Mitarbeitende(PA)' });
-    await expect(adminEmpTabBtn).toBeVisible();
-    await adminEmpTabBtn.click();
+    if (await adminEmpTabBtn.isVisible()) {
+      await adminEmpTabBtn.click();
+    } else {
+      await page.getByRole('button', { name: 'PA', exact: true }).click();
+    }
 
     // Verify German column header translations: Vorname, Nachname, E-mail, Telefon
     await expect(page.locator('th', { hasText: 'Vorname' })).toBeVisible();
