@@ -70,6 +70,9 @@ func (s *UserWithPermissions) HasPermission(perm string) bool {
 		if perm == "jobs.all.read" && (p == "jobs.all.write" || p == "*") {
 			return true
 		}
+		if perm == "job.role_assignment.read" && (p == "job.role_assignment.write" || p == "*") {
+			return true
+		}
 	}
 	return false
 }
@@ -87,6 +90,7 @@ func (s *UserWithPermissions) EnsureImpliedPermissions() {
 	hasAllergiesChildrenWrite := false
 	hasAllergiesEmployeesWrite := false
 	hasMealAllergensWrite := false
+	hasJobRoleAssignmentWrite := false
 	permSet := make(map[string]bool)
 	for _, p := range s.EffectivePermissions {
 		permSet[p] = true
@@ -114,6 +118,9 @@ func (s *UserWithPermissions) EnsureImpliedPermissions() {
 		if p == "*" || p == "meal_allergens.write" {
 			hasMealAllergensWrite = true
 		}
+		if p == "*" || p == "job.role_assignment.write" {
+			hasJobRoleAssignmentWrite = true
+		}
 	}
 	if hasFamiliesAll {
 		permSet["families.all.restrictedread"] = true
@@ -139,6 +146,9 @@ func (s *UserWithPermissions) EnsureImpliedPermissions() {
 	}
 	if hasMealAllergensWrite {
 		permSet["meal_allergens.read"] = true
+	}
+	if hasJobRoleAssignmentWrite {
+		permSet["job.role_assignment.read"] = true
 	}
 	s.EffectivePermissions = make([]string, 0, len(permSet))
 	for p := range permSet {
@@ -235,6 +245,8 @@ var AllKnownPermissions = []string{
 	"permissions.simulate",
 	"jobs.all.read",
 	"jobs.all.write",
+	"job.role_assignment.read",
+	"job.role_assignment.write",
 }
 
 // IntersectPermissions returns the intersection of effective permissions between actual and simulated.
@@ -1234,6 +1246,7 @@ type Job struct {
 	Name         string    `json:"name"`
 	Description  string    `json:"description"`
 	ContactEmail string    `json:"contact_email"`
+	Roles        []string  `json:"roles"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }

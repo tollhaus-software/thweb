@@ -50,6 +50,7 @@ import { ConfirmDeleteModal } from './components/Table/ConfirmDeleteModal';
 import { MgaLinkIcon } from './components/MgaLinkIcon';
 import { JobsPopover, JobsCell, type PersonWithJobs, type JobItem } from './components/Table/JobsPopover';
 import { JobsTab, type JobWithAssignees } from './components/Jobs/JobsTab';
+import type { Role } from './components/Jobs/JobRolesPopover';
 import { t, CURRENT_LOCALE, formatDisplayDate, parseInputDate, formatTollhausEmail, compareBirthDates } from './utils/i18n';
 import { getFamilyName } from './utils/family';
 
@@ -1158,6 +1159,12 @@ const diffJobSnapshots = (before: any, after: any): string[] => {
     changes.push(`${t('jobContactEmail') || 'Kontakt-E-Mail'}: "${before.contact_email || ''}" → "${after.contact_email || ''}"`);
   }
 
+  const beforeRoles = (before.roles || []).slice().sort().join(', ');
+  const afterRoles = (after.roles || []).slice().sort().join(', ');
+  if (beforeRoles !== afterRoles) {
+    changes.push(`${t('grantedRoles') || 'Gewährte Rollen'}: "[${beforeRoles}]" → "[${afterRoles}]"`);
+  }
+
   return changes;
 };
 
@@ -1906,7 +1913,11 @@ const ALL_AVAILABLE_PERMISSIONS = [
   'audit.view',
   'users.all.manage',
   'vaccination.status.manage',
-  'permissions.simulate'
+  'permissions.simulate',
+  'jobs.all.read',
+  'jobs.all.write',
+  'job.role_assignment.read',
+  'job.role_assignment.write'
 ];
 
 interface AdminViewProps {
@@ -2440,7 +2451,7 @@ import { useRealtime } from './hooks/useRealtime';
 import { useIsMobile } from './hooks/useIsMobile';
 
 const Dashboard: React.FC = () => {
-  const { user, token, logout, hasPermission, canSimulate, leaveSimulation } = useAuth();
+  const { user, token, logout, refreshUser, hasPermission, canSimulate, leaveSimulation } = useAuth();
   const isMobile = useIsMobile();
   const [simulatorModalOpen, setSimulatorModalOpen] = React.useState(false);
   const [viewRolesModalOpen, setViewRolesModalOpen] = React.useState(false);
@@ -2493,10 +2504,13 @@ const Dashboard: React.FC = () => {
   const canWriteEmployees = hasPermission('employees.all.write');
   const canReadJobs = hasPermission('jobs.all.read') || hasPermission('jobs.all.write');
   const canWriteJobs = hasPermission('jobs.all.write');
+  const canReadJobRoles = hasPermission('job.role_assignment.read') || hasPermission('job.role_assignment.write');
+  const canWriteJobRoles = hasPermission('job.role_assignment.write');
 
   const [families, setFamilies] = React.useState<Family[]>([]);
   const [employees, setEmployees] = React.useState<Employee[]>([]);
   const [jobs, setJobs] = React.useState<JobWithAssignees[]>([]);
+  const [availableRoles, setAvailableRoles] = React.useState<Role[]>([]);
   const [jobsPopoverAnchor, setJobsPopoverAnchor] = React.useState<HTMLElement | null>(null);
   const [activePersonForJobs, setActivePersonForJobs] = React.useState<PersonWithJobs | null>(null);
   const [overviewFamilies, setOverviewFamilies] = React.useState<OverviewFamily[]>([]);
@@ -3428,7 +3442,21 @@ const Dashboard: React.FC = () => {
       .catch((err) => console.error(err));
   }, [canReadJobs, getAuthHeaders]);
 
-  const handleCreateJob = React.useCallback(async (jobData: { name: string; description: string; contact_email: string }) => {
+  const fetchAvailableRoles = React.useCallback(async () => {
+    try {
+      const res = await fetch('/api/roles', {
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAvailableRoles(Array.isArray(data) ? data : (data?.roles || []));
+      }
+    } catch (err) {
+      console.error('Failed to fetch available roles', err);
+    }
+  }, [getAuthHeaders]);
+
+  const handleCreateJob = React.useCallback(async (jobData: { name: string; description: string; contact_email: string; roles?: string[] }) => {
     const res = await fetch('/api/jobs', {
       method: 'POST',
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
@@ -3439,12 +3467,13 @@ const Dashboard: React.FC = () => {
       throw new Error(err.error || 'Failed to create job');
     }
     await fetchJobs();
+    await refreshUser();
     if (canReadFamiliesAll) fetchFamilies();
     if (canReadOverview) fetchOverviewFamilies();
     if (canReadEmployees) fetchEmployees();
-  }, [getAuthHeaders, fetchJobs, canReadFamiliesAll, fetchFamilies, canReadOverview, fetchOverviewFamilies, canReadEmployees, fetchEmployees]);
+  }, [getAuthHeaders, fetchJobs, refreshUser, canReadFamiliesAll, fetchFamilies, canReadOverview, fetchOverviewFamilies, canReadEmployees, fetchEmployees]);
 
-  const handleUpdateJob = React.useCallback(async (id: string, jobData: { name: string; description: string; contact_email: string }) => {
+  const handleUpdateJob = React.useCallback(async (id: string, jobData: { name: string; description: string; contact_email: string; roles?: string[] }) => {
     const res = await fetch(`/api/jobs/${id}`, {
       method: 'PUT',
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
@@ -3455,10 +3484,25 @@ const Dashboard: React.FC = () => {
       throw new Error(err.error || 'Failed to update job');
     }
     await fetchJobs();
+    await refreshUser();
     if (canReadFamiliesAll) fetchFamilies();
     if (canReadOverview) fetchOverviewFamilies();
     if (canReadEmployees) fetchEmployees();
-  }, [getAuthHeaders, fetchJobs, canReadFamiliesAll, fetchFamilies, canReadOverview, fetchOverviewFamilies, canReadEmployees, fetchEmployees]);
+  }, [getAuthHeaders, fetchJobs, refreshUser, canReadFamiliesAll, fetchFamilies, canReadOverview, fetchOverviewFamilies, canReadEmployees, fetchEmployees]);
+
+  const handleUpdateJobRoles = React.useCallback(async (jobId: string, roles: string[]) => {
+    const res = await fetch(`/api/jobs/${jobId}/roles`, {
+      method: 'PUT',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ roles }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to update job roles');
+    }
+    await fetchJobs();
+    await refreshUser();
+  }, [getAuthHeaders, fetchJobs, refreshUser]);
 
   const handleDeleteJob = React.useCallback(async (id: string) => {
     const res = await fetch(`/api/jobs/${id}`, {
@@ -3639,6 +3683,9 @@ const Dashboard: React.FC = () => {
       case 'jobs':
         if (canReadJobs) {
           fetchJobs();
+          if (canReadJobRoles) {
+            fetchAvailableRoles();
+          }
         }
         break;
       case 'employees':
@@ -3683,12 +3730,14 @@ const Dashboard: React.FC = () => {
     canReadMembers,
     canReadEmployees,
     canReadJobs,
+    canReadJobRoles,
     canReadAudit,
     fetchOverviewFamilies,
     fetchFamilies,
     fetchMembers,
     fetchEmployees,
     fetchJobs,
+    fetchAvailableRoles,
     families.length,
     overviewFamilies.length,
   ]);
@@ -7959,6 +8008,10 @@ function formatParentsSummary(parents: any[]): string {
           <JobsTab
             jobs={jobs}
             canWriteJobs={canWriteJobs}
+            canReadJobRoles={canReadJobRoles}
+            canWriteJobRoles={canWriteJobRoles}
+            availableRoles={availableRoles}
+            onUpdateJobRoles={handleUpdateJobRoles}
             searchQuery={globalFilter}
             isCreateModalOpen={addJobOpen}
             onOpenCreateModal={() => setAddJobOpen(true)}

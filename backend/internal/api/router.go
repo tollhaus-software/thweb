@@ -131,6 +131,10 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		r.With(auth.RequirePermission("meal_allergens.write")).Put("/api/meal-allergens/{date}", server.HandleUpsertMealAllergens)
 		r.With(auth.RequirePermission("meal_allergens.write")).Post("/api/meal-allergens/{date}/finalize", server.HandleFinalizeMealAllergens)
 
+		// Roles and Permissions metadata
+		r.Get("/api/permissions", server.HandleGetPermissions)
+		r.Get("/api/roles", server.HandleListRoles)
+
 		// Jobs Management
 		r.With(auth.RequirePermission("jobs.all.read")).Get("/api/jobs", server.HandleListJobs)
 		r.With(auth.RequirePermission("jobs.all.read")).Get("/api/jobs/people", server.HandleListJobPeople)
@@ -138,6 +142,7 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		r.With(auth.RequirePermission("jobs.all.write")).Put("/api/jobs/{id}", server.HandleUpdateJob)
 		r.With(auth.RequirePermission("jobs.all.write")).Delete("/api/jobs/{id}", server.HandleDeleteJob)
 		r.With(auth.RequirePermission("jobs.all.write")).Put("/api/jobs/{id}/assignees", server.HandleSetJobAssignees)
+		r.With(auth.RequirePermission("job.role_assignment.write")).Put("/api/jobs/{id}/roles", server.HandleSetJobRoles)
 
 		// Job Associations
 		r.With(auth.RequireAnyPermission("families.all.write", "jobs.all.write")).Put("/api/parents/{id}/jobs", server.HandleSetParentJobs)

@@ -543,6 +543,127 @@ func (s *Store) GetEmployeeTypesByIdentifierEmail(ctx context.Context, email str
 	return types, rows.Err()
 }
 
+func (s *Store) GetParentInfoByIdentifierEmail(ctx context.Context, email string) (*uuid.UUID, *uuid.UUID, error) {
+	norm := models.NormalizeEmail(email)
+	if norm == "" {
+		return nil, nil, nil
+	}
+	query := `
+		SELECT p.id, p.family_id
+		FROM parents p, jsonb_array_elements(p.emails) AS elem
+		WHERE elem->>'identifier_email' = 'true'
+		  AND lower(trim(elem->>'value')) = $1
+		LIMIT 1
+	`
+	var parentID, familyID uuid.UUID
+	err := s.db.QueryRow(ctx, query, norm).Scan(&parentID, &familyID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil, nil
+		}
+		return nil, nil, err
+	}
+	return &parentID, &familyID, nil
+}
+
+func (s *Store) GetEmployeeInfoByIdentifierEmail(ctx context.Context, email string) (*uuid.UUID, []string, error) {
+	norm := models.NormalizeEmail(email)
+	if norm == "" {
+		return nil, nil, nil
+	}
+	query := `
+		SELECT e.id, e.employee_type
+		FROM employees e, jsonb_array_elements(e.emails) AS elem
+		WHERE elem->>'identifier_email' = 'true'
+		  AND lower(trim(elem->>'value')) = $1
+	`
+	rows, err := s.db.Query(ctx, query, norm)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+
+	var employeeID *uuid.UUID
+	typeMap := make(map[string]bool)
+	for rows.Next() {
+		var id uuid.UUID
+		var t string
+		if err := rows.Scan(&id, &t); err != nil {
+			return nil, nil, err
+		}
+		if employeeID == nil {
+			employeeID = &id
+		}
+		if t != "" {
+			typeMap[t] = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+	types := make([]string, 0, len(typeMap))
+	for t := range typeMap {
+		types = append(types, t)
+	}
+	return employeeID, types, nil
+}
+
+func (s *Store) GetJobRolesForParent(ctx context.Context, parentID uuid.UUID) ([]string, error) {
+	query := `
+		SELECT DISTINCT jsonb_array_elements_text(j.roles)
+		FROM jobs j
+		JOIN parent_jobs pj ON pj.job_id = j.id
+		WHERE pj.parent_id = $1
+		  AND j.roles IS NOT NULL
+		  AND jsonb_typeof(j.roles) = 'array'
+	`
+	rows, err := s.db.Query(ctx, query, parentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var roles []string
+	for rows.Next() {
+		var r string
+		if err := rows.Scan(&r); err != nil {
+			return nil, err
+		}
+		if r != "" {
+			roles = append(roles, r)
+		}
+	}
+	return roles, rows.Err()
+}
+
+func (s *Store) GetJobRolesForEmployee(ctx context.Context, employeeID uuid.UUID) ([]string, error) {
+	query := `
+		SELECT DISTINCT jsonb_array_elements_text(j.roles)
+		FROM jobs j
+		JOIN employee_jobs ej ON ej.job_id = j.id
+		WHERE ej.employee_id = $1
+		  AND j.roles IS NOT NULL
+		  AND jsonb_typeof(j.roles) = 'array'
+	`
+	rows, err := s.db.Query(ctx, query, employeeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var roles []string
+	for rows.Next() {
+		var r string
+		if err := rows.Scan(&r); err != nil {
+			return nil, err
+		}
+		if r != "" {
+			roles = append(roles, r)
+		}
+	}
+	return roles, rows.Err()
+}
+
 func (s *Store) ListEmployeeIdentifyingEmails(ctx context.Context) (map[string][]string, error) {
 	query := `
 		SELECT lower(trim(elem->>'value')) AS email, e.employee_type
@@ -3144,7 +3265,7 @@ func (s *Store) FinalizeMealAllergens(ctx context.Context, targetDate time.Time,
 func (s *Store) ListJobs(ctx context.Context) ([]models.JobWithAssignees, error) {
 	query := `
 		SELECT 
-			j.id, j.name, j.description, j.contact_email, j.created_at, j.updated_at,
+			j.id, j.name, j.description, j.contact_email, j.roles, j.created_at, j.updated_at,
 			COALESCE((
 				SELECT json_agg(json_build_object(
 					'id', p.id,
@@ -3178,18 +3299,25 @@ func (s *Store) ListJobs(ctx context.Context) ([]models.JobWithAssignees, error)
 	var jobs []models.JobWithAssignees
 	for rows.Next() {
 		var j models.JobWithAssignees
-		var parentsRaw, employeesRaw []byte
+		var rolesRaw, parentsRaw, employeesRaw []byte
 		if err := rows.Scan(
 			&j.ID,
 			&j.Name,
 			&j.Description,
 			&j.ContactEmail,
+			&rolesRaw,
 			&j.CreatedAt,
 			&j.UpdatedAt,
 			&parentsRaw,
 			&employeesRaw,
 		); err != nil {
 			return nil, err
+		}
+		if len(rolesRaw) > 0 {
+			_ = json.Unmarshal(rolesRaw, &j.Roles)
+		}
+		if j.Roles == nil {
+			j.Roles = []string{}
 		}
 		if len(parentsRaw) > 0 {
 			_ = json.Unmarshal(parentsRaw, &j.Parents)
@@ -3211,7 +3339,7 @@ func (s *Store) ListJobs(ctx context.Context) ([]models.JobWithAssignees, error)
 func (s *Store) GetJobByID(ctx context.Context, id uuid.UUID) (*models.JobWithAssignees, error) {
 	query := `
 		SELECT 
-			j.id, j.name, j.description, j.contact_email, j.created_at, j.updated_at,
+			j.id, j.name, j.description, j.contact_email, j.roles, j.created_at, j.updated_at,
 			COALESCE((
 				SELECT json_agg(json_build_object(
 					'id', p.id,
@@ -3237,12 +3365,13 @@ func (s *Store) GetJobByID(ctx context.Context, id uuid.UUID) (*models.JobWithAs
 		WHERE j.id = $1
 	`
 	var j models.JobWithAssignees
-	var parentsRaw, employeesRaw []byte
+	var rolesRaw, parentsRaw, employeesRaw []byte
 	err := s.db.QueryRow(ctx, query, id).Scan(
 		&j.ID,
 		&j.Name,
 		&j.Description,
 		&j.ContactEmail,
+		&rolesRaw,
 		&j.CreatedAt,
 		&j.UpdatedAt,
 		&parentsRaw,
@@ -3253,6 +3382,12 @@ func (s *Store) GetJobByID(ctx context.Context, id uuid.UUID) (*models.JobWithAs
 			return nil, nil
 		}
 		return nil, err
+	}
+	if len(rolesRaw) > 0 {
+		_ = json.Unmarshal(rolesRaw, &j.Roles)
+	}
+	if j.Roles == nil {
+		j.Roles = []string{}
 	}
 	if len(parentsRaw) > 0 {
 		_ = json.Unmarshal(parentsRaw, &j.Parents)
@@ -3276,27 +3411,42 @@ func (s *Store) CreateJob(ctx context.Context, userID uuid.UUID, job models.Job)
 	if job.Name == "" {
 		return models.Job{}, fmt.Errorf("job name is required")
 	}
+	if job.Roles == nil {
+		job.Roles = []string{}
+	}
+	rolesJSON, err := json.Marshal(job.Roles)
+	if err != nil {
+		return models.Job{}, fmt.Errorf("failed to marshal roles: %w", err)
+	}
 	if job.ID == uuid.Nil {
 		job.ID = uuid.New()
 	}
 	transactionID := uuid.New()
 
 	var created models.Job
-	err := s.WithTx(ctx, func(tx pgx.Tx) error {
+	var rolesRaw []byte
+	err = s.WithTx(ctx, func(tx pgx.Tx) error {
 		query := `
-			INSERT INTO jobs (id, name, description, contact_email)
-			VALUES ($1, $2, $3, $4)
-			RETURNING id, name, description, contact_email, created_at, updated_at
+			INSERT INTO jobs (id, name, description, contact_email, roles)
+			VALUES ($1, $2, $3, $4, $5)
+			RETURNING id, name, description, contact_email, roles, created_at, updated_at
 		`
-		if err := tx.QueryRow(ctx, query, job.ID, job.Name, job.Description, job.ContactEmail).Scan(
+		if err := tx.QueryRow(ctx, query, job.ID, job.Name, job.Description, job.ContactEmail, rolesJSON).Scan(
 			&created.ID,
 			&created.Name,
 			&created.Description,
 			&created.ContactEmail,
+			&rolesRaw,
 			&created.CreatedAt,
 			&created.UpdatedAt,
 		); err != nil {
 			return err
+		}
+		if len(rolesRaw) > 0 {
+			_ = json.Unmarshal(rolesRaw, &created.Roles)
+		}
+		if created.Roles == nil {
+			created.Roles = []string{}
 		}
 		return s.recordAudit(ctx, tx, transactionID, nil, "job", created.ID, "INSERT", nil, created, userID)
 	})
@@ -3316,6 +3466,7 @@ func (s *Store) UpdateJob(ctx context.Context, userID uuid.UUID, job models.Job)
 	transactionID := uuid.New()
 
 	var updated models.Job
+	var rolesRaw []byte
 	err := s.WithTx(ctx, func(tx pgx.Tx) error {
 		oldJob, err := s.GetJobByID(ctx, job.ID)
 		if err != nil {
@@ -3325,21 +3476,40 @@ func (s *Store) UpdateJob(ctx context.Context, userID uuid.UUID, job models.Job)
 			return fmt.Errorf("job not found")
 		}
 
+		// If caller did not provide roles, keep old roles
+		if job.Roles == nil {
+			job.Roles = oldJob.Roles
+		}
+		if job.Roles == nil {
+			job.Roles = []string{}
+		}
+		rolesJSON, err := json.Marshal(job.Roles)
+		if err != nil {
+			return fmt.Errorf("failed to marshal roles: %w", err)
+		}
+
 		query := `
 			UPDATE jobs
-			SET name = $1, description = $2, contact_email = $3, updated_at = NOW()
-			WHERE id = $4
-			RETURNING id, name, description, contact_email, created_at, updated_at
+			SET name = $1, description = $2, contact_email = $3, roles = $4, updated_at = NOW()
+			WHERE id = $5
+			RETURNING id, name, description, contact_email, roles, created_at, updated_at
 		`
-		if err := tx.QueryRow(ctx, query, job.Name, job.Description, job.ContactEmail, job.ID).Scan(
+		if err := tx.QueryRow(ctx, query, job.Name, job.Description, job.ContactEmail, rolesJSON, job.ID).Scan(
 			&updated.ID,
 			&updated.Name,
 			&updated.Description,
 			&updated.ContactEmail,
+			&rolesRaw,
 			&updated.CreatedAt,
 			&updated.UpdatedAt,
 		); err != nil {
 			return err
+		}
+		if len(rolesRaw) > 0 {
+			_ = json.Unmarshal(rolesRaw, &updated.Roles)
+		}
+		if updated.Roles == nil {
+			updated.Roles = []string{}
 		}
 		return s.recordAudit(ctx, tx, transactionID, nil, "job", updated.ID, "UPDATE", oldJob.Job, updated, userID)
 	})
@@ -3347,6 +3517,60 @@ func (s *Store) UpdateJob(ctx context.Context, userID uuid.UUID, job models.Job)
 		return models.Job{}, err
 	}
 	return updated, nil
+}
+
+func (s *Store) SetJobRoles(ctx context.Context, userID uuid.UUID, jobID uuid.UUID, roles []string) (*models.JobWithAssignees, error) {
+	if roles == nil {
+		roles = []string{}
+	}
+	rolesJSON, err := json.Marshal(roles)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal roles: %w", err)
+	}
+
+	transactionID := uuid.New()
+	err = s.WithTx(ctx, func(tx pgx.Tx) error {
+		oldJob, err := s.GetJobByID(ctx, jobID)
+		if err != nil {
+			return err
+		}
+		if oldJob == nil {
+			return fmt.Errorf("job not found")
+		}
+
+		var updatedJob models.Job
+		var rolesRaw []byte
+		query := `
+			UPDATE jobs
+			SET roles = $1, updated_at = NOW()
+			WHERE id = $2
+			RETURNING id, name, description, contact_email, roles, created_at, updated_at
+		`
+		if err := tx.QueryRow(ctx, query, rolesJSON, jobID).Scan(
+			&updatedJob.ID,
+			&updatedJob.Name,
+			&updatedJob.Description,
+			&updatedJob.ContactEmail,
+			&rolesRaw,
+			&updatedJob.CreatedAt,
+			&updatedJob.UpdatedAt,
+		); err != nil {
+			return err
+		}
+		if len(rolesRaw) > 0 {
+			_ = json.Unmarshal(rolesRaw, &updatedJob.Roles)
+		}
+		if updatedJob.Roles == nil {
+			updatedJob.Roles = []string{}
+		}
+
+		return s.recordAudit(ctx, tx, transactionID, nil, "job", jobID, "UPDATE", oldJob.Job, updatedJob, userID)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return s.GetJobByID(ctx, jobID)
 }
 
 func (s *Store) DeleteJob(ctx context.Context, userID uuid.UUID, jobID uuid.UUID) error {

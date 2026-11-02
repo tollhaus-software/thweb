@@ -176,20 +176,33 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 			user, err = a.Store.GetUserWithPermissionsByEmail(r.Context(), email)
 			if err != nil {
 				if err == pgx.ErrNoRows {
-					familyID, pErr := a.Store.GetFamilyIDByIdentifierEmail(r.Context(), email)
+					parentID, familyID, pErr := a.Store.GetParentInfoByIdentifierEmail(r.Context(), email)
 					if pErr != nil {
 						log.Printf("[AUTH ERROR] Failed to check identifier email %q: %v", email, pErr)
 						writeJSONError(w, "Database error: "+pErr.Error(), http.StatusInternalServerError)
 						return
 					}
-					empTypes, eErr := a.Store.GetEmployeeTypesByIdentifierEmail(r.Context(), email)
+					empID, empTypes, eErr := a.Store.GetEmployeeInfoByIdentifierEmail(r.Context(), email)
 					if eErr != nil {
 						log.Printf("[AUTH ERROR] Failed to check employee identifier email %q: %v", email, eErr)
 						writeJSONError(w, "Database error: "+eErr.Error(), http.StatusInternalServerError)
 						return
 					}
+
+					var jobRoles []string
+					if parentID != nil {
+						if jr, err := a.Store.GetJobRolesForParent(r.Context(), *parentID); err == nil {
+							jobRoles = append(jobRoles, jr...)
+						}
+					}
+					if empID != nil {
+						if jr, err := a.Store.GetJobRolesForEmployee(r.Context(), *empID); err == nil {
+							jobRoles = append(jobRoles, jr...)
+						}
+					}
+
 					triggers := a.TriggersForIdentifierEmail(familyID, empTypes)
-					if len(triggers) == 0 {
+					if len(triggers) == 0 && len(jobRoles) == 0 {
 						log.Printf("[AUTH WARNING] User email %q not found in allow-list or identifier emails", email)
 						w.Header().Set("Content-Type", "application/json")
 						w.WriteHeader(http.StatusForbidden)
@@ -200,11 +213,38 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 						return
 					}
 					identRoles, identPerms := a.RolesAndPermissionsForTriggers(triggers)
+
+					allRolesMap := make(map[string]bool)
+					for _, r := range identRoles {
+						allRolesMap[r] = true
+					}
+					for _, r := range jobRoles {
+						allRolesMap[r] = true
+					}
+					var combinedRoles []string
+					for r := range allRolesMap {
+						combinedRoles = append(combinedRoles, r)
+					}
+
+					jobRolePerms := a.PermissionsForRoles(r.Context(), jobRoles)
+
+					allPermsMap := make(map[string]bool)
+					for _, p := range identPerms {
+						allPermsMap[p] = true
+					}
+					for _, p := range jobRolePerms {
+						allPermsMap[p] = true
+					}
+					effectivePerms := make([]string, 0, len(allPermsMap))
+					for p := range allPermsMap {
+						effectivePerms = append(effectivePerms, p)
+					}
+
 					user = &models.UserWithPermissions{
 						Email:                email,
-						Roles:                identRoles,
+						Roles:                combinedRoles,
 						Permissions:          identPerms,
-						EffectivePermissions: identPerms,
+						EffectivePermissions: effectivePerms,
 						FamilyID:             familyID,
 					}
 				} else {
@@ -213,15 +253,28 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 					return
 				}
 			} else {
-				familyID, pErr := a.Store.GetFamilyIDByIdentifierEmail(r.Context(), email)
+				parentID, familyID, pErr := a.Store.GetParentInfoByIdentifierEmail(r.Context(), email)
 				if pErr == nil && familyID != nil {
 					user.FamilyID = familyID
 				}
-				empTypes, _ := a.Store.GetEmployeeTypesByIdentifierEmail(r.Context(), email)
+				empID, empTypes, _ := a.Store.GetEmployeeInfoByIdentifierEmail(r.Context(), email)
 				triggers := a.TriggersForIdentifierEmail(familyID, empTypes)
-				if len(triggers) > 0 {
+
+				var jobRoles []string
+				if parentID != nil {
+					if jr, err := a.Store.GetJobRolesForParent(r.Context(), *parentID); err == nil {
+						jobRoles = append(jobRoles, jr...)
+					}
+				}
+				if empID != nil {
+					if jr, err := a.Store.GetJobRolesForEmployee(r.Context(), *empID); err == nil {
+						jobRoles = append(jobRoles, jr...)
+					}
+				}
+
+				if len(triggers) > 0 || len(jobRoles) > 0 {
 					identRoles, implicitPerms := a.RolesAndPermissionsForTriggers(triggers)
-					for _, ir := range identRoles {
+					for _, ir := range append(identRoles, jobRoles...) {
 						found := false
 						for _, r := range user.Roles {
 							if r == ir {
@@ -233,11 +286,15 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 							user.Roles = append(user.Roles, ir)
 						}
 					}
+					jobRolePerms := a.PermissionsForRoles(r.Context(), jobRoles)
 					permSet := make(map[string]bool)
 					for _, p := range user.EffectivePermissions {
 						permSet[p] = true
 					}
 					for _, p := range implicitPerms {
+						permSet[p] = true
+					}
+					for _, p := range jobRolePerms {
 						permSet[p] = true
 					}
 					user.EffectivePermissions = make([]string, 0, len(permSet))
@@ -429,6 +486,35 @@ func (a *Authenticator) RolesAndPermissionsForTriggers(triggers []string) ([]str
 	return allRoles, allPerms
 }
 
+// PermissionsForRoles resolves all permissions granted by the given role IDs
+// from the Store (roles table) and RolesConfig (default_roles.yaml).
+func (a *Authenticator) PermissionsForRoles(ctx context.Context, roleIDs []string) []string {
+	permSet := make(map[string]bool)
+	for _, roleID := range roleIDs {
+		if a.Store != nil {
+			r, err := a.Store.GetRole(ctx, roleID)
+			if err == nil && r != nil {
+				for _, p := range r.Permissions {
+					permSet[p] = true
+				}
+				continue
+			}
+		}
+		if a.RolesConfig != nil {
+			if rc := a.RolesConfig.GetRole(roleID); rc != nil {
+				for _, p := range rc.Permissions {
+					permSet[p] = true
+				}
+			}
+		}
+	}
+	allPerms := make([]string, 0, len(permSet))
+	for p := range permSet {
+		allPerms = append(allPerms, p)
+	}
+	return allPerms
+}
+
 // ResolveSimulatedUser determines the roles, permissions, and family ID for a simulated target.
 func (a *Authenticator) ResolveSimulatedUser(ctx context.Context, cfg models.SimulationConfig) (*models.UserWithPermissions, error) {
 	if cfg.Mode == "user" {
@@ -446,36 +532,73 @@ func (a *Authenticator) ResolveSimulatedUser(ctx context.Context, cfg models.Sim
 				return nil, err
 			}
 
-			familyID, pErr := a.Store.GetFamilyIDByIdentifierEmail(ctx, email)
+			parentID, familyID, pErr := a.Store.GetParentInfoByIdentifierEmail(ctx, email)
 			if pErr != nil {
 				return nil, pErr
 			}
-			empTypes, eErr := a.Store.GetEmployeeTypesByIdentifierEmail(ctx, email)
+			empID, empTypes, eErr := a.Store.GetEmployeeInfoByIdentifierEmail(ctx, email)
 			if eErr != nil {
 				return nil, eErr
 			}
+			var jobRoles []string
+			if parentID != nil {
+				if jr, err := a.Store.GetJobRolesForParent(ctx, *parentID); err == nil {
+					jobRoles = append(jobRoles, jr...)
+				}
+			}
+			if empID != nil {
+				if jr, err := a.Store.GetJobRolesForEmployee(ctx, *empID); err == nil {
+					jobRoles = append(jobRoles, jr...)
+				}
+			}
+
 			triggers := a.TriggersForIdentifierEmail(familyID, empTypes)
 
-			if simUser == nil && len(triggers) == 0 {
+			if simUser == nil && len(triggers) == 0 && len(jobRoles) == 0 {
 				return nil, fmt.Errorf("user %q not found in known users or identifying emails", email)
 			}
 
 			if simUser == nil {
 				// Pure identifying parent or employee
 				identRoles, identPerms := a.RolesAndPermissionsForTriggers(triggers)
+
+				allRolesMap := make(map[string]bool)
+				for _, r := range identRoles {
+					allRolesMap[r] = true
+				}
+				for _, r := range jobRoles {
+					allRolesMap[r] = true
+				}
+				var combinedRoles []string
+				for r := range allRolesMap {
+					combinedRoles = append(combinedRoles, r)
+				}
+
+				jobRolePerms := a.PermissionsForRoles(ctx, jobRoles)
+				permSet := make(map[string]bool)
+				for _, p := range identPerms {
+					permSet[p] = true
+				}
+				for _, p := range jobRolePerms {
+					permSet[p] = true
+				}
+				effectivePerms := make([]string, 0, len(permSet))
+				for p := range permSet {
+					effectivePerms = append(effectivePerms, p)
+				}
 				simUser = &models.UserWithPermissions{
 					Email:                email,
-					Roles:                identRoles,
+					Roles:                combinedRoles,
 					Permissions:          identPerms,
-					EffectivePermissions: identPerms,
+					EffectivePermissions: effectivePerms,
 					FamilyID:             familyID,
 				}
-			} else if len(triggers) > 0 {
+			} else if len(triggers) > 0 || len(jobRoles) > 0 {
 				if familyID != nil {
 					simUser.FamilyID = familyID
 				}
 				identRoles, implicitPerms := a.RolesAndPermissionsForTriggers(triggers)
-				for _, ir := range identRoles {
+				for _, ir := range append(identRoles, jobRoles...) {
 					found := false
 					for _, r := range simUser.Roles {
 						if r == ir {
@@ -487,11 +610,15 @@ func (a *Authenticator) ResolveSimulatedUser(ctx context.Context, cfg models.Sim
 						simUser.Roles = append(simUser.Roles, ir)
 					}
 				}
+				jobRolePerms := a.PermissionsForRoles(ctx, jobRoles)
 				permSet := make(map[string]bool)
 				for _, p := range simUser.EffectivePermissions {
 					permSet[p] = true
 				}
 				for _, p := range implicitPerms {
+					permSet[p] = true
+				}
+				for _, p := range jobRolePerms {
 					permSet[p] = true
 				}
 				simUser.EffectivePermissions = make([]string, 0, len(permSet))

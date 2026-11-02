@@ -6,6 +6,7 @@ import { ConfirmDeleteModal } from '../Table/ConfirmDeleteModal';
 import { NotesEditor } from '../Table/NotesEditor';
 import EasyEdit, { Types as EasyEditTypes } from '../InlineEdit';
 import { JobAssigneesPopover } from './JobAssigneesPopover';
+import { JobRolesPopover, type Role } from './JobRolesPopover';
 import { t } from '../../utils/i18n';
 
 const EasyEditComponent = EasyEdit;
@@ -30,6 +31,7 @@ export interface JobWithAssignees {
   name: string;
   description: string;
   contact_email: string;
+  roles?: string[];
   parents: JobAssigneeParent[];
   employees: JobAssigneeEmployee[];
   created_at?: string;
@@ -39,14 +41,18 @@ export interface JobWithAssignees {
 export interface JobsTabProps {
   jobs: JobWithAssignees[];
   canWriteJobs: boolean;
+  canReadJobRoles?: boolean;
+  canWriteJobRoles?: boolean;
+  availableRoles?: Role[];
   searchQuery?: string;
   isCreateModalOpen?: boolean;
   onOpenCreateModal?: () => void;
   onCloseCreateModal?: () => void;
-  onCreateJob: (job: { name: string; description: string; contact_email: string }) => Promise<void>;
-  onUpdateJob: (id: string, job: { name: string; description: string; contact_email: string }) => Promise<void>;
+  onCreateJob: (job: { name: string; description: string; contact_email: string; roles?: string[] }) => Promise<void>;
+  onUpdateJob: (id: string, job: { name: string; description: string; contact_email: string; roles?: string[] }) => Promise<void>;
   onDeleteJob: (id: string) => Promise<void>;
   onUpdateJobAssignees?: (jobId: string, parentIds: string[], employeeIds: string[]) => Promise<void>;
+  onUpdateJobRoles?: (jobId: string, roles: string[]) => Promise<void>;
   onFetchPeople?: () => Promise<{ parents: JobAssigneeParent[]; employees: JobAssigneeEmployee[] }>;
   onJumpToPerson?: (personId: string, type: 'parent' | 'employee', familyId?: string, familyName?: string) => void;
 }
@@ -54,6 +60,9 @@ export interface JobsTabProps {
 export const JobsTab: React.FC<JobsTabProps> = ({
   jobs,
   canWriteJobs,
+  canReadJobRoles = false,
+  canWriteJobRoles = false,
+  availableRoles,
   searchQuery,
   isCreateModalOpen,
   onOpenCreateModal,
@@ -62,6 +71,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
   onUpdateJob,
   onDeleteJob,
   onUpdateJobAssignees,
+  onUpdateJobRoles,
   onFetchPeople,
   onJumpToPerson,
 }) => {
@@ -96,13 +106,43 @@ export const JobsTab: React.FC<JobsTabProps> = ({
     }
   };
 
+  // Roles Popover state
+  const [activeJobForRoles, setActiveJobForRoles] = useState<JobWithAssignees | null>(null);
+  const [rolesPopoverAnchor, setRolesPopoverAnchor] = useState<HTMLElement | null>(null);
+
+  const currentJobForRoles = activeJobForRoles
+    ? jobs.find((j) => j.id === activeJobForRoles.id) || activeJobForRoles
+    : null;
+
+  const handleSaveRoles = async (jobId: string, roles: string[]) => {
+    if (onUpdateJobRoles) {
+      await onUpdateJobRoles(jobId, roles);
+    } else {
+      const res = await fetch(`/api/jobs/${jobId}/roles`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roles }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to update job roles');
+      }
+    }
+  };
+
   const isModalOpen = (isCreateModalOpen !== undefined ? isCreateModalOpen : internalModalOpen) || editingJob !== null;
 
   // Form state
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    name: string;
+    description: string;
+    contact_email: string;
+    roles: string[];
+  }>({
     name: '',
     description: '',
     contact_email: '',
+    roles: [],
   });
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -143,7 +183,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
 
   const openCreateModal = () => {
     setEditingJob(null);
-    setFormData({ name: '', description: '', contact_email: '' });
+    setFormData({ name: '', description: '', contact_email: '', roles: [] });
     setFormError(null);
     if (onOpenCreateModal) {
       onOpenCreateModal();
@@ -158,7 +198,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
       onCloseCreateModal();
     }
     setInternalModalOpen(false);
-    setFormData({ name: '', description: '', contact_email: '' });
+    setFormData({ name: '', description: '', contact_email: '', roles: [] });
     setFormError(null);
   };
 
@@ -168,6 +208,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
       name: job.name || '',
       description: job.description || '',
       contact_email: job.contact_email || '',
+      roles: job.roles || [],
     });
     setFormError(null);
   };
@@ -452,6 +493,84 @@ export const JobsTab: React.FC<JobsTabProps> = ({
           );
         },
       },
+      ...(canReadJobRoles
+        ? [
+            {
+              id: 'roles',
+              header: t('grantedRoles') || 'Rollen',
+              size: 260,
+              cell: (info: any) => {
+                const row = info.row.original;
+                const roles = row.roles || [];
+                const cellId = `cell-job-roles-${row.id}`;
+                const isCurrentActive = Boolean(rolesPopoverAnchor && activeJobForRoles?.id === row.id);
+
+                return (
+                  <div
+                    id={cellId}
+                    className={`job-roles-cell-wrapper ${isCurrentActive ? 'active' : ''}`}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '0.4rem',
+                      width: '100%',
+                      minHeight: '24px',
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: 'wrap', gap: '0.3rem', alignItems: 'center' }}>
+                      {roles.length === 0 ? (
+                        <span style={{ color: 'var(--text-muted)' }}>-</span>
+                      ) : (
+                        roles.map((r: string) => {
+                          const matched = availableRoles?.find((ar) => ar.id === r);
+                          const label = matched?.name || r;
+                          return (
+                            <span
+                              key={r}
+                              className="role-badge"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                padding: '2px 7px',
+                                borderRadius: '12px',
+                                fontSize: '0.8rem',
+                                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                                border: '1px solid rgba(59, 130, 246, 0.25)',
+                                color: 'var(--primary-dark, #2563eb)',
+                                fontWeight: 500,
+                              }}
+                              title={matched?.description || r}
+                            >
+                              <span>{label}</span>
+                            </span>
+                          );
+                        })
+                      )}
+                    </div>
+                    {canWriteJobRoles && (
+                      <button
+                        type="button"
+                        className="cell-edit-pencil-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const targetEl = document.getElementById(cellId) || e.currentTarget;
+                          setActiveJobForRoles(row);
+                          setRolesPopoverAnchor(targetEl);
+                        }}
+                        title={t('editJobRoles') || 'Job-Rollen bearbeiten'}
+                        aria-label={`${t('editJobRoles')} ${row.name}`}
+                        data-testid={`edit-job-roles-btn-${row.id}`}
+                      >
+                        <Pencil size={13} />
+                      </button>
+                    )}
+                  </div>
+                );
+              },
+            },
+          ]
+        : []),
       ...(canWriteJobs
         ? [
             {
@@ -515,7 +634,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
           ]
         : []),
     ];
-  }, [canWriteJobs, onJumpToPerson, onUpdateJob, assigneesPopoverAnchor, activeJobForAssignees]);
+  }, [canWriteJobs, canReadJobRoles, canWriteJobRoles, availableRoles, onJumpToPerson, onUpdateJob, assigneesPopoverAnchor, activeJobForAssignees, rolesPopoverAnchor, activeJobForRoles]);
 
   return (
     <div
@@ -830,6 +949,67 @@ export const JobsTab: React.FC<JobsTabProps> = ({
                 />
               </div>
 
+              {canWriteJobRoles && (
+                <div style={{ marginBottom: '1.25rem' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.35rem', color: 'var(--text-h)' }}>
+                    {t('grantedRoles') || 'Rollen'}
+                  </label>
+                  <div
+                    style={{
+                      maxHeight: '130px',
+                      overflowY: 'auto',
+                      border: '1px solid var(--border)',
+                      borderRadius: '4px',
+                      padding: '0.4rem',
+                      backgroundColor: 'var(--bg-subtle, rgba(0,0,0,0.02))',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.2rem',
+                    }}
+                    data-testid="job-modal-roles-list"
+                  >
+                    {(availableRoles && availableRoles.length > 0
+                      ? availableRoles
+                      : [
+                          { id: 'admin', name: 'Administrator', description: 'Voller Systemzugriff' },
+                          { id: 'mga', name: 'MGA', description: 'Mitgliederausschuss' },
+                          { id: 'viewer', name: 'Viewer', description: 'Lesezugriff' },
+                        ]
+                    ).map((r) => {
+                      const isChecked = formData.roles.includes(r.id);
+                      return (
+                        <label
+                          key={r.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.4rem',
+                            fontSize: '0.82rem',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            data-testid={`job-modal-role-checkbox-${r.id}`}
+                            onChange={() => {
+                              setFormData((prev) => ({
+                                ...prev,
+                                roles: isChecked
+                                  ? prev.roles.filter((x) => x !== r.id)
+                                  : [...prev.roles, r.id],
+                              }));
+                            }}
+                          />
+                          <span style={{ fontWeight: 500 }}>{r.name || r.id}</span>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>({r.id})</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                 <button
                   type="button"
@@ -889,6 +1069,22 @@ export const JobsTab: React.FC<JobsTabProps> = ({
           onSaveAssignees={handleSaveAssignees}
           fetchPeople={onFetchPeople}
           readOnly={!canWriteJobs}
+        />
+      )}
+
+      {/* Roles Popover */}
+      {currentJobForRoles && (
+        <JobRolesPopover
+          isOpen={Boolean(rolesPopoverAnchor && currentJobForRoles)}
+          onClose={() => {
+            setActiveJobForRoles(null);
+            setRolesPopoverAnchor(null);
+          }}
+          anchorEl={rolesPopoverAnchor}
+          job={currentJobForRoles}
+          onSaveRoles={handleSaveRoles}
+          availableRoles={availableRoles}
+          readOnly={!canWriteJobRoles}
         />
       )}
     </div>

@@ -141,10 +141,24 @@ func (s *Server) HandleGetSimulationOptions(w http.ResponseWriter, r *http.Reque
 		empTypes := empIdentEmails[norm]
 		triggers := s.Authenticator.TriggersForIdentifierEmail(famIDPtr, empTypes)
 
-		if len(triggers) > 0 {
-			cand.Source = "both"
+		var jobRoles []string
+		if pID, _, err := s.Store.GetParentInfoByIdentifierEmail(r.Context(), norm); err == nil && pID != nil {
+			if jr, err := s.Store.GetJobRolesForParent(r.Context(), *pID); err == nil {
+				jobRoles = append(jobRoles, jr...)
+			}
+		}
+		if eID, _, err := s.Store.GetEmployeeInfoByIdentifierEmail(r.Context(), norm); err == nil && eID != nil {
+			if jr, err := s.Store.GetJobRolesForEmployee(r.Context(), *eID); err == nil {
+				jobRoles = append(jobRoles, jr...)
+			}
+		}
+
+		if len(triggers) > 0 || len(jobRoles) > 0 {
+			if len(triggers) > 0 {
+				cand.Source = "both"
+			}
 			identRoles, implicitPerms := s.Authenticator.RolesAndPermissionsForTriggers(triggers)
-			for _, ir := range identRoles {
+			for _, ir := range append(identRoles, jobRoles...) {
 				found := false
 				for _, r := range cand.Roles {
 					if r == ir {
@@ -156,11 +170,15 @@ func (s *Server) HandleGetSimulationOptions(w http.ResponseWriter, r *http.Reque
 					cand.Roles = append(cand.Roles, ir)
 				}
 			}
+			jobRolePerms := s.Authenticator.PermissionsForRoles(r.Context(), jobRoles)
 			permSet := make(map[string]bool)
 			for _, p := range cand.EffectivePermissions {
 				permSet[p] = true
 			}
 			for _, p := range implicitPerms {
+				permSet[p] = true
+			}
+			for _, p := range jobRolePerms {
 				permSet[p] = true
 			}
 			cand.EffectivePermissions = make([]string, 0, len(permSet))
@@ -203,11 +221,48 @@ func (s *Server) HandleGetSimulationOptions(w http.ResponseWriter, r *http.Reque
 			triggers := s.Authenticator.TriggersForIdentifierEmail(famIDPtr, empTypes)
 			identRoles, identPerms := s.Authenticator.RolesAndPermissionsForTriggers(triggers)
 
+			var jobRoles []string
+			if pID, _, err := s.Store.GetParentInfoByIdentifierEmail(r.Context(), norm); err == nil && pID != nil {
+				if jr, err := s.Store.GetJobRolesForParent(r.Context(), *pID); err == nil {
+					jobRoles = append(jobRoles, jr...)
+				}
+			}
+			if eID, _, err := s.Store.GetEmployeeInfoByIdentifierEmail(r.Context(), norm); err == nil && eID != nil {
+				if jr, err := s.Store.GetJobRolesForEmployee(r.Context(), *eID); err == nil {
+					jobRoles = append(jobRoles, jr...)
+				}
+			}
+
+			allRolesMap := make(map[string]bool)
+			for _, r := range identRoles {
+				allRolesMap[r] = true
+			}
+			for _, r := range jobRoles {
+				allRolesMap[r] = true
+			}
+			var combinedRoles []string
+			for r := range allRolesMap {
+				combinedRoles = append(combinedRoles, r)
+			}
+
+			jobRolePerms := s.Authenticator.PermissionsForRoles(r.Context(), jobRoles)
+			permSet := make(map[string]bool)
+			for _, p := range identPerms {
+				permSet[p] = true
+			}
+			for _, p := range jobRolePerms {
+				permSet[p] = true
+			}
+			effectivePerms := make([]string, 0, len(permSet))
+			for p := range permSet {
+				effectivePerms = append(effectivePerms, p)
+			}
+
 			uModel := &models.UserWithPermissions{
 				Email:                norm,
-				Roles:                identRoles,
+				Roles:                combinedRoles,
 				Permissions:          identPerms,
-				EffectivePermissions: identPerms,
+				EffectivePermissions: effectivePerms,
 				FamilyID:             famIDPtr,
 			}
 			uModel.EnsureImpliedPermissions()
@@ -2581,7 +2636,25 @@ func (s *Server) HandleListMealAllergensHistory(w http.ResponseWriter, r *http.R
 	jsonResponse(w, entries)
 }
 
+func slicesEqualPerms(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	counts := make(map[string]int)
+	for _, x := range a {
+		counts[x]++
+	}
+	for _, x := range b {
+		counts[x]--
+		if counts[x] < 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *Server) HandleListJobs(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
 	jobs, err := s.Store.ListJobs(r.Context())
 	if err != nil {
 		httpErrorLog(w, r, "Failed to list jobs", http.StatusInternalServerError, err)
@@ -2589,6 +2662,11 @@ func (s *Server) HandleListJobs(w http.ResponseWriter, r *http.Request) {
 	}
 	if jobs == nil {
 		jobs = []models.JobWithAssignees{}
+	}
+	if user == nil || !user.HasPermission("job.role_assignment.read") {
+		for i := range jobs {
+			jobs[i].Roles = []string{}
+		}
 	}
 	jsonResponse(w, jobs)
 }
@@ -2602,6 +2680,10 @@ func (s *Server) HandleCreateJob(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.TrimSpace(job.Name) == "" {
 		httpErrorLog(w, r, "Job name is required", http.StatusBadRequest, fmt.Errorf("job name is required"))
+		return
+	}
+	if len(job.Roles) > 0 && (user == nil || !user.HasPermission("job.role_assignment.write")) {
+		http.Error(w, "Forbidden: job.role_assignment.write required to assign job roles", http.StatusForbidden)
 		return
 	}
 
@@ -2640,6 +2722,21 @@ func (s *Server) HandleUpdateJob(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(job.Name) == "" {
 		httpErrorLog(w, r, "Job name is required", http.StatusBadRequest, fmt.Errorf("job name is required"))
 		return
+	}
+
+	if job.Roles != nil {
+		existingJob, err := s.Store.GetJobByID(r.Context(), id)
+		if err != nil {
+			httpErrorLog(w, r, "Failed to fetch existing job", http.StatusInternalServerError, err)
+			return
+		}
+		if existingJob != nil && (user == nil || !user.HasPermission("job.role_assignment.write")) {
+			if !slicesEqualPerms(existingJob.Roles, job.Roles) {
+				http.Error(w, "Forbidden: job.role_assignment.write required to update roles", http.StatusForbidden)
+				return
+			}
+			job.Roles = existingJob.Roles
+		}
 	}
 
 	updated, err := s.Store.UpdateJob(r.Context(), user.ID, job)
@@ -2847,6 +2944,55 @@ func (s *Server) HandleSetJobAssignees(w http.ResponseWriter, r *http.Request) {
 
 	jsonResponse(w, updatedJob)
 }
+
+func (s *Server) HandleSetJobRoles(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	idStr := chi.URLParam(r, "id")
+	jobID, err := uuid.Parse(idStr)
+	if err != nil {
+		httpErrorLog(w, r, "Invalid job ID", http.StatusBadRequest, err)
+		return
+	}
+
+	var req struct {
+		Roles []string `json:"roles"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpErrorLog(w, r, "Invalid request body", http.StatusBadRequest, err)
+		return
+	}
+	if req.Roles == nil {
+		req.Roles = []string{}
+	}
+
+	updated, err := s.Store.SetJobRoles(r.Context(), user.ID, jobID, req.Roles)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			httpErrorLog(w, r, "Job not found", http.StatusNotFound, err)
+			return
+		}
+		httpErrorLog(w, r, "Failed to update job roles", http.StatusInternalServerError, err)
+		return
+	}
+
+	if s.Hub != nil {
+		s.Hub.Broadcast(WSMessage{
+			Type: "JOB_UPDATED",
+			Payload: map[string]interface{}{
+				"job_id": jobID.String(),
+			},
+		})
+	}
+
+	jsonResponse(w, updated)
+}
+
+func (s *Server) HandleGetPermissions(w http.ResponseWriter, r *http.Request) {
+	jsonResponse(w, map[string]interface{}{
+		"permissions": models.AllKnownPermissions,
+	})
+}
+
 
 
 

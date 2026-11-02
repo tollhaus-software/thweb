@@ -259,6 +259,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     name TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     contact_email TEXT NOT NULL DEFAULT '',
+    roles JSONB NOT NULL DEFAULT '[]',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

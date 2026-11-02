@@ -1498,6 +1498,130 @@ func TestJobs_CRUDAndAssignments(t *testing.T) {
 	}
 }
 
+func TestJobs_PermissionsAndResolution(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	appStore := NewStore(pool)
+	testUserID := uuid.New()
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, 'jobs-perm-tester@example.com') ON CONFLICT (id) DO NOTHING", testUserID)
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", testUserID)
+	}()
+
+	// 1. Create job with initial permissions
+	job, err := appStore.CreateJob(ctx, testUserID, models.Job{
+		Name:         "Kassenwart",
+		Description:  "Finance duties",
+		ContactEmail: "finanzen@example.com",
+		Roles:        []string{"mga", "viewer"},
+	})
+	if err != nil {
+		t.Fatalf("CreateJob failed: %v", err)
+	}
+	defer func() {
+		_ = appStore.DeleteJob(ctx, testUserID, job.ID)
+	}()
+
+	if len(job.Roles) != 2 {
+		t.Fatalf("expected 2 roles on created job, got: %+v", job.Roles)
+	}
+
+	// 2. GetJobByID returns roles
+	fetched, err := appStore.GetJobByID(ctx, job.ID)
+	if err != nil || fetched == nil {
+		t.Fatalf("GetJobByID failed: %v", err)
+	}
+	if len(fetched.Roles) != 2 {
+		t.Fatalf("expected 2 roles in GetJobByID, got: %+v", fetched.Roles)
+	}
+
+	// 3. SetJobRoles updates roles
+	updated, err := appStore.SetJobRoles(ctx, testUserID, job.ID, []string{"mga", "viewer", "admin"})
+	if err != nil {
+		t.Fatalf("SetJobRoles failed: %v", err)
+	}
+	if len(updated.Roles) != 3 {
+		t.Fatalf("expected 3 roles after SetJobRoles, got: %+v", updated.Roles)
+	}
+
+	// 4. Test Parent association & GetJobRolesForParent
+	familyID := uuid.New()
+	_, err = pool.Exec(ctx, "INSERT INTO families (id) VALUES ($1)", familyID)
+	if err != nil {
+		t.Fatalf("failed to insert family: %v", err)
+	}
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM families WHERE id = $1", familyID)
+	}()
+
+	parentID := uuid.New()
+	emailsJSON := `[{"value":"parent.jobs@example.com","identifier_email":true}]`
+	_, err = pool.Exec(ctx, "INSERT INTO parents (id, family_id, first_name, last_name, emails) VALUES ($1, $2, 'Hans', 'Muster', $3)", parentID, familyID, emailsJSON)
+	if err != nil {
+		t.Fatalf("failed to insert parent: %v", err)
+	}
+
+	// Resolve parent info
+	pID, fID, err := appStore.GetParentInfoByIdentifierEmail(ctx, "parent.jobs@example.com")
+	if err != nil || pID == nil || *pID != parentID || fID == nil || *fID != familyID {
+		t.Fatalf("GetParentInfoByIdentifierEmail failed: pID=%v, fID=%v, err=%v", pID, fID, err)
+	}
+
+	// Assign job to parent
+	if err := appStore.SetParentJobs(ctx, testUserID, parentID, []uuid.UUID{job.ID}); err != nil {
+		t.Fatalf("SetParentJobs failed: %v", err)
+	}
+	defer func() {
+		_ = appStore.SetParentJobs(ctx, testUserID, parentID, []uuid.UUID{})
+	}()
+
+	parentRoles, err := appStore.GetJobRolesForParent(ctx, parentID)
+	if err != nil {
+		t.Fatalf("GetJobRolesForParent failed: %v", err)
+	}
+	if len(parentRoles) != 3 {
+		t.Fatalf("expected 3 roles for parent, got: %+v", parentRoles)
+	}
+
+	// 5. Test Employee association & GetJobRolesForEmployee
+	empID := uuid.New()
+	empEmailsJSON := `[{"value":"emp.jobs@example.com","identifier_email":true}]`
+	_, err = pool.Exec(ctx, "INSERT INTO employees (id, first_name, last_name, employee_type, emails) VALUES ($1, 'Erika', 'Muster', 'caregiver', $2)", empID, empEmailsJSON)
+	if err != nil {
+		t.Fatalf("failed to insert employee: %v", err)
+	}
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM employees WHERE id = $1", empID)
+	}()
+
+	eID, types, err := appStore.GetEmployeeInfoByIdentifierEmail(ctx, "emp.jobs@example.com")
+	if err != nil || eID == nil || *eID != empID || len(types) != 1 || types[0] != "caregiver" {
+		t.Fatalf("GetEmployeeInfoByIdentifierEmail failed: eID=%v, types=%v, err=%v", eID, types, err)
+	}
+
+	if err := appStore.SetEmployeeJobs(ctx, testUserID, empID, []uuid.UUID{job.ID}); err != nil {
+		t.Fatalf("SetEmployeeJobs failed: %v", err)
+	}
+	defer func() {
+		_ = appStore.SetEmployeeJobs(ctx, testUserID, empID, []uuid.UUID{})
+	}()
+
+	empRoles, err := appStore.GetJobRolesForEmployee(ctx, empID)
+	if err != nil {
+		t.Fatalf("GetJobRolesForEmployee failed: %v", err)
+	}
+	if len(empRoles) != 3 {
+		t.Fatalf("expected 3 roles for employee, got: %+v", empRoles)
+	}
+}
+
 
 
 

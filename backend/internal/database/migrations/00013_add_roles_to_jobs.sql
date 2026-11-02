@@ -1,0 +1,5 @@
+-- +goose Up
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS roles JSONB NOT NULL DEFAULT '[]';
+
+-- +goose Down
+ALTER TABLE jobs DROP COLUMN IF EXISTS roles;

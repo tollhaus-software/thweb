@@ -1202,4 +1202,120 @@ func TestAuthenticator_Simulation_DeniedForNonAdmin(t *testing.T) {
 	}
 }
 
+func TestAuthenticator_JobGrantedRoles(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	appStore := store.NewStore(pool)
+	authenticator := NewAuthenticator("", true, appStore)
+
+	testEmail := "bernd.jobtest@example.com"
+	testAdminID := uuid.New()
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, 'audit-admin@example.com') ON CONFLICT (id) DO NOTHING", testAdminID)
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", testAdminID)
+	}()
+
+	// Create a job with 'mga' role
+	job, err := appStore.CreateJob(ctx, testAdminID, models.Job{
+		Name:         "Schatzmeister",
+		Description:  "Treasurer job",
+		ContactEmail: "treasurer@example.com",
+		Roles:        []string{"mga"},
+	})
+	if err != nil {
+		t.Fatalf("CreateJob failed: %v", err)
+	}
+	defer func() {
+		_ = appStore.DeleteJob(ctx, testAdminID, job.ID)
+	}()
+
+	// Create family and parent with identifier email
+	famID := uuid.New()
+	_, err = pool.Exec(ctx, "INSERT INTO families (id) VALUES ($1)", famID)
+	if err != nil {
+		t.Fatalf("failed to insert family: %v", err)
+	}
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM families WHERE id = $1", famID)
+	}()
+
+	parentID := uuid.New()
+	emailsJSON := `[{"value":"bernd.jobtest@example.com","identifier_email":true}]`
+	_, err = pool.Exec(ctx, "INSERT INTO parents (id, family_id, first_name, last_name, emails) VALUES ($1, $2, 'Bernd', 'Jobtest', $3)", parentID, famID, emailsJSON)
+	if err != nil {
+		t.Fatalf("failed to insert parent: %v", err)
+	}
+
+	// Assign job to parent
+	if err := appStore.SetParentJobs(ctx, testAdminID, parentID, []uuid.UUID{job.ID}); err != nil {
+		t.Fatalf("SetParentJobs failed: %v", err)
+	}
+	defer func() {
+		_ = appStore.SetParentJobs(ctx, testAdminID, parentID, []uuid.UUID{})
+	}()
+
+	var recordedUser *models.UserWithPermissions
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recordedUser = GetUser(r.Context())
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := authenticator.Middleware(next)
+
+	req := httptest.NewRequest("GET", "/api/fees", nil)
+	req.Header.Set("Authorization", "Bearer "+testEmail)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d (%s)", rec.Code, rec.Body.String())
+	}
+
+	if recordedUser == nil {
+		t.Fatalf("expected user in context")
+	}
+	hasMGA := false
+	for _, r := range recordedUser.Roles {
+		if r == "mga" {
+			hasMGA = true
+			break
+		}
+	}
+	if !hasMGA {
+		t.Fatalf("expected user to have 'mga' role granted via job, got: %+v", recordedUser.Roles)
+	}
+	if !recordedUser.HasPermission("families.all.write") {
+		t.Fatalf("expected user to have families.all.write granted via job role, got: %+v", recordedUser.EffectivePermissions)
+	}
+
+	// Also verify simulation of this user
+	simUser, err := authenticator.ResolveSimulatedUser(ctx, models.SimulationConfig{
+		Active:    true,
+		Mode:      "user",
+		UserEmail: testEmail,
+	})
+	if err != nil {
+		t.Fatalf("ResolveSimulatedUser failed: %v", err)
+	}
+	hasSimMGA := false
+	for _, r := range simUser.Roles {
+		if r == "mga" {
+			hasSimMGA = true
+			break
+		}
+	}
+	if !hasSimMGA {
+		t.Fatalf("expected simulated user to have 'mga' role, got: %+v", simUser.Roles)
+	}
+	if !simUser.HasPermission("families.all.write") {
+		t.Fatalf("expected simulated user to have families.all.write granted via job role, got: %+v", simUser.EffectivePermissions)
+	}
+}
+
 

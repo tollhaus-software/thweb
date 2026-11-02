@@ -2719,6 +2719,160 @@ func TestJobs_APIHandlersAndPermissions(t *testing.T) {
 	}
 }
 
+func TestJobs_RolesAPI(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	appStore := store.NewStore(pool)
+	hub := NewHub()
+	authn := auth.NewAuthenticator("mock", true, appStore)
+
+	adminEmail := "job-perm-admin@example.com"
+	mgaEmail := "job-perm-mga@example.com"
+
+	adminID := uuid.New()
+	mgaID := uuid.New()
+
+	// Admin has "*"
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, permissions) VALUES ($1, $2, '[\"*\"]'::jsonb) ON CONFLICT (id) DO NOTHING", adminID, adminEmail)
+	// MGA has jobs.all.read, jobs.all.write but NOT job.role_assignment.*
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, permissions) VALUES ($1, $2, '[\"jobs.all.read\", \"jobs.all.write\"]'::jsonb) ON CONFLICT (id) DO NOTHING", mgaID, mgaEmail)
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id IN ($1, $2)", adminID, mgaID)
+	}()
+
+	router := SetupRouter(appStore, authn, hub, nil)
+
+	// 1. GET /api/permissions
+	reqPerms := httptest.NewRequest("GET", "/api/permissions", nil)
+	reqPerms.Header.Set("X-Forwarded-Email", adminEmail)
+	recPerms := httptest.NewRecorder()
+	router.ServeHTTP(recPerms, reqPerms)
+	if recPerms.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK from GET /api/permissions, got %d", recPerms.Code)
+	}
+	var permsResp struct {
+		Permissions []string `json:"permissions"`
+	}
+	_ = json.Unmarshal(recPerms.Body.Bytes(), &permsResp)
+	foundJobRoleWrite := false
+	for _, p := range permsResp.Permissions {
+		if p == "job.role_assignment.write" {
+			foundJobRoleWrite = true
+			break
+		}
+	}
+	if !foundJobRoleWrite {
+		t.Fatalf("expected job.role_assignment.write in GET /api/permissions")
+	}
+
+	// 2. MGA creating job with roles should fail with 403
+	postPayloadWithRoles := `{"name":"Secret Roles Job","description":"Desc","roles":["mga"]}`
+	reqPostMGA := httptest.NewRequest("POST", "/api/jobs", strings.NewReader(postPayloadWithRoles))
+	reqPostMGA.Header.Set("Content-Type", "application/json")
+	reqPostMGA.Header.Set("X-Forwarded-Email", mgaEmail)
+	recPostMGA := httptest.NewRecorder()
+	router.ServeHTTP(recPostMGA, reqPostMGA)
+	if recPostMGA.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden when MGA attempts to create job with roles, got %d", recPostMGA.Code)
+	}
+
+	// 3. Admin creating job with roles should succeed (201)
+	reqPostAdmin := httptest.NewRequest("POST", "/api/jobs", strings.NewReader(postPayloadWithRoles))
+	reqPostAdmin.Header.Set("Content-Type", "application/json")
+	reqPostAdmin.Header.Set("X-Forwarded-Email", adminEmail)
+	recPostAdmin := httptest.NewRecorder()
+	router.ServeHTTP(recPostAdmin, reqPostAdmin)
+	if recPostAdmin.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created when Admin creates job with roles, got %d (%s)", recPostAdmin.Code, recPostAdmin.Body.String())
+	}
+	var createdJob models.Job
+	_ = json.Unmarshal(recPostAdmin.Body.Bytes(), &createdJob)
+	defer func() {
+		_ = appStore.DeleteJob(ctx, adminID, createdJob.ID)
+	}()
+
+	// 4. GET /api/jobs as MGA should have roles sanitized to empty []
+	reqGetMGA := httptest.NewRequest("GET", "/api/jobs", nil)
+	reqGetMGA.Header.Set("X-Forwarded-Email", mgaEmail)
+	recGetMGA := httptest.NewRecorder()
+	router.ServeHTTP(recGetMGA, reqGetMGA)
+	if recGetMGA.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK from GET /api/jobs for MGA, got %d", recGetMGA.Code)
+	}
+	var mgaJobs []models.JobWithAssignees
+	_ = json.Unmarshal(recGetMGA.Body.Bytes(), &mgaJobs)
+	var foundMGAJob *models.JobWithAssignees
+	for i := range mgaJobs {
+		if mgaJobs[i].ID == createdJob.ID {
+			foundMGAJob = &mgaJobs[i]
+			break
+		}
+	}
+	if foundMGAJob == nil {
+		t.Fatalf("job not found in MGA list")
+	}
+	if len(foundMGAJob.Roles) != 0 {
+		t.Fatalf("expected roles to be sanitized/empty for MGA, got %+v", foundMGAJob.Roles)
+	}
+
+	// 5. GET /api/jobs as Admin should see the roles
+	reqGetAdmin := httptest.NewRequest("GET", "/api/jobs", nil)
+	reqGetAdmin.Header.Set("X-Forwarded-Email", adminEmail)
+	recGetAdmin := httptest.NewRecorder()
+	router.ServeHTTP(recGetAdmin, reqGetAdmin)
+	if recGetAdmin.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK from GET /api/jobs for Admin, got %d", recGetAdmin.Code)
+	}
+	var adminJobs []models.JobWithAssignees
+	_ = json.Unmarshal(recGetAdmin.Body.Bytes(), &adminJobs)
+	var foundAdminJob *models.JobWithAssignees
+	for i := range adminJobs {
+		if adminJobs[i].ID == createdJob.ID {
+			foundAdminJob = &adminJobs[i]
+			break
+		}
+	}
+	if foundAdminJob == nil {
+		t.Fatalf("job not found in Admin list")
+	}
+	if len(foundAdminJob.Roles) != 1 || foundAdminJob.Roles[0] != "mga" {
+		t.Fatalf("expected ['mga'] roles for Admin, got %+v", foundAdminJob.Roles)
+	}
+
+	// 6. PUT /api/jobs/{id}/roles as MGA should fail with 403
+	putRolesPayload := `{"roles":["viewer","mga"]}`
+	reqPutMGA := httptest.NewRequest("PUT", "/api/jobs/"+createdJob.ID.String()+"/roles", strings.NewReader(putRolesPayload))
+	reqPutMGA.Header.Set("Content-Type", "application/json")
+	reqPutMGA.Header.Set("X-Forwarded-Email", mgaEmail)
+	recPutMGA := httptest.NewRecorder()
+	router.ServeHTTP(recPutMGA, reqPutMGA)
+	if recPutMGA.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for MGA on PUT /api/jobs/{id}/roles, got %d", recPutMGA.Code)
+	}
+
+	// 7. PUT /api/jobs/{id}/roles as Admin should succeed
+	reqPutAdmin := httptest.NewRequest("PUT", "/api/jobs/"+createdJob.ID.String()+"/roles", strings.NewReader(putRolesPayload))
+	reqPutAdmin.Header.Set("Content-Type", "application/json")
+	reqPutAdmin.Header.Set("X-Forwarded-Email", adminEmail)
+	recPutAdmin := httptest.NewRecorder()
+	router.ServeHTTP(recPutAdmin, reqPutAdmin)
+	if recPutAdmin.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for Admin on PUT /api/jobs/{id}/roles, got %d (%s)", recPutAdmin.Code, recPutAdmin.Body.String())
+	}
+	var updatedJob models.JobWithAssignees
+	_ = json.Unmarshal(recPutAdmin.Body.Bytes(), &updatedJob)
+	if len(updatedJob.Roles) != 2 {
+		t.Fatalf("expected 2 roles after update, got %+v", updatedJob.Roles)
+	}
+}
+
 
 
 

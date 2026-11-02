@@ -179,6 +179,9 @@ var AuditRegistry = map[string]EntityPolicy{
 			return user.HasPermission("jobs.all.read") || user.HasPermission("jobs.all.write")
 		},
 		SanitizeSnapshot: func(user *models.UserWithPermissions, snapshot map[string]interface{}) map[string]interface{} {
+			if user == nil || !user.HasPermission("job.role_assignment.read") {
+				delete(snapshot, "roles")
+			}
 			return snapshot
 		},
 	},
