@@ -338,6 +338,7 @@ func (s *Store) ListFamilies(ctx context.Context) ([]models.Family, error) {
 							   'name', j.name,
 							   'description', j.description,
 							   'contact_email', j.contact_email,
+							   'soll_persons', j.soll_persons,
 							   'created_at', j.created_at,
 							   'updated_at', j.updated_at
 						   ) ORDER BY j.name ASC)
@@ -1977,6 +1978,7 @@ func (s *Store) ListEmployees(ctx context.Context) ([]models.Employee, error) {
 					'name', j.name,
 					'description', j.description,
 					'contact_email', j.contact_email,
+					'soll_persons', j.soll_persons,
 					'created_at', j.created_at,
 					'updated_at', j.updated_at
 				) ORDER BY j.name ASC)
@@ -2038,6 +2040,7 @@ func (s *Store) GetEmployeeByID(ctx context.Context, id uuid.UUID) (*models.Empl
 					'name', j.name,
 					'description', j.description,
 					'contact_email', j.contact_email,
+					'soll_persons', j.soll_persons,
 					'created_at', j.created_at,
 					'updated_at', j.updated_at
 				) ORDER BY j.name ASC)
@@ -3265,7 +3268,7 @@ func (s *Store) FinalizeMealAllergens(ctx context.Context, targetDate time.Time,
 func (s *Store) ListJobs(ctx context.Context) ([]models.JobWithAssignees, error) {
 	query := `
 		SELECT 
-			j.id, j.name, j.description, j.contact_email, j.roles, j.created_at, j.updated_at,
+			j.id, j.name, j.description, j.contact_email, j.roles, j.soll_persons, j.created_at, j.updated_at,
 			COALESCE((
 				SELECT json_agg(json_build_object(
 					'id', p.id,
@@ -3306,6 +3309,7 @@ func (s *Store) ListJobs(ctx context.Context) ([]models.JobWithAssignees, error)
 			&j.Description,
 			&j.ContactEmail,
 			&rolesRaw,
+			&j.SollPersons,
 			&j.CreatedAt,
 			&j.UpdatedAt,
 			&parentsRaw,
@@ -3339,7 +3343,7 @@ func (s *Store) ListJobs(ctx context.Context) ([]models.JobWithAssignees, error)
 func (s *Store) GetJobByID(ctx context.Context, id uuid.UUID) (*models.JobWithAssignees, error) {
 	query := `
 		SELECT 
-			j.id, j.name, j.description, j.contact_email, j.roles, j.created_at, j.updated_at,
+			j.id, j.name, j.description, j.contact_email, j.roles, j.soll_persons, j.created_at, j.updated_at,
 			COALESCE((
 				SELECT json_agg(json_build_object(
 					'id', p.id,
@@ -3372,6 +3376,7 @@ func (s *Store) GetJobByID(ctx context.Context, id uuid.UUID) (*models.JobWithAs
 		&j.Description,
 		&j.ContactEmail,
 		&rolesRaw,
+		&j.SollPersons,
 		&j.CreatedAt,
 		&j.UpdatedAt,
 		&parentsRaw,
@@ -3408,6 +3413,9 @@ func (s *Store) CreateJob(ctx context.Context, userID uuid.UUID, job models.Job)
 	job.Name = strings.TrimSpace(job.Name)
 	job.Description = strings.TrimSpace(job.Description)
 	job.ContactEmail = strings.TrimSpace(job.ContactEmail)
+	if job.SollPersons < 0 {
+		job.SollPersons = 0
+	}
 	if job.Name == "" {
 		return models.Job{}, fmt.Errorf("job name is required")
 	}
@@ -3427,16 +3435,17 @@ func (s *Store) CreateJob(ctx context.Context, userID uuid.UUID, job models.Job)
 	var rolesRaw []byte
 	err = s.WithTx(ctx, func(tx pgx.Tx) error {
 		query := `
-			INSERT INTO jobs (id, name, description, contact_email, roles)
-			VALUES ($1, $2, $3, $4, $5)
-			RETURNING id, name, description, contact_email, roles, created_at, updated_at
+			INSERT INTO jobs (id, name, description, contact_email, roles, soll_persons)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			RETURNING id, name, description, contact_email, roles, soll_persons, created_at, updated_at
 		`
-		if err := tx.QueryRow(ctx, query, job.ID, job.Name, job.Description, job.ContactEmail, rolesJSON).Scan(
+		if err := tx.QueryRow(ctx, query, job.ID, job.Name, job.Description, job.ContactEmail, rolesJSON, job.SollPersons).Scan(
 			&created.ID,
 			&created.Name,
 			&created.Description,
 			&created.ContactEmail,
 			&rolesRaw,
+			&created.SollPersons,
 			&created.CreatedAt,
 			&created.UpdatedAt,
 		); err != nil {
@@ -3460,6 +3469,9 @@ func (s *Store) UpdateJob(ctx context.Context, userID uuid.UUID, job models.Job)
 	job.Name = strings.TrimSpace(job.Name)
 	job.Description = strings.TrimSpace(job.Description)
 	job.ContactEmail = strings.TrimSpace(job.ContactEmail)
+	if job.SollPersons < 0 {
+		job.SollPersons = 0
+	}
 	if job.Name == "" {
 		return models.Job{}, fmt.Errorf("job name is required")
 	}
@@ -3490,16 +3502,17 @@ func (s *Store) UpdateJob(ctx context.Context, userID uuid.UUID, job models.Job)
 
 		query := `
 			UPDATE jobs
-			SET name = $1, description = $2, contact_email = $3, roles = $4, updated_at = NOW()
-			WHERE id = $5
-			RETURNING id, name, description, contact_email, roles, created_at, updated_at
+			SET name = $1, description = $2, contact_email = $3, roles = $4, soll_persons = $5, updated_at = NOW()
+			WHERE id = $6
+			RETURNING id, name, description, contact_email, roles, soll_persons, created_at, updated_at
 		`
-		if err := tx.QueryRow(ctx, query, job.Name, job.Description, job.ContactEmail, rolesJSON, job.ID).Scan(
+		if err := tx.QueryRow(ctx, query, job.Name, job.Description, job.ContactEmail, rolesJSON, job.SollPersons, job.ID).Scan(
 			&updated.ID,
 			&updated.Name,
 			&updated.Description,
 			&updated.ContactEmail,
 			&rolesRaw,
+			&updated.SollPersons,
 			&updated.CreatedAt,
 			&updated.UpdatedAt,
 		); err != nil {
@@ -3544,7 +3557,7 @@ func (s *Store) SetJobRoles(ctx context.Context, userID uuid.UUID, jobID uuid.UU
 			UPDATE jobs
 			SET roles = $1, updated_at = NOW()
 			WHERE id = $2
-			RETURNING id, name, description, contact_email, roles, created_at, updated_at
+			RETURNING id, name, description, contact_email, roles, soll_persons, created_at, updated_at
 		`
 		if err := tx.QueryRow(ctx, query, rolesJSON, jobID).Scan(
 			&updatedJob.ID,
@@ -3552,6 +3565,7 @@ func (s *Store) SetJobRoles(ctx context.Context, userID uuid.UUID, jobID uuid.UU
 			&updatedJob.Description,
 			&updatedJob.ContactEmail,
 			&rolesRaw,
+			&updatedJob.SollPersons,
 			&updatedJob.CreatedAt,
 			&updatedJob.UpdatedAt,
 		); err != nil {

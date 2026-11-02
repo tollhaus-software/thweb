@@ -1159,6 +1159,12 @@ const diffJobSnapshots = (before: any, after: any): string[] => {
     changes.push(`${t('jobContactEmail') || 'Kontakt-E-Mail'}: "${before.contact_email || ''}" → "${after.contact_email || ''}"`);
   }
 
+  const beforeSoll = before.soll_persons !== undefined && before.soll_persons !== null ? before.soll_persons : 0;
+  const afterSoll = after.soll_persons !== undefined && after.soll_persons !== null ? after.soll_persons : 0;
+  if (beforeSoll !== afterSoll) {
+    changes.push(`${t('sollPersons') || 'Soll Personen'}: ${beforeSoll} → ${afterSoll}`);
+  }
+
   const beforeRoles = (before.roles || []).slice().sort().join(', ');
   const afterRoles = (after.roles || []).slice().sort().join(', ');
   if (beforeRoles !== afterRoles) {
@@ -1451,6 +1457,9 @@ const formatSnapshotDetails = (log: AuditLog, families: Family[] = []) => {
     }
     if (data.contact_email) {
       parts.push(`${t('jobContactEmail') || 'Kontakt-E-Mail'}: ${data.contact_email}`);
+    }
+    if (data.soll_persons !== undefined && data.soll_persons !== null) {
+      parts.push(`${t('sollPersons') || 'Soll Personen'}: ${data.soll_persons}`);
     }
   }
 
@@ -3456,7 +3465,7 @@ const Dashboard: React.FC = () => {
     }
   }, [getAuthHeaders]);
 
-  const handleCreateJob = React.useCallback(async (jobData: { name: string; description: string; contact_email: string; roles?: string[] }) => {
+  const handleCreateJob = React.useCallback(async (jobData: { name: string; description: string; contact_email: string; roles?: string[]; soll_persons?: number }) => {
     const res = await fetch('/api/jobs', {
       method: 'POST',
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
@@ -3473,7 +3482,7 @@ const Dashboard: React.FC = () => {
     if (canReadEmployees) fetchEmployees();
   }, [getAuthHeaders, fetchJobs, refreshUser, canReadFamiliesAll, fetchFamilies, canReadOverview, fetchOverviewFamilies, canReadEmployees, fetchEmployees]);
 
-  const handleUpdateJob = React.useCallback(async (id: string, jobData: { name: string; description: string; contact_email: string; roles?: string[] }) => {
+  const handleUpdateJob = React.useCallback(async (id: string, jobData: { name: string; description: string; contact_email: string; roles?: string[]; soll_persons?: number }) => {
     const res = await fetch(`/api/jobs/${id}`, {
       method: 'PUT',
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),

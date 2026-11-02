@@ -32,6 +32,7 @@ export interface JobWithAssignees {
   description: string;
   contact_email: string;
   roles?: string[];
+  soll_persons?: number;
   parents: JobAssigneeParent[];
   employees: JobAssigneeEmployee[];
   created_at?: string;
@@ -48,8 +49,8 @@ export interface JobsTabProps {
   isCreateModalOpen?: boolean;
   onOpenCreateModal?: () => void;
   onCloseCreateModal?: () => void;
-  onCreateJob: (job: { name: string; description: string; contact_email: string; roles?: string[] }) => Promise<void>;
-  onUpdateJob: (id: string, job: { name: string; description: string; contact_email: string; roles?: string[] }) => Promise<void>;
+  onCreateJob: (job: { name: string; description: string; contact_email: string; roles?: string[]; soll_persons?: number }) => Promise<void>;
+  onUpdateJob: (id: string, job: { name: string; description: string; contact_email: string; roles?: string[]; soll_persons?: number }) => Promise<void>;
   onDeleteJob: (id: string) => Promise<void>;
   onUpdateJobAssignees?: (jobId: string, parentIds: string[], employeeIds: string[]) => Promise<void>;
   onUpdateJobRoles?: (jobId: string, roles: string[]) => Promise<void>;
@@ -138,11 +139,13 @@ export const JobsTab: React.FC<JobsTabProps> = ({
     description: string;
     contact_email: string;
     roles: string[];
+    soll_persons: number;
   }>({
     name: '',
     description: '',
     contact_email: '',
     roles: [],
+    soll_persons: 0,
   });
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -183,7 +186,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
 
   const openCreateModal = () => {
     setEditingJob(null);
-    setFormData({ name: '', description: '', contact_email: '', roles: [] });
+    setFormData({ name: '', description: '', contact_email: '', roles: [], soll_persons: 0 });
     setFormError(null);
     if (onOpenCreateModal) {
       onOpenCreateModal();
@@ -198,7 +201,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
       onCloseCreateModal();
     }
     setInternalModalOpen(false);
-    setFormData({ name: '', description: '', contact_email: '', roles: [] });
+    setFormData({ name: '', description: '', contact_email: '', roles: [], soll_persons: 0 });
     setFormError(null);
   };
 
@@ -209,6 +212,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
       description: job.description || '',
       contact_email: job.contact_email || '',
       roles: job.roles || [],
+      soll_persons: job.soll_persons ?? 0,
     });
     setFormError(null);
   };
@@ -293,6 +297,8 @@ export const JobsTab: React.FC<JobsTabProps> = ({
                     name: trimmed,
                     description: row.description,
                     contact_email: row.contact_email,
+                    roles: row.roles,
+                    soll_persons: row.soll_persons ?? 0,
                   });
                 }}
                 editButtonLabel={<Pencil size={13} />}
@@ -324,6 +330,8 @@ export const JobsTab: React.FC<JobsTabProps> = ({
                   name: row.name,
                   description: val,
                   contact_email: row.contact_email,
+                  roles: row.roles,
+                  soll_persons: row.soll_persons ?? 0,
                 });
               }}
               placeholder={t('addJobDescription') || 'Beschreibung hinzufügen...'}
@@ -361,6 +369,8 @@ export const JobsTab: React.FC<JobsTabProps> = ({
                   name: row.name,
                   description: row.description,
                   contact_email: trimmed,
+                  roles: row.roles,
+                  soll_persons: row.soll_persons ?? 0,
                 });
               }}
               placeholder="-"
@@ -384,6 +394,122 @@ export const JobsTab: React.FC<JobsTabProps> = ({
               onCancel={() => {}}
               onValidate={() => true}
             />
+          );
+        },
+      },
+      {
+        id: 'soll_persons',
+        accessorKey: 'soll_persons',
+        header: t('sollPersons') || 'Soll Personen',
+        size: 140,
+        cell: (info) => {
+          const row = info.row.original;
+          const soll = row.soll_persons ?? 0;
+          if (!canWriteJobs) {
+            return (
+              <span data-testid={`job-soll-persons-${row.id}`} style={{ fontWeight: 600 }}>
+                {soll}
+              </span>
+            );
+          }
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <EasyEditComponent
+                type={EasyEditTypes.TEXT}
+                value={String(soll)}
+                onSave={async (val: string) => {
+                  const parsed = Math.max(0, parseInt(val.trim(), 10) || 0);
+                  if (parsed === soll) return;
+                  await onUpdateJob(row.id, {
+                    name: row.name,
+                    description: row.description,
+                    contact_email: row.contact_email,
+                    roles: row.roles,
+                    soll_persons: parsed,
+                  });
+                }}
+                editButtonLabel={<Pencil size={13} />}
+                instructions={t('editSollPersons') || 'Soll Personen bearbeiten'}
+                displayComponent={
+                  <span data-testid={`job-soll-persons-${row.id}`} style={{ fontWeight: 600 }}>
+                    {soll}
+                  </span>
+                }
+                viewAttributes={{}}
+                inputAttributes={{
+                  type: 'number',
+                  min: '0',
+                  style: { width: '60px' },
+                }}
+                onCancel={() => {}}
+                onValidate={(val: string) => {
+                  const num = Number(val);
+                  return !isNaN(num) && num >= 0 && Number.isInteger(num);
+                }}
+              />
+            </div>
+          );
+        },
+      },
+      {
+        id: 'ist_persons',
+        header: t('istPersons') || 'Ist Personen',
+        size: 150,
+        cell: (info) => {
+          const row = info.row.original;
+          const parents = row.parents || [];
+          const employees = row.employees || [];
+          const istCount = parents.length + employees.length;
+          const sollCount = row.soll_persons ?? 0;
+          const diff = istCount - sollCount;
+
+          const signDiff = diff > 0 ? `+${diff}` : diff < 0 ? `${diff}` : '0';
+          const diffText = `( ${signDiff} )`;
+
+          let badgeBg = 'var(--success-bg, #f0fdf4)';
+          let badgeColor = 'var(--success-text, #15803d)';
+          let badgeBorder = 'var(--success-border, #bbf7d0)';
+          let badgeClass = 'job-diff-badge job-diff-zero';
+
+          if (diff < 0) {
+            badgeBg = 'var(--danger-bg, #fef2f2)';
+            badgeColor = 'var(--danger-text, #b91c1c)';
+            badgeBorder = 'var(--danger-border, #fecaca)';
+            badgeClass = 'job-diff-badge job-diff-negative';
+          } else if (diff > 0) {
+            badgeBg = 'var(--warning-bg, #fefce8)';
+            badgeColor = 'var(--warning-text, #a16207)';
+            badgeBorder = 'var(--warning-border, #fef08a)';
+            badgeClass = 'job-diff-badge job-diff-positive';
+          }
+
+          return (
+            <div
+              data-testid={`job-ist-cell-${row.id}`}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}
+            >
+              <span data-testid={`job-ist-count-${row.id}`} style={{ fontWeight: 600 }}>
+                {istCount}
+              </span>
+              <span
+                className={badgeClass}
+                data-testid={`job-diff-badge-${row.id}`}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  padding: '1px 7px',
+                  borderRadius: '10px',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  backgroundColor: badgeBg,
+                  color: badgeColor,
+                  border: `1px solid ${badgeBorder}`,
+                  lineHeight: '1.3',
+                }}
+              >
+                {diffText}
+              </span>
+            </div>
           );
         },
       },
@@ -936,6 +1062,29 @@ export const JobsTab: React.FC<JobsTabProps> = ({
                   value={formData.contact_email}
                   onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
                   placeholder="kontakt@tollhaus.de"
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem 0.7rem',
+                    fontSize: '0.9rem',
+                    borderRadius: '4px',
+                    border: '1px solid var(--border)',
+                    backgroundColor: 'var(--bg-surface)',
+                    color: 'var(--text)',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '1.25rem' }}>
+                <label htmlFor="job-soll-persons" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.35rem', color: 'var(--text-h)' }}>
+                  {t('sollPersonsLabel') || 'Soll Personen:'}
+                </label>
+                <input
+                  id="job-soll-persons"
+                  type="number"
+                  min={0}
+                  value={formData.soll_persons}
+                  onChange={(e) => setFormData({ ...formData, soll_persons: Math.max(0, parseInt(e.target.value, 10) || 0) })}
                   style={{
                     width: '100%',
                     padding: '0.5rem 0.7rem',

@@ -2678,6 +2678,9 @@ func (s *Server) HandleCreateJob(w http.ResponseWriter, r *http.Request) {
 		httpErrorLog(w, r, "Invalid request body", http.StatusBadRequest, err)
 		return
 	}
+	if job.SollPersons < 0 {
+		job.SollPersons = 0
+	}
 	if strings.TrimSpace(job.Name) == "" {
 		httpErrorLog(w, r, "Job name is required", http.StatusBadRequest, fmt.Errorf("job name is required"))
 		return
@@ -2713,8 +2716,14 @@ func (s *Server) HandleUpdateJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		httpErrorLog(w, r, "Invalid request body", http.StatusBadRequest, err)
+		return
+	}
+
 	var job models.Job
-	if err := json.NewDecoder(r.Body).Decode(&job); err != nil {
+	if err := json.Unmarshal(bodyBytes, &job); err != nil {
 		httpErrorLog(w, r, "Invalid request body", http.StatusBadRequest, err)
 		return
 	}
@@ -2724,13 +2733,28 @@ func (s *Server) HandleUpdateJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var rawMap map[string]json.RawMessage
+	_ = json.Unmarshal(bodyBytes, &rawMap)
+
+	existingJob, err := s.Store.GetJobByID(r.Context(), id)
+	if err != nil {
+		httpErrorLog(w, r, "Failed to fetch existing job", http.StatusInternalServerError, err)
+		return
+	}
+	if existingJob == nil {
+		httpErrorLog(w, r, "Job not found", http.StatusNotFound, fmt.Errorf("job not found"))
+		return
+	}
+
+	if _, hasSoll := rawMap["soll_persons"]; !hasSoll {
+		job.SollPersons = existingJob.SollPersons
+	}
+	if job.SollPersons < 0 {
+		job.SollPersons = 0
+	}
+
 	if job.Roles != nil {
-		existingJob, err := s.Store.GetJobByID(r.Context(), id)
-		if err != nil {
-			httpErrorLog(w, r, "Failed to fetch existing job", http.StatusInternalServerError, err)
-			return
-		}
-		if existingJob != nil && (user == nil || !user.HasPermission("job.role_assignment.write")) {
+		if user == nil || !user.HasPermission("job.role_assignment.write") {
 			if !slicesEqualPerms(existingJob.Roles, job.Roles) {
 				http.Error(w, "Forbidden: job.role_assignment.write required to update roles", http.StatusForbidden)
 				return

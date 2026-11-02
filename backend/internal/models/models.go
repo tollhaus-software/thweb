@@ -1247,6 +1247,7 @@ type Job struct {
 	Description  string    `json:"description"`
 	ContactEmail string    `json:"contact_email"`
 	Roles        []string  `json:"roles"`
+	SollPersons  int       `json:"soll_persons"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }

@@ -18,10 +18,17 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pavolmarko/thweb-backend/internal/auth"
 	"github.com/pavolmarko/thweb-backend/internal/crypto"
+	"github.com/pavolmarko/thweb-backend/internal/database"
 	"github.com/pavolmarko/thweb-backend/internal/kioskcert"
 	"github.com/pavolmarko/thweb-backend/internal/models"
 	"github.com/pavolmarko/thweb-backend/internal/store"
 )
+
+func TestMain(m *testing.M) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	database.ApplySchemaMigrations(context.Background(), dbURL)
+	os.Exit(m.Run())
+}
 
 func TestHandleListAuditLogs_Permission(t *testing.T) {
 	s := &Server{}
@@ -2524,7 +2531,7 @@ func TestJobs_APIHandlersAndPermissions(t *testing.T) {
 	}()
 
 	// 3. PUT /api/jobs/{id}
-	updateJobJSON := `{"name":"Hygiene Test Updated","description":"Updated hygiene tasks","contact_email":"updated@tollhaus.de"}`
+	updateJobJSON := `{"name":"Hygiene Test Updated","description":"Updated hygiene tasks","contact_email":"updated@tollhaus.de","soll_persons":3}`
 	reqPut := httptest.NewRequest("PUT", "/api/jobs/"+createdJob.ID.String(), strings.NewReader(updateJobJSON))
 	reqPut.Header.Set("Content-Type", "application/json")
 	reqPut.Header.Set("X-Forwarded-Email", writerEmail)
@@ -2532,6 +2539,27 @@ func TestJobs_APIHandlersAndPermissions(t *testing.T) {
 	router.ServeHTTP(recPut, reqPut)
 	if recPut.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK from PUT /api/jobs/{id}, got %d (%s)", recPut.Code, recPut.Body.String())
+	}
+	var updatedJob models.Job
+	_ = json.Unmarshal(recPut.Body.Bytes(), &updatedJob)
+	if updatedJob.SollPersons != 3 {
+		t.Fatalf("expected soll_persons=3, got %d", updatedJob.SollPersons)
+	}
+
+	// Verify PUT without soll_persons preserves existing soll_persons
+	updateJobJSON2 := `{"name":"Hygiene Test Updated Again","description":"Updated hygiene tasks","contact_email":"updated@tollhaus.de"}`
+	reqPut2 := httptest.NewRequest("PUT", "/api/jobs/"+createdJob.ID.String(), strings.NewReader(updateJobJSON2))
+	reqPut2.Header.Set("Content-Type", "application/json")
+	reqPut2.Header.Set("X-Forwarded-Email", writerEmail)
+	recPut2 := httptest.NewRecorder()
+	router.ServeHTTP(recPut2, reqPut2)
+	if recPut2.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK from PUT /api/jobs/{id}, got %d (%s)", recPut2.Code, recPut2.Body.String())
+	}
+	var updatedJobPreserved models.Job
+	_ = json.Unmarshal(recPut2.Body.Bytes(), &updatedJobPreserved)
+	if updatedJobPreserved.SollPersons != 3 {
+		t.Fatalf("expected soll_persons=3 to be preserved, got %d", updatedJobPreserved.SollPersons)
 	}
 
 	// 4. Create a parent and associate job
