@@ -12,12 +12,21 @@ export interface MealAllergenDocumentation {
   pdf_url?: string;
 }
 
+export interface MealAllergenCook {
+  id: string;
+  type: 'parent' | 'employee';
+  first_name?: string;
+  last_name?: string;
+  display_name?: string;
+}
+
 export interface MealAllergenDay {
   date: string; // YYYY-MM-DD
   has_allergen_record: boolean;
   cook_parent_id?: string | null;
   cook_employee_id?: string | null;
   cook_custom_name: string;
+  cooks?: MealAllergenCook[];
   cook_display_name: string;
   meal_components: MealAllergenComponent[];
   status: MealAllergenStatus;
@@ -29,12 +38,39 @@ export interface MealAllergenDay {
   updated_at?: string;
 }
 
+export interface MealAllergenSnapshot {
+  cooks?: MealAllergenCook[];
+  cook_parent_id?: string | null;
+  cook_employee_id?: string | null;
+  cook_custom_name?: string;
+  cook_display_name?: string;
+  meal_components?: MealAllergenComponent[];
+  status?: MealAllergenStatus;
+  documentation?: MealAllergenDocumentation;
+}
+
+export interface MealAllergensHistoryEntry {
+  id: string;
+  cooking_date: string;
+  operation: string;
+  before_snapshot?: MealAllergenSnapshot | null;
+  after_snapshot: MealAllergenSnapshot;
+  changed_by?: string | null;
+  changed_by_email: string;
+  is_kiosk: boolean;
+  kiosk_name: string;
+  created_at: string;
+}
+
 export interface CookOption {
   id: string;
   type: 'parent' | 'employee';
   first_name: string;
   last_name: string;
   display_name: string;
+  employee_type?: string;
+  family_id?: string | null;
+  family_name?: string;
 }
 
 export interface MainAllergenDefinition {
@@ -436,6 +472,7 @@ export function createEmptyMealAllergenDay(dateStr: string): MealAllergenDay {
     cook_parent_id: null,
     cook_employee_id: null,
     cook_custom_name: '',
+    cooks: [],
     cook_display_name: '',
     meal_components: [],
     status: 'unspecified',
@@ -444,6 +481,120 @@ export function createEmptyMealAllergenDay(dateStr: string): MealAllergenDay {
     plan_meal_components: [],
     has_plan_meal: false,
   };
+}
+
+/**
+ * Formats one or more cooks into a display name.
+ * If two people with the same surname are cooking, formats them as "GivenNameA & GivenNameB CommonSurname".
+ */
+export function formatCooksDisplayName(
+  cooks: Array<{ first_name?: string; last_name?: string; display_name?: string }>
+): string {
+  if (!cooks || cooks.length === 0) return '';
+  if (cooks.length === 1) {
+    const c = cooks[0];
+    if (c.display_name && c.display_name.trim()) return c.display_name.trim();
+    return `${(c.first_name || '').trim()} ${(c.last_name || '').trim()}`.trim();
+  }
+
+  const result: string[] = [];
+  let i = 0;
+  while (i < cooks.length) {
+    const cur = cooks[i];
+    const curFirst = (cur.first_name || '').trim();
+    const curLast = (cur.last_name || '').trim();
+    if (curLast !== '' && curFirst !== '') {
+      const sameLastFirsts = [curFirst];
+      let j = i + 1;
+      while (j < cooks.length) {
+        const nextFirst = (cooks[j].first_name || '').trim();
+        const nextLast = (cooks[j].last_name || '').trim();
+        if (nextLast.toLowerCase() === curLast.toLowerCase() && nextFirst !== '') {
+          sameLastFirsts.push(nextFirst);
+          j++;
+        } else {
+          break;
+        }
+      }
+      if (sameLastFirsts.length === 2) {
+        result.push(`${sameLastFirsts[0]} & ${sameLastFirsts[1]} ${curLast}`);
+        i = j;
+        continue;
+      } else if (sameLastFirsts.length > 2) {
+        const prefix = sameLastFirsts.slice(0, -1).join(', ');
+        result.push(`${prefix} & ${sameLastFirsts[sameLastFirsts.length - 1]} ${curLast}`);
+        i = j;
+        continue;
+      }
+    }
+    const disp = (cur.display_name || '').trim() || `${curFirst} ${curLast}`.trim();
+    if (disp) {
+      result.push(disp);
+    }
+    i++;
+  }
+  return result.join(', ');
+}
+
+export function getCookOptionKey(opt: { type: 'parent' | 'employee'; id: string }): string {
+  return `${opt.type}:${opt.id}`;
+}
+
+/**
+ * Sorts eligible cook options according to:
+ * 0. Already selected cooks (if prioritizedKeys is provided) first
+ * 1. Employees with employee_type === 'cook' first
+ * 2. Parents after that, ordered alphabetically by canonical family_name (and within their family, alphabetically by given name)
+ * 3. Remaining employees after that.
+ */
+export function sortCookOptions(
+  options: CookOption[],
+  prioritizedKeys?: Set<string>
+): CookOption[] {
+  const getGroupRank = (opt: CookOption): number => {
+    if (opt.type === 'employee' && opt.employee_type === 'cook') return 1;
+    if (opt.type === 'parent') return 2;
+    return 3;
+  };
+
+  return [...options].sort((a, b) => {
+    if (prioritizedKeys && prioritizedKeys.size > 0) {
+      const aPri = prioritizedKeys.has(getCookOptionKey(a));
+      const bPri = prioritizedKeys.has(getCookOptionKey(b));
+      if (aPri && !bPri) return -1;
+      if (!aPri && bPri) return 1;
+    }
+
+    const rankA = getGroupRank(a);
+    const rankB = getGroupRank(b);
+    if (rankA !== rankB) return rankA - rankB;
+
+    if (rankA === 2) {
+      // Parents: ordered alphabetically by canonical family_name, then family_id, then first_name
+      const famA = (a.family_name || a.last_name || '').trim();
+      const famB = (b.family_name || b.last_name || '').trim();
+      const famCmp = famA.localeCompare(famB, 'de', { sensitivity: 'base' });
+      if (famCmp !== 0) return famCmp;
+      if (a.family_id && b.family_id && a.family_id !== b.family_id) {
+        return a.family_id.localeCompare(b.family_id);
+      }
+      const fnCmp = (a.first_name || '').trim().localeCompare((b.first_name || '').trim(), 'de', {
+        sensitivity: 'base',
+      });
+      if (fnCmp !== 0) return fnCmp;
+      return (a.last_name || '').trim().localeCompare((b.last_name || '').trim(), 'de', {
+        sensitivity: 'base',
+      });
+    }
+
+    const fnCmp = (a.first_name || '').trim().localeCompare((b.first_name || '').trim(), 'de', {
+      sensitivity: 'base',
+    });
+    if (fnCmp !== 0) return fnCmp;
+    return (a.last_name || '').trim().localeCompare((b.last_name || '').trim(), 'de', {
+      sensitivity: 'base',
+    });
+  });
 }
 
 /**
@@ -456,10 +607,11 @@ export function matchCookFromPlan(
   cook_parent_id: string | null;
   cook_employee_id: string | null;
   cook_custom_name: string;
+  cooks: MealAllergenCook[];
 } {
   const trimmed = (planCookName || '').trim();
   if (!trimmed) {
-    return { cook_parent_id: null, cook_employee_id: null, cook_custom_name: '' };
+    return { cook_parent_id: null, cook_employee_id: null, cook_custom_name: '', cooks: [] };
   }
   const lower = trimmed.toLowerCase();
 
@@ -470,6 +622,15 @@ export function matchCookFromPlan(
       cook_parent_id: exactFull.type === 'parent' ? exactFull.id : null,
       cook_employee_id: exactFull.type === 'employee' ? exactFull.id : null,
       cook_custom_name: '',
+      cooks: [
+        {
+          id: exactFull.id,
+          type: exactFull.type,
+          first_name: exactFull.first_name,
+          last_name: exactFull.last_name,
+          display_name: exactFull.display_name,
+        },
+      ],
     };
   }
 
@@ -481,6 +642,15 @@ export function matchCookFromPlan(
       cook_parent_id: match.type === 'parent' ? match.id : null,
       cook_employee_id: match.type === 'employee' ? match.id : null,
       cook_custom_name: '',
+      cooks: [
+        {
+          id: match.id,
+          type: match.type,
+          first_name: match.first_name,
+          last_name: match.last_name,
+          display_name: match.display_name,
+        },
+      ],
     };
   }
 
@@ -488,6 +658,7 @@ export function matchCookFromPlan(
     cook_parent_id: null,
     cook_employee_id: null,
     cook_custom_name: trimmed,
+    cooks: [],
   };
 }
 
@@ -499,10 +670,22 @@ function getNormalizedCookNames(day: MealAllergenDay): string[] {
       names.add(norm);
     }
   }
+  for (const c of day.cooks || []) {
+    const disp = (c.display_name || `${c.first_name || ''} ${c.last_name || ''}`).trim().toLowerCase();
+    if (disp) names.add(disp);
+  }
   return Array.from(names);
 }
 
 export function isSameCook(a: MealAllergenDay, b: MealAllergenDay): boolean {
+  if (a.cooks && a.cooks.length > 0 && b.cooks && b.cooks.length > 0) {
+    const keysA = new Set(a.cooks.map((c) => `${c.type}:${c.id}`));
+    for (const cb of b.cooks) {
+      if (keysA.has(`${cb.type}:${cb.id}`)) {
+        return true;
+      }
+    }
+  }
   if (a.cook_parent_id && b.cook_parent_id && a.cook_parent_id === b.cook_parent_id) {
     return true;
   }

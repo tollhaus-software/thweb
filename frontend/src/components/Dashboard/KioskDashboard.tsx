@@ -4,10 +4,16 @@ import { useRealtime } from '../../hooks/useRealtime';
 import { t, formatDashboardDate } from '../../utils/i18n';
 import { AllergenIcon } from '../MealAllergens/AllergenIcon';
 import {
+  MealAllergensEditor,
+  MealComponentAllergenBadges,
+} from '../MealAllergens/MealAllergensEditor';
+import { formatDateKey } from '../../utils/mealPlan';
+import {
   isLebensmittelAllergen,
   getAllergenDisplayLabel,
   findMatchingComponentsForAllergy,
   abbreviateComponentName,
+  createEmptyMealAllergenDay,
   type MealAllergenComponent,
 } from '../../utils/mealAllergens';
 import {
@@ -21,6 +27,7 @@ import {
   AlertCircle,
   AlertTriangle,
   Home,
+  Pencil,
 } from 'lucide-react';
 import './KioskDashboard.css';
 
@@ -29,6 +36,8 @@ interface DailyBriefData {
   who_is_cooking: string;
   meal_components: string[];
   tasks_and_info: string[];
+  has_allergen_record?: boolean;
+  allergen_meal_components?: MealAllergenComponent[];
 }
 
 interface GroupAllergiesSummary {
@@ -58,13 +67,17 @@ export interface KioskDashboardProps {
 
 export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false }) => {
   const { token, hasPermission } = useAuth();
-  const canViewAllergiesSummary = !embedded || hasPermission('allergies.summary.read');
+  const canViewAllergiesSummary =
+    !embedded || hasPermission('allergies.summary.read') || hasPermission('meal_allergens.read');
+  const canEditMealAllergens = !embedded || hasPermission('meal_allergens.write');
 
   // If selectedDate is null, the frontend omits the ?date parameter, requesting "today" from backend
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [todayDateStr, setTodayDateStr] = useState<string>(() => formatDateKey(new Date()));
   const [data, setData] = useState<DailyBriefData | null>(null);
   const [allergiesData, setAllergiesData] = useState<AllergiesSummaryData | null>(null);
   const [showAllergies, setShowAllergies] = useState<boolean>(false);
+  const [isEditingAllergens, setIsEditingAllergens] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState<Date>(() => new Date());
 
@@ -100,6 +113,9 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
 
       const result: DailyBriefData = await res.json();
       setData(result);
+      if (!dateParam && result.date) {
+        setTodayDateStr(result.date.split('T')[0]);
+      }
       setError(null);
     } catch (err: unknown) {
       console.error('Error fetching daily brief:', err);
@@ -132,12 +148,10 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
     }
   }, [token, canViewAllergiesSummary]);
 
-  // Initial fetch and fetch when selectedDate or showAllergies changes
+  // Initial fetch and fetch when selectedDate changes (also needed on main dashboard for allergen matching)
   useEffect(() => {
-    if (showAllergies) {
-      void fetchAllergiesSummary(selectedDate);
-    }
-  }, [selectedDate, showAllergies, fetchAllergiesSummary]);
+    void fetchAllergiesSummary(selectedDate);
+  }, [selectedDate, fetchAllergiesSummary]);
   useEffect(() => {
     let ignore = false;
     const runFetch = async () => {
@@ -159,6 +173,9 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
         const result: DailyBriefData = await res.json();
         if (!ignore) {
           setData(result);
+          if (!selectedDate && result.date) {
+            setTodayDateStr(result.date.split('T')[0]);
+          }
           setError(null);
         }
       } catch (err: unknown) {
@@ -231,6 +248,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
     const y = current.getFullYear();
     const m = String(current.getMonth() + 1).padStart(2, '0');
     const d = String(current.getDate()).padStart(2, '0');
+    setIsEditingAllergens(false);
     setSelectedDate(`${y}-${m}-${d}`);
   };
 
@@ -240,57 +258,93 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
     const y = current.getFullYear();
     const m = String(current.getMonth() + 1).padStart(2, '0');
     const d = String(current.getDate()).padStart(2, '0');
+    setIsEditingAllergens(false);
     setSelectedDate(`${y}-${m}-${d}`);
   };
 
   const handleHomeClick = () => {
     setShowAllergies(false);
+    setIsEditingAllergens(false);
     setSelectedDate(null); // Omitting date fetches "today" from backend
   };
 
-  const displayDateStr = data?.date || selectedDate || new Date().toISOString().split('T')[0];
+  const displayDateStr = (data?.date || selectedDate || todayDateStr).split('T')[0];
+  const isToday = selectedDate === null || displayDateStr === todayDateStr;
   const formattedDate = formatDashboardDate(displayDateStr);
   const hours = String(currentTime.getHours()).padStart(2, '0');
   const minutes = String(currentTime.getMinutes()).padStart(2, '0');
   const formattedTime = `${hours}:${minutes}`;
+
+  const allergenComponents: MealAllergenComponent[] =
+    data?.allergen_meal_components && data.allergen_meal_components.length > 0
+      ? data.allergen_meal_components
+      : (allergiesData?.meal_components || []);
+
+  const hasAllergensAdded =
+    allergenComponents.length > 0 &&
+    (Boolean(data?.has_allergen_record) || allergenComponents.some((c) => c.allergens && c.allergens.length > 0));
+
+  const showAllergensSection = hasAllergensAdded || (isToday && canEditMealAllergens);
 
   return (
     <div className={`kiosk-tablet-page ${embedded ? 'embedded' : ''}`}>
       <div className="kiosk-tablet-container">
         
         {/* Content Area (taking up most of the screen space) */}
-        <main className="kiosk-content-area">
+        <main className={`kiosk-content-area ${isEditingAllergens ? 'editing-allergens' : ''}`}>
           {error && (
             <div className="kiosk-error-banner">
-              <AlertCircle size={embedded ? 20 : 24} />
+              <AlertCircle size={embedded ? 18 : 22} />
               <span>{error}</span>
             </div>
           )}
 
-          {/* Header: Just centered text saying the current date, with left/right day switch arrows at the screen sides */}
-          <header className="kiosk-header">
-            <button
-              onClick={handlePrevDay}
-              className="kiosk-header-nav-btn left"
-              title={t('previousDay')}
-              aria-label={t('previousDay')}
-            >
-              <ChevronLeft size={embedded ? 28 : 44} />
-            </button>
+          {isEditingAllergens ? (
+            <MealAllergensEditor
+              initialDay={{
+                ...createEmptyMealAllergenDay(displayDateStr),
+                has_allergen_record: Boolean(data?.has_allergen_record),
+                meal_components: allergenComponents,
+                plan_meal_components: data?.meal_components || [],
+                plan_cook_name: data?.who_is_cooking || '',
+              }}
+              hidePlanReference={true}
+              onBack={() => {
+                setIsEditingAllergens(false);
+                void fetchDailyBrief(selectedDate);
+                void fetchAllergiesSummary(selectedDate);
+              }}
+              onDaySaved={() => {
+                void fetchDailyBrief(selectedDate);
+                void fetchAllergiesSummary(selectedDate);
+              }}
+            />
+          ) : (
+            <>
+              {/* Header: Just centered text saying the current date, with left/right day switch arrows at the screen sides */}
+              <header className="kiosk-header">
+                <button
+                  onClick={handlePrevDay}
+                  className="kiosk-header-nav-btn left"
+                  title={t('previousDay')}
+                  aria-label={t('previousDay')}
+                >
+                  <ChevronLeft size={embedded ? 24 : 36} />
+                </button>
 
-            <h1 className="kiosk-header-date">{formattedDate}</h1>
+                <h1 className="kiosk-header-date">{formattedDate}</h1>
 
-            <button
-              onClick={handleNextDay}
-              className="kiosk-header-nav-btn right"
-              title={t('nextDay')}
-              aria-label={t('nextDay')}
-            >
-              <ChevronRight size={embedded ? 28 : 44} />
-            </button>
-          </header>
+                <button
+                  onClick={handleNextDay}
+                  className="kiosk-header-nav-btn right"
+                  title={t('nextDay')}
+                  aria-label={t('nextDay')}
+                >
+                  <ChevronRight size={embedded ? 24 : 36} />
+                </button>
+              </header>
 
-          {showAllergies ? (
+              {showAllergies ? (
             <div className="kiosk-allergies-view">
               {(() => {
                 const mealComponents: MealAllergenComponent[] = allergiesData?.meal_components || [];
@@ -304,7 +358,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
                     ]).map((grp) => (
                       <section key={grp.group_id} className="kiosk-card kiosk-card-allergies-group">
                         <div className="kiosk-card-header">
-                          <AlertCircle size={embedded ? 20 : 26} className="kiosk-card-header-icon" />
+                          <AlertCircle size={embedded ? 18 : 22} className="kiosk-card-header-icon" />
                           <span>{grp.group_name}</span>
                         </div>
                         <div className="kiosk-allergies-list">
@@ -337,7 +391,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
                                         }}
                                         data-testid={`group-allergy-icon-${grp.group_id}-${idx}`}
                                       >
-                                        <AllergenIcon allergenKey={allergy} size={embedded ? 20 : 30} />
+                                        <AllergenIcon allergenKey={allergy} size={embedded ? 18 : 24} />
                                       </span>
                                     )}
                                     <span>{display}</span>
@@ -368,7 +422,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
 
                     <section className="kiosk-card kiosk-card-allergies-employees">
                       <div className="kiosk-card-header">
-                        <AlertCircle size={embedded ? 20 : 26} className="kiosk-card-header-icon" />
+                        <AlertCircle size={embedded ? 18 : 22} className="kiosk-card-header-icon" />
                         <span>{t('employeeAllergiesTitle')}</span>
                       </div>
                       <div className="kiosk-allergies-list">
@@ -403,7 +457,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
                                       }}
                                       data-testid={`employee-allergy-icon-${idx}`}
                                     >
-                                      <AllergenIcon allergenKey={allergy} size={embedded ? 20 : 30} />
+                                      <AllergenIcon allergenKey={allergy} size={embedded ? 18 : 24} />
                                     </span>
                                   )}
                                   <span>{display}</span>
@@ -439,7 +493,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
               {/* Card 2: Shows who is cooking. Header on top left: "Koch / Köchin" */}
               <section className="kiosk-card kiosk-card-cook">
                 <div className="kiosk-card-header">
-                  <UtensilsCrossed size={embedded ? 20 : 26} className="kiosk-card-header-icon" />
+                  <UtensilsCrossed size={embedded ? 18 : 22} className="kiosk-card-header-icon" />
                   <span>{t('whoIsCooking')}</span>
                 </div>
                 <div className="kiosk-cook-content">
@@ -454,7 +508,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
               {/* Card 3: Shows the meal, with header "Es gibt:" and up to 3 meal components as lines */}
               <section className="kiosk-card kiosk-card-meal">
                 <div className="kiosk-card-header">
-                  <Soup size={embedded ? 20 : 26} className="kiosk-card-header-icon" />
+                  <Soup size={embedded ? 18 : 22} className="kiosk-card-header-icon" />
                   <span>{t('mealTitle')}</span>
                 </div>
                 <div className="kiosk-meal-lines">
@@ -471,12 +525,58 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
                     <div className="kiosk-empty-text">{t('noMeal')}</div>
                   )}
                 </div>
+
+                {showAllergensSection && (
+                  <div className="kiosk-meal-allergens-section" data-testid="kiosk-meal-allergens-section">
+                    <div className="kiosk-meal-allergens-header">
+                      <span>{t('componentsAndAllergensLabel')}</span>
+                      {isToday && canEditMealAllergens && (
+                        <button
+                          type="button"
+                          className="kiosk-meal-allergens-edit-btn"
+                          onClick={() => setIsEditingAllergens(true)}
+                          title={t('editMealAllergens')}
+                          aria-label={t('editMealAllergens')}
+                          data-testid="kiosk-edit-meal-allergens-btn"
+                        >
+                          <Pencil size={embedded ? 14 : 18} />
+                        </button>
+                      )}
+                    </div>
+                    {hasAllergensAdded && (
+                      <div className="kiosk-meal-allergens-list" data-testid="kiosk-meal-allergens-list">
+                        {allergenComponents.map((comp, idx) => (
+                          <div
+                            key={idx}
+                            className="kiosk-allergen-comp-row"
+                            data-testid={`kiosk-allergen-comp-${idx}`}
+                          >
+                            <span className="kiosk-allergen-comp-name">
+                              {comp.name?.trim() || t('unnamedComponent')}
+                            </span>
+                            <div className="kiosk-allergen-comp-badges">
+                              <MealComponentAllergenBadges
+                                allergens={comp.allergens}
+                                compIdx={idx}
+                                allergiesContext={allergiesData}
+                                emptyLabel={t('noAllergies')}
+                                emptyClassName="kiosk-allergen-pill-none"
+                                pillClassName="kiosk-allergen-pill"
+                                testIdPrefix="kiosk-"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </section>
 
               {/* Card 4: TODOs / warnings, aligned vertically at the bottom of the content area */}
               <section className="kiosk-card kiosk-card-todos">
                 <div className="kiosk-card-header">
-                  <AlertCircle size={embedded ? 20 : 26} className="kiosk-card-header-icon" />
+                  <AlertCircle size={embedded ? 18 : 22} className="kiosk-card-header-icon" />
                   <span>{t('tasksAndInfoTitle')}</span>
                 </div>
                 <div className="kiosk-todos-list">
@@ -485,7 +585,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
                       if (task === 'yellow_bin_retrieve') {
                         return (
                           <div key={idx} className="kiosk-todo-item kiosk-todo-yellow">
-                            <Trash2 size={embedded ? 24 : 36} className="kiosk-todo-icon" />
+                            <Trash2 size={embedded ? 20 : 30} className="kiosk-todo-icon" />
                             <span>{t('yellowBinRetrieve')}</span>
                           </div>
                         );
@@ -493,7 +593,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
                       if (task === 'yellow_bin_put_out') {
                         return (
                           <div key={idx} className="kiosk-todo-item kiosk-todo-yellow">
-                            <Trash2 size={embedded ? 24 : 36} className="kiosk-todo-icon" />
+                            <Trash2 size={embedded ? 20 : 30} className="kiosk-todo-icon" />
                             <span>{t('yellowBinPutOut')}</span>
                           </div>
                         );
@@ -501,7 +601,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
                       if (task === 'clean_coffe_machine' || task === 'clean_coffee_machine') {
                         return (
                           <div key={idx} className="kiosk-todo-item kiosk-todo-coffee">
-                            <Coffee size={embedded ? 24 : 36} className="kiosk-todo-icon" />
+                            <Coffee size={embedded ? 20 : 30} className="kiosk-todo-icon" />
                             <span>{t('cleanCoffeeMachine')}</span>
                           </div>
                         );
@@ -509,7 +609,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
                       if (task === 'clean_refrigerator') {
                         return (
                           <div key={idx} className="kiosk-todo-item kiosk-todo-refrigerator">
-                            <Refrigerator size={embedded ? 24 : 36} className="kiosk-todo-icon" />
+                            <Refrigerator size={embedded ? 20 : 30} className="kiosk-todo-icon" />
                             <span>{t('cleanRefrigerator')}</span>
                           </div>
                         );
@@ -517,7 +617,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
                       // Fallback for any other custom task/info
                       return (
                         <div key={idx} className="kiosk-todo-item kiosk-todo-default">
-                          <AlertCircle size={embedded ? 24 : 36} className="kiosk-todo-icon" />
+                          <AlertCircle size={embedded ? 20 : 30} className="kiosk-todo-icon" />
                           <span>{task}</span>
                         </div>
                       );
@@ -529,6 +629,8 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
                   )}
                 </div>
               </section>
+            </>
+          )}
             </>
           )}
         </main>
@@ -543,7 +645,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
               title={t('home')}
               aria-label={t('home')}
             >
-              <Home size={embedded ? 22 : 28} />
+              <Home size={embedded ? 18 : 24} />
             </button>
 
             <button
@@ -555,7 +657,10 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
 
             {canViewAllergiesSummary && (
               <button
-                onClick={() => setShowAllergies((prev) => !prev)}
+                onClick={() => {
+                  setIsEditingAllergens(false);
+                  setShowAllergies((prev) => !prev);
+                }}
                 className={`kiosk-nav-btn ${showAllergies ? 'active' : ''}`}
                 title={t('allergies')}
               >

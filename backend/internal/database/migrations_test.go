@@ -214,6 +214,28 @@ func TestApplySchemaMigrations(t *testing.T) {
 		t.Fatalf("expected meal_allergens table to exist: %v", err)
 	}
 
+	// Verify meal_allergens_history table exists
+	var mealAllergensHistoryTable string
+	err = testDB.QueryRow(`
+		SELECT table_name
+		FROM information_schema.tables
+		WHERE table_schema = 'public' AND table_name = 'meal_allergens_history';
+	`).Scan(&mealAllergensHistoryTable)
+	if err != nil {
+		t.Fatalf("expected meal_allergens_history table to exist: %v", err)
+	}
+
+	// Verify cooks column exists in meal_allergens
+	var cooksCol string
+	err = testDB.QueryRow(`
+		SELECT column_name
+		FROM information_schema.columns
+		WHERE table_name = 'meal_allergens' AND column_name = 'cooks';
+	`).Scan(&cooksCol)
+	if err != nil {
+		t.Fatalf("expected cooks column in meal_allergens: %v", err)
+	}
+
 
 	// Verify migration 00004: test phone number type defaulting to "mobile"
 	// Roll back to migration 3, insert untyped phones, then migrate up to 4

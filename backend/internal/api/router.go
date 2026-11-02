@@ -126,6 +126,7 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		// Meal Allergens (Essen/Allergene)
 		r.With(auth.RequirePermission("meal_allergens.read")).Get("/api/meal-allergens", server.HandleListMealAllergens)
 		r.With(auth.RequirePermission("meal_allergens.read")).Get("/api/meal-allergens/cooks", server.HandleListMealAllergenCooks)
+		r.With(auth.RequirePermission("meal_allergens.read")).Get("/api/meal-allergens/history", server.HandleListMealAllergensHistory)
 		r.With(auth.RequirePermission("meal_allergens.read")).Get("/api/meal-allergens/{date}", server.HandleGetMealAllergenDay)
 		r.With(auth.RequirePermission("meal_allergens.write")).Put("/api/meal-allergens/{date}", server.HandleUpsertMealAllergens)
 		r.With(auth.RequirePermission("meal_allergens.write")).Post("/api/meal-allergens/{date}/finalize", server.HandleFinalizeMealAllergens)

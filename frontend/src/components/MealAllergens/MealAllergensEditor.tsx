@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { ArrowLeft, Copy, Pencil, Plus, X, Utensils, Check, CircleDot, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Copy, Pencil, Plus, X, Utensils, Check, CircleDot, AlertTriangle, History } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useRealtime, type RealtimeMessage } from '../../hooks/useRealtime';
 import { t, formatDisplayDate } from '../../utils/i18n';
@@ -8,10 +8,14 @@ import {
   type MealAllergenDay,
   type MealAllergenComponent,
   type MealAllergenStatus,
+  type MealAllergenCook,
   type CookOption,
   MAIN_ALLERGENS,
   getAllergenDisplayLabel,
   matchCookFromPlan,
+  formatCooksDisplayName,
+  sortCookOptions,
+  getCookOptionKey,
   getSuggestedEntriesForCook,
   combineMealComponents,
   replaceMealComponents,
@@ -22,19 +26,112 @@ import {
 } from '../../utils/mealAllergens';
 import { AllergenIcon } from './AllergenIcon';
 import { MealAllergensCalendarView } from './MealAllergensCalendarView';
+import { MealAllergensHistoryModal } from './MealAllergensHistoryModal';
 import { CellPopover } from '../Table/CellPopover';
 import { RowActionsMenu } from '../Table/RowActionsMenu';
+import './MealAllergens.css';
+
+export interface MealComponentAllergenBadgesProps {
+  allergens: string[];
+  compIdx: number;
+  allergiesContext: AllergiesMatchContext | null;
+  emptyLabel: string;
+  emptyClassName?: string;
+  pillClassName?: string;
+  testIdPrefix?: string;
+}
+
+export const MealComponentAllergenBadges: React.FC<MealComponentAllergenBadgesProps> = ({
+  allergens,
+  compIdx,
+  allergiesContext,
+  emptyLabel,
+  emptyClassName = 'meal-allergen-none-text',
+  pillClassName = '',
+  testIdPrefix = '',
+}) => {
+  if (!allergens || allergens.length === 0) {
+    return <span className={emptyClassName}>{emptyLabel}</span>;
+  }
+  return (
+    <>
+      {allergens.map((allergen) => {
+        const matchingGroups = findMatchingGroupsForComponentAllergen(
+          allergen,
+          allergiesContext,
+          t('employeeAllergiesTitle') || 'Mitarbeitende'
+        );
+        const hasMatch = matchingGroups.length > 0;
+        return (
+          <div
+            key={allergen}
+            className={`meal-allergen-tag-wrapper ${hasMatch ? 'has-warning' : ''}`}
+          >
+            <span
+              className={`meal-allergens-tag-pill ${pillClassName}`.trim()}
+              style={{
+                borderColor: `${getAllergenColor(allergen)}45`,
+                backgroundColor: getAllergenBgColor(allergen),
+              }}
+              data-testid={`${testIdPrefix}allergen-pill-${compIdx}-${allergen}`}
+            >
+              <AllergenIcon allergenKey={allergen} size={14} />
+              <span>{getAllergenDisplayLabel(allergen)}</span>
+            </span>
+            {hasMatch && (
+              <span
+                className="meal-allergen-match-warning"
+                data-testid={`${testIdPrefix}allergen-match-warning-${compIdx}-${allergen}`}
+                title={`${t('allergyPresentIn')}: ${matchingGroups.join(', ')}`}
+              >
+                <AlertTriangle size={12} className="meal-allergen-warning-icon" />
+                <span>{matchingGroups.join(', ')}</span>
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </>
+  );
+};
 
 interface MealAllergensEditorProps {
   initialDay: MealAllergenDay;
   onBack: () => void;
   onDaySaved: (updated: MealAllergenDay) => void;
+  hidePlanReference?: boolean;
+}
+
+function buildInitialSelectedCooks(day: MealAllergenDay): MealAllergenCook[] {
+  if (day.cooks && day.cooks.length > 0) {
+    return day.cooks.map((c) => ({ ...c }));
+  }
+  if (day.cook_parent_id) {
+    return [
+      {
+        id: day.cook_parent_id,
+        type: 'parent',
+        display_name: day.cook_display_name || '',
+      },
+    ];
+  }
+  if (day.cook_employee_id) {
+    return [
+      {
+        id: day.cook_employee_id,
+        type: 'employee',
+        display_name: day.cook_display_name || '',
+      },
+    ];
+  }
+  return [];
 }
 
 export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
   initialDay,
   onBack,
   onDaySaved,
+  hidePlanReference = false,
 }) => {
   const { token, hasPermission } = useAuth();
   const canWrite = hasPermission('meal_allergens.write');
@@ -44,14 +141,17 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
   const [allEntries, setAllEntries] = useState<MealAllergenDay[]>([]);
   const [allergiesContext, setAllergiesContext] = useState<AllergiesMatchContext | null>(null);
 
-  // Cook state (parent, employee, or implicit custom text)
-  const [cookParentId, setCookParentId] = useState<string | null>(initialDay.cook_parent_id || null);
-  const [cookEmployeeId, setCookEmployeeId] = useState<string | null>(initialDay.cook_employee_id || null);
-  const [cookCustomName, setCookCustomName] = useState<string>(initialDay.cook_custom_name || '');
-  const [cookInputText, setCookInputText] = useState<string>(
-    initialDay.cook_display_name || initialDay.cook_custom_name || initialDay.plan_cook_name || ''
+  // Cook state (list of parent/employee cooks, or fallback custom text)
+  const [selectedCooks, setSelectedCooks] = useState<MealAllergenCook[]>(() =>
+    buildInitialSelectedCooks(initialDay)
   );
-  const [isCookDropdownOpen, setIsCookDropdownOpen] = useState<boolean>(false);
+  const [cookCustomName, setCookCustomName] = useState<string>(initialDay.cook_custom_name || '');
+
+  // Cooks multi-select popover state
+  const [isCooksPopoverOpen, setIsCooksPopoverOpen] = useState<boolean>(false);
+  const [cooksAnchorEl, setCooksAnchorEl] = useState<HTMLElement | null>(null);
+  const [cooksQuickFilter, setCooksQuickFilter] = useState<string>('');
+  const [initialSelectedCookKeys, setInitialSelectedCookKeys] = useState<Set<string>>(new Set());
 
   const [mealComponents, setMealComponents] = useState<MealAllergenComponent[]>(() => {
     if (initialDay.has_allergen_record) {
@@ -73,12 +173,13 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const cardRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const addBtnRef = useRef<HTMLButtonElement | null>(null);
-  const cookInputRef = useRef<HTMLInputElement | null>(null);
+  const editCooksBtnRef = useRef<HTMLButtonElement | null>(null);
   const [customAllergenInput, setCustomAllergenInput] = useState<Record<number, string>>({});
   const [_saving, setSaving] = useState<boolean>(false);
 
   // Copy modal state
   const [isCopyModalOpen, setIsCopyModalOpen] = useState<boolean>(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
   const [pendingCopySource, setPendingCopySource] = useState<MealAllergenDay | null>(null);
   const [metadataLoaded, setMetadataLoaded] = useState<boolean>(false);
 
@@ -127,6 +228,20 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
             setAllergiesContext(loadedAllergies);
           }
 
+          const enrichCook = (c: MealAllergenCook): MealAllergenCook => {
+            const found = loadedCooks.find((o) => o.type === c.type && o.id === c.id);
+            if (found) {
+              return {
+                id: found.id,
+                type: found.type,
+                first_name: found.first_name,
+                last_name: found.last_name,
+                display_name: found.display_name,
+              };
+            }
+            return c;
+          };
+
           if (loadedDay.has_allergen_record) {
             setMealComponents(
               (loadedDay.meal_components || []).map((c) => ({
@@ -134,49 +249,20 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
                 allergens: [...(c.allergens || [])],
               }))
             );
-            if (loadedDay.cook_parent_id) {
-              setCookParentId(loadedDay.cook_parent_id);
-              setCookEmployeeId(null);
+            const rawCooks = buildInitialSelectedCooks(loadedDay);
+            if (rawCooks.length > 0) {
+              setSelectedCooks(rawCooks.map(enrichCook));
               setCookCustomName('');
-              const found = loadedCooks.find(
-                (o) => o.type === 'parent' && o.id === loadedDay.cook_parent_id
-              );
-              setCookInputText(found ? found.display_name : loadedDay.cook_display_name || '');
-            } else if (loadedDay.cook_employee_id) {
-              setCookEmployeeId(loadedDay.cook_employee_id);
-              setCookParentId(null);
-              setCookCustomName('');
-              const found = loadedCooks.find(
-                (o) => o.type === 'employee' && o.id === loadedDay.cook_employee_id
-              );
-              setCookInputText(found ? found.display_name : loadedDay.cook_display_name || '');
             } else {
-              const custom = loadedDay.cook_custom_name || loadedDay.plan_cook_name || '';
-              setCookParentId(null);
-              setCookEmployeeId(null);
-              setCookCustomName(custom);
-              setCookInputText(custom);
+              setSelectedCooks([]);
+              setCookCustomName(loadedDay.cook_custom_name || loadedDay.plan_cook_name || '');
             }
           } else {
             // Meal plan components are not transferred by default
             setMealComponents((prev) => (prev.length > 0 ? prev : []));
             const matched = matchCookFromPlan(loadedDay.plan_cook_name, loadedCooks);
-            setCookParentId(matched.cook_parent_id);
-            setCookEmployeeId(matched.cook_employee_id);
+            setSelectedCooks(matched.cooks);
             setCookCustomName(matched.cook_custom_name);
-            if (matched.cook_parent_id) {
-              const found = loadedCooks.find(
-                (o) => o.type === 'parent' && o.id === matched.cook_parent_id
-              );
-              setCookInputText(found ? found.display_name : loadedDay.plan_cook_name || '');
-            } else if (matched.cook_employee_id) {
-              const found = loadedCooks.find(
-                (o) => o.type === 'employee' && o.id === matched.cook_employee_id
-              );
-              setCookInputText(found ? found.display_name : loadedDay.plan_cook_name || '');
-            } else {
-              setCookInputText(matched.cook_custom_name || '');
-            }
           }
         }
       } catch (err) {
@@ -220,8 +306,7 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
   const persistChanges = useCallback(
     async (
       nextComponents: MealAllergenComponent[],
-      nextCookParentId: string | null = cookParentId,
-      nextCookEmployeeId: string | null = cookEmployeeId,
+      nextCooks: MealAllergenCook[] = selectedCooks,
       nextCookCustomName: string = cookCustomName
     ) => {
       if (!canWrite) return;
@@ -234,13 +319,25 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
           headers['Authorization'] = `Bearer ${token}`;
         }
 
+        const singleParentId =
+          nextCooks.length === 1 && nextCooks[0].type === 'parent' ? nextCooks[0].id : null;
+        const singleEmpId =
+          nextCooks.length === 1 && nextCooks[0].type === 'employee' ? nextCooks[0].id : null;
+
         const res = await fetch(`/api/meal-allergens/${encodeURIComponent(day.date)}`, {
           method: 'PUT',
           headers,
           body: JSON.stringify({
-            cook_parent_id: nextCookParentId,
-            cook_employee_id: nextCookEmployeeId,
-            cook_custom_name: nextCookCustomName,
+            cooks: nextCooks.map((c) => ({
+              id: c.id,
+              type: c.type,
+              first_name: c.first_name,
+              last_name: c.last_name,
+              display_name: c.display_name,
+            })),
+            cook_parent_id: singleParentId,
+            cook_employee_id: singleEmpId,
+            cook_custom_name: nextCooks.length === 0 ? nextCookCustomName : '',
             meal_components: nextComponents,
             documentation: day.documentation || {},
           }),
@@ -259,61 +356,76 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
         setSaving(false);
       }
     },
-    [canWrite, token, day.date, day.documentation, cookParentId, cookEmployeeId, cookCustomName, onDaySaved]
+    [canWrite, token, day.date, day.documentation, selectedCooks, cookCustomName, onDaySaved]
   );
 
-  // Searchable Cook Combobox handlers
-  const filteredCookOptions = useMemo(() => {
-    const q = cookInputText.trim().toLowerCase();
-    if (!q) return cookOptions;
-    return cookOptions.filter((o) => o.display_name.toLowerCase().includes(q));
-  }, [cookOptions, cookInputText]);
-
-  const handleSelectCookOption = useCallback(
-    (opt: CookOption) => {
-      const nextParentId = opt.type === 'parent' ? opt.id : null;
-      const nextEmpId = opt.type === 'employee' ? opt.id : null;
-      setCookParentId(nextParentId);
-      setCookEmployeeId(nextEmpId);
-      setCookCustomName('');
-      setCookInputText(opt.display_name);
-      setIsCookDropdownOpen(false);
-      persistChanges(mealComponents, nextParentId, nextEmpId, '');
-    },
-    [mealComponents, persistChanges]
+  // Cooks multi-select popover handlers
+  const selectedCookKeys = useMemo(
+    () => new Set(selectedCooks.map((c) => getCookOptionKey(c))),
+    [selectedCooks]
   );
 
-  const handleAcceptCookText = useCallback(() => {
-    setIsCookDropdownOpen(false);
-    const trimmed = cookInputText.trim();
-    if (!trimmed) {
-      setCookParentId(null);
-      setCookEmployeeId(null);
-      setCookCustomName('');
-      persistChanges(mealComponents, null, null, '');
-      return;
-    }
-
-    const exactMatch = cookOptions.find(
-      (o) => o.display_name.toLowerCase() === trimmed.toLowerCase()
+  const orderedAndFilteredCookOptions = useMemo(() => {
+    const sorted = sortCookOptions(cookOptions, initialSelectedCookKeys);
+    const q = cooksQuickFilter.trim().toLowerCase();
+    if (!q) return sorted;
+    return sorted.filter(
+      (o) =>
+        o.display_name.toLowerCase().includes(q) ||
+        (o.family_name || '').toLowerCase().includes(q)
     );
-    if (exactMatch) {
-      const nextParentId = exactMatch.type === 'parent' ? exactMatch.id : null;
-      const nextEmpId = exactMatch.type === 'employee' ? exactMatch.id : null;
-      setCookParentId(nextParentId);
-      setCookEmployeeId(nextEmpId);
-      setCookCustomName('');
-      setCookInputText(exactMatch.display_name);
-      persistChanges(mealComponents, nextParentId, nextEmpId, '');
-    } else {
-      // Implicitly becomes the custom cook name
-      setCookParentId(null);
-      setCookEmployeeId(null);
-      setCookCustomName(trimmed);
-      setCookInputText(trimmed);
-      persistChanges(mealComponents, null, null, trimmed);
+  }, [cookOptions, initialSelectedCookKeys, cooksQuickFilter]);
+
+  const handleOpenCooksPopover = useCallback(
+    (triggerEl: HTMLElement) => {
+      if (!canWrite) return;
+      setInitialSelectedCookKeys(new Set(selectedCooks.map((c) => getCookOptionKey(c))));
+      setCooksQuickFilter('');
+      setCooksAnchorEl(triggerEl);
+      setIsCooksPopoverOpen(true);
+    },
+    [canWrite, selectedCooks]
+  );
+
+  const handleCloseCooksPopover = useCallback(() => {
+    setIsCooksPopoverOpen(false);
+    setCooksAnchorEl(null);
+    setCooksQuickFilter('');
+  }, []);
+
+  const handleToggleCookOption = useCallback(
+    (opt: CookOption) => {
+      const key = getCookOptionKey(opt);
+      const exists = selectedCooks.some((c) => getCookOptionKey(c) === key);
+      let nextCooks: MealAllergenCook[];
+      if (exists) {
+        nextCooks = selectedCooks.filter((c) => getCookOptionKey(c) !== key);
+      } else {
+        nextCooks = [
+          ...selectedCooks,
+          {
+            id: opt.id,
+            type: opt.type,
+            first_name: opt.first_name,
+            last_name: opt.last_name,
+            display_name: opt.display_name,
+          },
+        ];
+      }
+      setSelectedCooks(nextCooks);
+      const nextCustom = nextCooks.length > 0 ? '' : '';
+      setCookCustomName(nextCustom);
+      persistChanges(mealComponents, nextCooks, nextCustom);
+    },
+    [selectedCooks, mealComponents, persistChanges]
+  );
+
+  const cooksDisplayString = useMemo(() => {
+    if (selectedCooks.length > 0) {
+      return formatCooksDisplayName(selectedCooks);
     }
-  }, [cookInputText, cookOptions, mealComponents, persistChanges]);
+    return cookCustomName.trim();
+  }, [selectedCooks, cookCustomName]);
 
   // Meal Component operations
   // Pressing "+ Komponente" adds a component and opens the popover editor for it
@@ -351,7 +463,9 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
             idx === editingComponentIdx ? { ...c, name: trimmed } : c
           );
           setMealComponents(next);
-          persistChanges(next);
+          if (JSON.stringify(next) !== JSON.stringify(day.meal_components || [])) {
+            persistChanges(next);
+          }
         }
       } else {
         // Existing component: only persist if name or allergens actually changed
@@ -369,7 +483,9 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
             idx === editingComponentIdx ? { ...c, name: trimmed } : c
           );
           setMealComponents(next);
-          persistChanges(next);
+          if (JSON.stringify(next) !== JSON.stringify(day.meal_components || [])) {
+            persistChanges(next);
+          }
         } else {
           // No changes made! Revert name in case user typed whitespace
           if (current.name !== (editingSnapshot?.name || '')) {
@@ -387,7 +503,7 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
     setEditingSnapshot(null);
     setEditingComponentIdx(null);
     setAnchorEl(null);
-  }, [editingComponentIdx, editingSnapshot, isNewComponent, mealComponents, persistChanges]);
+  }, [editingComponentIdx, editingSnapshot, isNewComponent, mealComponents, day.meal_components, persistChanges]);
 
   const handleRemoveComponent = useCallback(
     (index: number) => {
@@ -466,12 +582,20 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
   const currentEditorDaySnapshot: MealAllergenDay = useMemo(
     () => ({
       ...day,
-      cook_parent_id: cookParentId,
-      cook_employee_id: cookEmployeeId,
-      cook_custom_name: cookCustomName,
+      cooks: selectedCooks,
+      cook_parent_id:
+        selectedCooks.length === 1 && selectedCooks[0].type === 'parent'
+          ? selectedCooks[0].id
+          : null,
+      cook_employee_id:
+        selectedCooks.length === 1 && selectedCooks[0].type === 'employee'
+          ? selectedCooks[0].id
+          : null,
+      cook_custom_name: selectedCooks.length === 0 ? cookCustomName : '',
+      cook_display_name: cooksDisplayString,
       meal_components: mealComponents,
     }),
-    [day, cookParentId, cookEmployeeId, cookCustomName, mealComponents]
+    [day, selectedCooks, cookCustomName, cooksDisplayString, mealComponents]
   );
 
   const suggestedEntries = useMemo(
@@ -527,7 +651,7 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
     persistChanges(next);
   }, [pendingCopySource, persistChanges]);
 
-  const isCookSelected = Boolean(cookInputText.trim());
+  const isCookSelected = selectedCooks.length > 0 || Boolean(cookCustomName.trim());
   const hasComponents = mealComponents.length > 0;
   const canFinalize = status !== 'finalized' && hasComponents && isCookSelected;
 
@@ -545,30 +669,29 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      let finalParentId = cookParentId;
-      let finalEmployeeId = cookEmployeeId;
-      let finalCustomName = cookCustomName;
-      const trimmedCook = cookInputText.trim();
-      if (!finalParentId && !finalEmployeeId) {
-        const exactMatch = cookOptions.find(
-          (o) => o.display_name.toLowerCase() === trimmedCook.toLowerCase()
-        );
-        if (exactMatch) {
-          finalParentId = exactMatch.type === 'parent' ? exactMatch.id : null;
-          finalEmployeeId = exactMatch.type === 'employee' ? exactMatch.id : null;
-          finalCustomName = '';
-        } else {
-          finalCustomName = trimmedCook;
-        }
-      }
+      const singleParentId =
+        selectedCooks.length === 1 && selectedCooks[0].type === 'parent'
+          ? selectedCooks[0].id
+          : null;
+      const singleEmpId =
+        selectedCooks.length === 1 && selectedCooks[0].type === 'employee'
+          ? selectedCooks[0].id
+          : null;
 
       const res = await fetch(`/api/meal-allergens/${encodeURIComponent(day.date)}/finalize`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          cook_parent_id: finalParentId,
-          cook_employee_id: finalEmployeeId,
-          cook_custom_name: finalCustomName,
+          cooks: selectedCooks.map((c) => ({
+            id: c.id,
+            type: c.type,
+            first_name: c.first_name,
+            last_name: c.last_name,
+            display_name: c.display_name,
+          })),
+          cook_parent_id: singleParentId,
+          cook_employee_id: singleEmpId,
+          cook_custom_name: selectedCooks.length === 0 ? cookCustomName.trim() : '',
           meal_components: mealComponents,
           documentation: day.documentation || {},
         }),
@@ -592,11 +715,8 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
     token,
     day.date,
     day.documentation,
-    cookParentId,
-    cookEmployeeId,
+    selectedCooks,
     cookCustomName,
-    cookInputText,
-    cookOptions,
     mealComponents,
     onDaySaved,
   ]);
@@ -609,256 +729,257 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
     <div className="meal-allergens-editor" data-testid="meal-allergens-editor" data-loaded={metadataLoaded ? 'true' : 'false'}>
       {/* Merged Header with back arrow, day, status, copy action, and Laut Speiseplan reference */}
       <div className="meal-allergens-editor-header">
-        <div className="meal-allergens-editor-title-group">
-          <button
-            type="button"
-            className="meal-allergens-back-btn"
-            onClick={onBack}
-            aria-label={t('backToOverview')}
-            title={t('backToOverview')}
-            data-testid="allergens-editor-back-btn"
-          >
-            <ArrowLeft size={20} />
-          </button>
-          <div className="meal-allergens-editor-titles">
-            <h2 className="meal-allergens-editor-day-title" data-testid="allergens-editor-header-title">
-              {dayName}, {formattedDate}
-            </h2>
-            <div className="meal-allergens-editor-plan-subtitle" data-testid="allergens-editor-status">
-              Status:{' '}
-              <strong>
-                {status === 'finalized'
-                  ? t('statusFinalized')
-                  : status === 'not_finalized'
-                  ? t('statusNotFinalized')
-                  : status === 'not_relevant'
-                  ? t('statusNotRelevant')
-                  : t('statusUnspecified')}
-              </strong>
-            </div>
-
-            {/* Read-only Meal Plan Reference */}
-            <div className="meal-allergens-plan-reference-box" data-testid="meal-plan-reference-box">
-              <div className="meal-allergens-plan-reference-header">
-                <Utensils size={16} />
-                <span className="meal-allergens-plan-reference-title">
-                  {t('mealPlanReferenceTitle')}
-                </span>
-              </div>
-              <div className="meal-allergens-plan-reference-content">
-                {!day.plan_cook_name?.trim() && (!day.plan_meal_components || day.plan_meal_components.length === 0) ? (
-                  <span className="meal-allergen-empty-text" data-testid="meal-plan-empty-text">
-                    {t('nothingEntered')}
-                  </span>
-                ) : (
-                  <>
-                    {day.plan_cook_name?.trim() && (
-                      <div className="meal-allergens-plan-ref-cook" data-testid="meal-plan-ref-cook">
-                        <strong>{day.plan_cook_name}</strong>
-                      </div>
-                    )}
-                    {day.plan_meal_components && day.plan_meal_components.length > 0 && (
-                      <div className="meal-allergens-plan-ref-components" data-testid="meal-plan-ref-components">
-                        {day.plan_meal_components.map((c, i) => (
-                          <div key={i} className="meal-allergens-plan-comp-line" data-testid={`plan-comp-chip-${i}`}>
-                            {c}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {canWrite && (
-          <div className="meal-allergens-editor-actions">
+        <div className="meal-allergens-editor-top-row">
+          <div className="meal-allergens-editor-title-group">
             <button
               type="button"
-              className="meal-allergens-copy-btn"
-              onClick={() => setIsCopyModalOpen(true)}
-              data-testid="copy-allergens-from-btn"
+              className="meal-allergens-back-btn"
+              onClick={onBack}
+              aria-label={t('backToOverview')}
+              title={t('backToOverview')}
+              data-testid="allergens-editor-back-btn"
             >
-              <Copy size={16} />
-              <span>{t('copyAllergensFromBtn')}</span>
+              <ArrowLeft size={20} />
             </button>
+            <div className="meal-allergens-editor-titles">
+              <h2 className="meal-allergens-editor-day-title" data-testid="allergens-editor-header-title">
+                {dayName}, {formattedDate}
+              </h2>
+            </div>
+          </div>
+
+          {canWrite && (
+            <div className="meal-allergens-editor-actions">
+              <button
+                type="button"
+                className="meal-allergens-copy-btn"
+                onClick={() => setIsCopyModalOpen(true)}
+                data-testid="copy-allergens-from-btn"
+              >
+                <Copy size={16} />
+                <span>{t('copyAllergensFromBtn')}</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="meal-allergens-editor-status-row" data-testid="allergens-editor-status-row">
+          <div className="meal-allergens-editor-plan-subtitle" data-testid="allergens-editor-status">
+            Status:{' '}
+            <strong>
+              {status === 'finalized'
+                ? t('statusFinalized')
+                : status === 'not_finalized'
+                ? t('statusNotFinalized')
+                : status === 'not_relevant'
+                ? t('statusNotRelevant')
+                : t('statusUnspecified')}
+            </strong>
+          </div>
+          <button
+            type="button"
+            className="meal-allergens-history-btn"
+            onClick={() => setIsHistoryModalOpen(true)}
+            title={t('viewHistory') || 'Historie anzeigen'}
+            aria-label={t('viewHistory') || 'Historie anzeigen'}
+            data-testid="allergens-history-btn"
+          >
+            <History size={15} />
+          </button>
+        </div>
+
+        {/* Read-only Meal Plan Reference */}
+        {!hidePlanReference && (
+          <div className="meal-allergens-plan-reference-box" data-testid="meal-plan-reference-box">
+            <Utensils size={15} className="meal-allergens-plan-reference-icon" />
+            <span className="meal-allergens-plan-reference-text">
+              <span className="meal-allergens-plan-reference-title">
+                {t('mealPlanReferenceTitle')}
+              </span>{' '}
+              {!day.plan_cook_name?.trim() && (!day.plan_meal_components || day.plan_meal_components.length === 0) ? (
+                <span className="meal-allergen-empty-text" data-testid="meal-plan-empty-text">
+                  {t('nothingEntered')}
+                </span>
+              ) : (
+                <>
+                  {day.plan_cook_name?.trim() && (
+                    <strong className="meal-allergens-plan-ref-cook" data-testid="meal-plan-ref-cook">
+                      {day.plan_cook_name}
+                    </strong>
+                  )}
+                  {day.plan_cook_name?.trim() && day.plan_meal_components && day.plan_meal_components.length > 0 && (
+                    <span> — </span>
+                  )}
+                  {day.plan_meal_components && day.plan_meal_components.length > 0 && (
+                    <span className="meal-allergens-plan-ref-components" data-testid="meal-plan-ref-components">
+                      {day.plan_meal_components.map((c, i) => (
+                        <React.Fragment key={i}>
+                          {i > 0 && ', '}
+                          <span className="meal-allergens-plan-comp-line" data-testid={`plan-comp-chip-${i}`}>
+                            {c}
+                          </span>
+                        </React.Fragment>
+                      ))}
+                    </span>
+                  )}
+                </>
+              )}
+            </span>
           </div>
         )}
       </div>
 
-      {/* Searchable Cook Combobox (filters options while typing, or accepts free text implicitly) */}
+      {/* Multi-Select Cook Field ("Es kocht") with Edit Icon & Popover */}
       <div className="meal-allergens-meta-grid">
-        <div className="meal-allergens-field-group">
+        <div className="meal-allergens-field-group meal-allergens-cooks-field-row">
           <label className="meal-allergens-field-label">{t('cookSelectionLabel')}</label>
-          <div className="meal-allergens-cook-combobox" data-testid="cook-combobox">
-            <input
-              ref={cookInputRef}
-              type="text"
-              className="meal-allergens-input"
-              placeholder={t('customCookPlaceholder')}
-              value={cookInputText}
-              onFocus={() => {
-                if (canWrite) setIsCookDropdownOpen(true);
-              }}
-              onChange={(e) => {
-                setCookInputText(e.target.value);
-                setIsCookDropdownOpen(true);
-              }}
-              onBlur={() => {
-                handleAcceptCookText();
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  handleAcceptCookText();
-                } else if (e.key === 'Escape') {
-                  setIsCookDropdownOpen(false);
-                }
-              }}
-              disabled={!canWrite}
-              data-testid="cook-combobox-input"
-            />
-
-            {canWrite && isCookDropdownOpen && filteredCookOptions.length > 0 && (
-              <div className="meal-allergens-cook-dropdown" data-testid="cook-combobox-dropdown">
-                {filteredCookOptions.map((opt) => {
-                  const isSelected =
-                    (opt.type === 'parent' && opt.id === cookParentId) ||
-                    (opt.type === 'employee' && opt.id === cookEmployeeId);
-                  return (
-                    <button
-                      key={`${opt.type}:${opt.id}`}
-                      type="button"
-                      className={`meal-allergens-cook-option ${isSelected ? 'selected' : ''}`}
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        handleSelectCookOption(opt);
-                      }}
-                      data-testid={`cook-option-${opt.type}-${opt.id}`}
-                    >
-                      <span>{opt.display_name}</span>
-                      <span className="meal-allergens-cook-option-badge">
-                        {opt.type === 'employee' ? t('cookTypeEmployee') : t('cookTypeParent')}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+          <div className="meal-allergens-cook-display-box" data-testid="cook-combobox">
+            <span
+              className={`meal-allergens-cook-display-text ${!cooksDisplayString ? 'empty' : ''}`}
+              data-testid="cooks-display-text"
+            >
+              {cooksDisplayString || t('noCookSelected')}
+            </span>
+            {canWrite && (
+              <button
+                ref={editCooksBtnRef}
+                type="button"
+                className="meal-allergens-edit-name-btn"
+                onClick={(e) => handleOpenCooksPopover(e.currentTarget)}
+                title={t('editCooks')}
+                aria-label={t('editCooks')}
+                data-testid="edit-cooks-btn"
+              >
+                <Pencil size={15} />
+              </button>
             )}
           </div>
         </div>
       </div>
 
-      {/* Meal Components & Allergens List */}
-      <div className="meal-allergens-components-section" data-testid="meal-components-list">
-        {mealComponents.length === 0 ? (
-          <div className="meal-allergens-empty-dropzone" data-testid="components-empty-dropzone">
-            <div className="meal-allergens-empty-dropzone-icon">
-              <Utensils size={28} />
+      {/* Cooks Selection Popover */}
+      {isCooksPopoverOpen && (
+        <CellPopover
+          isOpen={true}
+          anchorEl={cooksAnchorEl}
+          onClose={handleCloseCooksPopover}
+          width={340}
+        >
+          <div className="meal-allergens-cooks-popover" data-testid="cooks-popover">
+            <div className="meal-allergens-cooks-filter-row">
+              <input
+                type="text"
+                className="meal-allergens-input meal-allergens-cooks-filter-input"
+                placeholder={t('quickFilter')}
+                value={cooksQuickFilter}
+                onChange={(e) => setCooksQuickFilter(e.target.value)}
+                autoFocus
+                data-testid="cooks-quick-filter-input"
+              />
             </div>
-            <div className="meal-allergens-empty-dropzone-texts">
-              <h4 className="meal-allergens-empty-dropzone-title">{t('componentsEmptyTitle')}</h4>
-              <p className="meal-allergens-empty-dropzone-subtitle">{t('componentsEmptySubtitle')}</p>
+            <div className="meal-allergens-cooks-options-list" data-testid="cooks-options-list">
+              {orderedAndFilteredCookOptions.length === 0 ? (
+                <div className="meal-allergens-cooks-empty" data-testid="cooks-no-matches">
+                  {t('noMatchingPersons')}
+                </div>
+              ) : (
+                orderedAndFilteredCookOptions.map((opt) => {
+                  const key = getCookOptionKey(opt);
+                  const isChecked = selectedCookKeys.has(key);
+                  return (
+                    <label
+                      key={key}
+                      className={`meal-allergens-cook-checkbox-item ${isChecked ? 'selected' : ''}`}
+                      data-testid={`cook-option-${opt.type}-${opt.id}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => handleToggleCookOption(opt)}
+                        data-testid={`cook-checkbox-${opt.type}-${opt.id}`}
+                      />
+                      <span className="meal-allergens-cook-option-name">{opt.display_name}</span>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+            <div className="meal-allergens-popover-footer">
+              <button
+                type="button"
+                className="meal-allergens-popover-done-btn"
+                onClick={handleCloseCooksPopover}
+                data-testid="cooks-popover-done-btn"
+              >
+                {t('done')}
+              </button>
             </div>
           </div>
-        ) : (
-          mealComponents.map((comp, compIdx) => (
-            <div
-              key={compIdx}
-              ref={(el) => {
-                cardRefs.current[compIdx] = el;
-              }}
-              className="meal-allergens-component-card"
-              data-testid={`meal-component-card-${compIdx}`}
-            >
-              <div className="meal-allergens-component-top">
-                <div className="meal-allergens-component-title-display">
-                  <span
-                    className={`meal-allergens-component-name-text ${!comp.name?.trim() ? 'unnamed' : ''}`}
-                    data-testid={`meal-component-name-text-${compIdx}`}
-                  >
-                    {comp.name?.trim() || t('unnamedComponent')}
-                  </span>
-                  {canWrite && (
-                    <button
-                      type="button"
-                      className="meal-allergens-edit-name-btn"
-                      onClick={(e) => {
-                        setIsNewComponent(false);
-                        setEditingSnapshot({
-                          name: comp.name || '',
-                          allergens: [...comp.allergens],
-                        });
-                        setAnchorEl(e.currentTarget);
-                        setEditingComponentIdx(compIdx);
-                      }}
-                      title={t('editComponent')}
-                      aria-label={t('editComponent')}
-                      data-testid={`edit-meal-component-name-btn-${compIdx}`}
-                    >
-                      <Pencil size={15} />
-                    </button>
-                  )}
-                </div>
+        </CellPopover>
+      )}
 
+      {/* Meal Components & Allergens List */}
+      <div className="meal-allergens-components-section" data-testid="meal-components-list">
+        {mealComponents.map((comp, compIdx) => (
+          <div
+            key={compIdx}
+            ref={(el) => {
+              cardRefs.current[compIdx] = el;
+            }}
+            className="meal-allergens-component-card"
+            data-testid={`meal-component-card-${compIdx}`}
+          >
+            <div className="meal-allergens-component-top">
+              <div className="meal-allergens-component-title-display">
+                <span
+                  className={`meal-allergens-component-name-text ${!comp.name?.trim() ? 'unnamed' : ''}`}
+                  data-testid={`meal-component-name-text-${compIdx}`}
+                >
+                  {comp.name?.trim() || t('unnamedComponent')}
+                </span>
                 {canWrite && (
-                  <RowActionsMenu
-                    onDelete={() => handleRemoveComponent(compIdx)}
-                    deleteLabel={t('delete')}
-                    entityName={comp.name?.trim() || t('unnamedComponent')}
-                    testId={`component-actions-btn-${compIdx}`}
-                    deleteTestId={`remove-meal-component-btn-${compIdx}`}
-                  />
+                  <button
+                    type="button"
+                    className="meal-allergens-edit-name-btn"
+                    onClick={(e) => {
+                      setIsNewComponent(false);
+                      setEditingSnapshot({
+                        name: comp.name || '',
+                        allergens: [...comp.allergens],
+                      });
+                      setAnchorEl(e.currentTarget);
+                      setEditingComponentIdx(compIdx);
+                    }}
+                    title={t('editComponent')}
+                    aria-label={t('editComponent')}
+                    data-testid={`edit-meal-component-name-btn-${compIdx}`}
+                  >
+                    <Pencil size={15} />
+                  </button>
                 )}
               </div>
 
-              <div className="meal-allergens-tags-row" data-testid={`meal-component-allergens-${compIdx}`}>
-                {comp.allergens.length === 0 ? (
-                  <span className="meal-allergen-none-text">{t('noAllergensSelected')}</span>
-                ) : (
-                  comp.allergens.map((allergen) => {
-                    const matchingGroups = findMatchingGroupsForComponentAllergen(
-                      allergen,
-                      allergiesContext,
-                      t('employeeAllergiesTitle') || 'Mitarbeitende'
-                    );
-                    const hasMatch = matchingGroups.length > 0;
-                    return (
-                      <div
-                        key={allergen}
-                        className={`meal-allergen-tag-wrapper ${hasMatch ? 'has-warning' : ''}`}
-                      >
-                        <span
-                          className="meal-allergens-tag-pill"
-                          style={{
-                            borderColor: `${getAllergenColor(allergen)}45`,
-                            backgroundColor: getAllergenBgColor(allergen),
-                          }}
-                          data-testid={`allergen-pill-${compIdx}-${allergen}`}
-                        >
-                          <AllergenIcon allergenKey={allergen} size={14} />
-                          <span>{getAllergenDisplayLabel(allergen)}</span>
-                        </span>
-                        {hasMatch && (
-                          <span
-                            className="meal-allergen-match-warning"
-                            data-testid={`allergen-match-warning-${compIdx}-${allergen}`}
-                            title={`${t('allergyPresentIn')}: ${matchingGroups.join(', ')}`}
-                          >
-                            <AlertTriangle size={12} className="meal-allergen-warning-icon" />
-                            <span>{matchingGroups.join(', ')}</span>
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
+              {canWrite && (
+                <RowActionsMenu
+                  onDelete={() => handleRemoveComponent(compIdx)}
+                  deleteLabel={t('delete')}
+                  entityName={comp.name?.trim() || t('unnamedComponent')}
+                  testId={`component-actions-btn-${compIdx}`}
+                  deleteTestId={`remove-meal-component-btn-${compIdx}`}
+                />
+              )}
             </div>
-          ))
-        )}
+
+            <div className="meal-allergens-tags-row" data-testid={`meal-component-allergens-${compIdx}`}>
+              <MealComponentAllergenBadges
+                allergens={comp.allergens}
+                compIdx={compIdx}
+                allergiesContext={allergiesContext}
+                emptyLabel={t('noAllergensSelected')}
+              />
+            </div>
+          </div>
+        ))}
 
         {canWrite && (
           <div className="meal-allergens-add-component-bar">
@@ -918,9 +1039,8 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
                   <button
                     type="button"
                     className="meal-allergens-checklist-item pending"
-                    onClick={() => {
-                      cookInputRef.current?.focus();
-                      setIsCookDropdownOpen(true);
+                    onClick={(e) => {
+                      handleOpenCooksPopover(editCooksBtnRef.current || e.currentTarget);
                     }}
                     title={t('cookRequirementPending')}
                     data-testid="checklist-item-cook"
@@ -1339,6 +1459,15 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* History Modal */}
+      {isHistoryModalOpen && (
+        <MealAllergensHistoryModal
+          isOpen={isHistoryModalOpen}
+          onClose={() => setIsHistoryModalOpen(false)}
+          day={day}
+        />
       )}
     </div>
   );

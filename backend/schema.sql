@@ -225,6 +225,7 @@ CREATE TABLE IF NOT EXISTS meal_allergens (
     cook_parent_id UUID REFERENCES parents(id) ON DELETE SET NULL,
     cook_employee_id UUID REFERENCES employees(id) ON DELETE SET NULL,
     cook_custom_name TEXT NOT NULL DEFAULT '',
+    cooks JSONB NOT NULL DEFAULT '[]'::jsonb,
     meal_components JSONB NOT NULL DEFAULT '[]'::jsonb,
     status TEXT NOT NULL DEFAULT 'unspecified' CHECK (status IN ('unspecified', 'not_relevant', 'not_finalized', 'finalized')),
     documentation JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -234,6 +235,23 @@ CREATE TABLE IF NOT EXISTS meal_allergens (
 
 DROP TRIGGER IF EXISTS update_meal_allergens_updated_at ON meal_allergens;
 CREATE TRIGGER update_meal_allergens_updated_at BEFORE UPDATE ON meal_allergens FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+
+-- Meal allergens history table
+CREATE TABLE IF NOT EXISTS meal_allergens_history (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    cooking_date DATE NOT NULL,
+    operation TEXT NOT NULL,
+    before_snapshot JSONB,
+    after_snapshot JSONB NOT NULL,
+    changed_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    changed_by_email TEXT NOT NULL DEFAULT '',
+    is_kiosk BOOLEAN NOT NULL DEFAULT FALSE,
+    kiosk_name TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_meal_allergens_history_cooking_date ON meal_allergens_history (cooking_date, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_meal_allergens_history_created_at ON meal_allergens_history (created_at DESC);
 
 -- Jobs table
 CREATE TABLE IF NOT EXISTS jobs (

@@ -2215,23 +2215,39 @@ func TestMealAllergensHandlers(t *testing.T) {
 
 	testDate := "2099-11-16"
 
-	// Ensure meal_allergens table exists and is clean for testDate
+	// Ensure meal_allergens and meal_allergens_history tables exist and are clean for testDate
 	_, _ = pool.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS meal_allergens (
 			date DATE PRIMARY KEY,
 			cook_parent_id UUID REFERENCES parents(id) ON DELETE SET NULL,
 			cook_employee_id UUID REFERENCES employees(id) ON DELETE SET NULL,
 			cook_custom_name TEXT NOT NULL DEFAULT '',
+			cooks JSONB NOT NULL DEFAULT '[]'::jsonb,
 			meal_components JSONB NOT NULL DEFAULT '[]'::jsonb,
 			status TEXT NOT NULL DEFAULT 'unspecified' CHECK (status IN ('unspecified', 'not_relevant', 'not_finalized', 'finalized')),
 			documentation JSONB NOT NULL DEFAULT '{}'::jsonb,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		);
+		ALTER TABLE meal_allergens ADD COLUMN IF NOT EXISTS cooks JSONB NOT NULL DEFAULT '[]'::jsonb;
+		CREATE TABLE IF NOT EXISTS meal_allergens_history (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			cooking_date DATE NOT NULL,
+			operation TEXT NOT NULL,
+			before_snapshot JSONB,
+			after_snapshot JSONB NOT NULL,
+			changed_by UUID REFERENCES users(id) ON DELETE SET NULL,
+			changed_by_email TEXT NOT NULL DEFAULT '',
+			is_kiosk BOOLEAN NOT NULL DEFAULT FALSE,
+			kiosk_name TEXT NOT NULL DEFAULT '',
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		);
 	`)
+	_, _ = pool.Exec(ctx, "DELETE FROM meal_allergens_history WHERE cooking_date = $1", testDate)
 	_, _ = pool.Exec(ctx, "DELETE FROM meal_allergens WHERE date = $1", testDate)
 	_, _ = pool.Exec(ctx, "DELETE FROM meal_plan_from_sheets WHERE date = $1", testDate)
 	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM meal_allergens_history WHERE cooking_date = $1", testDate)
 		_, _ = pool.Exec(ctx, "DELETE FROM meal_allergens WHERE date = $1", testDate)
 		_, _ = pool.Exec(ctx, "DELETE FROM meal_plan_from_sheets WHERE date = $1", testDate)
 	}()
@@ -2241,10 +2257,23 @@ func TestMealAllergensHandlers(t *testing.T) {
 		t.Fatalf("SeedTestMealPlan failed: %v", err)
 	}
 
+	userID := uuid.New()
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING", userID, "cook-history-test@example.com")
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", userID)
+	}()
+
 	user := &models.UserWithPermissions{
-		ID:                   uuid.New(),
-		Email:                "cook@example.com",
+		ID:                   userID,
+		Email:                "cook-history-test@example.com",
 		EffectivePermissions: []string{"meal_allergens.read", "meal_allergens.write"},
+	}
+
+	kioskUser := &models.UserWithPermissions{
+		Email:                "kiosk+CN=kiosk-kitchen@internal",
+		EffectivePermissions: []string{"meal_allergens.read", "meal_allergens.write"},
+		IsKiosk:              true,
+		KioskName:            "kiosk-kitchen",
 	}
 
 	// 1. GET /api/meal-allergens?start_date=2099-11-16&end_date=2099-11-16 -> unspecified status, plan components populated
@@ -2266,7 +2295,7 @@ func TestMealAllergensHandlers(t *testing.T) {
 		t.Errorf("unexpected initial day state: %+v", days[0])
 	}
 
-	// 2. PUT /api/meal-allergens/{date} -> status becomes not_finalized
+	// 2. PUT /api/meal-allergens/{date} by regular user -> status becomes not_finalized, records INSERT in meal_allergens_history
 	putBody := []byte(`{
 		"cook_custom_name": "Maria Custom",
 		"meal_components": [
@@ -2293,9 +2322,9 @@ func TestMealAllergensHandlers(t *testing.T) {
 		t.Errorf("unexpected updatedDay: %+v", updatedDay)
 	}
 
-	// 3. POST /api/meal-allergens/{date}/finalize -> status becomes finalized
+	// 3. POST /api/meal-allergens/{date}/finalize by kiosk caller -> status becomes finalized, records FINALIZE with is_kiosk=true and kiosk_name="kiosk-kitchen"
 	reqFin := httptest.NewRequest("POST", "/api/meal-allergens/"+testDate+"/finalize", nil)
-	reqFin = reqFin.WithContext(context.WithValue(context.WithValue(reqFin.Context(), chi.RouteCtxKey, rctx), auth.UserContextKey, user))
+	reqFin = reqFin.WithContext(context.WithValue(context.WithValue(reqFin.Context(), chi.RouteCtxKey, rctx), auth.UserContextKey, kioskUser))
 	recFin := httptest.NewRecorder()
 	server.HandleFinalizeMealAllergens(recFin, reqFin)
 	if recFin.Code != http.StatusOK {
@@ -2307,9 +2336,16 @@ func TestMealAllergensHandlers(t *testing.T) {
 		t.Errorf("expected status 'finalized' after finalize, got %q", finDay.Status)
 	}
 
-	// 4. Subsequent PUT /api/meal-allergens/{date} (editing after finalization) -> status reverts to not_finalized
-	reqPut2 := httptest.NewRequest("PUT", "/api/meal-allergens/"+testDate, bytes.NewReader(putBody))
-	reqPut2 = reqPut2.WithContext(context.WithValue(context.WithValue(reqPut2.Context(), chi.RouteCtxKey, rctx), auth.UserContextKey, user))
+	// 4. Subsequent PUT /api/meal-allergens/{date} by kiosk caller (editing after finalization) -> status reverts to not_finalized, records UPDATE
+	putBodyKiosk := []byte(`{
+		"cook_custom_name": "Maria Custom",
+		"meal_components": [
+			{"name": "Spaghetti Bolognese", "allergens": ["gluten", "sellerie", "laktose"]},
+			{"name": "Salat", "allergens": ["senf"]}
+		]
+	}`)
+	reqPut2 := httptest.NewRequest("PUT", "/api/meal-allergens/"+testDate, bytes.NewReader(putBodyKiosk))
+	reqPut2 = reqPut2.WithContext(context.WithValue(context.WithValue(reqPut2.Context(), chi.RouteCtxKey, rctx), auth.UserContextKey, kioskUser))
 	recPut2 := httptest.NewRecorder()
 	server.HandleUpsertMealAllergens(recPut2, reqPut2)
 	if recPut2.Code != http.StatusOK {
@@ -2319,6 +2355,91 @@ func TestMealAllergensHandlers(t *testing.T) {
 	_ = json.Unmarshal(recPut2.Body.Bytes(), &revertedDay)
 	if revertedDay.Status != models.MealAllergenStatusNotFinalized {
 		t.Errorf("expected status to revert to 'not_finalized' after editing finalized entry, got %q", revertedDay.Status)
+	}
+
+	// 5. Verify meal_allergens_history via GET /api/meal-allergens/history?date=2099-11-16
+	reqHist := httptest.NewRequest("GET", "/api/meal-allergens/history?date="+testDate, nil)
+	reqHist = reqHist.WithContext(context.WithValue(reqHist.Context(), auth.UserContextKey, user))
+	recHist := httptest.NewRecorder()
+	server.HandleListMealAllergensHistory(recHist, reqHist)
+	if recHist.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK from HandleListMealAllergensHistory, got %d (%s)", recHist.Code, recHist.Body.String())
+	}
+	var histEntries []models.MealAllergensHistoryEntry
+	if err := json.Unmarshal(recHist.Body.Bytes(), &histEntries); err != nil {
+		t.Fatalf("failed to unmarshal meal_allergens_history: %v", err)
+	}
+	if len(histEntries) != 3 {
+		t.Fatalf("expected 3 history entries for %s, got %d: %+v", testDate, len(histEntries), histEntries)
+	}
+
+	// Entries are ordered DESC by created_at: [0]=UPDATE (kiosk), [1]=FINALIZE (kiosk), [2]=INSERT (user)
+	latest := histEntries[0]
+	if latest.Operation != "UPDATE" || !latest.IsKiosk || latest.KioskName != "kiosk-kitchen" || latest.CookingDate != testDate {
+		t.Errorf("unexpected latest history entry: %+v", latest)
+	}
+	if latest.BeforeSnapshot == nil || !strings.Contains(string(*latest.BeforeSnapshot), `"status":"finalized"`) {
+		t.Errorf("expected latest before_snapshot to have status finalized, got %v", latest.BeforeSnapshot)
+	}
+	if !strings.Contains(string(latest.AfterSnapshot), `"laktose"`) {
+		t.Errorf("expected latest after_snapshot to contain 'laktose', got %s", string(latest.AfterSnapshot))
+	}
+
+	mid := histEntries[1]
+	if mid.Operation != "FINALIZE" || !mid.IsKiosk || mid.KioskName != "kiosk-kitchen" {
+		t.Errorf("unexpected mid history entry: %+v", mid)
+	}
+
+	first := histEntries[2]
+	if first.Operation != "INSERT" || first.IsKiosk || first.KioskName != "" || first.ChangedBy == nil || *first.ChangedBy != userID || first.ChangedByEmail != "cook-history-test@example.com" {
+		t.Errorf("unexpected first history entry: %+v", first)
+	}
+	if first.BeforeSnapshot != nil {
+		t.Errorf("expected first history entry before_snapshot to be nil, got %s", string(*first.BeforeSnapshot))
+	}
+
+	// 6. Verify multi-cook persistence and same-surname display formatting ("GivenNameA & GivenNameB CommonSurname")
+	famID := uuid.New()
+	p1ID := uuid.New()
+	p2ID := uuid.New()
+	_, err = pool.Exec(ctx, "INSERT INTO families (id) VALUES ($1)", famID)
+	if err != nil {
+		t.Fatalf("failed to insert test family: %v", err)
+	}
+	_, err = pool.Exec(ctx, "INSERT INTO parents (id, family_id, first_name, last_name) VALUES ($1, $3, 'Anna', 'Müller'), ($2, $3, 'Thomas', 'Müller')", p1ID, p2ID, famID)
+	if err != nil {
+		t.Fatalf("failed to insert test parents: %v", err)
+	}
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM parents WHERE id IN ($1, $2)", p1ID, p2ID)
+		_, _ = pool.Exec(ctx, "DELETE FROM families WHERE id = $1", famID)
+	}()
+
+	putMultiCookBody := []byte(fmt.Sprintf(`{
+		"cooks": [
+			{"id": "%s", "type": "parent"},
+			{"id": "%s", "type": "parent"}
+		],
+		"meal_components": [
+			{"name": "Spaghetti Bolognese", "allergens": ["gluten"]}
+		]
+	}`, p1ID.String(), p2ID.String()))
+	reqPutMulti := httptest.NewRequest("PUT", "/api/meal-allergens/"+testDate, bytes.NewReader(putMultiCookBody))
+	reqPutMulti = reqPutMulti.WithContext(context.WithValue(context.WithValue(reqPutMulti.Context(), chi.RouteCtxKey, rctx), auth.UserContextKey, user))
+	recPutMulti := httptest.NewRecorder()
+	server.HandleUpsertMealAllergens(recPutMulti, reqPutMulti)
+	if recPutMulti.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK from multi-cook HandleUpsertMealAllergens, got %d (%s)", recPutMulti.Code, recPutMulti.Body.String())
+	}
+	var multiCookDay models.MealAllergenDay
+	if err := json.Unmarshal(recPutMulti.Body.Bytes(), &multiCookDay); err != nil {
+		t.Fatalf("failed to unmarshal multiCookDay: %v", err)
+	}
+	if len(multiCookDay.Cooks) != 2 {
+		t.Errorf("expected 2 cooks in multiCookDay, got %d: %+v", len(multiCookDay.Cooks), multiCookDay.Cooks)
+	}
+	if multiCookDay.CookDisplayName != "Anna & Thomas Müller" {
+		t.Errorf("expected CookDisplayName 'Anna & Thomas Müller', got %q", multiCookDay.CookDisplayName)
 	}
 }
 

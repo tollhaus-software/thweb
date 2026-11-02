@@ -52,12 +52,34 @@ func writeJSONError(w http.ResponseWriter, message string, statusCode int) {
 	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
 
+// ExtractKioskNameFromDN extracts the Common Name (CN) or device identifier from an X-Client-DN header value.
+// Handles RFC 2253 ("CN=kiosk-kitchen,O=Traumhaus Kiosk"), legacy OpenSSL ("/CN=kiosk-kitchen/O=..."),
+// or plain device names ("kiosk-kitchen").
+func ExtractKioskNameFromDN(dn string) string {
+	trimmed := strings.TrimSpace(dn)
+	if trimmed == "" {
+		return ""
+	}
+	parts := strings.FieldsFunc(trimmed, func(r rune) bool {
+		return r == ',' || r == '/'
+	})
+	for _, part := range parts {
+		kv := strings.SplitN(strings.TrimSpace(part), "=", 2)
+		if len(kv) == 2 && strings.EqualFold(strings.TrimSpace(kv[0]), "CN") {
+			return strings.TrimSpace(kv[1])
+		}
+	}
+	return trimmed
+}
+
 // IsAllowedKioskPath returns true if the request path is permitted for mTLS kiosk access.
 func IsAllowedKioskPath(path string) bool {
 	cleanPath := strings.TrimSuffix(path, "/")
 	return cleanPath == "/api/dashboard/daily-brief" ||
 		cleanPath == "/api/dashboard/allergies" ||
 		cleanPath == "/api/allergies/summary" ||
+		cleanPath == "/api/meal-allergens" ||
+		strings.HasPrefix(cleanPath, "/api/meal-allergens/") ||
 		cleanPath == "/ws" ||
 		cleanPath == "/api/ws"
 }
@@ -69,6 +91,7 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 		// 1. Check if request is authenticated via client certificate (mTLS) from edge gateway
 		if r.Header.Get("X-Client-Verified") == "SUCCESS" && IsAllowedKioskPath(r.URL.Path) {
 			dn := strings.TrimSpace(r.Header.Get("X-Client-DN"))
+			kioskName := ExtractKioskNameFromDN(dn)
 			kioskEmail := "kiosk@internal"
 			if dn != "" {
 				kioskEmail = "kiosk+" + dn + "@internal"
@@ -78,14 +101,17 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 				kioskRoles = []string{"kiosk"}
 			}
 			if len(kioskPerms) == 0 {
-				kioskPerms = []string{"dashboard.read", "allergies.summary.read"}
+				kioskPerms = []string{"dashboard.read", "allergies.summary.read", "meal_allergens.read", "meal_allergens.write"}
 			}
 			kioskUser := &models.UserWithPermissions{
 				Email:                kioskEmail,
 				Roles:                kioskRoles,
 				Permissions:          kioskPerms,
 				EffectivePermissions: kioskPerms,
+				IsKiosk:              true,
+				KioskName:            kioskName,
 			}
+			kioskUser.ActualUser = kioskUser
 			if a.RolesConfig != nil && len(kioskUser.Roles) > 0 {
 				denied := a.RolesConfig.DeniedPermissionsForRoles(kioskUser.Roles)
 				kioskUser.RemovePermissions(denied)

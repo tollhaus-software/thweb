@@ -34,6 +34,8 @@ type UserWithPermissions struct {
 	UpdatedAt            time.Time             `json:"updated_at"`
 	Simulation           *SimulationInfo       `json:"simulation,omitempty"`
 	ActualUser           *UserWithPermissions  `json:"-"`
+	IsKiosk              bool                  `json:"is_kiosk,omitempty"`
+	KioskName            string                `json:"kiosk_name,omitempty"`
 }
 
 func (s *UserWithPermissions) HasPermission(perm string) bool {
@@ -753,10 +755,12 @@ type THMembership struct {
 }
 
 type DailyBriefResponse struct {
-	Date           string   `json:"date"`
-	WhoIsCooking   string   `json:"who_is_cooking"`
-	MealComponents []string `json:"meal_components"`
-	TasksAndInfo   []string `json:"tasks_and_info"`
+	Date                   string                  `json:"date"`
+	WhoIsCooking           string                  `json:"who_is_cooking"`
+	MealComponents         []string                `json:"meal_components"`
+	TasksAndInfo           []string                `json:"tasks_and_info"`
+	HasAllergenRecord      bool                    `json:"has_allergen_record"`
+	AllergenMealComponents []MealAllergenComponent `json:"allergen_meal_components,omitempty"`
 }
 
 // MemberRow represents an active member displayed in the "Members" (Vereinsmitglieder) tab.
@@ -1009,9 +1013,141 @@ func (d *MealAllergenDocumentation) Scan(src interface{}) error {
 	return json.Unmarshal(raw, d)
 }
 
+type MealAllergenCook struct {
+	ID          uuid.UUID `json:"id"`
+	Type        string    `json:"type"` // "parent" or "employee"
+	FirstName   string    `json:"first_name,omitempty"`
+	LastName    string    `json:"last_name,omitempty"`
+	DisplayName string    `json:"display_name,omitempty"`
+}
+
+type MealAllergenCookList []MealAllergenCook
+
+func (l MealAllergenCookList) Value() (driver.Value, error) {
+	if l == nil {
+		return "[]", nil
+	}
+	b, err := json.Marshal(l)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
+}
+
+func (l *MealAllergenCookList) Scan(src interface{}) error {
+	if src == nil {
+		*l = MealAllergenCookList{}
+		return nil
+	}
+	var raw []byte
+	switch s := src.(type) {
+	case []byte:
+		raw = s
+	case string:
+		raw = []byte(s)
+	default:
+		return fmt.Errorf("cannot scan %T into MealAllergenCookList", src)
+	}
+	if len(raw) == 0 {
+		*l = MealAllergenCookList{}
+		return nil
+	}
+	return json.Unmarshal(raw, l)
+}
+
+// FormatCooksDisplayName formats one or more cooks into a display string.
+// If two (or more) people share the same non-empty surname, they are grouped as
+// "GivenNameA & GivenNameB CommonSurname".
+func FormatCooksDisplayName(cooks []MealAllergenCook) string {
+	type cookEntry struct {
+		first string
+		last  string
+		full  string
+	}
+	var entries []cookEntry
+	for _, c := range cooks {
+		first := strings.TrimSpace(c.FirstName)
+		last := strings.TrimSpace(c.LastName)
+		full := strings.TrimSpace(first + " " + last)
+		if full == "" {
+			full = strings.TrimSpace(c.DisplayName)
+		}
+		if full == "" {
+			continue
+		}
+		entries = append(entries, cookEntry{
+			first: first,
+			last:  last,
+			full:  full,
+		})
+	}
+	if len(entries) == 0 {
+		return ""
+	}
+	if len(entries) == 1 {
+		return entries[0].full
+	}
+
+	type surnameGroup struct {
+		lastLower string
+		lastOrig  string
+		firsts    []string
+		fulls     []string
+	}
+	var groups []*surnameGroup
+	groupBySurname := make(map[string]*surnameGroup)
+
+	for _, e := range entries {
+		if e.first != "" && e.last != "" {
+			key := strings.ToLower(e.last)
+			if g, ok := groupBySurname[key]; ok {
+				g.firsts = append(g.firsts, e.first)
+				g.fulls = append(g.fulls, e.full)
+				continue
+			}
+			g := &surnameGroup{
+				lastLower: key,
+				lastOrig:  e.last,
+				firsts:    []string{e.first},
+				fulls:     []string{e.full},
+			}
+			groupBySurname[key] = g
+			groups = append(groups, g)
+		} else {
+			groups = append(groups, &surnameGroup{
+				fulls: []string{e.full},
+			})
+		}
+	}
+
+	formattedGroups := make([]string, 0, len(groups))
+	for _, g := range groups {
+		if len(g.firsts) == 2 && g.lastOrig != "" {
+			formattedGroups = append(formattedGroups, fmt.Sprintf("%s & %s %s", g.firsts[0], g.firsts[1], g.lastOrig))
+		} else if len(g.firsts) > 2 && g.lastOrig != "" {
+			prefix := strings.Join(g.firsts[:len(g.firsts)-1], ", ")
+			formattedGroups = append(formattedGroups, fmt.Sprintf("%s & %s %s", prefix, g.firsts[len(g.firsts)-1], g.lastOrig))
+		} else if len(g.fulls) > 0 {
+			formattedGroups = append(formattedGroups, g.fulls[0])
+		}
+	}
+
+	if len(formattedGroups) == 0 {
+		return ""
+	}
+	if len(formattedGroups) == 1 {
+		return formattedGroups[0]
+	}
+	if len(formattedGroups) == 2 && len(entries) == 2 {
+		return formattedGroups[0] + " & " + formattedGroups[1]
+	}
+	return strings.Join(formattedGroups, ", ")
+}
+
 type MealAllergenDay struct {
 	Date               string                    `json:"date"`
 	HasAllergenRecord  bool                      `json:"has_allergen_record"`
+	Cooks              MealAllergenCookList      `json:"cooks"`
 	CookParentID       *uuid.UUID                `json:"cook_parent_id,omitempty"`
 	CookEmployeeID     *uuid.UUID                `json:"cook_employee_id,omitempty"`
 	CookCustomName     string                    `json:"cook_custom_name"`
@@ -1027,11 +1163,70 @@ type MealAllergenDay struct {
 }
 
 type CookOption struct {
-	ID          uuid.UUID `json:"id"`
-	Type        string    `json:"type"` // "parent" or "employee"
-	FirstName   string    `json:"first_name"`
-	LastName    string    `json:"last_name"`
-	DisplayName string    `json:"display_name"`
+	ID           uuid.UUID  `json:"id"`
+	Type         string     `json:"type"` // "parent" or "employee"
+	EmployeeType string     `json:"employee_type,omitempty"`
+	FamilyID     *uuid.UUID `json:"family_id,omitempty"`
+	FamilyName   string     `json:"family_name,omitempty"`
+	FirstName    string     `json:"first_name"`
+	LastName     string     `json:"last_name"`
+	DisplayName  string     `json:"display_name"`
+}
+
+type MealAllergenActor struct {
+	UserID    *uuid.UUID
+	Email     string
+	IsKiosk   bool
+	KioskName string
+}
+
+func ActorFromUser(u *UserWithPermissions) MealAllergenActor {
+	if u == nil {
+		return MealAllergenActor{}
+	}
+	if u.IsKiosk {
+		return MealAllergenActor{
+			UserID:    nil,
+			Email:     u.Email,
+			IsKiosk:   true,
+			KioskName: u.KioskName,
+		}
+	}
+	var uid *uuid.UUID
+	if u.ID != uuid.Nil {
+		idCopy := u.ID
+		uid = &idCopy
+	}
+	return MealAllergenActor{
+		UserID:    uid,
+		Email:     u.Email,
+		IsKiosk:   false,
+		KioskName: "",
+	}
+}
+
+type MealAllergenSnapshot struct {
+	Cooks           MealAllergenCookList      `json:"cooks,omitempty"`
+	CookParentID    *uuid.UUID                `json:"cook_parent_id,omitempty"`
+	CookEmployeeID  *uuid.UUID                `json:"cook_employee_id,omitempty"`
+	CookCustomName  string                    `json:"cook_custom_name"`
+	CookDisplayName string                    `json:"cook_display_name"`
+	MealComponents  MealAllergenComponentList `json:"meal_components"`
+	Status          MealAllergenStatus        `json:"status"`
+	Documentation   MealAllergenDocumentation `json:"documentation"`
+}
+
+type MealAllergensHistoryEntry struct {
+	ID             uuid.UUID        `json:"id"`
+	CookingDate    string           `json:"cooking_date"`
+	Operation      string           `json:"operation"`
+	BeforeSnapshot *json.RawMessage `json:"before_snapshot,omitempty"`
+	AfterSnapshot  json.RawMessage  `json:"after_snapshot"`
+	ChangedBy      *uuid.UUID       `json:"changed_by,omitempty"`
+	ChangedByEmail string           `json:"changed_by_email"`
+	IsKiosk        bool             `json:"is_kiosk"`
+	KioskName      string           `json:"kiosk_name"`
+	CreatedAt      time.Time        `json:"created_at"`
 }
 
 type Job struct {

@@ -56,6 +56,8 @@ roles:
     permissions:
       - dashboard.read
       - allergies.summary.read
+      - meal_allergens.read
+      - meal_allergens.write
 
   - id: parent_default
     name: Parent (default)

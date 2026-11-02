@@ -57,8 +57,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return {
         email: 'kiosk@tablet',
         roles: ['kiosk'],
-        permissions: ['dashboard.read', 'allergies.summary.read'],
-        effective_permissions: ['dashboard.read', 'allergies.summary.read'],
+        permissions: [
+          'dashboard.read',
+          'allergies.summary.read',
+          'meal_allergens.read',
+          'meal_allergens.write',
+        ],
+        effective_permissions: [
+          'dashboard.read',
+          'allergies.summary.read',
+          'meal_allergens.read',
+          'meal_allergens.write',
+        ],
       };
     }
     return null;

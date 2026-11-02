@@ -92,7 +92,33 @@ test.describe('Test Case 27: Allergen & Allergy Matching (MealAllergens Tab & Al
     expect(resetRes.ok()).toBeTruthy();
 
     const authHeaders = { Authorization: 'Bearer developer@example.com' };
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const formatLocalKey = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+    const now = new Date();
+    const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const dow = todayMidnight.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+    // Ensure both targetDate and the day before it are weekdays (Mon-Fri) visible in the 5-day calendar grid
+    const targetDate = new Date(todayMidnight);
+    if (dow === 0) {
+      // Sunday -> use Friday of the current week (-2 days)
+      targetDate.setDate(targetDate.getDate() - 2);
+    } else if (dow === 6) {
+      // Saturday -> use Friday of the current week (-1 day)
+      targetDate.setDate(targetDate.getDate() - 1);
+    } else if (dow === 1) {
+      // Monday -> use Tuesday of the current week (+1 day) so previous day is Monday
+      targetDate.setDate(targetDate.getDate() + 1);
+    }
+    const prevDate = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate() - 1);
+    const todayStr = formatLocalKey(targetDate);
+    const yesterdayKey = formatLocalKey(prevDate);
+    const diffFromRealToday = Math.round(
+      (targetDate.getTime() - todayMidnight.getTime()) / (24 * 60 * 60 * 1000)
+    );
 
     // 2. Create family and child in database with allergies in Group 1
     const famRes = await request.post('/api/families', {
@@ -170,7 +196,7 @@ test.describe('Test Case 27: Allergen & Allergy Matching (MealAllergens Tab & Al
     const editor = page.getByTestId('meal-allergens-editor');
     await expect(editor).toBeVisible();
     await expect(editor).toHaveAttribute('data-loaded', 'true');
-    await expect(page.getByTestId('components-empty-dropzone')).toBeVisible();
+    await expect(page.getByTestId('components-empty-dropzone')).toHaveCount(0);
 
     // Add component: "Suppe"
     const addCompBtn = page.getByTestId('add-meal-component-btn').first();
@@ -253,6 +279,27 @@ test.describe('Test Case 27: Allergen & Allergy Matching (MealAllergens Tab & Al
     const embeddedPage = page.locator('.kiosk-tablet-page.embedded');
     await expect(embeddedPage).toBeVisible();
 
+    const navigateDashboardByOffset = async (offset: number) => {
+      const headerEl = embeddedPage.locator('.kiosk-header-date');
+      if (offset < 0) {
+        const prevBtn = embeddedPage.locator('.kiosk-header-nav-btn.left');
+        for (let i = 0; i < Math.abs(offset); i++) {
+          const prevText = await headerEl.innerText();
+          await prevBtn.click();
+          await expect(headerEl).not.toHaveText(prevText);
+        }
+      } else if (offset > 0) {
+        const nextBtn = embeddedPage.locator('.kiosk-header-nav-btn.right');
+        for (let i = 0; i < offset; i++) {
+          const prevText = await headerEl.innerText();
+          await nextBtn.click();
+          await expect(headerEl).not.toHaveText(prevText);
+        }
+      }
+    };
+
+    await navigateDashboardByOffset(diffFromRealToday);
+
     // Toggle to Allergies view
     const toggleAllergiesBtn = embeddedPage.locator('.kiosk-nav-btn', { hasText: 'Allergien' });
     await expect(toggleAllergiesBtn).toBeVisible();
@@ -304,13 +351,6 @@ test.describe('Test Case 27: Allergen & Allergy Matching (MealAllergens Tab & Al
     await expect(page.getByTestId('meal-allergens-grid')).toBeVisible();
 
     // Select yesterday's box
-    const yesterdayDate = new Date();
-    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const yYear = yesterdayDate.getFullYear();
-    const yMonth = String(yesterdayDate.getMonth() + 1).padStart(2, '0');
-    const yDay = String(yesterdayDate.getDate()).padStart(2, '0');
-    const yesterdayKey = `${yYear}-${yMonth}-${yDay}`;
-
     const yesterdayBox = page.getByTestId(`meal-allergens-day-box-${yesterdayKey}`);
     await expect(yesterdayBox).toBeVisible();
     await yesterdayBox.click();
@@ -352,8 +392,7 @@ test.describe('Test Case 27: Allergen & Allergy Matching (MealAllergens Tab & Al
     await toggleAllergiesBtn.click();
     await expect(allergiesView).toBeVisible();
 
-    const prevDayBtn = embeddedPage.locator('.kiosk-header-nav-btn.left');
-    await prevDayBtn.click();
+    await navigateDashboardByOffset(diffFromRealToday - 1);
 
     // Verify employee allergy warning abbreviates >16 chars component name
     const empWarningYesterday = page.getByTestId('employee-allergy-warning-0');

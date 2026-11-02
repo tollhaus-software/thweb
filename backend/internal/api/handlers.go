@@ -2430,6 +2430,7 @@ func (s *Server) HandleGetMealAllergenDay(w http.ResponseWriter, r *http.Request
 }
 
 type UpsertMealAllergensRequest struct {
+	Cooks          models.MealAllergenCookList      `json:"cooks,omitempty"`
 	CookParentID   *uuid.UUID                       `json:"cook_parent_id"`
 	CookEmployeeID *uuid.UUID                       `json:"cook_employee_id"`
 	CookCustomName string                           `json:"cook_custom_name"`
@@ -2452,7 +2453,7 @@ func (s *Server) HandleUpsertMealAllergens(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if req.CookParentID != nil && req.CookEmployeeID != nil {
+	if len(req.Cooks) == 0 && req.CookParentID != nil && req.CookEmployeeID != nil {
 		httpErrorLog(w, r, "Cannot specify both cook_parent_id and cook_employee_id", http.StatusBadRequest, nil)
 		return
 	}
@@ -2463,15 +2464,19 @@ func (s *Server) HandleUpsertMealAllergens(w http.ResponseWriter, r *http.Reques
 		explicitStatus = req.Status
 	}
 
-	updated, err := s.Store.UpsertMealAllergens(
+	actor := models.ActorFromUser(auth.GetActualUser(r.Context()))
+
+	updated, err := s.Store.UpsertMealAllergensWithCooks(
 		r.Context(),
 		targetDate,
+		req.Cooks,
 		req.CookParentID,
 		req.CookEmployeeID,
 		req.CookCustomName,
 		req.MealComponents,
 		req.Documentation,
 		explicitStatus,
+		actor,
 	)
 	if err != nil {
 		httpErrorLog(w, r, "Failed to save meal allergens", http.StatusInternalServerError, err)
@@ -2496,6 +2501,8 @@ func (s *Server) HandleFinalizeMealAllergens(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	actor := models.ActorFromUser(auth.GetActualUser(r.Context()))
+
 	bodyBytes, _ := io.ReadAll(r.Body)
 	if len(strings.TrimSpace(string(bodyBytes))) > 0 {
 		var req UpsertMealAllergensRequest
@@ -2504,15 +2511,17 @@ func (s *Server) HandleFinalizeMealAllergens(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		finalizedStatus := models.MealAllergenStatusFinalized
-		updated, err := s.Store.UpsertMealAllergens(
+		updated, err := s.Store.UpsertMealAllergensWithCooks(
 			r.Context(),
 			targetDate,
+			req.Cooks,
 			req.CookParentID,
 			req.CookEmployeeID,
 			req.CookCustomName,
 			req.MealComponents,
 			req.Documentation,
 			&finalizedStatus,
+			actor,
 		)
 		if err != nil {
 			httpErrorLog(w, r, "Failed to finalize meal allergens", http.StatusInternalServerError, err)
@@ -2528,7 +2537,7 @@ func (s *Server) HandleFinalizeMealAllergens(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	updated, err := s.Store.FinalizeMealAllergens(r.Context(), targetDate)
+	updated, err := s.Store.FinalizeMealAllergens(r.Context(), targetDate, actor)
 	if err != nil {
 		httpErrorLog(w, r, "Failed to finalize meal allergens", http.StatusInternalServerError, err)
 		return
@@ -2542,6 +2551,34 @@ func (s *Server) HandleFinalizeMealAllergens(w http.ResponseWriter, r *http.Requ
 	}
 
 	jsonResponse(w, updated)
+}
+
+func (s *Server) HandleListMealAllergensHistory(w http.ResponseWriter, r *http.Request) {
+	dateParam := strings.TrimSpace(r.URL.Query().Get("date"))
+	if dateParam == "" {
+		dateParam = strings.TrimSpace(r.URL.Query().Get("cooking_date"))
+	}
+	if dateParam != "" {
+		if _, err := time.Parse("2006-01-02", dateParam); err != nil {
+			httpErrorLog(w, r, "Invalid date format, expected YYYY-MM-DD", http.StatusBadRequest, err)
+			return
+		}
+	}
+
+	limit := 100
+	if limitStr := strings.TrimSpace(r.URL.Query().Get("limit")); limitStr != "" {
+		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	entries, err := s.Store.ListMealAllergensHistory(r.Context(), dateParam, limit)
+	if err != nil {
+		httpErrorLog(w, r, "Failed to list meal allergens history", http.StatusInternalServerError, err)
+		return
+	}
+
+	jsonResponse(w, entries)
 }
 
 func (s *Server) HandleListJobs(w http.ResponseWriter, r *http.Request) {

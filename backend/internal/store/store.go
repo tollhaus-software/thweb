@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -1836,6 +1837,13 @@ func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*model
 		resp.TasksAndInfo = append(resp.TasksAndInfo, "clean_coffe_machine", "clean_refrigerator")
 	}
 
+	// 5. If meal allergens have been recorded for targetDate:
+	mealDay, err := s.GetMealAllergenDay(ctx, targetDate)
+	if err == nil && mealDay != nil && mealDay.HasAllergenRecord && len(mealDay.MealComponents) > 0 {
+		resp.HasAllergenRecord = true
+		resp.AllergenMealComponents = mealDay.MealComponents
+	}
+
 	return resp, nil
 }
 
@@ -2195,6 +2203,7 @@ func (s *Store) ResetTestData(ctx context.Context) error {
 			employee_jobs,
 			parent_jobs,
 			jobs,
+			meal_allergens_history,
 			meal_allergens,
 			meal_plan_from_sheets,
 			data_encryption_keys,
@@ -2227,35 +2236,13 @@ func (s *Store) SeedTestMealPlan(ctx context.Context, dateStr, cookName, comp1, 
 }
 
 func (s *Store) ListCookOptions(ctx context.Context) ([]models.CookOption, error) {
-	options := make([]models.CookOption, 0)
-
-	pRows, err := s.db.Query(ctx, `
-		SELECT id, first_name, last_name
-		FROM parents
-		ORDER BY first_name ASC, last_name ASC
-	`)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query parents for cook options: %w", err)
-	}
-	defer pRows.Close()
-
-	for pRows.Next() {
-		var opt models.CookOption
-		if err := pRows.Scan(&opt.ID, &opt.FirstName, &opt.LastName); err != nil {
-			return nil, err
-		}
-		opt.Type = "parent"
-		opt.DisplayName = strings.TrimSpace(opt.FirstName + " " + opt.LastName)
-		options = append(options, opt)
-	}
-	if err := pRows.Err(); err != nil {
-		return nil, err
-	}
+	var cookEmployees []models.CookOption
+	var otherEmployees []models.CookOption
 
 	eRows, err := s.db.Query(ctx, `
-		SELECT id, first_name, last_name
+		SELECT id, first_name, last_name, employee_type
 		FROM employees
-		ORDER BY first_name ASC, last_name ASC
+		ORDER BY LOWER(TRIM(first_name)) ASC, LOWER(TRIM(last_name)) ASC, first_name ASC, last_name ASC
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query employees for cook options: %w", err)
@@ -2264,16 +2251,65 @@ func (s *Store) ListCookOptions(ctx context.Context) ([]models.CookOption, error
 
 	for eRows.Next() {
 		var opt models.CookOption
-		if err := eRows.Scan(&opt.ID, &opt.FirstName, &opt.LastName); err != nil {
+		if err := eRows.Scan(&opt.ID, &opt.FirstName, &opt.LastName, &opt.EmployeeType); err != nil {
 			return nil, err
 		}
 		opt.Type = "employee"
 		opt.DisplayName = strings.TrimSpace(opt.FirstName + " " + opt.LastName)
-		options = append(options, opt)
+		if opt.EmployeeType == "cook" {
+			cookEmployees = append(cookEmployees, opt)
+		} else {
+			otherEmployees = append(otherEmployees, opt)
+		}
 	}
 	if err := eRows.Err(); err != nil {
 		return nil, err
 	}
+
+	pRows, err := s.db.Query(ctx, `
+		SELECT
+			p.id,
+			p.family_id,
+			p.first_name,
+			p.last_name,
+			COALESCE((
+				SELECT string_agg(DISTINCT TRIM(p2.last_name), ' / ' ORDER BY TRIM(p2.last_name) ASC)
+				FROM parents p2
+				WHERE p2.family_id = p.family_id AND TRIM(p2.last_name) != ''
+			), 'Familie') AS family_name
+		FROM parents p
+		ORDER BY LOWER(COALESCE((
+			SELECT string_agg(DISTINCT TRIM(p2.last_name), ' / ' ORDER BY TRIM(p2.last_name) ASC)
+			FROM parents p2
+			WHERE p2.family_id = p.family_id AND TRIM(p2.last_name) != ''
+		), 'Familie')) ASC,
+		p.family_id ASC,
+		LOWER(TRIM(p.first_name)) ASC,
+		LOWER(TRIM(p.last_name)) ASC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query parents for cook options: %w", err)
+	}
+	defer pRows.Close()
+
+	var parentOptions []models.CookOption
+	for pRows.Next() {
+		var opt models.CookOption
+		if err := pRows.Scan(&opt.ID, &opt.FamilyID, &opt.FirstName, &opt.LastName, &opt.FamilyName); err != nil {
+			return nil, err
+		}
+		opt.Type = "parent"
+		opt.DisplayName = strings.TrimSpace(opt.FirstName + " " + opt.LastName)
+		parentOptions = append(parentOptions, opt)
+	}
+	if err := pRows.Err(); err != nil {
+		return nil, err
+	}
+
+	options := make([]models.CookOption, 0, len(cookEmployees)+len(parentOptions)+len(otherEmployees))
+	options = append(options, cookEmployees...)
+	options = append(options, parentOptions...)
+	options = append(options, otherEmployees...)
 
 	return options, nil
 }
@@ -2284,9 +2320,14 @@ type planRow struct {
 }
 
 type allergenRow struct {
+	cooks           models.MealAllergenCookList
 	cookParentID    *uuid.UUID
+	cookParentFirst string
+	cookParentLast  string
 	cookParentName  string
 	cookEmployeeID  *uuid.UUID
+	cookEmpFirst    string
+	cookEmpLast     string
 	cookEmpName     string
 	cookCustomName  string
 	mealComponents  models.MealAllergenComponentList
@@ -2296,10 +2337,126 @@ type allergenRow struct {
 	updatedAt       time.Time
 }
 
-func buildMealAllergenDay(dateStr string, pRow *planRow, aRow *allergenRow) models.MealAllergenDay {
+type personNameInfo struct {
+	firstName string
+	lastName  string
+}
+
+func (s *Store) loadPersonNameMaps(ctx context.Context) (map[uuid.UUID]personNameInfo, map[uuid.UUID]personNameInfo) {
+	parentNames := make(map[uuid.UUID]personNameInfo)
+	empNames := make(map[uuid.UUID]personNameInfo)
+
+	pRows, err := s.db.Query(ctx, `SELECT id, first_name, last_name FROM parents`)
+	if err == nil {
+		for pRows.Next() {
+			var id uuid.UUID
+			var fn, ln string
+			if err := pRows.Scan(&id, &fn, &ln); err == nil {
+				parentNames[id] = personNameInfo{firstName: strings.TrimSpace(fn), lastName: strings.TrimSpace(ln)}
+			}
+		}
+		pRows.Close()
+	}
+
+	eRows, err := s.db.Query(ctx, `SELECT id, first_name, last_name FROM employees`)
+	if err == nil {
+		for eRows.Next() {
+			var id uuid.UUID
+			var fn, ln string
+			if err := eRows.Scan(&id, &fn, &ln); err == nil {
+				empNames[id] = personNameInfo{firstName: strings.TrimSpace(fn), lastName: strings.TrimSpace(ln)}
+			}
+		}
+		eRows.Close()
+	}
+
+	return parentNames, empNames
+}
+
+func resolveAllergenRowCooks(
+	aRow *allergenRow,
+	parentNames map[uuid.UUID]personNameInfo,
+	empNames map[uuid.UUID]personNameInfo,
+) models.MealAllergenCookList {
+	if aRow == nil {
+		return models.MealAllergenCookList{}
+	}
+	rawCooks := aRow.cooks
+	if len(rawCooks) == 0 {
+		if aRow.cookParentID != nil && *aRow.cookParentID != uuid.Nil {
+			rawCooks = models.MealAllergenCookList{
+				{ID: *aRow.cookParentID, Type: "parent"},
+			}
+		} else if aRow.cookEmployeeID != nil && *aRow.cookEmployeeID != uuid.Nil {
+			rawCooks = models.MealAllergenCookList{
+				{ID: *aRow.cookEmployeeID, Type: "employee"},
+			}
+		}
+	}
+
+	resolved := make(models.MealAllergenCookList, 0, len(rawCooks))
+	seen := make(map[string]bool)
+	for _, c := range rawCooks {
+		if c.ID == uuid.Nil {
+			continue
+		}
+		cType := strings.ToLower(strings.TrimSpace(c.Type))
+		if cType != "parent" && cType != "employee" {
+			continue
+		}
+		key := cType + ":" + c.ID.String()
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+
+		first := strings.TrimSpace(c.FirstName)
+		last := strings.TrimSpace(c.LastName)
+		if cType == "parent" {
+			if info, ok := parentNames[c.ID]; ok {
+				first = info.firstName
+				last = info.lastName
+			} else if aRow.cookParentID != nil && *aRow.cookParentID == c.ID {
+				first = strings.TrimSpace(aRow.cookParentFirst)
+				last = strings.TrimSpace(aRow.cookParentLast)
+			} else if first == "" && last == "" {
+				continue
+			}
+		} else {
+			if info, ok := empNames[c.ID]; ok {
+				first = info.firstName
+				last = info.lastName
+			} else if aRow.cookEmployeeID != nil && *aRow.cookEmployeeID == c.ID {
+				first = strings.TrimSpace(aRow.cookEmpFirst)
+				last = strings.TrimSpace(aRow.cookEmpLast)
+			} else if first == "" && last == "" {
+				continue
+			}
+		}
+
+		disp := strings.TrimSpace(first + " " + last)
+		resolved = append(resolved, models.MealAllergenCook{
+			ID:          c.ID,
+			Type:        cType,
+			FirstName:   first,
+			LastName:    last,
+			DisplayName: disp,
+		})
+	}
+	return resolved
+}
+
+func buildMealAllergenDay(
+	dateStr string,
+	pRow *planRow,
+	aRow *allergenRow,
+	parentNames map[uuid.UUID]personNameInfo,
+	empNames map[uuid.UUID]personNameInfo,
+) models.MealAllergenDay {
 	day := models.MealAllergenDay{
 		Date:               dateStr,
 		HasAllergenRecord:  false,
+		Cooks:              models.MealAllergenCookList{},
 		MealComponents:     models.MealAllergenComponentList{},
 		Status:             models.MealAllergenStatusUnspecified,
 		Documentation:      models.MealAllergenDocumentation{},
@@ -2318,8 +2475,19 @@ func buildMealAllergenDay(dateStr string, pRow *planRow, aRow *allergenRow) mode
 
 	if aRow != nil {
 		day.HasAllergenRecord = true
+		day.Cooks = resolveAllergenRowCooks(aRow, parentNames, empNames)
 		day.CookParentID = aRow.cookParentID
 		day.CookEmployeeID = aRow.cookEmployeeID
+		if len(day.Cooks) == 1 {
+			idCopy := day.Cooks[0].ID
+			if day.Cooks[0].Type == "parent" {
+				day.CookParentID = &idCopy
+				day.CookEmployeeID = nil
+			} else if day.Cooks[0].Type == "employee" {
+				day.CookEmployeeID = &idCopy
+				day.CookParentID = nil
+			}
+		}
 		day.CookCustomName = aRow.cookCustomName
 		if aRow.mealComponents != nil {
 			day.MealComponents = aRow.mealComponents
@@ -2331,7 +2499,9 @@ func buildMealAllergenDay(dateStr string, pRow *planRow, aRow *allergenRow) mode
 		day.CreatedAt = &cAt
 		day.UpdatedAt = &uAt
 
-		if aRow.cookParentID != nil && aRow.cookParentName != "" {
+		if len(day.Cooks) > 0 {
+			day.CookDisplayName = models.FormatCooksDisplayName(day.Cooks)
+		} else if aRow.cookParentID != nil && aRow.cookParentName != "" {
 			day.CookDisplayName = aRow.cookParentName
 		} else if aRow.cookEmployeeID != nil && aRow.cookEmpName != "" {
 			day.CookDisplayName = aRow.cookEmpName
@@ -2387,9 +2557,14 @@ func (s *Store) GetMealAllergenDaysRange(ctx context.Context, startDate, endDate
 	aRows, err := s.db.Query(ctx, `
 		SELECT
 			TO_CHAR(ma.date, 'YYYY-MM-DD'),
+			COALESCE(ma.cooks, '[]'::jsonb),
 			ma.cook_parent_id,
+			COALESCE(p.first_name, ''),
+			COALESCE(p.last_name, ''),
 			COALESCE(TRIM(p.first_name || ' ' || p.last_name), ''),
 			ma.cook_employee_id,
+			COALESCE(e.first_name, ''),
+			COALESCE(e.last_name, ''),
 			COALESCE(TRIM(e.first_name || ' ' || e.last_name), ''),
 			ma.cook_custom_name,
 			ma.meal_components,
@@ -2412,9 +2587,14 @@ func (s *Store) GetMealAllergenDaysRange(ctx context.Context, startDate, endDate
 		var ar allergenRow
 		if err := aRows.Scan(
 			&dStr,
+			&ar.cooks,
 			&ar.cookParentID,
+			&ar.cookParentFirst,
+			&ar.cookParentLast,
 			&ar.cookParentName,
 			&ar.cookEmployeeID,
+			&ar.cookEmpFirst,
+			&ar.cookEmpLast,
 			&ar.cookEmpName,
 			&ar.cookCustomName,
 			&ar.mealComponents,
@@ -2432,10 +2612,12 @@ func (s *Store) GetMealAllergenDaysRange(ctx context.Context, startDate, endDate
 		return nil, err
 	}
 
+	parentNames, empNames := s.loadPersonNameMaps(ctx)
+
 	var result []models.MealAllergenDay
 	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
 		dStr := d.Format("2006-01-02")
-		result = append(result, buildMealAllergenDay(dStr, planMap[dStr], allergenMap[dStr]))
+		result = append(result, buildMealAllergenDay(dStr, planMap[dStr], allergenMap[dStr], parentNames, empNames))
 	}
 
 	return result, nil
@@ -2448,7 +2630,7 @@ func (s *Store) GetMealAllergenDay(ctx context.Context, targetDate time.Time) (*
 	}
 	if len(days) == 0 {
 		dStr := targetDate.Format("2006-01-02")
-		day := buildMealAllergenDay(dStr, nil, nil)
+		day := buildMealAllergenDay(dStr, nil, nil, nil, nil)
 		return &day, nil
 	}
 	return &days[0], nil
@@ -2496,9 +2678,14 @@ func (s *Store) GetAllMealAllergenEntries(ctx context.Context) ([]models.MealAll
 	aRows, err := s.db.Query(ctx, `
 		SELECT
 			TO_CHAR(ma.date, 'YYYY-MM-DD'),
+			COALESCE(ma.cooks, '[]'::jsonb),
 			ma.cook_parent_id,
+			COALESCE(p.first_name, ''),
+			COALESCE(p.last_name, ''),
 			COALESCE(TRIM(p.first_name || ' ' || p.last_name), ''),
 			ma.cook_employee_id,
+			COALESCE(e.first_name, ''),
+			COALESCE(e.last_name, ''),
 			COALESCE(TRIM(e.first_name || ' ' || e.last_name), ''),
 			ma.cook_custom_name,
 			ma.meal_components,
@@ -2520,9 +2707,14 @@ func (s *Store) GetAllMealAllergenEntries(ctx context.Context) ([]models.MealAll
 		var ar allergenRow
 		if err := aRows.Scan(
 			&dStr,
+			&ar.cooks,
 			&ar.cookParentID,
+			&ar.cookParentFirst,
+			&ar.cookParentLast,
 			&ar.cookParentName,
 			&ar.cookEmployeeID,
+			&ar.cookEmpFirst,
+			&ar.cookEmpLast,
 			&ar.cookEmpName,
 			&ar.cookCustomName,
 			&ar.mealComponents,
@@ -2541,6 +2733,8 @@ func (s *Store) GetAllMealAllergenEntries(ctx context.Context) ([]models.MealAll
 		return nil, err
 	}
 
+	parentNames, empNames := s.loadPersonNameMaps(ctx)
+
 	dates := make([]string, 0, len(dateSet))
 	for dStr := range dateSet {
 		dates = append(dates, dStr)
@@ -2551,7 +2745,7 @@ func (s *Store) GetAllMealAllergenEntries(ctx context.Context) ([]models.MealAll
 
 	result := make([]models.MealAllergenDay, 0, len(dates))
 	for _, dStr := range dates {
-		result = append(result, buildMealAllergenDay(dStr, planMap[dStr], allergenMap[dStr]))
+		result = append(result, buildMealAllergenDay(dStr, planMap[dStr], allergenMap[dStr], parentNames, empNames))
 	}
 
 	return result, nil
@@ -2581,6 +2775,206 @@ func sanitizeMealComponents(in models.MealAllergenComponentList) models.MealAlle
 	return out
 }
 
+func sanitizeMealAllergenCooks(
+	cooks models.MealAllergenCookList,
+	cookParentID *uuid.UUID,
+	cookEmployeeID *uuid.UUID,
+) (models.MealAllergenCookList, *uuid.UUID, *uuid.UUID) {
+	clean := make(models.MealAllergenCookList, 0, len(cooks))
+	seen := make(map[string]bool)
+	for _, c := range cooks {
+		if c.ID == uuid.Nil {
+			continue
+		}
+		cType := strings.ToLower(strings.TrimSpace(c.Type))
+		if cType != "parent" && cType != "employee" {
+			continue
+		}
+		key := cType + ":" + c.ID.String()
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		clean = append(clean, models.MealAllergenCook{
+			ID:   c.ID,
+			Type: cType,
+		})
+	}
+
+	if len(clean) == 0 {
+		if cookParentID != nil && *cookParentID != uuid.Nil {
+			clean = append(clean, models.MealAllergenCook{
+				ID:   *cookParentID,
+				Type: "parent",
+			})
+		} else if cookEmployeeID != nil && *cookEmployeeID != uuid.Nil {
+			clean = append(clean, models.MealAllergenCook{
+				ID:   *cookEmployeeID,
+				Type: "employee",
+			})
+		}
+	}
+
+	var outParentID, outEmployeeID *uuid.UUID
+	if len(clean) == 1 {
+		idCopy := clean[0].ID
+		if clean[0].Type == "parent" {
+			outParentID = &idCopy
+		} else if clean[0].Type == "employee" {
+			outEmployeeID = &idCopy
+		}
+	}
+	return clean, outParentID, outEmployeeID
+}
+
+func snapshotFromMealAllergenDay(day *models.MealAllergenDay) models.MealAllergenSnapshot {
+	if day == nil {
+		return models.MealAllergenSnapshot{
+			Cooks:          models.MealAllergenCookList{},
+			MealComponents: models.MealAllergenComponentList{},
+		}
+	}
+	comps := day.MealComponents
+	if comps == nil {
+		comps = models.MealAllergenComponentList{}
+	}
+	cooks := day.Cooks
+	if cooks == nil {
+		cooks = models.MealAllergenCookList{}
+	}
+	return models.MealAllergenSnapshot{
+		Cooks:           cooks,
+		CookParentID:    day.CookParentID,
+		CookEmployeeID:  day.CookEmployeeID,
+		CookCustomName:  day.CookCustomName,
+		CookDisplayName: day.CookDisplayName,
+		MealComponents:  comps,
+		Status:          day.Status,
+		Documentation:   day.Documentation,
+	}
+}
+
+func (s *Store) recordMealAllergensHistory(
+	ctx context.Context,
+	dateStr string,
+	op string,
+	before *models.MealAllergenSnapshot,
+	after models.MealAllergenSnapshot,
+	actor models.MealAllergenActor,
+) error {
+	var beforeBytes []byte
+	var err error
+	if before != nil {
+		beforeBytes, err = json.Marshal(before)
+		if err != nil {
+			return err
+		}
+	}
+	afterBytes, err := json.Marshal(after)
+	if err != nil {
+		return err
+	}
+
+	var changedByID *uuid.UUID
+	if !actor.IsKiosk && actor.UserID != nil && *actor.UserID != uuid.Nil {
+		changedByID = actor.UserID
+	}
+
+	_, err = s.db.Exec(ctx, `
+		INSERT INTO meal_allergens_history (
+			cooking_date,
+			operation,
+			before_snapshot,
+			after_snapshot,
+			changed_by,
+			changed_by_email,
+			is_kiosk,
+			kiosk_name
+		) VALUES (
+			$1,
+			$2,
+			$3,
+			$4,
+			(SELECT id FROM users WHERE id = $5),
+			$6,
+			$7,
+			$8
+		)
+	`, dateStr, op, beforeBytes, afterBytes, changedByID, actor.Email, actor.IsKiosk, actor.KioskName)
+	return err
+}
+
+func (s *Store) ListMealAllergensHistory(ctx context.Context, cookingDate string, limit int) ([]models.MealAllergensHistoryEntry, error) {
+	var whereClauses []string
+	var args []interface{}
+
+	trimmedDate := strings.TrimSpace(cookingDate)
+	if trimmedDate != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf("h.cooking_date = $%d", len(args)+1))
+		args = append(args, trimmedDate)
+	}
+
+	query := `
+		SELECT
+			h.id,
+			TO_CHAR(h.cooking_date, 'YYYY-MM-DD'),
+			h.operation,
+			h.before_snapshot,
+			h.after_snapshot,
+			h.changed_by,
+			COALESCE(NULLIF(h.changed_by_email, ''), u.email, ''),
+			h.is_kiosk,
+			h.kiosk_name,
+			h.created_at
+		FROM meal_allergens_history h
+		LEFT JOIN users u ON h.changed_by = u.id
+	`
+	if len(whereClauses) > 0 {
+		query += " WHERE " + strings.Join(whereClauses, " AND ")
+	}
+	query += " ORDER BY h.created_at DESC, h.id DESC"
+
+	if limit > 0 {
+		query += fmt.Sprintf(" LIMIT $%d", len(args)+1)
+		args = append(args, limit)
+	}
+
+	rows, err := s.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query meal_allergens_history: %w", err)
+	}
+	defer rows.Close()
+
+	entries := make([]models.MealAllergensHistoryEntry, 0)
+	for rows.Next() {
+		var e models.MealAllergensHistoryEntry
+		var beforeRaw, afterRaw []byte
+		if err := rows.Scan(
+			&e.ID,
+			&e.CookingDate,
+			&e.Operation,
+			&beforeRaw,
+			&afterRaw,
+			&e.ChangedBy,
+			&e.ChangedByEmail,
+			&e.IsKiosk,
+			&e.KioskName,
+			&e.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		if len(beforeRaw) > 0 {
+			rawMsg := json.RawMessage(beforeRaw)
+			e.BeforeSnapshot = &rawMsg
+		}
+		if len(afterRaw) > 0 {
+			e.AfterSnapshot = json.RawMessage(afterRaw)
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
 func (s *Store) UpsertMealAllergens(
 	ctx context.Context,
 	targetDate time.Time,
@@ -2590,11 +2984,44 @@ func (s *Store) UpsertMealAllergens(
 	mealComponents models.MealAllergenComponentList,
 	documentation models.MealAllergenDocumentation,
 	explicitStatus *models.MealAllergenStatus,
+	actor ...models.MealAllergenActor,
+) (*models.MealAllergenDay, error) {
+	return s.UpsertMealAllergensWithCooks(
+		ctx,
+		targetDate,
+		nil,
+		cookParentID,
+		cookEmployeeID,
+		cookCustomName,
+		mealComponents,
+		documentation,
+		explicitStatus,
+		actor...,
+	)
+}
+
+func (s *Store) UpsertMealAllergensWithCooks(
+	ctx context.Context,
+	targetDate time.Time,
+	cooks models.MealAllergenCookList,
+	cookParentID *uuid.UUID,
+	cookEmployeeID *uuid.UUID,
+	cookCustomName string,
+	mealComponents models.MealAllergenComponentList,
+	documentation models.MealAllergenDocumentation,
+	explicitStatus *models.MealAllergenStatus,
+	actor ...models.MealAllergenActor,
 ) (*models.MealAllergenDay, error) {
 	dateStr := targetDate.Format("2006-01-02")
 	cleanComponents := sanitizeMealComponents(mealComponents)
 	cleanCustomName := strings.TrimSpace(cookCustomName)
+	cleanCooks, dbParentID, dbEmployeeID := sanitizeMealAllergenCooks(cooks, cookParentID, cookEmployeeID)
 	documentation.PDFURL = strings.TrimSpace(documentation.PDFURL)
+
+	existing, err := s.GetMealAllergenDay(ctx, targetDate)
+	if err != nil {
+		return nil, err
+	}
 
 	// Whenever a change to allergens JSONB is persisted, the status of the row should change to not_finalized,
 	// unless an explicit status (such as finalized via the finalize button) is requested.
@@ -2603,17 +3030,19 @@ func (s *Store) UpsertMealAllergens(
 		status = *explicitStatus
 	}
 
-	_, err := s.db.Exec(ctx, `
+	_, err = s.db.Exec(ctx, `
 		INSERT INTO meal_allergens (
 			date,
+			cooks,
 			cook_parent_id,
 			cook_employee_id,
 			cook_custom_name,
 			meal_components,
 			status,
 			documentation
-		) VALUES ($1, $2, $3, $4, $5, $6, $7)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (date) DO UPDATE SET
+			cooks = EXCLUDED.cooks,
 			cook_parent_id = EXCLUDED.cook_parent_id,
 			cook_employee_id = EXCLUDED.cook_employee_id,
 			cook_custom_name = EXCLUDED.cook_custom_name,
@@ -2621,15 +3050,44 @@ func (s *Store) UpsertMealAllergens(
 			status = EXCLUDED.status,
 			documentation = EXCLUDED.documentation,
 			updated_at = NOW()
-	`, dateStr, cookParentID, cookEmployeeID, cleanCustomName, cleanComponents, string(status), documentation)
+	`, dateStr, cleanCooks, dbParentID, dbEmployeeID, cleanCustomName, cleanComponents, string(status), documentation)
 	if err != nil {
 		return nil, fmt.Errorf("failed to upsert meal_allergens for %s: %w", dateStr, err)
 	}
 
-	return s.GetMealAllergenDay(ctx, targetDate)
+	updated, err := s.GetMealAllergenDay(ctx, targetDate)
+	if err != nil {
+		return nil, err
+	}
+
+	var beforeSnap *models.MealAllergenSnapshot
+	op := "INSERT"
+	if existing != nil && existing.HasAllergenRecord {
+		op = "UPDATE"
+		snap := snapshotFromMealAllergenDay(existing)
+		beforeSnap = &snap
+	}
+	if explicitStatus != nil && *explicitStatus == models.MealAllergenStatusFinalized {
+		op = "FINALIZE"
+	}
+	afterSnap := snapshotFromMealAllergenDay(updated)
+
+	if op == "UPDATE" && beforeSnap != nil && reflect.DeepEqual(*beforeSnap, afterSnap) {
+		return updated, nil
+	}
+
+	var act models.MealAllergenActor
+	if len(actor) > 0 {
+		act = actor[0]
+	}
+	if err := s.recordMealAllergensHistory(ctx, dateStr, op, beforeSnap, afterSnap, act); err != nil {
+		return nil, fmt.Errorf("failed to record meal_allergens_history for %s: %w", dateStr, err)
+	}
+
+	return updated, nil
 }
 
-func (s *Store) FinalizeMealAllergens(ctx context.Context, targetDate time.Time) (*models.MealAllergenDay, error) {
+func (s *Store) FinalizeMealAllergens(ctx context.Context, targetDate time.Time, actor ...models.MealAllergenActor) (*models.MealAllergenDay, error) {
 	dateStr := targetDate.Format("2006-01-02")
 	existing, err := s.GetMealAllergenDay(ctx, targetDate)
 	if err != nil {
@@ -2646,7 +3104,20 @@ func (s *Store) FinalizeMealAllergens(ctx context.Context, targetDate time.Time)
 		if err != nil {
 			return nil, fmt.Errorf("failed to finalize meal_allergens for %s: %w", dateStr, err)
 		}
-		return s.GetMealAllergenDay(ctx, targetDate)
+		updated, err := s.GetMealAllergenDay(ctx, targetDate)
+		if err != nil {
+			return nil, err
+		}
+		beforeSnap := snapshotFromMealAllergenDay(existing)
+		afterSnap := snapshotFromMealAllergenDay(updated)
+		var act models.MealAllergenActor
+		if len(actor) > 0 {
+			act = actor[0]
+		}
+		if err := s.recordMealAllergensHistory(ctx, dateStr, "FINALIZE", &beforeSnap, afterSnap, act); err != nil {
+			return nil, fmt.Errorf("failed to record meal_allergens_history for %s: %w", dateStr, err)
+		}
+		return updated, nil
 	}
 
 	// If no row exists yet, initialize from meal plan and finalize
@@ -2666,6 +3137,7 @@ func (s *Store) FinalizeMealAllergens(ctx context.Context, targetDate time.Time)
 		initComps,
 		models.MealAllergenDocumentation{},
 		&finalizedStatus,
+		actor...,
 	)
 }
 

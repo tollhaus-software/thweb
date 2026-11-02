@@ -358,6 +358,25 @@ func TestExtractIDToken(t *testing.T) {
 	}
 }
 
+func TestExtractKioskNameFromDN(t *testing.T) {
+	tests := []struct {
+		dn   string
+		want string
+	}{
+		{"CN=kiosk-tablet-1", "kiosk-tablet-1"},
+		{"CN=kiosk-kitchen,O=Traumhaus Kiosk", "kiosk-kitchen"},
+		{"/CN=kiosk-reception/O=Traumhaus Kiosk", "kiosk-reception"},
+		{"O=Traumhaus Kiosk, cn = kiosk-group-2", "kiosk-group-2"},
+		{"plain-kiosk-name", "plain-kiosk-name"},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		if got := ExtractKioskNameFromDN(tt.dn); got != tt.want {
+			t.Errorf("ExtractKioskNameFromDN(%q) = %q, want %q", tt.dn, got, tt.want)
+		}
+	}
+}
+
 func TestIsAllowedKioskPath(t *testing.T) {
 	tests := []struct {
 		path string
@@ -369,6 +388,11 @@ func TestIsAllowedKioskPath(t *testing.T) {
 		{"/api/dashboard/allergies/", true},
 		{"/api/allergies/summary", true},
 		{"/api/allergies/summary/", true},
+		{"/api/meal-allergens", true},
+		{"/api/meal-allergens/", true},
+		{"/api/meal-allergens/cooks", true},
+		{"/api/meal-allergens/2026-10-22", true},
+		{"/api/meal-allergens/2026-10-22/finalize", true},
 		{"/api/daily-brief", false},
 		{"/ws", true},
 		{"/ws/", true},
@@ -393,12 +417,13 @@ func TestAuthenticator_Middleware_Kiosk(t *testing.T) {
 	auth := NewAuthenticator("mock-client-id", false, nil)
 
 	tests := []struct {
-		name        string
-		path        string
-		headers     map[string]string
-		wantStatus  int
-		wantKiosk   bool
-		wantKioskDN string
+		name          string
+		path          string
+		headers       map[string]string
+		wantStatus    int
+		wantKiosk     bool
+		wantKioskDN   string
+		wantKioskName string
 	}{
 		{
 			name: "kiosk allowed on /api/dashboard/daily-brief with verified client cert",
@@ -407,9 +432,22 @@ func TestAuthenticator_Middleware_Kiosk(t *testing.T) {
 				"X-Client-Verified": "SUCCESS",
 				"X-Client-DN":       "CN=kiosk-tablet-1",
 			},
-			wantStatus:  http.StatusOK,
-			wantKiosk:   true,
-			wantKioskDN: "CN=kiosk-tablet-1",
+			wantStatus:    http.StatusOK,
+			wantKiosk:     true,
+			wantKioskDN:   "CN=kiosk-tablet-1",
+			wantKioskName: "kiosk-tablet-1",
+		},
+		{
+			name: "kiosk allowed on /api/meal-allergens with RFC2253 DN",
+			path: "/api/meal-allergens/2026-10-22",
+			headers: map[string]string{
+				"X-Client-Verified": "SUCCESS",
+				"X-Client-DN":       "CN=kiosk-kitchen,O=Traumhaus Kiosk",
+			},
+			wantStatus:    http.StatusOK,
+			wantKiosk:     true,
+			wantKioskDN:   "CN=kiosk-kitchen,O=Traumhaus Kiosk",
+			wantKioskName: "kiosk-kitchen",
 		},
 		{
 			name: "kiosk allowed on /ws without client DN",
@@ -473,8 +511,17 @@ func TestAuthenticator_Middleware_Kiosk(t *testing.T) {
 				if recordedUser == nil {
 					t.Fatal("expected recordedUser in context, got nil")
 				}
+				if !recordedUser.IsKiosk {
+					t.Errorf("expected IsKiosk = true")
+				}
+				if recordedUser.KioskName != tt.wantKioskName {
+					t.Errorf("expected KioskName = %q, got %q", tt.wantKioskName, recordedUser.KioskName)
+				}
 				if !recordedUser.HasPermission("dashboard.read") {
 					t.Errorf("expected user to have 'dashboard.read' permission, got: %v", recordedUser.EffectivePermissions)
+				}
+				if !recordedUser.HasPermission("meal_allergens.read") || !recordedUser.HasPermission("meal_allergens.write") {
+					t.Errorf("expected kiosk user to have meal_allergens.read and meal_allergens.write permissions, got: %v", recordedUser.EffectivePermissions)
 				}
 				if tt.wantKioskDN != "" {
 					expectedEmail := "kiosk+" + tt.wantKioskDN + "@internal"

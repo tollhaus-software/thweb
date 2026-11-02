@@ -10,7 +10,10 @@ import {
   doesDayMatchSearch,
   findMostRecentMatchingDay,
   createEmptyMealAllergenDay,
+  formatCooksDisplayName,
+  sortCookOptions,
   type MealAllergenDay,
+  type CookOption,
 } from '../src/utils/mealAllergens';
 
 test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, and Copy Allergens', () => {
@@ -137,9 +140,46 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
 
     const mostRecent = findMostRecentMatchingDay([entry1, entry2, entry3, entry4Old], 'Spaghetti');
     expect(mostRecent?.date).toBe('2026-10-08');
+
+    // 7. Multi-cook display formatting ("GivenNameA & GivenNameB CommonSurname") and cook options sorting
+    expect(
+      formatCooksDisplayName([
+        { first_name: 'Anton', last_name: 'Becker', display_name: 'Anton Becker' },
+        { first_name: 'Zoe', last_name: 'Becker', display_name: 'Zoe Becker' },
+      ])
+    ).toBe('Anton & Zoe Becker');
+    expect(
+      formatCooksDisplayName([
+        { first_name: 'Sabine', last_name: 'Mitarbeiterin', display_name: 'Sabine Mitarbeiterin' },
+        { first_name: 'Markus', last_name: 'Elternkoch', display_name: 'Markus Elternkoch' },
+      ])
+    ).toBe('Sabine Mitarbeiterin, Markus Elternkoch');
+
+    const sampleOptions: CookOption[] = [
+      { id: 'e2', type: 'employee', first_name: 'Vera', last_name: 'Erzieherin', display_name: 'Vera Erzieherin', employee_type: 'caregiver' },
+      { id: 'p3', type: 'parent', first_name: 'Markus', last_name: 'Elternkoch', display_name: 'Markus Elternkoch', family_name: 'Elternkoch', family_id: 'f2' },
+      { id: 'p2', type: 'parent', first_name: 'Zoe', last_name: 'Becker', display_name: 'Zoe Becker', family_name: 'Becker', family_id: 'f1' },
+      { id: 'e1', type: 'employee', first_name: 'Sabine', last_name: 'Mitarbeiterin', display_name: 'Sabine Mitarbeiterin', employee_type: 'cook' },
+      { id: 'p1', type: 'parent', first_name: 'Anton', last_name: 'Becker', display_name: 'Anton Becker', family_name: 'Becker', family_id: 'f1' },
+    ];
+    expect(sortCookOptions(sampleOptions).map((o) => o.display_name)).toEqual([
+      'Sabine Mitarbeiterin',
+      'Anton Becker',
+      'Zoe Becker',
+      'Markus Elternkoch',
+      'Vera Erzieherin',
+    ]);
+    // With prioritizedKeys (already selected cooks shown first)
+    expect(sortCookOptions(sampleOptions, new Set(['employee:e2'])).map((o) => o.display_name)).toEqual([
+      'Vera Erzieherin',
+      'Sabine Mitarbeiterin',
+      'Anton Becker',
+      'Zoe Becker',
+      'Markus Elternkoch',
+    ]);
   });
 
-  test('desktop (5x5 month view) and mobile (5-day week view) layouts, searchable cook dropdown, component popover editor, and copy allergens', async ({
+  test('desktop (5x5 month view) and mobile (5-day week view) layouts, multi-cook popover editor, component popover editor, and copy allergens', async ({
     request,
     page,
   }) => {
@@ -149,7 +189,18 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
 
     const authHeaders = { Authorization: 'Bearer developer@example.com' };
 
-    // Create a parent and an employee to test the searchable cook dropdown
+    // Create families and employees to test multi-cook popover ordering and same-surname display
+    const famBeckerRes = await request.post('/api/families', {
+      headers: authHeaders,
+      data: {
+        parents: [
+          { first_name: 'Zoe', last_name: 'Becker', emails: [], phones: [] },
+          { first_name: 'Anton', last_name: 'Becker', emails: [], phones: [] },
+        ],
+      },
+    });
+    expect(famBeckerRes.ok()).toBeTruthy();
+
     const famRes = await request.post('/api/families', {
       headers: authHeaders,
       data: {
@@ -169,6 +220,18 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
       },
     });
     expect(empRes.ok()).toBeTruthy();
+
+    const empPedRes = await request.post('/api/employees', {
+      headers: authHeaders,
+      data: {
+        first_name: 'Vera',
+        last_name: 'Erzieherin',
+        employee_type: 'caregiver',
+        emails: [],
+        phones: [],
+      },
+    });
+    expect(empPedRes.ok()).toBeTruthy();
 
     // Compute dates around current week
     const now = new Date();
@@ -331,23 +394,74 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     await expect(headerTitle).not.toContainText('Spaghetti Bolognese');
     await expect(headerTitle).not.toContainText('Gurkensalat');
 
-    // Verify cook label is "Koch/Köchin" and cook selector is visible
+    // Verify cook label is "Es kocht" and cook selector is visible
     const cookField = page.locator('.meal-allergens-field-group');
-    await expect(cookField.locator('.meal-allergens-field-label')).toHaveText('Koch/Köchin');
+    await expect(cookField.locator('.meal-allergens-field-label')).toHaveText('Es kocht');
     await expect(page.getByTestId('cook-combobox')).toBeVisible();
+    await expect(page.getByTestId('cooks-display-text')).toHaveText('Anna Köchin');
+    await expect(page.getByTestId('edit-cooks-btn')).toBeVisible();
 
-    // Verify read-only meal plan reference box is visible at the top and not editable
-    await expect(page.getByTestId('meal-plan-reference-box')).toBeVisible();
-    await expect(page.getByTestId('meal-plan-reference-box')).toContainText('Laut Speiseplan:');
+    // Verify read-only meal plan reference box is visible at the top, left-aligned (not indented), and inline comma-separated
+    const planRefEl = page.getByTestId('meal-plan-reference-box');
+    await expect(planRefEl).toBeVisible();
+    await expect(planRefEl).toContainText('Laut Speiseplan: Anna Köchin — Spaghetti Bolognese, Gurkensalat');
     await expect(page.getByTestId('meal-plan-ref-cook')).toHaveText('Anna Köchin');
     await expect(page.getByTestId('plan-comp-chip-0')).toHaveText('Spaghetti Bolognese');
     await expect(page.getByTestId('plan-comp-chip-1')).toHaveText('Gurkensalat');
 
+    // Verify layout alignment on large viewport (1280x800):
+    // - Status text left edge aligns with Date title left edge
+    // - History button is on the Status line and right-aligned with Copy button
+    // - Laut Speiseplan box is not indented (aligns with Back button and Es kocht label left edge)
+    // - Es kocht meta grid has no separate background color or border
+    const backBtnBox = await page.getByTestId('allergens-editor-back-btn').boundingBox();
+    const titleBox = await headerTitle.boundingBox();
+    const copyBtnBox = await page.getByTestId('copy-allergens-from-btn').boundingBox();
+    const statusBox = await page.getByTestId('allergens-editor-status').boundingBox();
+    const historyBtnBox = await page.getByTestId('allergens-history-btn').boundingBox();
+    const planRefBox = await planRefEl.boundingBox();
+    const cookLabelBox = await cookField.locator('.meal-allergens-field-label').boundingBox();
+
+    expect(backBtnBox && titleBox && copyBtnBox && statusBox && historyBtnBox && planRefBox && cookLabelBox).toBeTruthy();
+    if (backBtnBox && titleBox && copyBtnBox && statusBox && historyBtnBox && planRefBox && cookLabelBox) {
+      // Status text aligns with date title
+      expect(Math.abs(statusBox.x - titleBox.x)).toBeLessThanOrEqual(2);
+      // History button is on the same horizontal row as status text and right-aligned
+      expect(Math.abs((statusBox.y + statusBox.height / 2) - (historyBtnBox.y + historyBtnBox.height / 2))).toBeLessThanOrEqual(6);
+      expect(Math.abs((historyBtnBox.x + historyBtnBox.width) - (copyBtnBox.x + copyBtnBox.width))).toBeLessThanOrEqual(2);
+      // Laut Speiseplan is placed on the left (not indented under date/status)
+      expect(Math.abs(planRefBox.x - backBtnBox.x)).toBeLessThanOrEqual(2);
+      expect(Math.abs(cookLabelBox.x - backBtnBox.x)).toBeLessThanOrEqual(2);
+    }
+
+    const metaGridStyles = await page.locator('.meal-allergens-meta-grid').evaluate((el) => {
+      const cs = window.getComputedStyle(el);
+      return { bg: cs.backgroundColor, borderTopWidth: cs.borderTopWidth };
+    });
+    expect(metaGridStyles.bg).toBe('rgba(0, 0, 0, 0)');
+    expect(metaGridStyles.borderTopWidth).toBe('0px');
+
+    // Verify layout alignment on small viewport (375x667) as well
+    await page.setViewportSize({ width: 375, height: 667 });
+    const mobileBackBox = await page.getByTestId('allergens-editor-back-btn').boundingBox();
+    const mobileTitleBox = await headerTitle.boundingBox();
+    const mobileCopyBox = await page.getByTestId('copy-allergens-from-btn').boundingBox();
+    const mobileStatusBox = await page.getByTestId('allergens-editor-status').boundingBox();
+    const mobileHistoryBox = await page.getByTestId('allergens-history-btn').boundingBox();
+    const mobilePlanRefBox = await planRefEl.boundingBox();
+    if (mobileBackBox && mobileTitleBox && mobileCopyBox && mobileStatusBox && mobileHistoryBox && mobilePlanRefBox) {
+      expect(Math.abs(mobileStatusBox.x - mobileTitleBox.x)).toBeLessThanOrEqual(2);
+      expect(Math.abs((mobileStatusBox.y + mobileStatusBox.height / 2) - (mobileHistoryBox.y + mobileHistoryBox.height / 2))).toBeLessThanOrEqual(6);
+      expect(Math.abs((mobileHistoryBox.x + mobileHistoryBox.width) - (mobileCopyBox.x + mobileCopyBox.width))).toBeLessThanOrEqual(2);
+      expect(Math.abs(mobilePlanRefBox.x - mobileBackBox.x)).toBeLessThanOrEqual(2);
+    }
+    await page.setViewportSize({ width: 1280, height: 800 });
+
     // 7. Verify meal plan components are NOT transferred to allergens by default
     await expect(page.locator('[data-testid^="meal-component-card-"]')).toHaveCount(0);
 
-    // Empty state dropzone is displayed when no components are added yet
-    await expect(page.getByTestId('components-empty-dropzone')).toBeVisible();
+    // Empty state dropzone is removed (not shown)
+    await expect(page.getByTestId('components-empty-dropzone')).toHaveCount(0);
 
     // Verify completion checklist next to Finalisieren button:
     // Cook was matched from plan ("Anna Köchin"), so cook requirement is satisfied (disappears)
@@ -359,6 +473,34 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     await expect(page.getByTestId('finalize-allergens-btn')).toBeVisible();
     await expect(page.getByTestId('finalize-allergens-btn')).toHaveText('Finalisieren');
     await expect(page.getByTestId('finalize-allergens-btn')).toBeDisabled();
+
+    // Verify "Finalisieren" button has a gray background when disabled (not green)
+    const disabledBgLight = await page.getByTestId('finalize-allergens-btn').evaluate((el) => {
+      return window.getComputedStyle(el).backgroundColor;
+    });
+    expect(disabledBgLight).not.toBe('rgb(22, 163, 74)');
+    expect(disabledBgLight).toBe('rgb(241, 245, 249)');
+
+    // In dark mode, disabled background is dark gray
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+    const disabledBgDark = await page.getByTestId('finalize-allergens-btn').evaluate((el) => {
+      return window.getComputedStyle(el).backgroundColor;
+    });
+    expect(disabledBgDark).not.toBe('rgb(22, 163, 74)');
+    expect(disabledBgDark).toBe('rgb(53, 54, 58)');
+    await page.evaluate(() => document.documentElement.removeAttribute('data-theme'));
+
+    // Verify history icon next to Status at the top of the editor
+    const historyBtn = page.getByTestId('allergens-history-btn');
+    await expect(historyBtn).toBeVisible();
+    await historyBtn.click();
+
+    // History viewer modal opens and shows empty or initial history
+    const historyModal = page.getByTestId('meal-allergens-history-modal');
+    await expect(historyModal).toBeVisible();
+    await expect(historyModal.getByTestId('history-modal-title')).toBeVisible();
+    await historyModal.getByTestId('close-history-modal-btn').click();
+    await expect(historyModal).toHaveCount(0);
 
     // 8. Verify "+ Komponente" button opens editing popover:
     const addCompBtn = page.getByTestId('add-meal-component-btn');
@@ -409,6 +551,23 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     await expect(page.getByTestId('checklist-item-components')).toHaveCount(0);
     await expect(page.getByTestId('checklist-item-cook')).toHaveCount(0);
     await expect(page.getByTestId('finalize-allergens-btn')).toBeEnabled();
+
+    // When enabled, Finalisieren button has green background
+    const enabledBg = await page.getByTestId('finalize-allergens-btn').evaluate((el) => {
+      return window.getComputedStyle(el).backgroundColor;
+    });
+    expect(enabledBg).toBe('rgb(22, 163, 74)');
+
+    // Open history viewer to verify change tracking for this day
+    await page.getByTestId('allergens-history-btn').click();
+    await expect(page.getByTestId('meal-allergens-history-modal')).toBeVisible();
+    await expect(page.getByTestId('history-entries-list')).toBeVisible();
+    await expect(page.getByTestId('history-entry-0')).toBeVisible();
+    await expect(page.getByTestId('history-who-0')).toContainText('developer@example.com');
+    await expect(page.getByTestId('history-what-0')).toContainText('Spaghetti Bolognese');
+    await expect(page.getByTestId('history-when-0')).toBeVisible();
+    await page.getByTestId('close-history-modal-btn').click();
+    await expect(page.getByTestId('meal-allergens-history-modal')).toHaveCount(0);
 
     // Add second component (Gurkensalat) from meal plan suggestion
     await addCompBtn.click();
@@ -469,20 +628,38 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     await expect(page.getByTestId('meal-component-card-2')).toHaveCount(0);
     await expect(page.getByTestId('meal-component-card-2')).toHaveCount(0);
 
-    // 11. Test Searchable Cook Combobox:
-    // Typing filters the list of options; selecting an option selects it; typing unlisted text implicitly persists as custom cook
-    const cookInput = page.getByTestId('cook-combobox-input');
-    await cookInput.click();
-    await cookInput.fill('Sabine');
-    const dropdown = page.getByTestId('cook-combobox-dropdown');
-    await expect(dropdown).toBeVisible();
-    await expect(dropdown).toContainText('Sabine Mitarbeiterin');
-    await expect(dropdown).not.toContainText('Markus Elternkoch');
+    // 11. Test Multi-Select Cook Popover:
+    // Clicking the edit icon next to "Es kocht" opens the popover with checkboxes, ordered as:
+    // - employees with type cook first ("Sabine Mitarbeiterin")
+    // - parents after that, ordered by canonical family name & given name ("Anton Becker", "Zoe Becker", "Markus Elternkoch")
+    // - remaining employees after that ("Vera Erzieherin")
+    // And without "Elternteil" / "Mitarbeitende(r)" badges.
+    await page.getByTestId('edit-cooks-btn').click();
+    const cooksPopover = page.getByTestId('cooks-popover');
+    await expect(cooksPopover).toBeVisible();
+    await expect(cooksPopover).not.toContainText('Elternteil');
+    await expect(cooksPopover).not.toContainText('Mitarbeitende(r)');
 
-    // Type a custom cook name not in options ("Anna Köchin") and press Enter -> implicitly persisted as custom text
-    await cookInput.fill('Anna Köchin');
-    await cookInput.press('Enter');
-    await expect(cookInput).toHaveValue('Anna Köchin');
+    const optionNames = await cooksPopover.locator('.meal-allergens-cook-option-name').allTextContents();
+    expect(optionNames).toEqual([
+      'Sabine Mitarbeiterin',
+      'Anton Becker',
+      'Zoe Becker',
+      'Markus Elternkoch',
+      'Vera Erzieherin',
+    ]);
+
+    // Test quick filter inside cooks popover
+    const filterInput = page.getByTestId('cooks-quick-filter-input');
+    await filterInput.fill('Sabine');
+    await expect(cooksPopover.locator('.meal-allergens-cook-option-name')).toHaveCount(1);
+    await expect(cooksPopover.locator('.meal-allergens-cook-option-name').first()).toHaveText('Sabine Mitarbeiterin');
+    await filterInput.fill('');
+    await expect(cooksPopover.locator('.meal-allergens-cook-option-name')).toHaveCount(5);
+
+    // Close cooks popover so "Anna Köchin" stays the cook for the "Kopieren von..." suggestions test below
+    await page.getByTestId('cooks-popover-done-btn').click();
+    await expect(cooksPopover).toHaveCount(0);
 
     // 11. Test "Copy allergens from" (renamed to "Kopieren von...")
     const copyBtn = page.getByTestId('copy-allergens-from-btn');
@@ -585,8 +762,8 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     await expect(page.getByTestId('meal-plan-empty-text')).toHaveText('Nichts eingetragen');
     await expect(page.getByTestId('meal-plan-ref-cook')).toHaveCount(0);
 
-    // Empty dropzone is visible
-    await expect(page.getByTestId('components-empty-dropzone')).toBeVisible();
+    // Empty dropzone card is removed (not shown)
+    await expect(page.getByTestId('components-empty-dropzone')).toHaveCount(0);
 
     // Both cook and components requirements are pending in the checklist
     await expect(page.getByTestId('checklist-item-cook')).toBeVisible();
@@ -606,20 +783,38 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     await expect(page.getByTestId('checklist-item-cook')).toBeVisible();
     await expect(page.getByTestId('finalize-allergens-btn')).toBeDisabled();
 
-    // Clicking cook checklist item focuses the cook input
+    // Clicking cook checklist item opens the cooks popover
     await page.getByTestId('checklist-item-cook').click();
-    const unseededCookInput = page.getByTestId('cook-combobox-input');
-    await expect(unseededCookInput).toBeFocused();
+    const unseededPopover = page.getByTestId('cooks-popover');
+    await expect(unseededPopover).toBeVisible();
 
-    // Select cook -> cook requirement satisfied (disappears), and Finalize button becomes ENABLED!
-    await unseededCookInput.fill('Chefkoch Tom');
-    await unseededCookInput.press('Enter');
+    // Select two people with the same surname ("Anton Becker" and "Zoe Becker")
+    await unseededPopover.locator('.meal-allergens-cook-checkbox-item', { hasText: 'Anton Becker' }).click();
+    await unseededPopover.locator('.meal-allergens-cook-checkbox-item', { hasText: 'Zoe Becker' }).click();
+    await page.getByTestId('cooks-popover-done-btn').click();
+
+    // Cook requirement is now satisfied (disappears), Finalize button is ENABLED, and display shows "Anton & Zoe Becker"
     await expect(page.getByTestId('checklist-item-cook')).toHaveCount(0);
     await expect(page.getByTestId('finalize-allergens-btn')).toBeEnabled();
+    await expect(page.getByTestId('cooks-display-text')).toHaveText('Anton & Zoe Becker');
 
-    // Clear cook -> cook requirement becomes pending again (reappears), and Finalize button is disabled again!
-    await unseededCookInput.fill('');
-    await unseededCookInput.press('Enter');
+    // Re-open the cooks popover -> already selected cooks ("Anton Becker", "Zoe Becker") are shown FIRST at the top!
+    await page.getByTestId('edit-cooks-btn').click();
+    await expect(unseededPopover).toBeVisible();
+    const reopenedNames = await unseededPopover.locator('.meal-allergens-cook-option-name').allTextContents();
+    expect(reopenedNames.slice(0, 2)).toEqual(['Anton Becker', 'Zoe Becker']);
+    await page.getByTestId('cooks-popover-done-btn').click();
+
+    // Go back to overview and verify the day box displays "Anton & Zoe Becker"
+    await page.getByTestId('allergens-editor-back-btn').click();
+    await expect(page.getByTestId(`meal-allergens-day-box-${unseededDate}`)).toContainText('Anton & Zoe Becker');
+
+    // Re-open unseededDate and deselect both cooks from the top of the popover -> cook requirement becomes pending again!
+    await page.getByTestId(`meal-allergens-day-box-${unseededDate}`).click();
+    await page.getByTestId('edit-cooks-btn').click();
+    await unseededPopover.locator('.meal-allergens-cook-checkbox-item', { hasText: 'Anton Becker' }).click();
+    await unseededPopover.locator('.meal-allergens-cook-checkbox-item', { hasText: 'Zoe Becker' }).click();
+    await page.getByTestId('cooks-popover-done-btn').click();
     await expect(page.getByTestId('checklist-item-cook')).toBeVisible();
     await expect(page.getByTestId('finalize-allergens-btn')).toBeDisabled();
   });

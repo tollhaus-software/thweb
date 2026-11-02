@@ -84,6 +84,24 @@ func TestGetDailyBrief(t *testing.T) {
 		t.Fatalf("failed to insert meal_plan_from_sheets: %v", err)
 	}
 
+	// Insert meal allergen entry for Friday 2099-10-09
+	_, err = appStore.UpsertMealAllergens(
+		ctx,
+		fridayDate,
+		nil,
+		nil,
+		"Chef Mario",
+		models.MealAllergenComponentList{
+			{Name: "Tomatensuppe", Allergens: []string{"sellerie"}},
+			{Name: "Pasta Pesto", Allergens: []string{"gluten", "milch"}},
+		},
+		models.MealAllergenDocumentation{},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("failed to upsert meal allergens: %v", err)
+	}
+
 	// Test 1: Friday 2099-10-09
 	briefFriday, err := appStore.GetDailyBrief(ctx, fridayDate)
 	if err != nil {
@@ -101,6 +119,14 @@ func TestGetDailyBrief(t *testing.T) {
 		if briefFriday.MealComponents[0] != "Tomatensuppe" || briefFriday.MealComponents[1] != "Pasta Pesto" || briefFriday.MealComponents[2] != "Apfel" {
 			t.Errorf("unexpected meal components: %+v", briefFriday.MealComponents)
 		}
+	}
+	if !briefFriday.HasAllergenRecord {
+		t.Errorf("expected HasAllergenRecord to be true for Friday")
+	}
+	if len(briefFriday.AllergenMealComponents) != 2 {
+		t.Errorf("expected 2 allergen meal components for Friday, got %d", len(briefFriday.AllergenMealComponents))
+	} else if briefFriday.AllergenMealComponents[0].Name != "Tomatensuppe" || len(briefFriday.AllergenMealComponents[0].Allergens) != 1 {
+		t.Errorf("unexpected allergen meal component: %+v", briefFriday.AllergenMealComponents[0])
 	}
 
 	// Tasks for Friday: yellow_bin_retrieve, clean_coffe_machine, and clean_refrigerator
@@ -141,6 +167,12 @@ func TestGetDailyBrief(t *testing.T) {
 	}
 	if len(briefThursday.MealComponents) != 0 {
 		t.Errorf("expected 0 meal components, got %d", len(briefThursday.MealComponents))
+	}
+	if briefThursday.HasAllergenRecord {
+		t.Errorf("expected HasAllergenRecord to be false for Thursday")
+	}
+	if len(briefThursday.AllergenMealComponents) != 0 {
+		t.Errorf("expected 0 allergen meal components for Thursday, got %d", len(briefThursday.AllergenMealComponents))
 	}
 
 	// Tasks for Thursday: yellow_bin_put_out, but NOT clean_coffe_machine, clean_refrigerator, or yellow_bin_retrieve
