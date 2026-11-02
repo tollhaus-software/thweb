@@ -1,8 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Plus, Pencil, Trash, X, Search } from 'lucide-react';
+import { Plus, Pencil, Trash, X, Search, Bold, Italic, Underline, Link as LinkIcon } from 'lucide-react';
 import { DataTable } from '../Table/DataTable';
 import { ConfirmDeleteModal } from '../Table/ConfirmDeleteModal';
+import { NotesEditor } from '../Table/NotesEditor';
 import EasyEdit, { Types as EasyEditTypes } from '../InlineEdit';
 import { JobAssigneesPopover } from './JobAssigneesPopover';
 import { t } from '../../utils/i18n';
@@ -105,6 +106,40 @@ export const JobsTab: React.FC<JobsTabProps> = ({
   });
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const descModalTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const insertModalFormatting = (prefix: string, suffix: string, defaultText = '') => {
+    const textarea = descModalTextareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = textarea.value;
+    const selectedText = text.substring(start, end) || defaultText;
+    const replacement = `${prefix}${selectedText}${suffix}`;
+    const newText = text.substring(0, start) + replacement + text.substring(end);
+    setFormData((prev) => ({ ...prev, description: newText }));
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + prefix.length, start + prefix.length + selectedText.length);
+    }, 0);
+  };
+
+  const handleModalInsertLink = () => {
+    const textarea = descModalTextareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = textarea.value;
+    const selectedText = text.substring(start, end);
+
+    if (selectedText.startsWith('http://') || selectedText.startsWith('https://')) {
+      insertModalFormatting('[Link-Titel](', ')', selectedText);
+    } else if (selectedText) {
+      insertModalFormatting('[', '](https://example.com)', selectedText);
+    } else {
+      insertModalFormatting('[Link-Titel](https://example.com)', '', '');
+    }
+  };
 
   const openCreateModal = () => {
     setEditingJob(null);
@@ -239,16 +274,8 @@ export const JobsTab: React.FC<JobsTabProps> = ({
         cell: (info) => {
           const row = info.row.original;
           const desc = row.description;
-          if (!canWriteJobs) {
-            return desc ? (
-              <span style={{ whiteSpace: 'pre-line' }}>{desc}</span>
-            ) : (
-              <span style={{ color: 'var(--text-muted)' }}>-</span>
-            );
-          }
           return (
-            <EasyEditComponent
-              type={EasyEditTypes.TEXT}
+            <NotesEditor
               value={desc || ''}
               onSave={async (val: string) => {
                 if (val === desc) return;
@@ -258,20 +285,9 @@ export const JobsTab: React.FC<JobsTabProps> = ({
                   contact_email: row.contact_email,
                 });
               }}
-              placeholder="-"
-              editButtonLabel={<Pencil size={13} />}
-              instructions={t('editJobDescription') || 'Beschreibung bearbeiten'}
-              displayComponent={
-                desc ? (
-                  <span style={{ whiteSpace: 'pre-line' }}>{desc}</span>
-                ) : (
-                  <span style={{ color: 'var(--text-muted)' }}>-</span>
-                )
-              }
-              viewAttributes={{}}
-              inputAttributes={{}}
-              onCancel={() => {}}
-              onValidate={() => true}
+              placeholder={t('addJobDescription') || 'Beschreibung hinzufügen...'}
+              title={t('jobDescription') || 'Beschreibung'}
+              readOnly={!canWriteJobs}
             />
           );
         },
@@ -679,11 +695,100 @@ export const JobsTab: React.FC<JobsTabProps> = ({
               </div>
 
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.35rem', color: 'var(--text-h)' }}>
-                  {t('jobDescriptionLabel') || 'Beschreibung:'}
-                </label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                  <label htmlFor="job-desc" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-h)' }}>
+                    {t('jobDescriptionLabel') || 'Beschreibung:'}
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <button
+                      type="button"
+                      title={`${t('bold') || 'Bold'}`}
+                      onClick={() => insertModalFormatting('**', '**')}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '22px',
+                        height: '22px',
+                        padding: 0,
+                        border: '1px solid var(--border)',
+                        borderRadius: '4px',
+                        background: 'var(--bg-surface)',
+                        color: 'var(--text)',
+                        cursor: 'pointer',
+                      }}
+                      aria-label="Bold"
+                    >
+                      <Bold size={11} />
+                    </button>
+                    <button
+                      type="button"
+                      title={`${t('italic') || 'Italic'}`}
+                      onClick={() => insertModalFormatting('*', '*')}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '22px',
+                        height: '22px',
+                        padding: 0,
+                        border: '1px solid var(--border)',
+                        borderRadius: '4px',
+                        background: 'var(--bg-surface)',
+                        color: 'var(--text)',
+                        cursor: 'pointer',
+                      }}
+                      aria-label="Italic"
+                    >
+                      <Italic size={11} />
+                    </button>
+                    <button
+                      type="button"
+                      title={`${t('underline') || 'Underline'}`}
+                      onClick={() => insertModalFormatting('<u>', '</u>')}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '22px',
+                        height: '22px',
+                        padding: 0,
+                        border: '1px solid var(--border)',
+                        borderRadius: '4px',
+                        background: 'var(--bg-surface)',
+                        color: 'var(--text)',
+                        cursor: 'pointer',
+                      }}
+                      aria-label="Underline"
+                    >
+                      <Underline size={11} />
+                    </button>
+                    <button
+                      type="button"
+                      title={`${t('link') || 'Link'}`}
+                      onClick={handleModalInsertLink}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '22px',
+                        height: '22px',
+                        padding: 0,
+                        border: '1px solid var(--border)',
+                        borderRadius: '4px',
+                        background: 'var(--bg-surface)',
+                        color: 'var(--text)',
+                        cursor: 'pointer',
+                      }}
+                      aria-label="Link"
+                    >
+                      <LinkIcon size={11} />
+                    </button>
+                  </div>
+                </div>
                 <textarea
                   id="job-desc"
+                  ref={descModalTextareaRef}
                   rows={3}
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}

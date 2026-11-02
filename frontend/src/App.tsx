@@ -5870,6 +5870,7 @@ function formatParentsSummary(parents: any[]): string {
             <NotesEditor
               value={parent.notes || ''}
               onSave={(val: string) => handleSaveParentField(parent, 'notes', val)}
+              readOnly={!canWriteParents}
             />
           );
         }
@@ -6120,6 +6121,7 @@ function formatParentsSummary(parents: any[]): string {
             <NotesEditor
               value={child.notes || ''}
               onSave={(val: string) => handleSaveChildField(child, 'notes', val)}
+              readOnly={!canWriteChildren}
             />
           );
         }
@@ -6284,6 +6286,7 @@ function formatParentsSummary(parents: any[]): string {
             <NotesEditor
               value={child.notes || ''}
               onSave={(val: string) => handleSaveChildField(child, 'notes', val)}
+              readOnly={!canWriteChildren}
             />
           );
         }

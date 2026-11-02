@@ -172,10 +172,32 @@ test.describe('Test Case 28: Jobs and Assignments (MGA)', () => {
 
     // In-Table inline editing test: edit description and email in the table
     const descCell = hygieneRow.locator('td').nth(1);
-    await descCell.locator('.easy-edit-button').click();
-    await descCell.locator('.easy-edit-input').fill('In-Table Hygiene Tasks');
-    await descCell.locator('.easy-edit-input').press('Enter');
-    await expect(descCell).toContainText('In-Table Hygiene Tasks');
+    await descCell.locator('.cell-edit-pencil-btn').click();
+    const descPopover = page.locator('.glass-popup');
+    await expect(descPopover).toBeVisible();
+    await descPopover.locator('textarea').fill('Line 1: **bold** and *italic*\nLine 2: <u>underline</u> and [Docs](https://example.com/docs)\nLine 3: https://example.com');
+    // Verify preview renders formatted bold, italic, underline, explicit link, and auto-link
+    await descPopover.getByRole('button', { name: 'Vorschau' }).click();
+    await expect(descPopover.locator('.notes-preview-container strong')).toHaveText('bold');
+    await expect(descPopover.locator('.notes-preview-container em')).toHaveText('italic');
+    await expect(descPopover.locator('.notes-preview-container u')).toHaveText('underline');
+    await expect(descPopover.locator('.notes-preview-container a[href="https://example.com/docs"]')).toHaveText('Docs');
+    await expect(descPopover.locator('.notes-preview-container a[href="https://example.com"]')).toHaveText('https://example.com');
+    // Switch back to edit and save
+    await descPopover.getByRole('button', { name: 'Bearbeiten' }).click();
+    await descPopover.getByRole('button', { name: 'Speichern' }).click();
+    await expect(descPopover).toBeHidden();
+    // Preview in table cell shows first line with clean formatting and '...' multiline indicator
+    await expect(descCell).toContainText('Line 1: bold and italic');
+    await expect(descCell.locator('.notes-more-indicator')).toBeVisible();
+    await expect(descCell.locator('.notes-more-indicator')).toHaveText('...');
+
+    // Reopen popover to verify multiline content persisted in DB
+    await descCell.locator('.cell-edit-pencil-btn').click();
+    await expect(descPopover).toBeVisible();
+    await expect(descPopover.locator('textarea')).toHaveValue('Line 1: **bold** and *italic*\nLine 2: <u>underline</u> and [Docs](https://example.com/docs)\nLine 3: https://example.com');
+    await descPopover.getByRole('button', { name: 'Abbrechen' }).click();
+    await expect(descPopover).toBeHidden();
 
     const emailCell = hygieneRow.locator('td').nth(2);
     await emailCell.locator('.easy-edit-button').click();
