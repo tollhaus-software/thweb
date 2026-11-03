@@ -354,6 +354,44 @@ class ReauthManager {
         }
       }
 
+      if (isApiCall) {
+        const win = window as unknown as { __THWEB_APP_VIEW__?: string; __KIOSK_MODE__?: boolean };
+        const isDash =
+          win.__THWEB_APP_VIEW__ === 'dashboard' ||
+          window.location.hash.replace('#', '') === 'dashboard' ||
+          window.location.port === '1443' ||
+          new URLSearchParams(window.location.search).get('kiosk') === 'true' ||
+          Boolean(win.__KIOSK_MODE__);
+        const appView = isDash ? 'dashboard' : 'portal';
+
+        if (!sanitizedInit) {
+          sanitizedInit = { headers: { 'X-App-View': appView } };
+        } else if (!sanitizedInit.headers) {
+          sanitizedInit = { ...sanitizedInit, headers: { 'X-App-View': appView } };
+        } else if (sanitizedInit.headers instanceof Headers) {
+          if (!sanitizedInit.headers.has('X-App-View')) {
+            sanitizedInit.headers.set('X-App-View', appView);
+          }
+        } else if (Array.isArray(sanitizedInit.headers)) {
+          const hasHeader = sanitizedInit.headers.some(([k]) => k.toLowerCase() === 'x-app-view');
+          if (!hasHeader) {
+            sanitizedInit = {
+              ...sanitizedInit,
+              headers: [...sanitizedInit.headers, ['X-App-View', appView]],
+            };
+          }
+        } else if (typeof sanitizedInit.headers === 'object') {
+          const raw = sanitizedInit.headers as Record<string, string>;
+          const hasHeader = Object.keys(raw).some((k) => k.toLowerCase() === 'x-app-view');
+          if (!hasHeader) {
+            sanitizedInit = {
+              ...sanitizedInit,
+              headers: { ...raw, 'X-App-View': appView },
+            };
+          }
+        }
+      }
+
       let response: Response;
       try {
         response = await originalFetch(input, sanitizedInit);

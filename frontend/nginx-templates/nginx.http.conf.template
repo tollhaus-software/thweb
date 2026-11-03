@@ -20,6 +20,10 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header Authorization $http_authorization;
         proxy_set_header X-Forwarded-Email $http_x_forwarded_email;
+        proxy_set_header X-Forwarded-User $http_x_forwarded_user;
+        proxy_set_header X-Forwarded-Preferred-Username $http_x_forwarded_preferred_username;
+        proxy_set_header X-Forwarded-Groups $http_x_forwarded_groups;
+        proxy_set_header X-App-View $http_x_app_view;
         proxy_set_header X-Forwarded-ID-Token $http_x_forwarded_id_token;
         proxy_set_header X-Forwarded-Access-Token $http_x_forwarded_access_token;
         proxy_set_header X-KMS-Access-Token $http_x_kms_access_token;
@@ -47,6 +51,10 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header Authorization $http_authorization;
         proxy_set_header X-Forwarded-Email $http_x_forwarded_email;
+        proxy_set_header X-Forwarded-User $http_x_forwarded_user;
+        proxy_set_header X-Forwarded-Preferred-Username $http_x_forwarded_preferred_username;
+        proxy_set_header X-Forwarded-Groups $http_x_forwarded_groups;
+        proxy_set_header X-App-View $http_x_app_view;
         proxy_set_header X-Forwarded-ID-Token $http_x_forwarded_id_token;
         proxy_set_header X-Forwarded-Access-Token $http_x_forwarded_access_token;
         proxy_set_header X-KMS-Access-Token $http_x_kms_access_token;

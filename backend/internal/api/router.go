@@ -8,6 +8,7 @@ import (
 	"github.com/pavolmarko/thweb-backend/internal/auth"
 	"github.com/pavolmarko/thweb-backend/internal/crypto"
 	"github.com/pavolmarko/thweb-backend/internal/kioskcert"
+	"github.com/pavolmarko/thweb-backend/internal/metrics"
 	"github.com/pavolmarko/thweb-backend/internal/store"
 )
 
@@ -33,6 +34,7 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(metrics.Middleware)
 
 	// Public routes
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -54,6 +56,13 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		r.Handle("/api/ws", hub)
 
 		r.Get("/api/me", server.HandleGetMe)
+		r.Post("/api/activity", func(w http.ResponseWriter, r *http.Request) {
+			var ar *metrics.ActivityRecorder
+			if authenticator != nil {
+				ar = authenticator.ActivityRecorder
+			}
+			ar.HandleClientActivityEvent(w, r)
+		})
 		r.With(auth.RequirePermission("families.all.restrictedread")).Get("/api/families/overview", server.HandleListFamiliesOverview)
 		r.With(auth.RequirePermission("families.all.read")).Get("/api/families", server.HandleListFamilies)
 		r.With(auth.RequirePermission("audit.view")).Get("/api/audit-logs", server.HandleListAuditLogs)

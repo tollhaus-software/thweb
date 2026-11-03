@@ -5,18 +5,25 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"strconv"
+	"syscall"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pavolmarko/thweb-backend/internal/api"
 	"github.com/pavolmarko/thweb-backend/internal/auth"
 	"github.com/pavolmarko/thweb-backend/internal/crypto"
 	"github.com/pavolmarko/thweb-backend/internal/database"
+	"github.com/pavolmarko/thweb-backend/internal/metrics"
 	"github.com/pavolmarko/thweb-backend/internal/roles"
 	"github.com/pavolmarko/thweb-backend/internal/store"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
@@ -108,13 +115,74 @@ func main() {
 		log.Println("[INFO] Proxy shared secret verification enabled.")
 	}
 
+	// Initialize user & feature activity recorder (standalone monitoring DB if configured)
+	var activityPool *pgxpool.Pool
+	if activityDBURL := os.Getenv("ACTIVITY_DATABASE_URL"); activityDBURL != "" {
+		cfg, err := pgxpool.ParseConfig(activityDBURL)
+		if err != nil {
+			log.Printf("[WARNING] Invalid ACTIVITY_DATABASE_URL: %v\n", err)
+		} else {
+			cfg.MaxConns = 3
+			ap, err := pgxpool.NewWithConfig(ctx, cfg)
+			if err != nil {
+				log.Printf("[WARNING] Unable to connect to ACTIVITY_DATABASE_URL: %v\n", err)
+			} else {
+				defer ap.Close()
+				activityPool = ap
+			}
+		}
+	}
+	activityRecorder := metrics.NewActivityRecorder(activityPool)
+	if activityPool != nil {
+		activityRecorder.EnsureSchema(ctx)
+		go activityRecorder.StartFlushLoop(ctx, 60*time.Second)
+
+		if os.Getenv("USER_ACTIVITY_PURGE_ENABLED") == "true" {
+			retentionDays := 30
+			if v := os.Getenv("USER_ACTIVITY_RETENTION_DAYS"); v != "" {
+				if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 {
+					retentionDays = parsed
+				}
+			}
+			go activityRecorder.StartPurgeLoop(ctx, retentionDays)
+		}
+	}
+	authenticator.ActivityRecorder = activityRecorder
+
+	metricsAddr := os.Getenv("METRICS_ADDR")
+	if metricsAddr == "" {
+		metricsAddr = ":9100"
+	}
+	if metricsAddr != "off" && metricsAddr != "disabled" {
+		metricsMux := http.NewServeMux()
+		metricsMux.Handle("/metrics", promhttp.Handler())
+		metricsMux.HandleFunc("/internal/activity", activityRecorder.HandleInternalActivity)
+		go func() {
+			log.Printf("Internal metrics & activity server listening on %s\n", metricsAddr)
+			if err := http.ListenAndServe(metricsAddr, metricsMux); err != nil && err != http.ErrServerClosed {
+				log.Printf("[WARNING] Internal metrics server failed: %v\n", err)
+			}
+		}()
+	}
+
 	hub := api.NewHub()
 	go hub.Run()
 
 	r := api.SetupRouter(appStore, authenticator, hub, kmsProvider, allergiesKMSProvider)
 
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: r,
+	}
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shutdownCtx)
+	}()
+
 	log.Println("Server running on http://localhost:8080")
-	if err := http.ListenAndServe(":8080", r); err != nil {
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Server failed: %v\n", err)
 	}
 }

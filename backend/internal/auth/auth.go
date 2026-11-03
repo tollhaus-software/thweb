@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/pavolmarko/thweb-backend/internal/metrics"
 	"github.com/pavolmarko/thweb-backend/internal/models"
 	"github.com/pavolmarko/thweb-backend/internal/roles"
 	"github.com/pavolmarko/thweb-backend/internal/store"
@@ -29,6 +30,7 @@ type Authenticator struct {
 	ProxySharedSecret string
 	Store             *store.Store
 	RolesConfig       *roles.Config
+	ActivityRecorder  *metrics.ActivityRecorder
 }
 
 func NewAuthenticator(clientID string, allowMockAuth bool, store *store.Store, rolesConfig ...*roles.Config) *Authenticator {
@@ -116,6 +118,9 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 				denied := a.RolesConfig.DeniedPermissionsForRoles(kioskUser.Roles)
 				kioskUser.RemovePermissions(denied)
 			}
+			if a.ActivityRecorder != nil {
+				a.ActivityRecorder.RecordHTTPRequest(r, "kiosk_mtls", "")
+			}
 			ctx := context.WithValue(r.Context(), UserContextKey, kioskUser)
 			ctx = context.WithValue(ctx, AccessTokenContextKey, rawAccessToken)
 			next.ServeHTTP(w, r.WithContext(ctx))
@@ -123,12 +128,14 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 		}
 
 		var email string
+		var authMethod string
 
 		// 2. Check if request is authenticated via trusted reverse proxy with shared secret
 		proxySecret := strings.TrimSpace(r.Header.Get("X-Proxy-Secret"))
 		if a.ProxySharedSecret != "" && proxySecret != "" && subtle.ConstantTimeCompare([]byte(proxySecret), []byte(a.ProxySharedSecret)) == 1 {
 			if headerEmail := strings.TrimSpace(r.Header.Get("X-Forwarded-Email")); headerEmail != "" && headerEmail != "null" && headerEmail != "undefined" {
 				email = headerEmail
+				authMethod = "oauth2_proxy"
 			}
 		}
 
@@ -145,6 +152,7 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 				} else {
 					email = "developer@example.com"
 				}
+				authMethod = "mock"
 			} else {
 				// Standalone zero-trust mode: Require valid Google ID token cryptographically verified against Google RSA keys
 				if idToken == "" {
@@ -165,6 +173,7 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 					return
 				}
 				email = emailClaim
+				authMethod = "id_token"
 			}
 		}
 
@@ -314,6 +323,11 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 		if a.RolesConfig != nil && len(user.Roles) > 0 {
 			denied := a.RolesConfig.DeniedPermissionsForRoles(user.Roles)
 			user.RemovePermissions(denied)
+		}
+
+		// Record authenticated user activity using verbatim headers (before simulation override)
+		if a.ActivityRecorder != nil {
+			a.ActivityRecorder.RecordHTTPRequest(r, authMethod, user.Email)
 		}
 
 		// 4. Check if role/permissions simulation is active

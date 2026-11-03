@@ -95,13 +95,24 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
     return () => clearInterval(clockTimer);
   }, []);
 
+  // Mark active view as dashboard while KioskDashboard is mounted
+  useEffect(() => {
+    const win = window as unknown as { __THWEB_APP_VIEW__?: string };
+    win.__THWEB_APP_VIEW__ = 'dashboard';
+    return () => {
+      win.__THWEB_APP_VIEW__ = 'portal';
+    };
+  }, []);
+
   const fetchDailyBrief = useCallback(async (dateParam: string | null) => {
     try {
       const url = dateParam
         ? `/api/dashboard/daily-brief?date=${encodeURIComponent(dateParam)}`
         : `/api/dashboard/daily-brief`;
 
-      const headers: Record<string, string> = {};
+      const headers: Record<string, string> = {
+        'X-App-View': 'dashboard',
+      };
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
@@ -131,7 +142,9 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
         ? `/api/dashboard/allergies?date=${encodeURIComponent(dateParam)}`
         : `/api/dashboard/allergies`;
 
-      const headers: Record<string, string> = {};
+      const headers: Record<string, string> = {
+        'X-App-View': 'dashboard',
+      };
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
@@ -160,7 +173,9 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
           ? `/api/dashboard/daily-brief?date=${encodeURIComponent(selectedDate)}`
           : `/api/dashboard/daily-brief`;
 
-        const headers: Record<string, string> = {};
+        const headers: Record<string, string> = {
+          'X-App-View': 'dashboard',
+        };
         if (token) {
           headers['Authorization'] = `Bearer ${token}`;
         }
