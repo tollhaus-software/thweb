@@ -546,16 +546,16 @@ export const JobsTab: React.FC<JobsTabProps> = ({
                     {parents.map((p) => (
                       <span
                         key={`p-${p.id}`}
-                        className="person-badge"
+                        className="person-badge job-parent-badge"
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
                           padding: '2px 7px',
                           borderRadius: '12px',
                           fontSize: '0.8rem',
-                          backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                          border: '1px solid rgba(59, 130, 246, 0.25)',
-                          color: 'var(--primary-dark, #1d4ed8)',
+                          backgroundColor: 'var(--job-parent-badge-bg, rgba(59, 130, 246, 0.1))',
+                          border: '1px solid var(--job-parent-badge-border, rgba(59, 130, 246, 0.25))',
+                          color: 'var(--job-parent-badge-text, #1d4ed8)',
                           cursor: onJumpToPerson ? 'pointer' : 'default',
                         }}
                         title={t('cookTypeParent') || 'Elternteil'}
@@ -654,16 +654,16 @@ export const JobsTab: React.FC<JobsTabProps> = ({
                           return (
                             <span
                               key={r}
-                              className="role-badge"
+                              className="role-badge job-role-badge"
                               style={{
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 padding: '2px 7px',
                                 borderRadius: '12px',
                                 fontSize: '0.8rem',
-                                backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                                border: '1px solid rgba(59, 130, 246, 0.25)',
-                                color: 'var(--primary-dark, #2563eb)',
+                                backgroundColor: 'var(--job-role-badge-bg, rgba(59, 130, 246, 0.1))',
+                                border: '1px solid var(--job-role-badge-border, rgba(59, 130, 246, 0.25))',
+                                color: 'var(--job-role-badge-text, #2563eb)',
                                 fontWeight: 500,
                               }}
                               title={matched?.description || r}

@@ -568,6 +568,7 @@ tr.overview-parents-toggle-row td {
 .hygiene-cell-wrapper:hover .cell-edit-pencil-btn,
 .jobs-cell-wrapper:hover .cell-edit-pencil-btn,
 .job-assignees-cell-wrapper:hover .cell-edit-pencil-btn,
+.job-roles-cell-wrapper:hover .cell-edit-pencil-btn,
 .paten-cell-wrapper:hover .cell-edit-pencil-btn {
   opacity: 1;
 }
@@ -2991,6 +2992,49 @@ tr.family-group-row td {
   background-color: var(--success-bg, #f0fdf4);
   color: var(--success-text, #15803d);
   border: 1px solid var(--success-border, #bbf7d0);
+}
+
+/* Job Parent & Role Badges */
+.job-parent-badge {
+  color: var(--job-parent-badge-text, #1d4ed8);
+  background-color: var(--job-parent-badge-bg, rgba(59, 130, 246, 0.1));
+  border: 1px solid var(--job-parent-badge-border, rgba(59, 130, 246, 0.25));
+}
+
+.job-role-badge {
+  color: var(--job-role-badge-text, #2563eb);
+  background-color: var(--job-role-badge-bg, rgba(59, 130, 246, 0.1));
+  border: 1px solid var(--job-role-badge-border, rgba(59, 130, 246, 0.25));
+}
+
+:root[data-theme="dark"] .job-parent-badge,
+:root[data-theme="dark"] .job-parent-badge.person-badge {
+  color: var(--job-parent-badge-text, #93c5fd);
+  background-color: var(--job-parent-badge-bg, rgba(59, 130, 246, 0.2));
+  border-color: var(--job-parent-badge-border, rgba(147, 197, 253, 0.35));
+}
+
+:root[data-theme="dark"] .job-role-badge,
+:root[data-theme="dark"] .job-role-badge.role-badge {
+  color: var(--job-role-badge-text, #93c5fd);
+  background-color: var(--job-role-badge-bg, rgba(59, 130, 246, 0.2));
+  border-color: var(--job-role-badge-border, rgba(147, 197, 253, 0.35));
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .job-parent-badge,
+  :root:not([data-theme="light"]) .job-parent-badge.person-badge {
+    color: var(--job-parent-badge-text, #93c5fd);
+    background-color: var(--job-parent-badge-bg, rgba(59, 130, 246, 0.2));
+    border-color: var(--job-parent-badge-border, rgba(147, 197, 253, 0.35));
+  }
+
+  :root:not([data-theme="light"]) .job-role-badge,
+  :root:not([data-theme="light"]) .job-role-badge.role-badge {
+    color: var(--job-role-badge-text, #93c5fd);
+    background-color: var(--job-role-badge-bg, rgba(59, 130, 246, 0.2));
+    border-color: var(--job-role-badge-border, rgba(147, 197, 253, 0.35));
+  }
 }
 
 

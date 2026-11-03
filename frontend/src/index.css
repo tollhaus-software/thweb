@@ -38,6 +38,13 @@
   --accent-border: rgba(170, 59, 255, 0.5);
   --social-bg: rgba(244, 243, 236, 0.5);
   --code-bg: #f4f3ec;
+  --primary-dark: #1d4ed8;
+  --job-parent-badge-text: #1d4ed8;
+  --job-parent-badge-bg: rgba(59, 130, 246, 0.1);
+  --job-parent-badge-border: rgba(59, 130, 246, 0.25);
+  --job-role-badge-text: #2563eb;
+  --job-role-badge-bg: rgba(59, 130, 246, 0.1);
+  --job-role-badge-border: rgba(59, 130, 246, 0.25);
 
   /* Status & Alerts */
   --danger-bg: #fef2f2;
@@ -114,6 +121,13 @@
     --accent-border: rgba(197, 138, 249, 0.5);
     --social-bg: rgba(60, 64, 67, 0.5);
     --code-bg: #28292c;
+    --primary-dark: #93c5fd;
+    --job-parent-badge-text: #93c5fd;
+    --job-parent-badge-bg: rgba(59, 130, 246, 0.2);
+    --job-parent-badge-border: rgba(147, 197, 253, 0.35);
+    --job-role-badge-text: #93c5fd;
+    --job-role-badge-bg: rgba(59, 130, 246, 0.2);
+    --job-role-badge-border: rgba(147, 197, 253, 0.35);
 
     /* Status & Alerts */
     --danger-bg: rgba(242, 139, 130, 0.15);
@@ -176,6 +190,13 @@
   --accent-border: rgba(197, 138, 249, 0.5);
   --social-bg: rgba(60, 64, 67, 0.5);
   --code-bg: #28292c;
+  --primary-dark: #93c5fd;
+  --job-parent-badge-text: #93c5fd;
+  --job-parent-badge-bg: rgba(59, 130, 246, 0.2);
+  --job-parent-badge-border: rgba(147, 197, 253, 0.35);
+  --job-role-badge-text: #93c5fd;
+  --job-role-badge-bg: rgba(59, 130, 246, 0.2);
+  --job-role-badge-border: rgba(147, 197, 253, 0.35);
 
   /* Status & Alerts */
   --danger-bg: rgba(242, 139, 130, 0.15);

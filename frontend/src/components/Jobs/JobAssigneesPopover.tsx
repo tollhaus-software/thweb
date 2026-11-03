@@ -300,11 +300,11 @@ export const JobAssigneesPopover: React.FC<JobAssigneesPopoverProps> = ({
                           </div>
                           {parent.family_name && (
                             <span
-                              className="person-badge job-assignee-family-tag"
+                              className="person-badge job-assignee-family-tag job-parent-badge"
                               style={{
-                                backgroundColor: 'rgba(59, 130, 246, 0.08)',
-                                border: '1px solid rgba(59, 130, 246, 0.2)',
-                                color: 'var(--primary-dark, #1d4ed8)',
+                                backgroundColor: 'var(--job-parent-badge-bg, rgba(59, 130, 246, 0.08))',
+                                border: '1px solid var(--job-parent-badge-border, rgba(59, 130, 246, 0.2))',
+                                color: 'var(--job-parent-badge-text, #1d4ed8)',
                                 fontSize: '0.78rem',
                                 padding: '2px 8px',
                                 borderRadius: '12px',

@@ -195,6 +195,28 @@ test.describe('Test Case 30: Job Role Assignments', () => {
 
     await expect(jobRow.locator('.person-badge', { hasText: 'Bernd Becker' })).toBeVisible();
 
+    // Verify contrast of assigned parents and roles in light and dark mode
+    const parentBadge = jobRow.locator('.job-parent-badge', { hasText: 'Bernd Becker' });
+    const roleBadge = jobRow.locator('.job-role-badge', { hasText: 'MGA' });
+    await expect(parentBadge).toBeVisible();
+    await expect(roleBadge).toBeVisible();
+
+    // Light mode: dark blue colors as originally designed
+    const lightParentColor = await parentBadge.evaluate((el) => window.getComputedStyle(el).color);
+    const lightRoleColor = await roleBadge.evaluate((el) => window.getComputedStyle(el).color);
+    expect(lightParentColor).toBe('rgb(29, 78, 216)'); // #1d4ed8
+    expect(lightRoleColor).toBe('rgb(37, 99, 235)'); // #2563eb
+
+    // Switch to dark mode and verify contrast color
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+    const darkParentColor = await parentBadge.evaluate((el) => window.getComputedStyle(el).color);
+    const darkRoleColor = await roleBadge.evaluate((el) => window.getComputedStyle(el).color);
+    expect(darkParentColor).toBe('rgb(147, 197, 253)'); // #93c5fd - high contrast on dark gray
+    expect(darkRoleColor).toBe('rgb(147, 197, 253)'); // #93c5fd - high contrast on dark gray
+
+    // Reset back to light mode for subsequent steps
+    await page.evaluate(() => document.documentElement.removeAttribute('data-theme'));
+
     // =========================================================================
     // Part 4: Verify Bernd Becker receives effective roles & permissions from job
     // =========================================================================

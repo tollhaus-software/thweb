@@ -283,7 +283,7 @@ export const JobRolesPopover: React.FC<JobRolesPopoverProps> = ({
                     />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-                        <span style={{ color: isChecked ? 'var(--primary-dark, #2563eb)' : 'var(--text)', fontWeight: 600, fontSize: '0.85rem' }}>
+                        <span style={{ color: isChecked ? 'var(--job-role-badge-text, #2563eb)' : 'var(--text)', fontWeight: 600, fontSize: '0.85rem' }}>
                           {role.name || role.id}
                         </span>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
