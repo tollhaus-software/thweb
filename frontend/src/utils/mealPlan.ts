@@ -152,3 +152,74 @@ export function formatDayHeader(date: Date, locale: Locale = CURRENT_LOCALE): { 
 
   return { dayName, dateStr };
 }
+
+export const MEAL_PLAN_OVERRIDES_KEY = 'thweb_meal_plan_overrides';
+
+export type MealPlanOverrides = Record<string, Record<number, string>>;
+
+/**
+ * Loads meal plan text overrides from session storage.
+ * Preserves edited meal descriptions across page reloads in the current session.
+ */
+export function loadMealPlanOverrides(): MealPlanOverrides {
+  try {
+    if (typeof window === 'undefined' || !window.sessionStorage) return {};
+    const raw = sessionStorage.getItem(MEAL_PLAN_OVERRIDES_KEY) || sessionStorage.getItem('meal_plan_overrides');
+    if (!raw) return {};
+    return JSON.parse(raw);
+  } catch (e) {
+    console.error('Error loading meal plan overrides from sessionStorage:', e);
+    return {};
+  }
+}
+
+/**
+ * Persists meal plan text overrides to session storage.
+ */
+export function saveMealPlanOverrides(overrides: MealPlanOverrides): void {
+  try {
+    if (typeof window === 'undefined' || !window.sessionStorage) return;
+    const serialized = JSON.stringify(overrides);
+    sessionStorage.setItem(MEAL_PLAN_OVERRIDES_KEY, serialized);
+    sessionStorage.setItem('meal_plan_overrides', serialized);
+  } catch (e) {
+    console.error('Error saving meal plan overrides to sessionStorage:', e);
+  }
+}
+
+/**
+ * Stores or updates a meal component override for a specific date and component index.
+ */
+export function setMealPlanComponentOverride(
+  date: string,
+  index: number,
+  value: string
+): MealPlanOverrides {
+  const current = loadMealPlanOverrides();
+  if (!current[date]) {
+    current[date] = {};
+  }
+  current[date][index] = value;
+  saveMealPlanOverrides(current);
+  return current;
+}
+
+/**
+ * Reverts a meal component override back to the original Kochplan value
+ * by deleting the override from session storage.
+ */
+export function revertMealPlanComponentOverride(
+  date: string,
+  index: number
+): MealPlanOverrides {
+  const current = loadMealPlanOverrides();
+  if (current[date]) {
+    delete current[date][index];
+    if (Object.keys(current[date]).length === 0) {
+      delete current[date];
+    }
+    saveMealPlanOverrides(current);
+  }
+  return current;
+}
+

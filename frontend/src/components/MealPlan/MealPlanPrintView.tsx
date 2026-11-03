@@ -128,6 +128,7 @@ export const MealPlanPrintView: React.FC = () => {
         daysData={daysData}
         loading={loading}
         error={error}
+        editable={false}
       />
     </div>
   );
