@@ -624,30 +624,59 @@ tr.family-group-row td {
   padding: 0.35rem 0.6rem;
 }
 
-.data-table tr.overview-parent-row:not(.no-special-bg),
-.data-table tr.overview-parent-row:not(.no-special-bg) td,
-.data-table tr.overview-parent-row:not(.no-special-bg) td.sticky-col,
-.data-table tr.overview-parent-row:not(.no-special-bg):hover,
-.data-table tr.overview-parent-row:not(.no-special-bg):hover td,
-.data-table tr.overview-parent-row:not(.no-special-bg):hover td.sticky-col {
-  background-color: var(--bg-subtle) !important;
-}
+/* Table view alternating family backgrounds for familiesOverview and families */
+@media (min-width: 769px) {
+  .data-table.overview-table tbody.family-card.family-card-even tr,
+  .data-table.overview-table tbody.family-card.family-card-even tr td,
+  .data-table.overview-table tbody.family-card.family-card-even tr td.sticky-col,
+  .data-table.families-table tbody.family-card.family-card-even tr,
+  .data-table.families-table tbody.family-card.family-card-even tr td,
+  .data-table.families-table tbody.family-card.family-card-even tr td.sticky-col {
+    background-color: var(--bg-surface) !important;
+  }
 
-/* In desktop group mode: keep parent row background constant on hover/click */
-.data-table.overview-table tr.overview-group-parent-row,
-.data-table.overview-table tr.overview-group-parent-row:hover,
-.data-table.overview-table tr.overview-group-parent-row:focus,
-.data-table.overview-table tr.overview-group-parent-row:active,
-.data-table.overview-table tr.overview-group-parent-row td,
-.data-table.overview-table tr.overview-group-parent-row:hover td,
-.data-table.overview-table tr.overview-group-parent-row:focus td,
-.data-table.overview-table tr.overview-group-parent-row:active td,
-.data-table.overview-table tr.overview-group-parent-row td.sticky-col,
-.data-table.overview-table tr.overview-group-parent-row:hover td.sticky-col,
-.data-table.overview-table tr.overview-group-parent-row:focus td.sticky-col,
-.data-table.overview-table tr.overview-group-parent-row:active td.sticky-col {
-  background: var(--bg-surface) !important;
-  background-color: var(--bg-surface) !important;
+  .data-table.overview-table tbody.family-card.family-card-odd tr,
+  .data-table.overview-table tbody.family-card.family-card-odd tr td,
+  .data-table.overview-table tbody.family-card.family-card-odd tr td.sticky-col,
+  .data-table.families-table tbody.family-card.family-card-odd tr,
+  .data-table.families-table tbody.family-card.family-card-odd tr td,
+  .data-table.families-table tbody.family-card.family-card-odd tr td.sticky-col {
+    background-color: var(--bg-family-alt) !important;
+  }
+
+  /* Row hover in alternating family table views */
+  .data-table.overview-table tbody.family-card tr:not(.family-group-row):hover,
+  .data-table.overview-table tbody.family-card tr:not(.family-group-row):hover td,
+  .data-table.overview-table tbody.family-card tr:not(.family-group-row):hover td.sticky-col,
+  .data-table.families-table tbody.family-card tr:not(.family-group-row):hover,
+  .data-table.families-table tbody.family-card tr:not(.family-group-row):hover td,
+  .data-table.families-table tbody.family-card tr:not(.family-group-row):hover td.sticky-col {
+    background-color: var(--bg-hover) !important;
+  }
+
+  /* Slight horizontal separator between parents (family header) and children in families(MGA) */
+  .data-table.families-table tbody.family-card tr.family-group-row td {
+    border-bottom: 1px solid var(--border) !important;
+  }
+
+  /* Horizontal separator between different families in table views */
+  .data-table.families-table tbody.family-card:not(:first-of-type) tr td,
+  .data-table.families-table tbody.family-card:not(:first-of-type) tr.family-group-row td,
+  .data-table.overview-table tbody.family-card:not(:first-of-type) tr.family-group-row td {
+    border-top: 1px solid var(--border-strong) !important;
+  }
+
+  .data-table.families-table td {
+    vertical-align: top;
+  }
+
+  /* Ensure highlighted row has precedence */
+  .data-table.overview-table tbody.family-card tr.highlighted-row td,
+  .data-table.overview-table tbody.family-card tr.highlighted-row td.sticky-col,
+  .data-table.families-table tbody.family-card tr.highlighted-row td,
+  .data-table.families-table tbody.family-card tr.highlighted-row td.sticky-col {
+    background-color: var(--highlight-bg) !important;
+  }
 }
 
 .family-sub-header-parents {
@@ -1204,7 +1233,7 @@ tr.family-group-row td {
 
   .data-table.overview-table tbody.family-card.family-card-odd,
   .data-table.card-table.families-table tbody.family-card.family-card-odd {
-    background-color: var(--bg-subtle) !important;
+    background-color: var(--bg-family-alt) !important;
   }
 
   /* Group section header in per-group mode */
@@ -1423,6 +1452,8 @@ tr.family-group-row td {
     border: none !important;
     border-top: none !important;
     box-sizing: border-box !important;
+    background: transparent !important;
+    background-color: transparent !important;
   }
 
   .data-table.overview-table tr.overview-parents-toggle-row td {
@@ -1445,7 +1476,25 @@ tr.family-group-row td {
   .data-table.overview-table tbody.family-card tr td.sticky-col,
   .data-table.overview-table tbody.family-card tr:hover td.sticky-col,
   .data-table.overview-table tbody.family-card tr:focus td.sticky-col,
-  .data-table.overview-table tbody.family-card tr:active td.sticky-col {
+  .data-table.overview-table tbody.family-card tr:active td.sticky-col,
+  .data-table.overview-table tbody.family-card.family-card-even tr,
+  .data-table.overview-table tbody.family-card.family-card-even tr td,
+  .data-table.overview-table tbody.family-card.family-card-even tr td.sticky-col,
+  .data-table.overview-table tbody.family-card.family-card-odd tr,
+  .data-table.overview-table tbody.family-card.family-card-odd tr td,
+  .data-table.overview-table tbody.family-card.family-card-odd tr td.sticky-col,
+  .data-table.card-table.families-table tbody.family-card tr,
+  .data-table.card-table.families-table tbody.family-card tr:hover,
+  .data-table.card-table.families-table tbody.family-card tr td,
+  .data-table.card-table.families-table tbody.family-card tr:hover td,
+  .data-table.card-table.families-table tbody.family-card tr td.sticky-col,
+  .data-table.card-table.families-table tbody.family-card tr:hover td.sticky-col,
+  .data-table.card-table.families-table tbody.family-card.family-card-even tr,
+  .data-table.card-table.families-table tbody.family-card.family-card-even tr td,
+  .data-table.card-table.families-table tbody.family-card.family-card-even tr td.sticky-col,
+  .data-table.card-table.families-table tbody.family-card.family-card-odd tr,
+  .data-table.card-table.families-table tbody.family-card.family-card-odd tr td,
+  .data-table.card-table.families-table tbody.family-card.family-card-odd tr td.sticky-col {
     background: transparent !important;
     background-color: transparent !important;
   }

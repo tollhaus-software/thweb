@@ -3080,6 +3080,92 @@ func TestHandleUpdateFamilyMentor(t *testing.T) {
 	}
 }
 
+func TestHandleUpdateFamilyNotes(t *testing.T) {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	appStore := store.NewStore(pool)
+	authn := auth.NewAuthenticator("mock", true, appStore)
+	hub := NewHub()
+	router := SetupRouter(appStore, authn, hub, nil)
+
+	adminUserID := uuid.New()
+	adminEmail := "notes-admin-" + adminUserID.String() + "@example.com"
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, email, permissions) VALUES ($1, $2, $3)", adminUserID, adminEmail, []string{"*"})
+	if err != nil {
+		t.Fatalf("failed to insert admin user: %v", err)
+	}
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", adminUserID)
+	}()
+
+	readOnlyUserID := uuid.New()
+	readOnlyEmail := "notes-ro-" + readOnlyUserID.String() + "@example.com"
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, email, permissions) VALUES ($1, $2, $3)", readOnlyUserID, readOnlyEmail, []string{"families.all.read"})
+	if err != nil {
+		t.Fatalf("failed to insert read-only user: %v", err)
+	}
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", readOnlyUserID)
+	}()
+
+	fam, err := appStore.CreateFamilyWithParents(ctx, adminUserID, []models.Parent{
+		{FirstName: "TestP", LastName: "NotesFamily"},
+	})
+	if err != nil {
+		t.Fatalf("failed to create Family: %v", err)
+	}
+	defer func() { _ = appStore.DeleteFamily(ctx, adminUserID, fam.ID) }()
+
+	// 1. Read-only user attempt should be forbidden (403)
+	payload := `{"notes": "Confidential family note"}`
+	reqRO := httptest.NewRequest("PUT", "/api/families/"+fam.ID.String()+"/notes", strings.NewReader(payload))
+	reqRO.Header.Set("Content-Type", "application/json")
+	reqRO.Header.Set("X-Forwarded-Email", readOnlyEmail)
+	recRO := httptest.NewRecorder()
+	router.ServeHTTP(recRO, reqRO)
+	if recRO.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for read-only user, got %d", recRO.Code)
+	}
+
+	// 2. Admin user updates notes (200)
+	reqAdmin := httptest.NewRequest("PUT", "/api/families/"+fam.ID.String()+"/notes", strings.NewReader(payload))
+	reqAdmin.Header.Set("Content-Type", "application/json")
+	reqAdmin.Header.Set("X-Forwarded-Email", adminEmail)
+	recAdmin := httptest.NewRecorder()
+	router.ServeHTTP(recAdmin, reqAdmin)
+	if recAdmin.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK updating family notes, got %d (%s)", recAdmin.Code, recAdmin.Body.String())
+	}
+
+	// 3. Verify via ListFamilies
+	fams, err := appStore.ListFamilies(ctx)
+	if err != nil {
+		t.Fatalf("failed to list families: %v", err)
+	}
+	var found *models.Family
+	for _, f := range fams {
+		if f.ID == fam.ID {
+			found = &f
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("family %s not found in ListFamilies", fam.ID)
+	}
+	if found.Notes != "Confidential family note" {
+		t.Fatalf("expected family notes %q, got %q", "Confidential family note", found.Notes)
+	}
+}
+
 
 
 

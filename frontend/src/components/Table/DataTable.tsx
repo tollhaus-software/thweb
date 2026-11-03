@@ -497,8 +497,14 @@ export function DataTable<TData>({
                     key={familyRow.id}
                     className={`family-card ${isEven ? 'family-card-even' : 'family-card-odd'}`}
                   >
-                    {renderGroupedRow(familyRow)}
-                    {familyRow.subRows && familyRow.subRows.map((subRow) => renderRow(subRow))}
+                    {getSubRows ? (
+                      <>
+                        {renderGroupedRow(familyRow)}
+                        {familyRow.subRows && familyRow.subRows.map((subRow) => renderRow(subRow))}
+                      </>
+                    ) : (
+                      renderRow(familyRow)
+                    )}
                   </tbody>
                 );
               });

@@ -232,9 +232,9 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     const hansNamePadding = await hansRow.locator('td').first().locator('span').evaluate((el) => parseFloat(getComputedStyle(el).paddingLeft));
     const miaNamePadding = await miaRow.locator('td').first().locator('span').evaluate((el) => parseFloat(getComputedStyle(el).paddingLeft));
     expect(miaNamePadding).toBeGreaterThan(hansNamePadding);
-    // Child rows have different background color from parent rows
+    // Child rows and parent rows of the same family have the same background color
     const miaBg = await miaRow.locator('td').first().evaluate((el) => getComputedStyle(el).backgroundColor);
-    expect(miaBg).not.toBe(hansBg);
+    expect(miaBg).toBe(hansBg);
     // For own child, current group is displayed simply as "<group name>" (e.g. "Kleine Gr.")
     await expect(miaRow).toContainText('Kleine Gr.');
     // Must NOT contain extended duration/date text like "seit" or "(1J"

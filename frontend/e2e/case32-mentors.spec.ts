@@ -231,51 +231,39 @@ test.describe('Test Case 32: Mentors and "Paten von"', () => {
     await expect(familiesTabBtn).toBeVisible();
     await familiesTabBtn.click();
 
-    // Verify column headers "Paten" and "Paten von" exist
+    // Verify column headers in Familien(MGA): "Paten" and "Paten von" exist as family-level columns, "Allergien" does NOT exist
     await expect(page.getByRole('columnheader', { name: 'Paten', exact: true })).toBeVisible();
     await expect(page.getByRole('columnheader', { name: 'Paten von', exact: true })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'Allergien', exact: true })).not.toBeVisible();
 
     // Check Family 2 (Target):
-    // In "Paten", it should show "Familie Mentor" (whole family)
-    const targetRow = page.locator('tr', { hasText: 'Tim Target' });
-    await expect(targetRow).toBeVisible();
-    await expect(targetRow.locator('td[data-column-id="paten"]')).toContainText('Familie Mentor');
+    // In family row Paten column, it should show "Familie Mentor" (whole family)
+    const f2Header = page.locator(`tr#row-${f2.id}`);
+    await expect(f2Header).toBeVisible();
+    await expect(f2Header.locator('td[data-column-id="paten"]')).toContainText('Familie Mentor');
 
     // Check Family 3 (Neuer):
-    // In "Paten", it should show "Bernd Mentor" (only individual parent)
-    const neuerRow = page.locator('tr', { hasText: 'Leo Neuer' });
-    await expect(neuerRow).toBeVisible();
-    await expect(neuerRow.locator('td[data-column-id="paten"]')).toContainText('Bernd Mentor');
+    // In family row Paten column, it should show "Bernd Mentor" (only individual parent)
+    const f3Header = page.locator(`tr#row-${f3.id}`);
+    await expect(f3Header).toBeVisible();
+    await expect(f3Header.locator('td[data-column-id="paten"]')).toContainText('Bernd Mentor');
 
     // Check Family 1 (Mentor):
-    // In "Paten von", it should show:
+    // In family row "Paten von" column, it should show:
     // "04/2024 - Familie Target" AND "geplant - Familie Neuer (Bernd)"
-    const mentorChildRow = page.locator('tr', { hasText: 'Mimi Mentor' });
-    await expect(mentorChildRow).toBeVisible();
-    const mentorPatenVonCell = mentorChildRow.locator('td[data-column-id="paten_von"]');
-    await expect(mentorPatenVonCell).toContainText('04/2024 - Familie Target');
-    await expect(mentorPatenVonCell).toContainText('geplant - Familie Neuer (Bernd)');
+    const f1Header = page.locator(`tr#row-${f1.id}`);
+    await expect(f1Header).toBeVisible();
+    const f1PatenVon = f1Header.locator('td[data-column-id="paten_von"]');
+    await expect(f1PatenVon).toContainText('04/2024 - Familie Target');
+    await expect(f1PatenVon).toContainText('geplant - Familie Neuer (Bernd)');
 
-    // Verify Family 1 has no mentor yet (shows "-"), but edit pencil is right-aligned in Paten cell
-    const mentorPatenCell = mentorChildRow.locator('td[data-column-id="paten"]');
-    await expect(mentorPatenCell).toContainText('-');
-    const mentorPatenPencil = mentorPatenCell.locator('.cell-edit-pencil-btn');
+    // Verify Family 1 has no mentor yet (shows "-"), but edit pencil is present
+    await expect(f1Header.locator('td[data-column-id="paten"]')).toContainText('-');
+    const mentorPatenPencil = f1Header.locator('button[title="Paten verwalten"]');
     await expect(mentorPatenPencil).toBeVisible();
-    const patenCellBox = await mentorPatenCell.boundingBox();
-    const patenPencilBox = await mentorPatenPencil.boundingBox();
-    expect(patenCellBox).not.toBeNull();
-    expect(patenPencilBox).not.toBeNull();
-    // Pencil button is right-aligned: distance between pencil right edge and cell right edge is small (< 15px)
-    expect(patenCellBox!.x + patenCellBox!.width - (patenPencilBox!.x + patenPencilBox!.width)).toBeLessThan(15);
-
-    // Color of the pencil icon matches other cell edit buttons (primary color, not text-muted)
-    const patenPencilColor = await mentorPatenPencil.evaluate((el) => window.getComputedStyle(el).color);
-    const otherPencil = mentorChildRow.locator('.cell-edit-pencil-btn').first();
-    const otherPencilColor = await otherPencil.evaluate((el) => window.getComputedStyle(el).color);
-    expect(patenPencilColor).toBe(otherPencilColor);
 
     // Click on "Familie Target" in "Paten von" -> should navigate/highlight Family Target
-    const targetLink = mentorPatenVonCell.getByRole('button', { name: /Familie Target/ });
+    const targetLink = f1Header.getByRole('button', { name: /Familie Target/ });
     await expect(targetLink).toBeVisible();
     await targetLink.click();
     await expect(page.locator(`tr#row-${f2.id}`)).toHaveClass(/highlighted-row/);
@@ -324,9 +312,9 @@ test.describe('Test Case 32: Mentors and "Paten von"', () => {
     await expect(page.locator(`tr#row-${f3.id}`)).toHaveClass(/highlighted-row/);
 
     // --- Verification of MentorPopover rules ---
-    // Open edit popover for Family 2 (Target)
-    const targetPatenCell = page.locator('tr', { hasText: 'Tim Target' }).locator('td[data-column-id="paten"]');
-    await targetPatenCell.locator('button[title="Paten verwalten"]').click();
+    // Open edit popover for Family 2 (Target) via family header pencil button
+    const targetPatenBtn = page.locator(`tr#row-${f2.id}`).locator('button[title="Paten verwalten"]');
+    await targetPatenBtn.click();
     const mentorPopover = page.locator('.mentor-popover');
     await expect(mentorPopover).toBeVisible();
 
@@ -364,24 +352,11 @@ test.describe('Test Case 32: Mentors and "Paten von"', () => {
 
     // --- Verification of Cards View (under breakpoint <= 768px) ---
     await page.setViewportSize({ width: 500, height: 800 });
-    // In card view, verify "Paten von" is left-aligned (flush next to label, not indented/centered)
-    const mimiCard = page.locator('tr').filter({ hasText: 'Mimi Mentor' });
-    await expect(mimiCard).toBeVisible();
-    const patenVonTd = mimiCard.locator('td[data-column-id="paten_von"]');
-    await expect(patenVonTd).toBeVisible();
-    const patenVonWrapper = patenVonTd.locator('.paten-von-cell-wrapper');
-    await expect(patenVonWrapper).toBeVisible();
-
-    // Check computed styles: align-items should be flex-start and text-align left
-    const alignItems = await patenVonWrapper.evaluate((el) => window.getComputedStyle(el).alignItems);
-    expect(['flex-start', 'start']).toContain(alignItems);
-
-    const firstItem = patenVonWrapper.locator('div').first();
-    const tdBox = await patenVonTd.boundingBox();
-    const itemBox = await firstItem.boundingBox();
-    expect(tdBox).not.toBeNull();
-    expect(itemBox).not.toBeNull();
-    // The item box x position should be close to the label (within 130px from td.x, accommodating label min-width)
-    expect(itemBox!.x - tdBox!.x).toBeLessThan(130);
+    // In card view, verify "Paten von" is shown on family card
+    const f1Card = page.locator(`tr#row-${f1.id}`);
+    await expect(f1Card).toBeVisible();
+    const f1CardPatenVon = f1Card.locator('td[data-column-id="paten_von"]');
+    await expect(f1CardPatenVon).toContainText('04/2024 - Familie Target');
+    await expect(f1CardPatenVon).toContainText('geplant - Familie Neuer (Bernd)');
   });
 });

@@ -865,6 +865,7 @@ func (s *Server) HandleCreateFamily(w http.ResponseWriter, r *http.Request) {
 		Emails                  models.MultiValueList `json:"emails"`
 		Phones                  models.MultiValueList `json:"phones"`
 		Address                 string                `json:"address"`
+		Notes                   string                `json:"notes"`
 		Parents                 []struct {
 			FirstName               string                `json:"first_name"`
 			FirstNameForAddressList string                `json:"first_name_for_address_list"`
@@ -872,6 +873,7 @@ func (s *Server) HandleCreateFamily(w http.ResponseWriter, r *http.Request) {
 			Emails                  models.MultiValueList `json:"emails"`
 			Phones                  models.MultiValueList `json:"phones"`
 			Address                 string                `json:"address"`
+			Notes                   string                `json:"notes"`
 		} `json:"parents"`
 	}
 
@@ -890,6 +892,7 @@ func (s *Server) HandleCreateFamily(w http.ResponseWriter, r *http.Request) {
 				Emails:                  p.Emails,
 				Phones:                  p.Phones,
 				Address:                 p.Address,
+				Notes:                   p.Notes,
 			})
 		}
 	} else if req.FirstName != "" || req.LastName != "" {
@@ -900,6 +903,7 @@ func (s *Server) HandleCreateFamily(w http.ResponseWriter, r *http.Request) {
 			Emails:                  req.Emails,
 			Phones:                  req.Phones,
 			Address:                 req.Address,
+			Notes:                   req.Notes,
 		})
 	}
 
@@ -1143,6 +1147,41 @@ func (s *Server) HandleUpdateFamilyMentor(w http.ResponseWriter, r *http.Request
 			return
 		}
 		httpErrorLog(w, r, "Failed to update family mentor", http.StatusInternalServerError, err)
+		return
+	}
+
+	s.Hub.Broadcast(WSMessage{
+		Type:    "FAMILY_UPDATED",
+		Payload: map[string]string{"id": familyID.String()},
+	})
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) HandleUpdateFamilyNotes(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	idStr := chi.URLParam(r, "id")
+	familyID, err := uuid.Parse(idStr)
+	if err != nil {
+		httpErrorLog(w, r, "Invalid family ID", http.StatusBadRequest, err)
+		return
+	}
+
+	var req struct {
+		Notes string `json:"notes"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpErrorLog(w, r, "Invalid request body JSON", http.StatusBadRequest, err)
+		return
+	}
+
+	if err := s.Store.UpdateFamilyNotes(r.Context(), user.ID, familyID, req.Notes); err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			httpErrorLog(w, r, err.Error(), http.StatusNotFound, err)
+			return
+		}
+		httpErrorLog(w, r, "Failed to update family notes", http.StatusInternalServerError, err)
 		return
 	}
 

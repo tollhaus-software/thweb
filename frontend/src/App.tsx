@@ -13,7 +13,7 @@ import { MultiValueListEditor, type MultiValueFlagConfig, type MultiValueEntry, 
 import { AllergiesListEditor } from './components/Allergies/AllergiesListEditor';
 import { isLebensmittelAllergen } from './utils/mealAllergens';
 import { MultiValueCell } from './components/Table/MultiValueCell';
-import { NotesEditor } from './components/Table/NotesEditor';
+import { FamilyNotesEditor, FamilyNotesCell, type NotesTarget } from './components/Table/FamilyNotesEditor';
 import { AddressEditor } from './components/Table/AddressEditor';
 import { FirstNameEditor } from './components/Table/FirstNameEditor';
 import { GroupChangesPopover } from './components/Table/GroupChangesPopover';
@@ -314,6 +314,7 @@ const ChildStartDateCell: React.FC<ChildStartDateCellProps> = ({
       id={cellId}
       className="startdatum-cell-wrapper"
       onDoubleClick={(e) => {
+        if (readOnly) return;
         e.stopPropagation();
         window.getSelection()?.removeAllRanges();
         const cellEl = document.getElementById(cellId) || e.currentTarget;
@@ -359,6 +360,7 @@ interface ChildGroupCellProps {
   isActive: boolean;
   onOpenManage: (child: Child, anchor: HTMLElement | string) => void;
   readOnly?: boolean;
+  compact?: boolean;
 }
 
 const ChildGroupCell: React.FC<ChildGroupCellProps> = ({
@@ -366,6 +368,7 @@ const ChildGroupCell: React.FC<ChildGroupCellProps> = ({
   isActive,
   onOpenManage,
   readOnly = false,
+  compact = false,
 }) => {
   const groupInfo = getChildGroupInfo(child.group_changes);
   const cellId = `cell-group-${child.id}`;
@@ -378,9 +381,10 @@ const ChildGroupCell: React.FC<ChildGroupCellProps> = ({
         style={{
           display: 'flex',
           alignItems: 'center',
-          minHeight: '28px',
-          padding: '2px 4px',
+          minHeight: compact ? '20px' : '28px',
+          padding: compact ? '0 2px' : '2px 4px',
           color: 'var(--text-muted)',
+          fontSize: compact ? '0.8rem' : 'inherit',
         }}
       >
         <span>-</span>
@@ -393,6 +397,7 @@ const ChildGroupCell: React.FC<ChildGroupCellProps> = ({
       id={cellId}
       className="child-group-cell-wrapper"
       onDoubleClick={(e) => {
+        if (readOnly) return;
         e.stopPropagation();
         window.getSelection()?.removeAllRanges();
         const cellEl = document.getElementById(cellId) || e.currentTarget;
@@ -404,12 +409,13 @@ const ChildGroupCell: React.FC<ChildGroupCellProps> = ({
         alignItems: 'center',
         width: '100%',
         gap: '0.25rem',
-        minHeight: '28px',
+        minHeight: compact ? '20px' : '28px',
         borderRadius: '4px',
-        padding: '2px 4px',
+        padding: compact ? '0 2px' : '2px 4px',
         backgroundColor: isActive ? 'var(--accent-bg)' : 'transparent',
         transition: 'background-color 0.15s ease-in-out',
         fontWeight: 'normal',
+        fontSize: compact ? '0.8rem' : 'inherit',
       }}
       title={readOnly ? t('viewGroupChanges') : t('manageGroupChanges')}
     >
@@ -520,7 +526,7 @@ const ChildGroupCell: React.FC<ChildGroupCellProps> = ({
           }}
           title={t('manageGroupChanges')}
         >
-          <Pencil size={13} />
+          <Pencil size={compact ? 11 : 13} />
         </button>
       )}
     </div>
@@ -594,6 +600,7 @@ const ChildFamiliencardCell: React.FC<ChildFamiliencardCellProps> = ({
       id={cellId}
       className="familiencard-cell-wrapper"
       onDoubleClick={(e) => {
+        if (readOnly) return;
         e.stopPropagation();
         window.getSelection()?.removeAllRanges();
         const cellEl = document.getElementById(cellId) || e.currentTarget;
@@ -714,6 +721,7 @@ interface Family {
   children?: Child[];
   mentor_family_id?: string | null;
   mentor_parent_ids?: string[] | null;
+  notes?: string;
 }
 
 export type FamilySortOrder =
@@ -2973,6 +2981,23 @@ const Dashboard: React.FC = () => {
     setActiveFamilyForMentor(null);
   }, []);
 
+  // Family Notes popover state
+  const [activeFamilyForNotes, setActiveFamilyForNotes] = React.useState<Family | null>(null);
+  const [activeNotesTarget, setActiveNotesTarget] = React.useState<NotesTarget | null>(null);
+  const [familyNotesPopoverAnchor, setFamilyNotesPopoverAnchor] = React.useState<HTMLElement | string | null>(null);
+
+  const openFamilyNotes = React.useCallback((family: Family, target: NotesTarget, anchor: HTMLElement | string) => {
+    setActiveFamilyForNotes(family);
+    setActiveNotesTarget(target);
+    setFamilyNotesPopoverAnchor(anchor);
+  }, []);
+
+  const closeFamilyNotes = React.useCallback(() => {
+    setFamilyNotesPopoverAnchor(null);
+    setActiveFamilyForNotes(null);
+    setActiveNotesTarget(null);
+  }, []);
+
   const [confirmDelete, setConfirmDelete] = React.useState<{
     isOpen: boolean;
     title?: string;
@@ -4558,6 +4583,11 @@ const Dashboard: React.FC = () => {
     return families.find((f) => f.id === activeFamilyForMentor.id) || activeFamilyForMentor;
   }, [families, activeFamilyForMentor]);
 
+  const activeFamilyForNotesMemo = React.useMemo(() => {
+    if (!activeFamilyForNotes) return null;
+    return families.find((f) => f.id === activeFamilyForNotes.id) || activeFamilyForNotes;
+  }, [families, activeFamilyForNotes]);
+
   const handleSaveFamilyMentor = React.useCallback(
     async (familyId: string, mentorFamilyId: string | null, mentorParentIds: string[]) => {
       const res = await fetch(`/api/families/${familyId}/mentor`, {
@@ -4576,6 +4606,24 @@ const Dashboard: React.FC = () => {
       if (canReadOverview) fetchOverviewFamilies();
     },
     [getAuthHeaders, canReadFamiliesAll, canReadOverview, fetchFamilies, fetchOverviewFamilies]
+  );
+
+  const handleSaveFamilyNotes = React.useCallback(
+    async (familyId: string, notes: string) => {
+      const res = await fetch(`/api/families/${familyId}/notes`, {
+        method: 'PUT',
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ notes }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || errData.message || 'Failed to update family notes');
+      }
+      setFamilies((prev) =>
+        prev.map((f) => (f.id === familyId ? { ...f, notes } : f))
+      );
+    },
+    [getAuthHeaders]
   );
 
   const activeParentForHygiene = React.useMemo(() => {
@@ -5420,10 +5468,10 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
       });
   }, [families, globalFilter, familySortOrder]);
 
-  // Structure families with their children sub-rows for the families tab
+  // Structure families for 1-row-per-family display in families tab
   const familiesTabData = React.useMemo(() => {
     const query = (globalFilter || '').trim().toLowerCase();
-    const mapped = families.map(f => {
+    const mapped = families.map((f) => {
       const familyName = getFamilyName(f);
 
       const sortedParents = [...(f.parents || [])].sort((a, b) => {
@@ -5433,7 +5481,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
       });
 
       const parentNames = sortedParents
-        .map(p => `${p.first_name || ''} ${p.last_name || ''}`.trim())
+        .map((p) => `${p.first_name || ''} ${p.last_name || ''}`.trim())
         .filter(Boolean)
         .join(', ');
 
@@ -5443,145 +5491,59 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
         return (a.first_name || '').localeCompare(b.first_name || '', CURRENT_LOCALE);
       });
 
-      const allChildren = sortedChildren.map(c => ({
-        ...c,
-        family_id: f.id,
-        family_name: familyName,
-      }));
-
-      // Filter children
-      const filteredChildren = allChildren.filter(c => {
-        if (!query) return true;
-        const fullName = `${c.first_name || ''} ${c.last_name || ''}`.trim().toLowerCase();
-        const fnMatch = (c.first_name || '').toLowerCase().includes(query);
-        const lnMatch = (c.last_name || '').toLowerCase().includes(query);
-        const bdFormatted = formatDisplayDate(c.birth_date).toLowerCase();
-        const bdRaw = (c.birth_date || '').split('T')[0];
-        const bdMatch = bdFormatted.includes(query) || bdRaw.includes(query);
-        const groupInfo = getChildGroupInfo(c.group_changes);
-        const groupMatch = groupInfo.groupLabel.toLowerCase().includes(query);
-        const fcSummary = getFamiliencardSummary(c.familiencards);
-        const fcMatch = fcSummary.text.toLowerCase().includes(query);
-        const familyNameMatch = familyName.toLowerCase().includes(query);
-        const parentMatch = parentNames.toLowerCase().includes(query);
-        const notesMatch = (c.notes || '').toLowerCase().includes(query);
-        const allergyMatch = (c.allergies || []).some(a => String(a || '').toLowerCase().includes(query));
-        return fnMatch || lnMatch || fullName.includes(query) || bdMatch || groupMatch || fcMatch || familyNameMatch || parentMatch || notesMatch || allergyMatch;
-      });
+      const childNames = sortedChildren
+        .map((c) => `${c.first_name || ''} ${c.last_name || ''}`.trim())
+        .filter(Boolean)
+        .join(', ');
 
       const mentorDisplay = getMentorsDisplay(f, families);
-      const isPopActive = Boolean(mentorPopoverAnchor && activeFamilyForMentor?.id === f.id);
-      const mentorMatch = mentorDisplay.text.toLowerCase().includes(query);
       const mentoredFamilies = getMentoredFamiliesForFamily(f, families);
-      const mentoredMatch = mentoredFamilies.some(m => m.canonicalName.toLowerCase().includes(query) || m.displayName.toLowerCase().includes(query));
-      const familyMatch = familyName.toLowerCase().includes(query) || parentNames.toLowerCase().includes(query) || mentorMatch || mentoredMatch;
 
-      const subHeader = (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-          {sortedParents && sortedParents.length > 0 && (
-            <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: '0.25rem', alignItems: 'center' }}>
-              {sortedParents.map((p, idx) => {
-                const pName = `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Parent';
-                return (
-                  <React.Fragment key={p.id}>
-                    {idx > 0 && <span style={{ color: 'var(--text-muted)' }}>,</span>}
-                    <button
-                      type="button"
-                      className="family-parent-link"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleJumpToParent(p.id, f.id, familyName);
-                      }}
-                      title={t('jumpToParent')}
-                    >
-                      <span>{pName}</span>
-                      <ArrowUpRight size={12} className="family-link-icon" />
-                    </button>
-                  </React.Fragment>
-                );
-              })}
-            </span>
-          )}
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            <span style={{ fontWeight: 500 }}>{t('mentors')}:</span>
-            {mentorDisplay.isFamily && mentorDisplay.mentorFamily ? (
-              <button
-                type="button"
-                className="family-parent-link"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleJumpToFamily(mentorDisplay.mentorFamily!.id, 'families');
-                }}
-                title={t('jumpToFamily')}
-              >
-                <span>{mentorDisplay.text}</span>
-                <ArrowUpRight size={12} className="family-link-icon" />
-              </button>
-            ) : (
-              <span style={{ color: mentorDisplay.text === '-' ? 'var(--text-muted)' : 'inherit' }}>
-                {mentorDisplay.text}
-              </span>
-            )}
-            {canWriteFamilies && (
-              <button
-                type="button"
-                className={`inline-edit-btn ${isPopActive ? 'active' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openManageMentor(f, e.currentTarget);
-                }}
-                title={t('manageMentors')}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: '2px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  color: 'var(--text-muted)',
-                }}
-              >
-                <Pencil size={11} />
-              </button>
-            )}
-          </div>
-        </div>
+      const mentorMatch = mentorDisplay.text.toLowerCase().includes(query);
+      const mentoredMatch = mentoredFamilies.some(
+        (m) => m.canonicalName.toLowerCase().includes(query) || m.displayName.toLowerCase().includes(query)
       );
+      const familyNameMatch = familyName.toLowerCase().includes(query);
+      const parentMatch = parentNames.toLowerCase().includes(query);
+      const childMatch = childNames.toLowerCase().includes(query);
+      const familyNotesMatch = (f.notes || '').toLowerCase().includes(query);
+      const parentNotesMatch = sortedParents.some((p) => (p.notes || '').toLowerCase().includes(query));
+      const childNotesMatch = sortedChildren.some((c) => (c.notes || '').toLowerCase().includes(query));
+      const childBirthDatesMatch = sortedChildren.some((c) => {
+        const bd = formatDisplayDate(c.birth_date).toLowerCase();
+        const raw = (c.birth_date || '').split('T')[0];
+        return bd.includes(query) || raw.includes(query);
+      });
+
+      const matchesQuery =
+        !query ||
+        familyNameMatch ||
+        parentMatch ||
+        childMatch ||
+        mentorMatch ||
+        mentoredMatch ||
+        familyNotesMatch ||
+        parentNotesMatch ||
+        childNotesMatch ||
+        childBirthDatesMatch;
 
       return {
+        ...f,
         id: f.id,
         family_name: familyName,
-        sub_header: subHeader,
-        children: filteredChildren,
-        nameMatch: familyMatch,
+        parents: sortedParents,
+        children: sortedChildren,
+        mentorDisplay,
+        mentoredFamilies,
+        matchesQuery,
         originalFamily: f,
       };
     });
 
     const sorted = sortFamilyBlocks(mapped, familySortOrder, CURRENT_LOCALE);
-
     if (!query) return sorted;
-    return sorted.filter(f => f.nameMatch || f.children.length > 0)
-      .map(f => {
-        if (f.nameMatch && f.children.length === 0) {
-          const originalFamily = families.find(orig => orig.id === f.id);
-          const origChildren = [...(originalFamily?.children || [])].sort((a, b) => {
-            const cmp = compareBirthDates(a.birth_date, b.birth_date);
-            if (cmp !== 0) return cmp;
-            return (a.first_name || '').localeCompare(b.first_name || '', CURRENT_LOCALE);
-          });
-          return {
-            ...f,
-            children: origChildren.map(c => ({
-              ...c,
-              family_id: f.id,
-              family_name: f.family_name,
-            }))
-          };
-        }
-        return f;
-      });
-  }, [families, globalFilter, familySortOrder, handleJumpToParent, handleJumpToFamily, canWriteFamilies, mentorPopoverAnchor, activeFamilyForMentor, openManageMentor]);
+    return sorted.filter((f) => f.matchesQuery);
+  }, [families, globalFilter, familySortOrder]);
 
 function formatParentsSummary(parents: any[]): string {
   if (!parents || parents.length === 0) return '';
@@ -6046,11 +6008,16 @@ function formatParentsSummary(parents: any[]): string {
         size: 260,
         cell: (info) => {
           const parent = info.row.original;
+          const family = families.find((f) => f.id === parent.family_id);
           return (
-            <NotesEditor
+            <FamilyNotesCell
               value={parent.notes || ''}
-              onSave={(val: string) => handleSaveParentField(parent, 'notes', val)}
               readOnly={!canWriteParents}
+              onOpen={(anchor) => {
+                if (family) {
+                  openFamilyNotes(family, { type: 'parent', id: parent.id }, anchor);
+                }
+              }}
             />
           );
         }
@@ -6253,7 +6220,7 @@ function formatParentsSummary(parents: any[]): string {
         }
       }
     ],
-    [families, handleSaveParentField, handleSaveParentNames, handleSaveFamilyParents, handleDeleteParent, canWriteParents, canWriteJobs, isVaccinationUnlocked, handleRequestKmsAuth, hasPermission, user?.email, membershipPopoverAnchor, targetParentMemberships, openManageMemberships, multiValuePopoverAnchor, activeParentForMultiValue, activeMultiValueField, openManageMultiValue, vaccinationPopoverAnchor, targetVaccinationPerson, openManageVaccination, jobsPopoverAnchor, activePersonForJobs, openManageJobs, handleJumpToFamily, canWriteFamilies, mentorPopoverAnchor, activeFamilyForMentor, openManageMentor]
+    [families, handleSaveParentField, handleSaveParentNames, handleSaveFamilyParents, handleDeleteParent, canWriteParents, canWriteJobs, isVaccinationUnlocked, handleRequestKmsAuth, hasPermission, user?.email, membershipPopoverAnchor, targetParentMemberships, openManageMemberships, multiValuePopoverAnchor, activeParentForMultiValue, activeMultiValueField, openManageMultiValue, vaccinationPopoverAnchor, targetVaccinationPerson, openManageVaccination, jobsPopoverAnchor, activePersonForJobs, openManageJobs, handleJumpToFamily, canWriteFamilies, mentorPopoverAnchor, activeFamilyForMentor, openManageMentor, openFamilyNotes]
   );
 
   const childGroupColumn = React.useMemo<ColumnDef<any>>(
@@ -6413,11 +6380,16 @@ function formatParentsSummary(parents: any[]): string {
         size: 260,
         cell: (info) => {
           const child = info.row.original;
+          const family = families.find((f) => f.id === child.family_id);
           return (
-            <NotesEditor
+            <FamilyNotesCell
               value={child.notes || ''}
-              onSave={(val: string) => handleSaveChildField(child, 'notes', val)}
               readOnly={!canWriteChildren}
+              onOpen={(anchor) => {
+                if (family) {
+                  openFamilyNotes(family, { type: 'child', id: child.id }, anchor);
+                }
+              }}
             />
           );
         }
@@ -6518,123 +6490,288 @@ function formatParentsSummary(parents: any[]): string {
       vaccinationPopoverAnchor,
       targetVaccinationPerson,
       openManageVaccination,
+      openFamilyNotes,
     ]
   );
 
-  const familyChildColumns = React.useMemo<ColumnDef<any>[]>(
+  const familyColumns = React.useMemo<ColumnDef<any>[]>(
     () => [
       {
-        id: 'child_name',
-        accessorFn: (child: any) => `${child.first_name || ''} ${child.last_name || ''}`.trim(),
-        header: t('firstNameEdit'),
-        size: 200,
+        id: 'family_name',
+        accessorKey: 'family_name',
+        header: t('familyName') || 'Familienname',
+        size: 190,
+        minSize: 150,
+        cell: (info) => {
+          const f = info.row.original;
+          const familyName = f.family_name || getFamilyName(f);
+          return (
+            <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-h)' }}>
+              <span>{familyName}</span>
+            </div>
+          );
+        },
+      },
+      {
+        id: 'parents',
+        header: t('parentsColumn') || 'Eltern',
+        size: 240,
         minSize: 200,
         cell: (info) => {
-          const child = info.row.original;
-          const fullName = `${child.first_name || ''} ${child.last_name || ''}`.trim() || '-';
-          if (!child.first_name && !child.last_name) {
-            return <span>-</span>;
-          }
+          const f = info.row.original;
+          const familyName = f.family_name || getFamilyName(f);
+          const parents = f.parents || [];
           return (
-            <button
-              type="button"
-              className="family-child-link"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleJumpToChild(child.id, child.family_id, child.family_name || '');
-              }}
-              title={t('jumpToChild')}
-            >
-              <span>{fullName}</span>
-              <ArrowUpRight size={13} className="family-link-icon" />
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', width: '100%' }}>
+              {parents.length === 0 && canWriteParents && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%' }}>
+                  <button
+                    type="button"
+                    className="family-action-button family-add-button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openAddParent(f.id, familyName);
+                    }}
+                    title={t('addParent') || 'Elternteil hinzufügen'}
+                    aria-label={t('addParent') || 'Elternteil hinzufügen'}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '22px',
+                      height: '22px',
+                      minWidth: '22px',
+                      padding: 0,
+                      borderRadius: '4px',
+                      border: '1px solid var(--border)',
+                      background: 'var(--bg-surface)',
+                      color: 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      marginLeft: 'auto',
+                    }}
+                  >
+                    <Plus size={13} />
+                  </button>
+                </div>
+              )}
+              {parents.map((p: any, idx: number) => {
+                const pName = `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Parent';
+                const isLast = idx === parents.length - 1;
+                return (
+                  <div
+                    key={p.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      width: '100%',
+                      gap: '0.35rem',
+                    }}
+                  >
+                    <button
+                      type="button"
+                      className="family-parent-link"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleJumpToParent(p.id, f.id, familyName);
+                      }}
+                      title={t('jumpToParent')}
+                    >
+                      <span>{pName}</span>
+                      <ArrowUpRight size={12} className="family-link-icon" />
+                    </button>
+                    {isLast && canWriteParents && (
+                      <button
+                        type="button"
+                        className="family-action-button family-add-button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openAddParent(f.id, familyName);
+                        }}
+                        title={t('addParent') || 'Elternteil hinzufügen'}
+                        aria-label={t('addParent') || 'Elternteil hinzufügen'}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '22px',
+                          height: '22px',
+                          minWidth: '22px',
+                          padding: 0,
+                          borderRadius: '4px',
+                          border: '1px solid var(--border)',
+                          background: 'var(--bg-surface)',
+                          color: 'var(--text-secondary)',
+                          cursor: 'pointer',
+                          marginLeft: 'auto',
+                          flexShrink: 0,
+                        }}
+                      >
+                        <Plus size={13} />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           );
-        }
+        },
       },
       {
-        id: 'birth_date',
-        accessorKey: 'birth_date',
-        header: t('birthDateEdit'),
-        size: 160,
-        minSize: 120,
+        id: 'children',
+        header: t('childrenColumn') || 'Kinder',
+        size: 380,
+        minSize: 300,
         cell: (info) => {
-          const child = info.row.original;
-          const formatted = formatDisplayDate(child.birth_date);
-          if (!formatted) {
-            return <span>-</span>;
-          }
-          return (
-            <span className="family-child-birthdate">
-              <span className="family-card-birthdate-prefix">geb. </span>
-              {formatted}
-            </span>
-          );
-        }
-      },
-      childGroupColumn,
-      {
-        header: t('notes'),
-        accessorKey: 'notes',
-        size: 260,
-        cell: (info) => {
-          const child = info.row.original;
-          return (
-            <NotesEditor
-              value={child.notes || ''}
-              onSave={(val: string) => handleSaveChildField(child, 'notes', val)}
-              readOnly={!canWriteChildren}
-            />
-          );
-        }
-      },
-      ...(canReadChildAllergies ? [
-        {
-          id: 'allergies',
-          header: t('allergies'),
-          accessorKey: 'allergies',
-          size: 220,
-          cell: (info: any) => {
-            const child = info.row.original;
-            const isPopActive =
-              activeChildForMultiValue?.id === child.id && activeMultiValueField === 'allergies';
+          const f = info.row.original;
+          const familyName = f.family_name || getFamilyName(f);
+          const children = f.children || [];
+
+          if (children.length === 0) {
             return (
-              <MultiValueCell
-                id={`fam-${child.id}`}
-                field="allergies"
-                values={child.allergies || []}
-                placeholder={canWriteChildAllergies ? t('addAllergy') : t('noAllergies')}
-                isActive={isPopActive}
-                onOpenManage={(field, anchor) => openManageChildMultiValue(child, field, anchor)}
-                canEdit={canWriteChildAllergies}
-              />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                <span style={{ color: 'var(--text-muted)' }}>-</span>
+                {canWriteChildren && (
+                  <button
+                    type="button"
+                    className="family-action-button family-add-button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openAddChild(f.id, familyName);
+                    }}
+                    title={t('addChild') || 'Kind hinzufügen'}
+                    aria-label={t('addChild') || 'Kind hinzufügen'}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '22px',
+                      height: '22px',
+                      minWidth: '22px',
+                      padding: 0,
+                      borderRadius: '4px',
+                      border: '1px solid var(--border)',
+                      background: 'var(--bg-surface)',
+                      color: 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      marginLeft: 'auto',
+                    }}
+                  >
+                    <Plus size={13} />
+                  </button>
+                )}
+              </div>
             );
           }
-        }
-      ] : []),
-      {
-        id: 'paten',
-        header: t('mentors'),
-        size: 220,
-        minSize: 160,
-        cell: (info: any) => {
-          const child = info.row.original;
-          const family = families.find((f) => f.id === child.family_id);
-          const mentorDisplay = getMentorsDisplay(family, families);
-          const isPopActive = Boolean(mentorPopoverAnchor && activeFamilyForMentor?.id === child.family_id);
 
           return (
-            <div
-              className="paten-cell-wrapper"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                width: '100%',
-                minHeight: '28px',
-                gap: '0.35rem',
-              }}
-            >
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', width: '100%' }}>
+              {children.map((c: any, idx: number) => {
+                const cName = `${c.first_name || ''} ${c.last_name || ''}`.trim() || 'Kind';
+                const isLast = idx === children.length - 1;
+
+                return (
+                  <div
+                    key={c.id}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.1rem',
+                      width: '100%',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        width: '100%',
+                        gap: '0.4rem',
+                      }}
+                    >
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                        {/* Child Name Link */}
+                        <button
+                          type="button"
+                          className="family-parent-link"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleJumpToChild(c.id, f.id, familyName);
+                          }}
+                          title={t('jumpToChild')}
+                        >
+                          <span>{cName}</span>
+                          <ArrowUpRight size={12} className="family-link-icon" />
+                        </button>
+
+                        {/* Read-only Birth Date */}
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          {formatDisplayDate(c.birth_date)}
+                        </span>
+                      </div>
+
+                      {isLast && canWriteChildren && (
+                        <button
+                          type="button"
+                          className="family-action-button family-add-button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openAddChild(f.id, familyName);
+                          }}
+                          title={t('addChild') || 'Kind hinzufügen'}
+                          aria-label={t('addChild') || 'Kind hinzufügen'}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: '22px',
+                            height: '22px',
+                            minWidth: '22px',
+                            padding: 0,
+                            borderRadius: '4px',
+                            border: '1px solid var(--border)',
+                            background: 'var(--bg-surface)',
+                            color: 'var(--text-secondary)',
+                            cursor: 'pointer',
+                            marginLeft: 'auto',
+                            flexShrink: 0,
+                          }}
+                        >
+                          <Plus size={13} />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Read-only Group Summary vertically close to child name */}
+                    <div style={{ display: 'flex', alignItems: 'center', minHeight: '20px' }}>
+                      <ChildGroupCell
+                        child={c}
+                        isActive={false}
+                        onOpenManage={openManageGroupChanges}
+                        readOnly={true}
+                        compact
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        },
+      },
+      {
+        id: 'paten',
+        header: t('mentors') || 'Paten',
+        size: 200,
+        minSize: 160,
+        cell: (info) => {
+          const f = info.row.original;
+          const mentorDisplay = f.mentorDisplay || getMentorsDisplay(f, families);
+          const isPopActive = Boolean(mentorPopoverAnchor && activeFamilyForMentor?.id === f.id);
+
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '0.35rem', minHeight: '28px' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
                 {mentorDisplay.isFamily && mentorDisplay.mentorFamily ? (
                   <button
                     type="button"
@@ -6649,24 +6786,26 @@ function formatParentsSummary(parents: any[]): string {
                     <ArrowUpRight size={12} className="family-link-icon" />
                   </button>
                 ) : (
-                  <span style={{ color: mentorDisplay.text === '-' ? 'var(--text-muted)' : 'inherit' }}>
+                  <span style={{ color: mentorDisplay.text === '-' ? 'var(--text-muted)' : 'inherit', fontSize: '0.85rem' }}>
                     {mentorDisplay.text}
                   </span>
                 )}
               </div>
-              {canWriteFamilies && family && (
-                <button
-                  type="button"
-                  className={`cell-edit-pencil-btn ${isPopActive ? 'active' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openManageMentor(family, e.currentTarget);
-                  }}
-                  title={t('manageMentors')}
-                  style={{ marginLeft: 'auto' }}
-                >
-                  <Pencil size={13} />
-                </button>
+              {canWriteFamilies && (
+                <div className="cell-edit-pencil-btn-wrapper" style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto', flexShrink: 0 }}>
+                  <button
+                    type="button"
+                    className={`cell-edit-pencil-btn easy-edit-button ${isPopActive ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openManageMentor(f, e.currentTarget);
+                    }}
+                    title={t('manageMentors')}
+                    aria-label={t('manageMentors')}
+                  >
+                    <Pencil size={13} />
+                  </button>
+                </div>
               )}
             </div>
           );
@@ -6674,86 +6813,74 @@ function formatParentsSummary(parents: any[]): string {
       },
       {
         id: 'paten_von',
-        header: t('mentorsOf'),
-        size: 260,
+        header: t('mentorsOf') || 'Paten von',
+        size: 220,
         minSize: 180,
-        cell: (info: any) => {
-          const child = info.row.original;
-          const family = families.find((f) => f.id === child.family_id);
-          if (!family) return <span>-</span>;
-          const mentored = getMentoredFamiliesForFamily(family, families);
+        cell: (info) => {
+          const f = info.row.original;
+          const mentoredFamilies = f.mentoredFamilies || getMentoredFamiliesForFamily(f, families);
+          if (!mentoredFamilies || mentoredFamilies.length === 0) {
+            return <span style={{ color: 'var(--text-muted)' }}>-</span>;
+          }
+
           return (
-            <div
-              className="paten-von-cell-wrapper"
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.2rem',
-                alignItems: 'flex-start',
-                textAlign: 'left',
-                width: '100%',
-              }}
-            >
-              {mentored.length === 0 ? (
-                <span style={{ color: 'var(--text-muted)' }}>-</span>
-              ) : (
-                mentored.map((item) => (
-                  <div
-                    key={item.family.id}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      flexWrap: 'wrap',
-                      gap: '0.25rem',
-                      textAlign: 'left',
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+              {mentoredFamilies.map((item: any) => (
+                <div key={item.family.id} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{`${item.datePrefix} - `}</span>
+                  <button
+                    type="button"
+                    className="family-parent-link"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleJumpToFamily(item.family.id, 'families');
                     }}
+                    title={t('jumpToFamily')}
                   >
-                    <span>{`${item.datePrefix} - `}</span>
-                    <button
-                      type="button"
-                      className="family-parent-link"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleJumpToFamily(item.family.id, 'families');
-                      }}
-                      title={t('jumpToFamily')}
-                    >
-                      <span>{`Familie ${item.canonicalName}`}</span>
-                      <ArrowUpRight size={12} className="family-link-icon" />
-                    </button>
-                    {item.parentGivenNames && (
-                      <span style={{ color: 'var(--text-muted)' }}>{` (${item.parentGivenNames})`}</span>
-                    )}
-                  </div>
-                ))
-              )}
+                    <span>{`Familie ${item.canonicalName}`}</span>
+                    <ArrowUpRight size={12} className="family-link-icon" />
+                  </button>
+                  {item.parentGivenNames && (
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{` (${item.parentGivenNames})`}</span>
+                  )}
+                </div>
+              ))}
             </div>
           );
         },
       },
       {
-        id: 'actions',
-        header: '',
-        size: 85,
-        minSize: 85,
-        cell: () => null,
+        id: 'notes',
+        header: t('notes') || 'Notizen',
+        size: 260,
+        minSize: 200,
+        cell: (info) => {
+          const f = info.row.original;
+          return (
+            <FamilyNotesCell
+              value={f.notes || ''}
+              readOnly={!canWriteFamilies}
+              onOpen={(anchor) => openFamilyNotes(f, { type: 'family' }, anchor)}
+            />
+          );
+        },
       },
     ],
     [
-      childGroupColumn,
+      handleJumpToParent,
       handleJumpToChild,
-      handleSaveChildField,
-      canReadChildAllergies,
-      canWriteChildAllergies,
-      activeChildForMultiValue,
-      activeMultiValueField,
-      openManageChildMultiValue,
-      families,
+      handleJumpToFamily,
+      canWriteParents,
+      canWriteChildren,
       canWriteFamilies,
+      openAddParent,
+      openAddChild,
       openManageMentor,
+      openFamilyNotes,
+      openManageGroupChanges,
       mentorPopoverAnchor,
       activeFamilyForMentor,
-      handleJumpToFamily,
+      families,
     ]
   );
 
@@ -8296,11 +8423,7 @@ function formatParentsSummary(parents: any[]): string {
           <DataTable
             className="card-table families-table"
             data={familiesTabData}
-            columns={familyChildColumns}
-            getSubRows={(row: any) => row.children}
-            onAddChild={openAddChild}
-            onAddParent={openAddParent}
-            emptySubRowsText={t('noChildrenYet')}
+            columns={familyColumns}
             highlightedRowId={highlightedRowId}
             stickyFirstColumn
             enableSorting={false}
@@ -8829,6 +8952,24 @@ function formatParentsSummary(parents: any[]): string {
           allFamilies={families}
           onSaveMentor={handleSaveFamilyMentor}
           readOnly={!canWriteFamilies}
+        />
+
+        {/* Family Notes Editor Popover */}
+        <FamilyNotesEditor
+          key={activeFamilyForNotesMemo?.id || 'family-notes-popover'}
+          isOpen={Boolean(familyNotesPopoverAnchor && activeFamilyForNotesMemo)}
+          anchorEl={familyNotesPopoverAnchor}
+          onClose={closeFamilyNotes}
+          family={activeFamilyForNotesMemo}
+          target={activeNotesTarget}
+          onSaveFamilyNotes={handleSaveFamilyNotes}
+          onSaveParentNotes={(p, val) => handleSaveParentField(p, 'notes', val)}
+          onSaveChildNotes={(c, val) => handleSaveChildField(c, 'notes', val)}
+          onJumpToParent={handleJumpToParent}
+          onJumpToChild={handleJumpToChild}
+          canWriteFamilies={canWriteFamilies}
+          canWriteParents={canWriteParents}
+          canWriteChildren={canWriteChildren}
         />
 
         {/* Manage Multi-Values (Emails / Phones / Allergies) Popover */}

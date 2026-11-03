@@ -63,6 +63,7 @@ export interface FamilyLike {
   children?: FamilyChildLike[];
   mentor_family_id?: string | null;
   mentor_parent_ids?: string[] | null;
+  notes?: string;
 }
 
 export function getEarliestGroupStartDate(family: FamilyLike | null | undefined): string | null {

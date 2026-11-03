@@ -43,6 +43,10 @@ var AuditRegistry = map[string]EntityPolicy{
 		SanitizeSnapshot: func(user *models.UserWithPermissions, snapshot map[string]interface{}) map[string]interface{} {
 			stripSensitiveHealthFields(snapshot)
 
+			if !user.HasPermission("families.all.read") {
+				snapshot["notes"] = ""
+			}
+
 			if parentsRaw, ok := snapshot["parents"].([]interface{}); ok {
 				for _, pItem := range parentsRaw {
 					if pMap, ok := pItem.(map[string]interface{}); ok {

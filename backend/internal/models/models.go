@@ -316,6 +316,7 @@ type Family struct {
 	Children        []Child     `json:"children,omitempty"`
 	MentorFamilyID  *uuid.UUID  `json:"mentor_family_id,omitempty"`
 	MentorParentIDs []uuid.UUID `json:"mentor_parent_ids,omitempty"`
+	Notes           string      `json:"notes"`
 }
 
 // FormatFamilyName formats parents' surnames into a standardized family name:

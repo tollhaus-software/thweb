@@ -11,6 +11,7 @@
   --bg-page: #f8fafc;
   --bg-surface: #ffffff;
   --bg-subtle: #f1f5f9;
+  --bg-family-alt: #f8fafc;
   --bg-hover: #f8fafc;
 
   /* Text & Typography */
@@ -94,6 +95,7 @@
     --bg-page: #202124;
     --bg-surface: #292a2d;
     --bg-subtle: #35363a;
+    --bg-family-alt: #2f3034;
     --bg-hover: #3c4043;
 
     /* Text & Typography */
@@ -163,6 +165,7 @@
   --bg-page: #202124;
   --bg-surface: #292a2d;
   --bg-subtle: #35363a;
+  --bg-family-alt: #2f3034;
   --bg-hover: #3c4043;
 
   /* Text & Typography */

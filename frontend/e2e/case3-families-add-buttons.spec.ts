@@ -24,31 +24,22 @@ test.describe('Test Case 3: Families View Add Buttons (+ Kind and + Elternteil)'
     await page.locator('form').getByRole('button', { name: 'Familie hinzufügen' }).click();
 
     // Verify family row appears on default Familien tab
-    const familyRow = page.locator('tr.family-group-row', { hasText: 'Mustermann' });
+    const familyRow = page.locator('tbody tr', { hasText: 'Mustermann' });
     await expect(familyRow).toBeVisible();
 
-    // Verify Erika is displayed in the family sub-header
-    await expect(familyRow.locator('.family-sub-header-parents')).toContainText('Erika Mustermann');
+    // Verify Erika is displayed in parents column
+    const parentsCell = familyRow.locator('td[data-column-id="parents"]');
+    await expect(parentsCell).toContainText('Erika Mustermann');
 
-    // --- Step 2: Verify both buttons exist on the right side of the family row ---
-    const actionsContainer = familyRow.locator('.family-group-actions');
-    await expect(actionsContainer).toBeVisible();
-
-    const addChildBtn = familyRow.getByRole('button', { name: '+ Kind' });
-    const addParentBtn = familyRow.getByRole('button', { name: '+ Elternteil' });
+    // --- Step 2: Verify both buttons exist in their respective columns ---
+    const addParentBtn = parentsCell.locator('button.family-add-button');
+    const childrenCell = familyRow.locator('td[data-column-id="children"]');
+    const addChildBtn = childrenCell.locator('button.family-add-button');
 
     await expect(addChildBtn).toBeVisible();
     await expect(addParentBtn).toBeVisible();
 
-    // Verify position: actions container is on the right of the row
-    const wrapperBox = await page.locator('.data-table-wrapper').boundingBox();
-    const actionsBox = await actionsContainer.boundingBox();
-    expect(wrapperBox).not.toBeNull();
-    expect(actionsBox).not.toBeNull();
-    // The right edge of the actions box should be near the right edge of the visible table
-    expect(actionsBox!.x).toBeGreaterThan(wrapperBox!.x + wrapperBox!.width * 0.5);
-
-    // --- Step 3: Add a Child via + Kind button ---
+    // --- Step 3: Add a Child via + button in children cell ---
     await addChildBtn.click();
 
     // Verify Add Child modal opened with correct title and prefilled last name
@@ -63,10 +54,9 @@ test.describe('Test Case 3: Families View Add Buttons (+ Kind and + Elternteil)'
     await expect(childModal).toBeHidden();
 
     // Verify Felix appears as a child in the table under Mustermann
-    const felixRow = page.locator('tr', { hasText: 'Felix Mustermann' });
-    await expect(felixRow).toBeVisible();
+    await expect(childrenCell).toContainText('Felix Mustermann');
 
-    // --- Step 4: Add a Parent via + Elternteil button ---
+    // --- Step 4: Add a Parent via + button in parents cell ---
     await addParentBtn.click();
 
     // Verify Add Parent modal opened with correct title and prefilled last name
@@ -80,9 +70,9 @@ test.describe('Test Case 3: Families View Add Buttons (+ Kind and + Elternteil)'
     await page.locator('form').getByRole('button', { name: 'Elternteil hinzufügen' }).click();
     await expect(parentModal).toBeHidden();
 
-    // Verify Markus appears in the family sub-header alongside Erika
-    await expect(familyRow.locator('.family-sub-header-parents')).toContainText('Markus Mustermann');
-    await expect(familyRow.locator('.family-sub-header-parents')).toContainText('Erika Mustermann');
+    // Verify Markus appears in parents column alongside Erika
+    await expect(parentsCell).toContainText('Markus Mustermann');
+    await expect(parentsCell).toContainText('Erika Mustermann');
 
     // --- Step 5: Verify Parents tab has + Elternteil button on the right side with matching style and →Kinder jump link ---
     await page.getByRole('button', { name: 'Eltern(MGA)', exact: true }).click();

@@ -296,7 +296,7 @@ func (s *Store) recordAudit(ctx context.Context, tx pgx.Tx, tid uuid.UUID, fid *
 
 func (s *Store) ListFamilies(ctx context.Context) ([]models.Family, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT f.id, f.created_at, f.mentor_family_id, f.mentor_parent_ids,
+		SELECT f.id, f.created_at, f.mentor_family_id, f.mentor_parent_ids, f.notes,
 			   COALESCE((
 				   SELECT json_agg(json_build_object(
 					   'id', p.id,
@@ -389,7 +389,7 @@ func (s *Store) ListFamilies(ctx context.Context) ([]models.Family, error) {
 	for rows.Next() {
 		var f models.Family
 		var parentsJSON, childrenJSON, mentorParentIDsJSON []byte
-		if err := rows.Scan(&f.ID, &f.CreatedAt, &f.MentorFamilyID, &mentorParentIDsJSON, &parentsJSON, &childrenJSON); err != nil {
+		if err := rows.Scan(&f.ID, &f.CreatedAt, &f.MentorFamilyID, &mentorParentIDsJSON, &f.Notes, &parentsJSON, &childrenJSON); err != nil {
 			return nil, err
 		}
 		if len(mentorParentIDsJSON) > 0 {
@@ -885,8 +885,8 @@ func (s *Store) UpdateFamilyMentor(ctx context.Context, userID uuid.UUID, family
 		var oldFamily models.Family
 		var oldMentorFamilyID *uuid.UUID
 		var oldMentorParentIDsJSON []byte
-		err := tx.QueryRow(ctx, "SELECT id, created_at, mentor_family_id, mentor_parent_ids FROM families WHERE id = $1", familyID).
-			Scan(&oldFamily.ID, &oldFamily.CreatedAt, &oldMentorFamilyID, &oldMentorParentIDsJSON)
+		err := tx.QueryRow(ctx, "SELECT id, created_at, mentor_family_id, mentor_parent_ids, notes FROM families WHERE id = $1", familyID).
+			Scan(&oldFamily.ID, &oldFamily.CreatedAt, &oldMentorFamilyID, &oldMentorParentIDsJSON, &oldFamily.Notes)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return fmt.Errorf("family not found")
@@ -953,6 +953,40 @@ func (s *Store) UpdateFamilyMentor(ctx context.Context, userID uuid.UUID, family
 		newFamily := oldFamily
 		newFamily.MentorFamilyID = mentorFamilyID
 		newFamily.MentorParentIDs = mentorParentIDs
+
+		transactionID := uuid.New()
+		return s.recordAudit(ctx, tx, transactionID, &familyID, "family", familyID, "UPDATE", oldFamily, newFamily, userID)
+	})
+}
+
+func (s *Store) UpdateFamilyNotes(ctx context.Context, userID uuid.UUID, familyID uuid.UUID, notes string) error {
+	return s.WithTx(ctx, func(tx pgx.Tx) error {
+		var oldFamily models.Family
+		var oldMentorFamilyID *uuid.UUID
+		var oldMentorParentIDsJSON []byte
+		err := tx.QueryRow(ctx, "SELECT id, created_at, mentor_family_id, mentor_parent_ids, notes FROM families WHERE id = $1", familyID).
+			Scan(&oldFamily.ID, &oldFamily.CreatedAt, &oldMentorFamilyID, &oldMentorParentIDsJSON, &oldFamily.Notes)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("family not found")
+			}
+			return err
+		}
+		oldFamily.MentorFamilyID = oldMentorFamilyID
+		if len(oldMentorParentIDsJSON) > 0 {
+			_ = json.Unmarshal(oldMentorParentIDsJSON, &oldFamily.MentorParentIDs)
+		}
+		if oldFamily.MentorParentIDs == nil {
+			oldFamily.MentorParentIDs = []uuid.UUID{}
+		}
+
+		_, err = tx.Exec(ctx, "UPDATE families SET notes = $1 WHERE id = $2", notes, familyID)
+		if err != nil {
+			return err
+		}
+
+		newFamily := oldFamily
+		newFamily.Notes = notes
 
 		transactionID := uuid.New()
 		return s.recordAudit(ctx, tx, transactionID, &familyID, "family", familyID, "UPDATE", oldFamily, newFamily, userID)
