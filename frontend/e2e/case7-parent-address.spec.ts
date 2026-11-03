@@ -44,6 +44,7 @@ test.describe('Test Case 7: Parent Address Feature', () => {
     await page.locator('#f-p2-first').fill('Markus');
     await page.locator('#f-p2-last').fill('Mustermann');
     await page.locator('form').getByRole('button', { name: 'Familie hinzufügen' }).click();
+    await expect(page.locator('form')).toBeHidden();
 
     // Navigate to Parents tab ("Eltern(MGA)")
     const parentsTabBtn = page.getByRole('button', { name: 'Eltern(MGA)' });
@@ -84,7 +85,11 @@ test.describe('Test Case 7: Parent Address Feature', () => {
 
     // Enter shared address and save
     await sharedInput.fill('Königstraße 1, 70173 Stuttgart');
+    const savePromise1 = page.waitForResponse(
+      (resp) => resp.url().includes('/api/families') && resp.request().method() === 'PUT'
+    );
     await popover.getByRole('button', { name: 'Speichern' }).click();
+    await savePromise1;
     await expect(popover).toBeHidden();
 
     // Verify both parents in the family now have the shared address
@@ -108,7 +113,11 @@ test.describe('Test Case 7: Parent Address Feature', () => {
 
     // Change Markus's address to individual address
     await markusIndInput.fill('Schlossplatz 2, 70173 Stuttgart');
+    const savePromise2 = page.waitForResponse(
+      (resp) => resp.url().includes('/api/families') && resp.request().method() === 'PUT'
+    );
     await popover.getByRole('button', { name: 'Speichern' }).click();
+    await savePromise2;
     await expect(popover).toBeHidden();
 
     // Verify Erika still has Königstraße 1 and Markus has Schlossplatz 2
@@ -129,7 +138,10 @@ test.describe('Test Case 7: Parent Address Feature', () => {
 
     // Switch back to "individuelle Adressen" and test empty address ignored edge case
     await popover.getByRole('radio', { name: 'individuelle Adressen' }).click();
-    await popover.getByRole('textbox', { name: 'Markus Adresse' }).fill('');
+    await expect(popover.getByRole('radio', { name: 'individuelle Adressen' })).toBeChecked();
+    const markusInput = popover.getByRole('textbox', { name: 'Markus Adresse' });
+    await markusInput.fill('');
+    await expect(markusInput).toHaveValue('');
 
     // Erika has "Königstraße 1, 70173 Stuttgart", Markus is empty
     await popover.getByRole('radio', { name: 'gemeinsame Adresse' }).click();
@@ -140,6 +152,7 @@ test.describe('Test Case 7: Parent Address Feature', () => {
 
     // Switch to individual, clear both addresses
     await popover.getByRole('radio', { name: 'individuelle Adressen' }).click();
+    await expect(popover.getByRole('radio', { name: 'individuelle Adressen' })).toBeChecked();
     await popover.getByRole('textbox', { name: 'Erika Adresse' }).fill('');
     await popover.getByRole('textbox', { name: 'Markus Adresse' }).fill('');
 

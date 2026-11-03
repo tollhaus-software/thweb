@@ -2901,6 +2901,185 @@ func TestJobs_RolesAPI(t *testing.T) {
 	}
 }
 
+func TestHandleUpdateFamilyMentor(t *testing.T) {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	appStore := store.NewStore(pool)
+	authn := auth.NewAuthenticator("mock", true, appStore)
+	hub := NewHub()
+	router := SetupRouter(appStore, authn, hub, nil)
+
+	adminUserID := uuid.New()
+	adminEmail := "mentor-admin-" + adminUserID.String() + "@example.com"
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, email, permissions) VALUES ($1, $2, $3)", adminUserID, adminEmail, []string{"*"})
+	if err != nil {
+		t.Fatalf("failed to insert admin user: %v", err)
+	}
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", adminUserID)
+	}()
+
+	readOnlyUserID := uuid.New()
+	readOnlyEmail := "mentor-readonly-" + readOnlyUserID.String() + "@example.com"
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, email, permissions) VALUES ($1, $2, $3)", readOnlyUserID, readOnlyEmail, []string{"families.all.read"})
+	if err != nil {
+		t.Fatalf("failed to insert read-only user: %v", err)
+	}
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", readOnlyUserID)
+	}()
+
+	// 1. Create Family A (mentor candidate)
+	famA, err := appStore.CreateFamilyWithParents(ctx, adminUserID, []models.Parent{
+		{FirstName: "MentorA1", LastName: "FamilyA"},
+		{FirstName: "MentorA2", LastName: "FamilyA"},
+	})
+	if err != nil {
+		t.Fatalf("failed to create Family A: %v", err)
+	}
+	defer func() { _ = appStore.DeleteFamily(ctx, adminUserID, famA.ID) }()
+
+	// 2. Create Family B (target)
+	famB, err := appStore.CreateFamilyWithParents(ctx, adminUserID, []models.Parent{
+		{FirstName: "TargetB1", LastName: "FamilyB"},
+	})
+	if err != nil {
+		t.Fatalf("failed to create Family B: %v", err)
+	}
+	defer func() { _ = appStore.DeleteFamily(ctx, adminUserID, famB.ID) }()
+
+	// 3. Test read-only user cannot update mentor (403)
+	putPayload := fmt.Sprintf(`{"mentor_family_id": "%s", "mentor_parent_ids": []}`, famA.ID)
+	reqRO := httptest.NewRequest("PUT", "/api/families/"+famB.ID.String()+"/mentor", strings.NewReader(putPayload))
+	reqRO.Header.Set("Content-Type", "application/json")
+	reqRO.Header.Set("X-Forwarded-Email", readOnlyEmail)
+	recRO := httptest.NewRecorder()
+	router.ServeHTTP(recRO, reqRO)
+	if recRO.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for read-only user, got %d", recRO.Code)
+	}
+
+	// 4. Admin updates Family B's mentor to whole Family A
+	reqAdmin := httptest.NewRequest("PUT", "/api/families/"+famB.ID.String()+"/mentor", strings.NewReader(putPayload))
+	reqAdmin.Header.Set("Content-Type", "application/json")
+	reqAdmin.Header.Set("X-Forwarded-Email", adminEmail)
+	recAdmin := httptest.NewRecorder()
+	router.ServeHTTP(recAdmin, reqAdmin)
+	if recAdmin.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK updating mentor, got %d (%s)", recAdmin.Code, recAdmin.Body.String())
+	}
+
+	// Verify via GET /api/families
+	reqGet := httptest.NewRequest("GET", "/api/families", nil)
+	reqGet.Header.Set("X-Forwarded-Email", adminEmail)
+	recGet := httptest.NewRecorder()
+	router.ServeHTTP(recGet, reqGet)
+	if recGet.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK from GET /api/families, got %d", recGet.Code)
+	}
+	var families []models.Family
+	_ = json.Unmarshal(recGet.Body.Bytes(), &families)
+	var foundB *models.Family
+	for i := range families {
+		if families[i].ID == famB.ID {
+			foundB = &families[i]
+			break
+		}
+	}
+	if foundB == nil {
+		t.Fatalf("Family B not found in list")
+	}
+	if foundB.MentorFamilyID == nil || *foundB.MentorFamilyID != famA.ID {
+		t.Fatalf("expected MentorFamilyID %s, got %v", famA.ID, foundB.MentorFamilyID)
+	}
+	if len(foundB.MentorParentIDs) != 0 {
+		t.Fatalf("expected 0 mentor parent IDs for whole family, got %d", len(foundB.MentorParentIDs))
+	}
+
+	// 5. Update Family B's mentor to only Parent A1
+	parentA1ID := famA.Parents[0].ID
+	putSingleParent := fmt.Sprintf(`{"mentor_family_id": "%s", "mentor_parent_ids": ["%s"]}`, famA.ID, parentA1ID)
+	reqSingle := httptest.NewRequest("PUT", "/api/families/"+famB.ID.String()+"/mentor", strings.NewReader(putSingleParent))
+	reqSingle.Header.Set("Content-Type", "application/json")
+	reqSingle.Header.Set("X-Forwarded-Email", adminEmail)
+	recSingle := httptest.NewRecorder()
+	router.ServeHTTP(recSingle, reqSingle)
+	if recSingle.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK updating mentor to single parent, got %d (%s)", recSingle.Code, recSingle.Body.String())
+	}
+
+	// Verify single parent persisted
+	famsAfter, err := appStore.ListFamilies(ctx)
+	if err != nil {
+		t.Fatalf("failed to list families: %v", err)
+	}
+	for _, f := range famsAfter {
+		if f.ID == famB.ID {
+			if len(f.MentorParentIDs) != 1 || f.MentorParentIDs[0] != parentA1ID {
+				t.Fatalf("expected mentor parent ID %s, got %+v", parentA1ID, f.MentorParentIDs)
+			}
+		}
+	}
+
+	// 6. Test self-mentor rejected
+	putSelf := fmt.Sprintf(`{"mentor_family_id": "%s", "mentor_parent_ids": []}`, famB.ID)
+	reqSelf := httptest.NewRequest("PUT", "/api/families/"+famB.ID.String()+"/mentor", strings.NewReader(putSelf))
+	reqSelf.Header.Set("Content-Type", "application/json")
+	reqSelf.Header.Set("X-Forwarded-Email", adminEmail)
+	recSelf := httptest.NewRecorder()
+	router.ServeHTTP(recSelf, reqSelf)
+	if recSelf.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 Bad Request for self mentor, got %d", recSelf.Code)
+	}
+
+	// 7. Test invalid parent from another family rejected
+	invalidParent := famB.Parents[0].ID
+	putInvalidParent := fmt.Sprintf(`{"mentor_family_id": "%s", "mentor_parent_ids": ["%s"]}`, famA.ID, invalidParent)
+	reqInvalid := httptest.NewRequest("PUT", "/api/families/"+famB.ID.String()+"/mentor", strings.NewReader(putInvalidParent))
+	reqInvalid.Header.Set("Content-Type", "application/json")
+	reqInvalid.Header.Set("X-Forwarded-Email", adminEmail)
+	recInvalid := httptest.NewRecorder()
+	router.ServeHTTP(recInvalid, reqInvalid)
+	if recInvalid.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 Bad Request for invalid mentor parent, got %d", recInvalid.Code)
+	}
+
+	// 8. Clear mentor
+	putClear := `{"mentor_family_id": null, "mentor_parent_ids": []}`
+	reqClear := httptest.NewRequest("PUT", "/api/families/"+famB.ID.String()+"/mentor", strings.NewReader(putClear))
+	reqClear.Header.Set("Content-Type", "application/json")
+	reqClear.Header.Set("X-Forwarded-Email", adminEmail)
+	recClear := httptest.NewRecorder()
+	router.ServeHTTP(recClear, reqClear)
+	if recClear.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK clearing mentor, got %d (%s)", recClear.Code, recClear.Body.String())
+	}
+
+	famsCleared, err := appStore.ListFamilies(ctx)
+	if err != nil {
+		t.Fatalf("failed to list families: %v", err)
+	}
+	for _, f := range famsCleared {
+		if f.ID == famB.ID {
+			if f.MentorFamilyID != nil {
+				t.Fatalf("expected MentorFamilyID nil after clear, got %v", f.MentorFamilyID)
+			}
+			if len(f.MentorParentIDs) != 0 {
+				t.Fatalf("expected 0 mentor parent IDs after clear, got %d", len(f.MentorParentIDs))
+			}
+		}
+	}
+}
+
 
 
 

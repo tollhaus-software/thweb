@@ -309,11 +309,13 @@ type Role struct {
 }
 
 type Family struct {
-	ID         uuid.UUID `json:"id"`
-	CreatedAt  time.Time `json:"created_at"`
-	FamilyName string    `json:"family_name,omitempty"`
-	Parents    []Parent  `json:"parents,omitempty"`
-	Children   []Child   `json:"children,omitempty"`
+	ID              uuid.UUID   `json:"id"`
+	CreatedAt       time.Time   `json:"created_at"`
+	FamilyName      string      `json:"family_name,omitempty"`
+	Parents         []Parent    `json:"parents,omitempty"`
+	Children        []Child     `json:"children,omitempty"`
+	MentorFamilyID  *uuid.UUID  `json:"mentor_family_id,omitempty"`
+	MentorParentIDs []uuid.UUID `json:"mentor_parent_ids,omitempty"`
 }
 
 // FormatFamilyName formats parents' surnames into a standardized family name:

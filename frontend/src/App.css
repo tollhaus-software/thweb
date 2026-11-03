@@ -567,7 +567,8 @@ tr.overview-parents-toggle-row td {
 .membership-cell-wrapper:hover .cell-edit-pencil-btn,
 .hygiene-cell-wrapper:hover .cell-edit-pencil-btn,
 .jobs-cell-wrapper:hover .cell-edit-pencil-btn,
-.job-assignees-cell-wrapper:hover .cell-edit-pencil-btn {
+.job-assignees-cell-wrapper:hover .cell-edit-pencil-btn,
+.paten-cell-wrapper:hover .cell-edit-pencil-btn {
   opacity: 1;
 }
 
@@ -595,6 +596,7 @@ tr.overview-parents-toggle-row td {
 }
 
 .cell-edit-pencil-btn:hover,
+.cell-edit-pencil-btn.active,
 .easy-edit-view-button-wrapper button.easy-edit-button:hover {
   background-color: var(--accent-bg);
   color: var(--primary);
@@ -1735,8 +1737,19 @@ tr.family-group-row td {
   .data-table.card-table .vaccination-cell-wrapper,
   .data-table.card-table .multi-value-cell-wrapper,
   .data-table.card-table .emails-cell-wrapper,
-  .data-table.card-table .phones-cell-wrapper {
+  .data-table.card-table .phones-cell-wrapper,
+  .data-table.card-table .paten-cell-wrapper,
+  .data-table.card-table .paten-von-cell-wrapper {
     padding-right: 0 !important;
+  }
+
+  .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td .paten-von-cell-wrapper,
+  .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td[data-column-id="paten_von"] > div {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    justify-content: flex-start !important;
+    text-align: left !important;
   }
 
   .data-table.card-table .cell-edit-pencil-btn,

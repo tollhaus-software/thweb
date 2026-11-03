@@ -41,12 +41,12 @@ test.describe('Test Case 3: Families View Add Buttons (+ Kind and + Elternteil)'
     await expect(addParentBtn).toBeVisible();
 
     // Verify position: actions container is on the right of the row
-    const rowBox = await familyRow.boundingBox();
+    const wrapperBox = await page.locator('.data-table-wrapper').boundingBox();
     const actionsBox = await actionsContainer.boundingBox();
-    expect(rowBox).not.toBeNull();
+    expect(wrapperBox).not.toBeNull();
     expect(actionsBox).not.toBeNull();
     // The right edge of the actions box should be near the right edge of the visible table
-    expect(actionsBox!.x).toBeGreaterThan(rowBox!.x + rowBox!.width * 0.5);
+    expect(actionsBox!.x).toBeGreaterThan(wrapperBox!.x + wrapperBox!.width * 0.5);
 
     // --- Step 3: Add a Child via + Kind button ---
     await addChildBtn.click();
@@ -118,7 +118,9 @@ test.describe('Test Case 3: Families View Add Buttons (+ Kind and + Elternteil)'
     const felixDateInput = popover.locator('input[type="text"]').first();
     await expect(felixDateInput).toBeVisible();
     await felixDateInput.fill('01.09.2024');
+    const savePromise = page.waitForResponse((res) => res.url().includes('group_change') && res.ok());
     await popover.locator('button:has(svg.lucide-check)').click();
+    await savePromise;
     await page.keyboard.press('Escape');
 
     // --- Step 7: Switch to Familien (familiesOverview) and verify data is fetched and updates are present ---

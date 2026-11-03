@@ -1114,6 +1114,46 @@ func (s *Server) HandleDeleteFamily(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (s *Server) HandleUpdateFamilyMentor(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	idStr := chi.URLParam(r, "id")
+	familyID, err := uuid.Parse(idStr)
+	if err != nil {
+		httpErrorLog(w, r, "Invalid family ID", http.StatusBadRequest, err)
+		return
+	}
+
+	var req struct {
+		MentorFamilyID  *uuid.UUID  `json:"mentor_family_id"`
+		MentorParentIDs []uuid.UUID `json:"mentor_parent_ids"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpErrorLog(w, r, "Invalid request body JSON", http.StatusBadRequest, err)
+		return
+	}
+
+	if err := s.Store.UpdateFamilyMentor(r.Context(), user.ID, familyID, req.MentorFamilyID, req.MentorParentIDs); err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			httpErrorLog(w, r, err.Error(), http.StatusNotFound, err)
+			return
+		}
+		if strings.Contains(err.Error(), "cannot be its own mentor") || strings.Contains(err.Error(), "does not belong") {
+			httpErrorLog(w, r, err.Error(), http.StatusBadRequest, err)
+			return
+		}
+		httpErrorLog(w, r, "Failed to update family mentor", http.StatusInternalServerError, err)
+		return
+	}
+
+	s.Hub.Broadcast(WSMessage{
+		Type:    "FAMILY_UPDATED",
+		Payload: map[string]string{"id": familyID.String()},
+	})
+
+	w.WriteHeader(http.StatusOK)
+}
+
 func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 	user := auth.GetUser(r.Context())
 	idStr := chi.URLParam(r, "id")

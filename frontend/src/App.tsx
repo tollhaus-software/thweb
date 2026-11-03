@@ -52,7 +52,13 @@ import { JobsPopover, JobsCell, type PersonWithJobs, type JobItem } from './comp
 import { JobsTab, type JobWithAssignees } from './components/Jobs/JobsTab';
 import type { Role } from './components/Jobs/JobRolesPopover';
 import { t, CURRENT_LOCALE, formatDisplayDate, parseInputDate, formatTollhausEmail, compareBirthDates } from './utils/i18n';
-import { getFamilyName } from './utils/family';
+import {
+  getFamilyName,
+  getMentorsDisplay,
+  getMentoredFamiliesForFamily,
+  getMentoredFamiliesForParent,
+} from './utils/family';
+import { MentorPopover } from './components/Table/MentorPopover';
 
 const EasyEditComponent = EasyEdit;
 const EasyEditTypes = Types;
@@ -706,6 +712,8 @@ interface Family {
   created_at: string;
   parents: Parent[];
   children?: Child[];
+  mentor_family_id?: string | null;
+  mentor_parent_ids?: string[] | null;
 }
 
 export type FamilySortOrder =
@@ -2499,6 +2507,7 @@ const Dashboard: React.FC = () => {
   const canReadFamiliesAll = hasPermission('families.all.read');
   const canReadFees = hasPermission('fees.all.read') || hasPermission('fees.self.read');
   const canWriteParents = hasPermission('families.all.write');
+  const canWriteFamilies = canWriteParents;
   const canWriteChildren = hasPermission('children.all.write');
   const canWriteHygiene = hasPermission('hygiene.all.write');
   const canViewMealPlan = hasPermission('mealplan.view');
@@ -2844,6 +2853,26 @@ const Dashboard: React.FC = () => {
     window.location.hash = `parents?${params.toString()}`;
   }, []);
 
+  const handleJumpToFamily = React.useCallback(
+    (
+      familyId: string,
+      fromTab: 'families' | 'familiesOverview' | 'members' | 'parents' | 'children' = 'families'
+    ) => {
+      setGlobalFilter('');
+      setActiveTab('families');
+      setHighlightTarget({ id: familyId, key: Date.now() });
+      setReturnNav({ familyId, familyName: '', type: 'family', fromTab });
+      const params = new URLSearchParams({
+        fromFamily: familyId,
+        highlight: familyId,
+        type: 'family',
+        fromTab,
+      });
+      window.location.hash = `families?${params.toString()}`;
+    },
+    []
+  );
+
   const handleReturnToFamilies = React.useCallback(() => {
     const famId = returnNav?.familyId;
     const targetTab = returnNav?.fromTab || 'families';
@@ -2929,6 +2958,20 @@ const Dashboard: React.FC = () => {
   // Vaccination Status popover state
   const [targetVaccinationPerson, setTargetVaccinationPerson] = React.useState<{ id: string; type: 'parent' | 'child' } | null>(null);
   const [vaccinationPopoverAnchor, setVaccinationPopoverAnchor] = React.useState<HTMLElement | string | null>(null);
+
+  // Mentor popover state
+  const [activeFamilyForMentor, setActiveFamilyForMentor] = React.useState<Family | null>(null);
+  const [mentorPopoverAnchor, setMentorPopoverAnchor] = React.useState<HTMLElement | string | null>(null);
+
+  const openManageMentor = React.useCallback((family: Family, anchor: HTMLElement | string) => {
+    setActiveFamilyForMentor(family);
+    setMentorPopoverAnchor(anchor);
+  }, []);
+
+  const closeManageMentor = React.useCallback(() => {
+    setMentorPopoverAnchor(null);
+    setActiveFamilyForMentor(null);
+  }, []);
 
   const [confirmDelete, setConfirmDelete] = React.useState<{
     isOpen: boolean;
@@ -4510,6 +4553,31 @@ const Dashboard: React.FC = () => {
     return targetChildFamiliencards;
   }, [families, overviewFamilies, targetChildFamiliencards]);
 
+  const activeFamilyForMentorMemo = React.useMemo(() => {
+    if (!activeFamilyForMentor) return null;
+    return families.find((f) => f.id === activeFamilyForMentor.id) || activeFamilyForMentor;
+  }, [families, activeFamilyForMentor]);
+
+  const handleSaveFamilyMentor = React.useCallback(
+    async (familyId: string, mentorFamilyId: string | null, mentorParentIds: string[]) => {
+      const res = await fetch(`/api/families/${familyId}/mentor`, {
+        method: 'PUT',
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          mentor_family_id: mentorFamilyId,
+          mentor_parent_ids: mentorParentIds,
+        }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || errData.message || 'Failed to update mentor');
+      }
+      if (canReadFamiliesAll) fetchFamilies();
+      if (canReadOverview) fetchOverviewFamilies();
+    },
+    [getAuthHeaders, canReadFamiliesAll, canReadOverview, fetchFamilies, fetchOverviewFamilies]
+  );
+
   const activeParentForHygiene = React.useMemo(() => {
     if (!targetParent) return null;
     for (const f of families) {
@@ -5245,7 +5313,9 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
         const emailMatch = (p.emails || []).some(e => getEntryValue(e).toLowerCase().includes(query));
         const phoneMatch = (p.phones || []).some(ph => getEntryValue(ph).toLowerCase().includes(query));
         const addressMatch = (p.address || '').toLowerCase().includes(query);
-        return fnMatch || lnMatch || emailMatch || phoneMatch || addressMatch;
+        const mentored = getMentoredFamiliesForParent(p, families);
+        const mentorMatch = mentored.some(m => m.canonicalName.toLowerCase().includes(query) || m.displayName.toLowerCase().includes(query));
+        return fnMatch || lnMatch || emailMatch || phoneMatch || addressMatch || mentorMatch;
       });
 
       return {
@@ -5399,32 +5469,84 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
         return fnMatch || lnMatch || fullName.includes(query) || bdMatch || groupMatch || fcMatch || familyNameMatch || parentMatch || notesMatch || allergyMatch;
       });
 
-      const familyMatch = familyName.toLowerCase().includes(query) || parentNames.toLowerCase().includes(query);
+      const mentorDisplay = getMentorsDisplay(f, families);
+      const isPopActive = Boolean(mentorPopoverAnchor && activeFamilyForMentor?.id === f.id);
+      const mentorMatch = mentorDisplay.text.toLowerCase().includes(query);
+      const mentoredFamilies = getMentoredFamiliesForFamily(f, families);
+      const mentoredMatch = mentoredFamilies.some(m => m.canonicalName.toLowerCase().includes(query) || m.displayName.toLowerCase().includes(query));
+      const familyMatch = familyName.toLowerCase().includes(query) || parentNames.toLowerCase().includes(query) || mentorMatch || mentoredMatch;
 
-      const subHeader = (sortedParents && sortedParents.length > 0) ? (
-        <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: '0.25rem', alignItems: 'center' }}>
-          {sortedParents.map((p, idx) => {
-            const pName = `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Parent';
-            return (
-              <React.Fragment key={p.id}>
-                {idx > 0 && <span style={{ color: 'var(--text-muted)' }}>,</span>}
-                <button
-                  type="button"
-                  className="family-parent-link"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleJumpToParent(p.id, f.id, familyName);
-                  }}
-                  title={t('jumpToParent')}
-                >
-                  <span>{pName}</span>
-                  <ArrowUpRight size={12} className="family-link-icon" />
-                </button>
-              </React.Fragment>
-            );
-          })}
-        </span>
-      ) : null;
+      const subHeader = (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+          {sortedParents && sortedParents.length > 0 && (
+            <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: '0.25rem', alignItems: 'center' }}>
+              {sortedParents.map((p, idx) => {
+                const pName = `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Parent';
+                return (
+                  <React.Fragment key={p.id}>
+                    {idx > 0 && <span style={{ color: 'var(--text-muted)' }}>,</span>}
+                    <button
+                      type="button"
+                      className="family-parent-link"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleJumpToParent(p.id, f.id, familyName);
+                      }}
+                      title={t('jumpToParent')}
+                    >
+                      <span>{pName}</span>
+                      <ArrowUpRight size={12} className="family-link-icon" />
+                    </button>
+                  </React.Fragment>
+                );
+              })}
+            </span>
+          )}
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+            <span style={{ fontWeight: 500 }}>{t('mentors')}:</span>
+            {mentorDisplay.isFamily && mentorDisplay.mentorFamily ? (
+              <button
+                type="button"
+                className="family-parent-link"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleJumpToFamily(mentorDisplay.mentorFamily!.id, 'families');
+                }}
+                title={t('jumpToFamily')}
+              >
+                <span>{mentorDisplay.text}</span>
+                <ArrowUpRight size={12} className="family-link-icon" />
+              </button>
+            ) : (
+              <span style={{ color: mentorDisplay.text === '-' ? 'var(--text-muted)' : 'inherit' }}>
+                {mentorDisplay.text}
+              </span>
+            )}
+            {canWriteFamilies && (
+              <button
+                type="button"
+                className={`inline-edit-btn ${isPopActive ? 'active' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openManageMentor(f, e.currentTarget);
+                }}
+                title={t('manageMentors')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '2px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                <Pencil size={11} />
+              </button>
+            )}
+          </div>
+        </div>
+      );
 
       return {
         id: f.id,
@@ -5459,7 +5581,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
         }
         return f;
       });
-  }, [families, globalFilter, familySortOrder, handleJumpToParent]);
+  }, [families, globalFilter, familySortOrder, handleJumpToParent, handleJumpToFamily, canWriteFamilies, mentorPopoverAnchor, activeFamilyForMentor, openManageMentor]);
 
 function formatParentsSummary(parents: any[]): string {
   if (!parents || parents.length === 0) return '';
@@ -5995,6 +6117,122 @@ function formatParentsSummary(parents: any[]): string {
         }
       ] : []),
       {
+        id: 'paten',
+        header: t('mentors'),
+        size: 220,
+        minSize: 160,
+        cell: (info: any) => {
+          const parent = info.row.original;
+          const family = families.find((f) => f.id === parent.family_id);
+          const mentorDisplay = getMentorsDisplay(family, families);
+          const isPopActive = Boolean(mentorPopoverAnchor && activeFamilyForMentor?.id === parent.family_id);
+
+          return (
+            <div
+              className="paten-cell-wrapper"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                width: '100%',
+                minHeight: '28px',
+                gap: '0.35rem',
+              }}
+            >
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', flexWrap: 'wrap' }}>
+                {mentorDisplay.isFamily && mentorDisplay.mentorFamily ? (
+                  <button
+                    type="button"
+                    className="family-parent-link"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleJumpToFamily(mentorDisplay.mentorFamily!.id, 'families');
+                    }}
+                    title={t('jumpToFamily')}
+                  >
+                    <span>{mentorDisplay.text}</span>
+                    <ArrowUpRight size={12} className="family-link-icon" />
+                  </button>
+                ) : (
+                  <span style={{ color: mentorDisplay.text === '-' ? 'var(--text-muted)' : 'inherit' }}>
+                    {mentorDisplay.text}
+                  </span>
+                )}
+              </div>
+              {canWriteFamilies && family && (
+                <button
+                  type="button"
+                  className={`cell-edit-pencil-btn ${isPopActive ? 'active' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openManageMentor(family, e.currentTarget);
+                  }}
+                  title={t('manageMentors')}
+                  style={{ marginLeft: 'auto' }}
+                >
+                  <Pencil size={13} />
+                </button>
+              )}
+            </div>
+          );
+        },
+      },
+      {
+        id: 'paten_von',
+        header: t('mentorsOf'),
+        size: 260,
+        minSize: 180,
+        cell: (info: any) => {
+          const parent = info.row.original;
+          if (!parent) return <span>-</span>;
+          const mentored = getMentoredFamiliesForParent(parent, families);
+          return (
+            <div
+              className="paten-von-cell-wrapper"
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.2rem',
+                alignItems: 'flex-start',
+                textAlign: 'left',
+                width: '100%',
+              }}
+            >
+              {mentored.length === 0 ? (
+                <span style={{ color: 'var(--text-muted)' }}>-</span>
+              ) : (
+                mentored.map((item) => (
+                  <div
+                    key={item.family.id}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: '0.25rem',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <span>{`${item.datePrefix} - `}</span>
+                    <button
+                      type="button"
+                      className="family-parent-link"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleJumpToFamily(item.family.id, 'families');
+                      }}
+                      title={t('jumpToFamily')}
+                    >
+                      <span>{`Familie ${item.canonicalName}`}</span>
+                      <ArrowUpRight size={12} className="family-link-icon" />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          );
+        },
+      },
+      {
         id: 'actions',
         header: '',
         size: 50,
@@ -6015,7 +6253,7 @@ function formatParentsSummary(parents: any[]): string {
         }
       }
     ],
-    [families, handleSaveParentField, handleSaveParentNames, handleSaveFamilyParents, handleDeleteParent, canWriteParents, canWriteJobs, isVaccinationUnlocked, handleRequestKmsAuth, hasPermission, user?.email, membershipPopoverAnchor, targetParentMemberships, openManageMemberships, multiValuePopoverAnchor, activeParentForMultiValue, activeMultiValueField, openManageMultiValue, vaccinationPopoverAnchor, targetVaccinationPerson, openManageVaccination, jobsPopoverAnchor, activePersonForJobs, openManageJobs]
+    [families, handleSaveParentField, handleSaveParentNames, handleSaveFamilyParents, handleDeleteParent, canWriteParents, canWriteJobs, isVaccinationUnlocked, handleRequestKmsAuth, hasPermission, user?.email, membershipPopoverAnchor, targetParentMemberships, openManageMemberships, multiValuePopoverAnchor, activeParentForMultiValue, activeMultiValueField, openManageMultiValue, vaccinationPopoverAnchor, targetVaccinationPerson, openManageVaccination, jobsPopoverAnchor, activePersonForJobs, openManageJobs, handleJumpToFamily, canWriteFamilies, mentorPopoverAnchor, activeFamilyForMentor, openManageMentor]
   );
 
   const childGroupColumn = React.useMemo<ColumnDef<any>>(
@@ -6374,6 +6612,126 @@ function formatParentsSummary(parents: any[]): string {
         }
       ] : []),
       {
+        id: 'paten',
+        header: t('mentors'),
+        size: 220,
+        minSize: 160,
+        cell: (info: any) => {
+          const child = info.row.original;
+          const family = families.find((f) => f.id === child.family_id);
+          const mentorDisplay = getMentorsDisplay(family, families);
+          const isPopActive = Boolean(mentorPopoverAnchor && activeFamilyForMentor?.id === child.family_id);
+
+          return (
+            <div
+              className="paten-cell-wrapper"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                width: '100%',
+                minHeight: '28px',
+                gap: '0.35rem',
+              }}
+            >
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', flexWrap: 'wrap' }}>
+                {mentorDisplay.isFamily && mentorDisplay.mentorFamily ? (
+                  <button
+                    type="button"
+                    className="family-parent-link"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleJumpToFamily(mentorDisplay.mentorFamily!.id, 'families');
+                    }}
+                    title={t('jumpToFamily')}
+                  >
+                    <span>{mentorDisplay.text}</span>
+                    <ArrowUpRight size={12} className="family-link-icon" />
+                  </button>
+                ) : (
+                  <span style={{ color: mentorDisplay.text === '-' ? 'var(--text-muted)' : 'inherit' }}>
+                    {mentorDisplay.text}
+                  </span>
+                )}
+              </div>
+              {canWriteFamilies && family && (
+                <button
+                  type="button"
+                  className={`cell-edit-pencil-btn ${isPopActive ? 'active' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openManageMentor(family, e.currentTarget);
+                  }}
+                  title={t('manageMentors')}
+                  style={{ marginLeft: 'auto' }}
+                >
+                  <Pencil size={13} />
+                </button>
+              )}
+            </div>
+          );
+        },
+      },
+      {
+        id: 'paten_von',
+        header: t('mentorsOf'),
+        size: 260,
+        minSize: 180,
+        cell: (info: any) => {
+          const child = info.row.original;
+          const family = families.find((f) => f.id === child.family_id);
+          if (!family) return <span>-</span>;
+          const mentored = getMentoredFamiliesForFamily(family, families);
+          return (
+            <div
+              className="paten-von-cell-wrapper"
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.2rem',
+                alignItems: 'flex-start',
+                textAlign: 'left',
+                width: '100%',
+              }}
+            >
+              {mentored.length === 0 ? (
+                <span style={{ color: 'var(--text-muted)' }}>-</span>
+              ) : (
+                mentored.map((item) => (
+                  <div
+                    key={item.family.id}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: '0.25rem',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <span>{`${item.datePrefix} - `}</span>
+                    <button
+                      type="button"
+                      className="family-parent-link"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleJumpToFamily(item.family.id, 'families');
+                      }}
+                      title={t('jumpToFamily')}
+                    >
+                      <span>{`Familie ${item.canonicalName}`}</span>
+                      <ArrowUpRight size={12} className="family-link-icon" />
+                    </button>
+                    {item.parentGivenNames && (
+                      <span style={{ color: 'var(--text-muted)' }}>{` (${item.parentGivenNames})`}</span>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          );
+        },
+      },
+      {
         id: 'actions',
         header: '',
         size: 85,
@@ -6390,6 +6748,12 @@ function formatParentsSummary(parents: any[]): string {
       activeChildForMultiValue,
       activeMultiValueField,
       openManageChildMultiValue,
+      families,
+      canWriteFamilies,
+      openManageMentor,
+      mentorPopoverAnchor,
+      activeFamilyForMentor,
+      handleJumpToFamily,
     ]
   );
 
@@ -8453,6 +8817,18 @@ function formatParentsSummary(parents: any[]): string {
           child={activeChildForFamiliencards}
           onSaveFamiliencards={handleSaveFamiliencards}
           readOnly={!canWriteChildren}
+        />
+
+        {/* Manage Mentors Popover */}
+        <MentorPopover
+          key={activeFamilyForMentorMemo?.id || 'mentor-popover'}
+          isOpen={Boolean(mentorPopoverAnchor && activeFamilyForMentorMemo)}
+          anchorEl={mentorPopoverAnchor}
+          onClose={closeManageMentor}
+          family={activeFamilyForMentorMemo}
+          allFamilies={families}
+          onSaveMentor={handleSaveFamilyMentor}
+          readOnly={!canWriteFamilies}
         />
 
         {/* Manage Multi-Values (Emails / Phones / Allergies) Popover */}

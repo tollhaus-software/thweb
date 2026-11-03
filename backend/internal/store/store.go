@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"sort"
@@ -295,7 +296,7 @@ func (s *Store) recordAudit(ctx context.Context, tx pgx.Tx, tid uuid.UUID, fid *
 
 func (s *Store) ListFamilies(ctx context.Context) ([]models.Family, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT f.id, f.created_at, 
+		SELECT f.id, f.created_at, f.mentor_family_id, f.mentor_parent_ids,
 			   COALESCE((
 				   SELECT json_agg(json_build_object(
 					   'id', p.id,
@@ -387,9 +388,15 @@ func (s *Store) ListFamilies(ctx context.Context) ([]models.Family, error) {
 	families := []models.Family{}
 	for rows.Next() {
 		var f models.Family
-		var parentsJSON, childrenJSON []byte
-		if err := rows.Scan(&f.ID, &f.CreatedAt, &parentsJSON, &childrenJSON); err != nil {
+		var parentsJSON, childrenJSON, mentorParentIDsJSON []byte
+		if err := rows.Scan(&f.ID, &f.CreatedAt, &f.MentorFamilyID, &mentorParentIDsJSON, &parentsJSON, &childrenJSON); err != nil {
 			return nil, err
+		}
+		if len(mentorParentIDsJSON) > 0 {
+			_ = json.Unmarshal(mentorParentIDsJSON, &f.MentorParentIDs)
+		}
+		if f.MentorParentIDs == nil {
+			f.MentorParentIDs = []uuid.UUID{}
 		}
 		if err := json.Unmarshal(parentsJSON, &f.Parents); err != nil {
 			return nil, err
@@ -869,6 +876,89 @@ func (s *Store) DeleteFamily(ctx context.Context, userID uuid.UUID, familyID uui
 	})
 }
 
+func (s *Store) UpdateFamilyMentor(ctx context.Context, userID uuid.UUID, familyID uuid.UUID, mentorFamilyID *uuid.UUID, mentorParentIDs []uuid.UUID) error {
+	if mentorFamilyID != nil && *mentorFamilyID == familyID {
+		return fmt.Errorf("family cannot be its own mentor")
+	}
+
+	return s.WithTx(ctx, func(tx pgx.Tx) error {
+		var oldFamily models.Family
+		var oldMentorFamilyID *uuid.UUID
+		var oldMentorParentIDsJSON []byte
+		err := tx.QueryRow(ctx, "SELECT id, created_at, mentor_family_id, mentor_parent_ids FROM families WHERE id = $1", familyID).
+			Scan(&oldFamily.ID, &oldFamily.CreatedAt, &oldMentorFamilyID, &oldMentorParentIDsJSON)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("family not found")
+			}
+			return err
+		}
+		oldFamily.MentorFamilyID = oldMentorFamilyID
+		if len(oldMentorParentIDsJSON) > 0 {
+			_ = json.Unmarshal(oldMentorParentIDsJSON, &oldFamily.MentorParentIDs)
+		}
+		if oldFamily.MentorParentIDs == nil {
+			oldFamily.MentorParentIDs = []uuid.UUID{}
+		}
+
+		if mentorFamilyID != nil {
+			var mentorExists bool
+			err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM families WHERE id = $1)", *mentorFamilyID).Scan(&mentorExists)
+			if err != nil {
+				return err
+			}
+			if !mentorExists {
+				return fmt.Errorf("mentor family not found")
+			}
+
+			if len(mentorParentIDs) > 0 {
+				rows, err := tx.Query(ctx, "SELECT id FROM parents WHERE family_id = $1", *mentorFamilyID)
+				if err != nil {
+					return err
+				}
+				defer rows.Close()
+				validParents := make(map[uuid.UUID]bool)
+				for rows.Next() {
+					var pid uuid.UUID
+					if err := rows.Scan(&pid); err != nil {
+						return err
+					}
+					validParents[pid] = true
+				}
+				for _, pid := range mentorParentIDs {
+					if !validParents[pid] {
+						return fmt.Errorf("parent %s does not belong to mentor family %s", pid, *mentorFamilyID)
+					}
+				}
+			}
+		} else {
+			mentorParentIDs = []uuid.UUID{}
+		}
+
+		if mentorParentIDs == nil {
+			mentorParentIDs = []uuid.UUID{}
+		}
+		mentorParentIDsBytes, err := json.Marshal(mentorParentIDs)
+		if err != nil {
+			return err
+		}
+
+		_, err = tx.Exec(ctx,
+			"UPDATE families SET mentor_family_id = $1, mentor_parent_ids = $2 WHERE id = $3",
+			mentorFamilyID, mentorParentIDsBytes, familyID)
+		if err != nil {
+			return err
+		}
+
+		newFamily := oldFamily
+		newFamily.MentorFamilyID = mentorFamilyID
+		newFamily.MentorParentIDs = mentorParentIDs
+
+		transactionID := uuid.New()
+		return s.recordAudit(ctx, tx, transactionID, &familyID, "family", familyID, "UPDATE", oldFamily, newFamily, userID)
+	})
+}
+
 func (s *Store) DeleteChild(ctx context.Context, userID uuid.UUID, childID uuid.UUID) error {
 	transactionID := uuid.New()
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
@@ -931,6 +1021,7 @@ func (s *Store) DeleteParent(ctx context.Context, userID uuid.UUID, parentID uui
 		if err != nil {
 			return err
 		}
+		_, _ = tx.Exec(ctx, "UPDATE families SET mentor_parent_ids = mentor_parent_ids - $1::text WHERE mentor_parent_ids ? $1::text", parentID.String())
 
 		// Cleanup empty family
 		var parentCount int

@@ -398,9 +398,11 @@ test.describe('Test Case 19: Familiencards Tracking and Display', () => {
     await expect(yearSelect).toBeVisible();
     await expect(yearSelect).toHaveValue(String(currentYear));
     await popover.locator('button:has(svg.lucide-check)').click();
+    await expect(popover.locator('button:has(svg.lucide-check)')).toBeHidden();
     await expect(popover.locator('tr', { hasText: String(currentYear) })).toBeVisible();
 
     // 7. Click add again - now currentYear is in list, so default value should be next year
+    await expect(addBtn).toBeVisible();
     await addBtn.click();
     await expect(yearSelect).toBeVisible();
     await expect(yearSelect).toHaveValue(String(currentYear + 1));
