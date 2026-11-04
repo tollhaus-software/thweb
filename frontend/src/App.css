@@ -470,6 +470,62 @@ tr.overview-parents-toggle-row td {
   box-shadow: 0 0 0 2px var(--accent-bg);
 }
 
+/* Overview controls toolbar styling */
+.overview-controls-left {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+  flex-wrap: nowrap !important;
+}
+
+.overview-search-input {
+  width: 150px !important;
+  min-width: 90px !important;
+  max-width: 180px !important;
+  padding: 0.4rem 0.6rem !important;
+  font-size: 0.85rem !important;
+  height: 32px !important;
+  box-sizing: border-box !important;
+  margin-bottom: 0 !important;
+}
+
+.overview-grouping-toggle {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.25rem !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  flex-shrink: 0 !important;
+}
+
+.overview-grouping-btn {
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  border-radius: 6px;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  line-height: 1.3;
+}
+
+.overview-grouping-btn:hover:not(.active) {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.overview-grouping-btn.active {
+  background: var(--primary) !important;
+  color: var(--primary-contrast, #ffffff) !important;
+  font-weight: 600;
+  border-radius: 6px;
+}
+
 /* EasyEdit elements styling */
 .easy-edit-inline-wrapper {
   display: flex;
@@ -1208,6 +1264,35 @@ tr.family-group-row td {
     margin-bottom: 0 !important;
   }
 
+  .overview-controls-left {
+    flex-wrap: nowrap !important;
+    gap: 1.25rem !important;
+    width: 100% !important;
+    justify-content: space-between !important;
+  }
+
+  .overview-search-input {
+    flex: 1 1 auto !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    font-size: 0.8rem !important;
+    padding: 0.35rem 0.45rem !important;
+    height: 30px !important;
+  }
+
+  .overview-grouping-toggle {
+    flex-shrink: 0 !important;
+    margin-left: auto !important;
+    gap: 0.2rem !important;
+  }
+
+  .overview-grouping-btn {
+    font-size: 0.75rem !important;
+    padding: 0.25rem 0.45rem !important;
+    border-radius: 6px !important;
+  }
+
   .overview-table-wrapper {
     width: 100% !important;
     min-width: 0 !important;
@@ -1217,14 +1302,19 @@ tr.family-group-row td {
     overflow-x: hidden !important;
     overflow-y: auto !important;
     width: 100% !important;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
   }
 
   .data-table.overview-table {
     display: flex !important;
     flex-direction: column !important;
-    gap: 0.65rem !important;
+    gap: 1.25rem !important;
     width: 100% !important;
     min-width: 0 !important;
+    border: none !important;
+    background: transparent !important;
   }
 
   .data-table.overview-table tbody {
@@ -1242,7 +1332,7 @@ tr.family-group-row td {
     box-sizing: border-box !important;
     border: 1px solid var(--border) !important;
     border-radius: 8px !important;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+    box-shadow: 0px 2px 5px #0000001a !important;
     overflow: hidden !important;
     gap: 0 !important;
   }
@@ -1283,16 +1373,17 @@ tr.family-group-row td {
     background: transparent !important;
     background-color: transparent !important;
     color: var(--text-h) !important;
-    font-size: 0.85rem !important;
+    font-size: 1rem !important;
     font-weight: 700 !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.05em !important;
+    text-transform: none !important;
+    letter-spacing: normal !important;
   }
 
   .data-table.overview-table tbody.overview-group-header-block .family-name-text {
+    font-size: 1rem !important;
     font-weight: 700 !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.05em !important;
+    text-transform: none !important;
+    letter-spacing: normal !important;
   }
 
   /* Horizontal line above group header if not the first group in the view */
@@ -1326,11 +1417,11 @@ tr.family-group-row td {
     box-sizing: border-box !important;
     padding: 0.55rem 0.85rem !important;
     border: none !important;
-    border-bottom: 1px solid var(--border) !important;
+    border-bottom: none !important;
     border-radius: 0 !important;
     background-color: transparent !important;
     color: var(--text-h) !important;
-    font-size: 0.95rem !important;
+    font-size: 1rem !important;
     font-weight: 700 !important;
   }
 
@@ -1378,6 +1469,7 @@ tr.family-group-row td {
     border: none !important;
     background: transparent !important;
     background-color: transparent !important;
+    box-shadow: none !important;
   }
 
   .data-table.overview-table tr.overview-parent-row td:first-child {
@@ -1411,6 +1503,8 @@ tr.family-group-row td {
     gap: 0.35rem !important;
     width: 100% !important;
     box-sizing: border-box !important;
+    background: transparent !important;
+    box-shadow: none !important;
   }
 
   .data-table.overview-table tr.overview-parent-row .overview-parent-entry {
@@ -1421,6 +1515,8 @@ tr.family-group-row td {
     width: 100% !important;
     min-width: 0 !important;
     box-sizing: border-box !important;
+    background: transparent !important;
+    box-shadow: none !important;
   }
 
   .data-table.overview-table tr.overview-parent-row .overview-entry-icon,
@@ -1494,7 +1590,7 @@ tr.family-group-row td {
   }
 
   .data-table.overview-table tr.overview-child-row td:first-child {
-    font-size: 0.95rem !important;
+    font-size: 1rem !important;
     font-weight: 600 !important;
     color: var(--text-h) !important;
     width: 100% !important;
@@ -1667,7 +1763,7 @@ tr.family-group-row td {
     border: 1px solid var(--border) !important;
     border-radius: 8px !important;
     background-color: var(--bg-surface) !important;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+    box-shadow: 0px 2px 5px #0000001a !important;
     gap: 0.2rem !important;
   }
 

@@ -199,8 +199,8 @@ test.describe('Test Case 33: Alternating Family Backgrounds in Tables & Cards, S
 
     // Card 1 even background matches --bg-surface (white)
     expect(card1Bg).toBe('rgb(255, 255, 255)');
-    // Card 2 odd background matches --bg-family-alt (#f8fafc -> rgb(248, 250, 252))
-    expect(card2Bg).toBe('rgb(248, 250, 252)');
+    // Card 2 odd background matches --bg-family-alt (#e8eef4 -> rgb(232, 238, 244))
+    expect(card2Bg).toBe('rgb(232, 238, 244)');
 
     // In mobile card view, mentors displayed in Paten and Paten von columns
     await expect(mobileMgaCards.nth(1).locator('td[data-column-id="paten"]')).toContainText('Familie Schmidt');

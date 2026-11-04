@@ -317,9 +317,9 @@ test.describe('Test Case 8: Adaptive Card Layout for familiesOverview Tab', () =
     const groupHeaderDisplay = await groupHeaderRow.evaluate((el) => getComputedStyle(el).display);
     expect(groupHeaderDisplay).toBe('block');
 
-    // Verify group sub headings: uppercase, bold, no separate background, not in a box
+    // Verify group sub headings: not uppercase, bold, no separate background, not in a box
     const ghTextTransform = await groupHeaderRow.locator('td').evaluate((el) => getComputedStyle(el).textTransform);
-    expect(ghTextTransform).toBe('uppercase');
+    expect(ghTextTransform).toBe('none');
     const ghFontWeight = await groupHeaderRow.locator('td').evaluate((el) => parseInt(getComputedStyle(el).fontWeight, 10));
     expect(ghFontWeight).toBeGreaterThanOrEqual(600);
     const ghBorder = await groupHeaderRow.locator('td').evaluate((el) => getComputedStyle(el).borderStyle);

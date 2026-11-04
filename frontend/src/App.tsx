@@ -7969,11 +7969,19 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
 
         {!isLandingActive && activeTab !== 'childcareFees' && activeTab !== 'audit' && activeTab !== 'admin' && activeTab !== 'kiosk' && activeTab !== 'dashboard' && activeTab !== 'mealPlan' && activeTab !== 'mealAllergens' && (
           <div className="controls-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <div className="controls-left" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div
+              className={`controls-left ${activeTab === 'familiesOverview' ? 'overview-controls-left' : ''}`}
+              style={{
+                display: 'flex',
+                gap: activeTab === 'familiesOverview' ? '1.25rem' : '0.75rem',
+                alignItems: 'center',
+                flexWrap: activeTab === 'familiesOverview' ? 'nowrap' : 'wrap',
+              }}
+            >
               <input
                 value={globalFilter ?? ''}
                 onChange={(e) => setGlobalFilter(e.target.value)}
-                className="search-input"
+                className={`search-input ${activeTab === 'familiesOverview' ? 'overview-search-input' : ''}`}
                 placeholder={
                   activeTab === 'employees'
                     ? (t('searchEmployees') || 'Mitarbeiter suchen...')
@@ -7981,7 +7989,9 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                     ? (t('searchJobs') || 'Jobs suchen...')
                     : activeTab === 'members'
                     ? t('searchMembers')
-                    : activeTab === 'families' || activeTab === 'familiesOverview'
+                    : activeTab === 'familiesOverview'
+                    ? (t('search') || 'Suche')
+                    : activeTab === 'families'
                     ? t('searchFamilies')
                     : activeTab === 'children'
                     ? t('searchChildren')
@@ -8079,30 +8089,12 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                   className="overview-grouping-toggle"
                   role="group"
                   aria-label={t('groupingLabel')}
-                  style={{
-                    display: 'inline-flex',
-                    border: '1px solid var(--border)',
-                    borderRadius: '4px',
-                    overflow: 'hidden',
-                    background: 'var(--bg-surface)',
-                    height: '34px',
-                    boxSizing: 'border-box',
-                  }}
                 >
                   <button
                     type="button"
                     onClick={() => setOverviewGroupBy('family')}
                     aria-pressed={overviewGroupBy === 'family'}
-                    style={{
-                      padding: '0 0.75rem',
-                      fontSize: '0.85rem',
-                      fontWeight: 600,
-                      border: 'none',
-                      cursor: 'pointer',
-                      background: overviewGroupBy === 'family' ? 'var(--primary)' : 'transparent',
-                      color: overviewGroupBy === 'family' ? 'var(--primary-contrast, #ffffff)' : 'var(--text)',
-                      transition: 'all 0.15s ease',
-                    }}
+                    className={`overview-grouping-btn ${overviewGroupBy === 'family' ? 'active' : ''}`}
                   >
                     {t('groupByFamily')}
                   </button>
@@ -8110,17 +8102,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                     type="button"
                     onClick={() => setOverviewGroupBy('group')}
                     aria-pressed={overviewGroupBy === 'group'}
-                    style={{
-                      padding: '0 0.75rem',
-                      fontSize: '0.85rem',
-                      fontWeight: 600,
-                      border: 'none',
-                      borderLeft: '1px solid var(--border)',
-                      cursor: 'pointer',
-                      background: overviewGroupBy === 'group' ? 'var(--primary)' : 'transparent',
-                      color: overviewGroupBy === 'group' ? 'var(--primary-contrast, #ffffff)' : 'var(--text)',
-                      transition: 'all 0.15s ease',
-                    }}
+                    className={`overview-grouping-btn ${overviewGroupBy === 'group' ? 'active' : ''}`}
                   >
                     {t('groupByGroup')}
                   </button>
