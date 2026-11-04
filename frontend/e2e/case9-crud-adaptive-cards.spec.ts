@@ -351,57 +351,31 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     const familiesColumnsBtn = page.getByRole('button', { name: 'Spalten' });
     await expect(familiesColumnsBtn).toBeVisible();
 
-    // Verify families table renders child row as a card
-    const famChildRow = page.locator('.families-table tbody tr:not(.family-group-row)', { hasText: 'Tim Müller' });
-    await expect(famChildRow).toBeVisible();
-    const famChildDisplay = await famChildRow.evaluate((el) => getComputedStyle(el).display);
-    expect(famChildDisplay).toBe('flex');
+    // Verify families table renders family row as a card
+    const famRow = page.locator('.families-table tbody tr', { hasText: 'Müller' });
+    await expect(famRow).toBeVisible();
+    const famDisplay = await famRow.evaluate((el) => getComputedStyle(el).display);
+    expect(famDisplay).toBe('flex');
 
-    // 1. Child name is the header with no "Vorname" field
-    const nameCell = famChildRow.locator('td[data-column-id="child_name"]');
-    await expect(nameCell).toContainText('Tim Müller');
-    const nameBeforeDisplay = await nameCell.evaluate((el) => getComputedStyle(el, '::before').display);
-    expect(nameBeforeDisplay).toBe('none');
+    // 1. Family name
+    const familyNameCell = famRow.locator('td[data-column-id="family_name"]');
+    await expect(familyNameCell).toContainText('Müller');
 
-    // 2. "geb. <birthdate>" under it, left aligned
-    const birthCell = famChildRow.locator('td[data-column-id="birth_date"]');
-    await expect(birthCell).toContainText('geb. 12.05.2020');
-    const birthBeforeDisplay = await birthCell.evaluate((el) => getComputedStyle(el, '::before').display);
-    expect(birthBeforeDisplay).toBe('none');
+    // 2. Parents cell
+    const parentsCell = famRow.locator('td[data-column-id="parents"]');
+    await expect(parentsCell).toContainText('Sabina Müller');
 
-    // 3. "<Group name> (seit <group change date>)" under that
-    const groupCellInFam = famChildRow.locator('td[data-column-id="group"]');
-    await expect(groupCellInFam).toContainText(/Grosse Gr\. \(seit .+\)/);
-    const groupBeforeDisplay = await groupCellInFam.evaluate((el) => getComputedStyle(el, '::before').display);
-    expect(groupBeforeDisplay).toBe('none');
+    // 3. Children cell with child name, birthdate, and group
+    const childrenCell = famRow.locator('td[data-column-id="children"]');
+    await expect(childrenCell).toContainText('Tim Müller');
+    await expect(childrenCell).toContainText('12.05.2020');
+    await expect(childrenCell).toContainText(/Grosse Gr\./);
 
     // Verify children data color in dark mode matches the text color in children-table (var(--text))
     await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
-    const birthColorDark = await birthCell.evaluate((el) => getComputedStyle(el).color);
-    const groupColorDark = await groupCellInFam.evaluate((el) => getComputedStyle(el).color);
-    expect(birthColorDark).toBe('rgb(232, 234, 237)');
-    expect(groupColorDark).toBe('rgb(232, 234, 237)');
+    const childrenColorDark = await childrenCell.evaluate((el) => getComputedStyle(el).color);
+    expect(childrenColorDark).toBe('rgb(232, 234, 237)');
     await page.evaluate(() => document.documentElement.removeAttribute('data-theme'));
-
-    // Verify vertical stacking order: Name -> geb. -> Group
-    const nameBox = await nameCell.boundingBox();
-    const birthBox = await birthCell.boundingBox();
-    const groupBox = await groupCellInFam.boundingBox();
-    expect(nameBox).not.toBeNull();
-    expect(birthBox).not.toBeNull();
-    expect(groupBox).not.toBeNull();
-    if (nameBox && birthBox && groupBox) {
-      expect(birthBox.y).toBeGreaterThan(nameBox.y);
-      expect(groupBox.y).toBeGreaterThan(birthBox.y);
-    }
-
-    // Tapping group pencil button opens bottom sheet
-    await groupCellInFam.locator('.cell-edit-pencil-btn').click();
-    await expect(page.locator('.cell-popover-mobile-backdrop')).toBeVisible();
-    const memBottomSheet = page.locator('.cell-popover-bottom-sheet');
-    await expect(memBottomSheet).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(memBottomSheet).toBeHidden();
 
     // -------------------------------------------------------------
     // Test Switch back to Desktop Viewport
@@ -434,24 +408,10 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     await page.keyboard.press('Escape');
     await expect(dtColPopover).toBeHidden();
 
-    const dtFamChildRow = page.locator('.families-table tbody tr:not(.family-group-row)', { hasText: 'Tim Müller' });
-    await expect(dtFamChildRow).toBeVisible();
-    const dtFamChildDisplay = await dtFamChildRow.evaluate((el) => getComputedStyle(el).display);
-    expect(dtFamChildDisplay).toBe('table-row');
-
-    // On desktop: single-click on dtGroupCell does NOT open popover (allowing text selection)
-    const dtGroupCell = dtFamChildRow.locator('td[data-column-id="group"]');
-    await dtGroupCell.click();
-    await expect(page.locator('.glass-popup')).toBeHidden();
-
-    // Double-click on desktop opens standard anchored popover, not bottom sheet
-    await dtGroupCell.dblclick();
-    await expect(page.locator('.cell-popover-mobile-backdrop')).toBeHidden();
-    const desktopPopover = page.locator('.glass-popup');
-    await expect(desktopPopover).toBeVisible();
-    await expect(desktopPopover).not.toHaveClass(/cell-popover-bottom-sheet/);
-    await page.keyboard.press('Escape');
-    await expect(desktopPopover).toBeHidden();
+    const dtFamRow = page.locator('.families-table tbody tr', { hasText: 'Müller' });
+    await expect(dtFamRow).toBeVisible();
+    const dtFamDisplay = await dtFamRow.evaluate((el) => getComputedStyle(el).display);
+    expect(dtFamDisplay).toBe('table-row');
 
     // Switch to parents tab on desktop and verify card-person-header is hidden and first_name is sticky
     const dtParentsTab = page.getByRole('button', { name: 'Eltern(MGA)', exact: true });
@@ -695,12 +655,12 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     await expect(card1).toHaveClass(/family-card-odd/);
 
     // Card header is the family name
-    await expect(card0.locator('tr.family-group-row .family-name-text')).toHaveText('Müller');
-    await expect(card1.locator('tr.family-group-row .family-name-text')).toHaveText('Schneider');
+    await expect(card0.locator('td[data-column-id="family_name"]')).toContainText('Müller');
+    await expect(card1.locator('td[data-column-id="family_name"]')).toContainText('Schneider');
 
     // Children of that family are within that card
-    await expect(card0.locator('tr:not(.family-group-row)', { hasText: 'Tim Müller' })).toBeVisible();
-    await expect(card1.locator('tr:not(.family-group-row)', { hasText: 'Lena Schneider' })).toBeVisible();
+    await expect(card0.locator('td[data-column-id="children"]')).toContainText('Tim Müller');
+    await expect(card1.locator('td[data-column-id="children"]')).toContainText('Lena Schneider');
 
     // Verify alternating background colors (almost white and light gray in light layout)
     const bg0 = await card0.evaluate((el) => getComputedStyle(el).backgroundColor);

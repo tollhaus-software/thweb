@@ -221,13 +221,13 @@ test.describe('Test Case 24: Families Overview Date-based Filtering', () => {
     await expect(familiesMgaTab).toHaveClass(/active/);
 
     // In Familien(MGA), ALL families MUST be visible
-    await expect(page.locator('tr.family-group-row', { hasText: 'Altexited' })).toBeVisible();
-    await expect(page.locator('tr.family-group-row', { hasText: 'Neunexited' })).toBeVisible();
-    await expect(page.locator('tr.family-group-row', { hasText: 'Weitgeplant' })).toBeVisible();
-    await expect(page.locator('tr.family-group-row', { hasText: 'Baldstart' })).toBeVisible();
-    await expect(page.locator('tr.family-group-row', { hasText: 'Aktivfam' })).toBeVisible();
-    await expect(page.locator('tr.family-group-row', { hasText: 'Keinstart' })).toBeVisible();
-    await expect(page.locator('tr.family-group-row', { hasText: 'Mischfam' })).toBeVisible();
+    await expect(page.locator('.families-table tbody tr', { hasText: 'Altexited' })).toBeVisible();
+    await expect(page.locator('.families-table tbody tr', { hasText: 'Neunexited' })).toBeVisible();
+    await expect(page.locator('.families-table tbody tr', { hasText: 'Weitgeplant' })).toBeVisible();
+    await expect(page.locator('.families-table tbody tr', { hasText: 'Baldstart' })).toBeVisible();
+    await expect(page.locator('.families-table tbody tr', { hasText: 'Aktivfam' })).toBeVisible();
+    await expect(page.locator('.families-table tbody tr', { hasText: 'Keinstart' })).toBeVisible();
+    await expect(page.locator('.families-table tbody tr', { hasText: 'Mischfam' })).toBeVisible();
     await expect(page.locator('.data-table.families-table tr', { hasText: 'KindOhneGruppe' })).toBeVisible();
   });
 });

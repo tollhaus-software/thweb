@@ -29,6 +29,25 @@ roles:
       - fees.self.read
       - audit.view
 
+  - id: mga
+    name: MGA
+    description: Mitgliederauschuss
+    permissions:
+      - families.all.read
+      - families.all.write
+      - children.all.read
+      - children.all.write
+      - vaccination.status.manage
+      - allergies.children.read
+      - allergies.children.write
+      - allergies.summary.read
+      - memberships.all.read
+      - memberships.all.write
+      - fees.all.read
+      - audit.view
+      - jobs.all.read
+      - jobs.all.write
+
   - id: kiosk
     name: Kiosk
     description: Read-only dashboard access for mTLS hardware kiosk terminals
@@ -50,6 +69,7 @@ roles:
       - fees.self.read
       - families.self.selfservice
       - memberships.self.read
+      - allergies.summary.read
       - meal_allergens.read
       - meal_allergens.write
 
@@ -61,6 +81,7 @@ roles:
     permissions:
       - families.all.restrictedread
       - mealplan.view
+      - allergies.summary.read
       - meal_allergens.read
       - meal_allergens.write
 
@@ -71,6 +92,7 @@ roles:
       - cook_identifier_email
     permissions:
       - mealplan.view
+      - allergies.summary.read
       - meal_allergens.read
       - meal_allergens.write
 

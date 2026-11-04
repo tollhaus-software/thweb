@@ -234,6 +234,7 @@ test.describe('Test Case 30: Job Role Assignments', () => {
     const berndPage = await page.context().newPage();
     await berndPage.addInitScript(() => {
       localStorage.setItem('token', 'bernd.becker@example.com');
+      localStorage.setItem('thweb_active_tab', 'families');
     });
     await berndPage.goto('/');
 
@@ -266,6 +267,7 @@ test.describe('Test Case 30: Job Role Assignments', () => {
     const berndRevokedPage = await page.context().newPage();
     await berndRevokedPage.addInitScript(() => {
       localStorage.setItem('token', 'bernd.becker@example.com');
+      localStorage.setItem('thweb_active_tab', 'families');
     });
     await berndRevokedPage.goto('/');
     await expect(berndRevokedPage.getByRole('button', { name: 'Familie hinzufügen' })).toBeHidden();

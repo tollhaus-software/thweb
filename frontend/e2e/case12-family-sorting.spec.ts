@@ -202,6 +202,16 @@ test.describe('Test Case 12: Family Sorting across MGA Tabs', () => {
 
     // Helper to get visible family names from family rows
     const getVisibleFamilyNames = async () => {
+      const familyNameCells = page.locator('.families-table td[data-column-id="family_name"]');
+      if (await familyNameCells.count() > 0) {
+        const count = await familyNameCells.count();
+        const names: string[] = [];
+        for (let i = 0; i < count; i++) {
+          const text = await familyNameCells.nth(i).textContent();
+          names.push((text || '').trim());
+        }
+        return names;
+      }
       const rows = page.locator('tr.family-group-row');
       const count = await rows.count();
       const names: string[] = [];
@@ -222,17 +232,17 @@ test.describe('Test Case 12: Family Sorting across MGA Tabs', () => {
     await expect(familiesTh).not.toContainText(/🔼|🔽/);
 
     // Check internal sorting in Aalberg:
-    // Parents sub-header should show Benjamin before Zachary
-    const aalbergRow = page.locator('tr.family-group-row', { hasText: 'Aalberg' });
-    const parentsText = await aalbergRow.locator('.family-parent-link').allTextContents();
+    // Parents column should show Benjamin before Zachary
+    const aalbergRow = page.locator('.families-table tbody tr', { hasText: 'Aalberg' });
+    const parentsText = await aalbergRow.locator('td[data-column-id="parents"] .family-parent-link').allTextContents();
     expect(parentsText.map(t => t.trim())).toEqual(['Benjamin Aalberg', 'Zachary Aalberg']);
 
-    // Children sub-rows of Aalberg: Aaron (2018) before Felix (2020)
-    const childRows = page.locator('tbody tr:not(.family-group-row)');
-    const aaronText = childRows.filter({ hasText: 'Aaron Aalberg' });
-    const felixText = childRows.filter({ hasText: 'Felix Aalberg' });
-    await expect(aaronText).toBeVisible();
-    await expect(felixText).toBeVisible();
+    // Children in Aalberg: Aaron (2018) before Felix (2020)
+    const childrenCell = aalbergRow.locator('td[data-column-id="children"]');
+    await expect(childrenCell).toContainText('Aaron Aalberg');
+    await expect(childrenCell).toContainText('Felix Aalberg');
+    const childrenText = await childrenCell.textContent();
+    expect(childrenText?.indexOf('Aaron Aalberg')).toBeLessThan(childrenText?.indexOf('Felix Aalberg') ?? 0);
 
     // 2. Open Sort Popover and choose Name (Z → A)
     await sortButton.click();

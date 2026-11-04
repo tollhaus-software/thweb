@@ -32,20 +32,31 @@ test.describe('Test Case 2: Inferred Default Start Date from Oldest Group Change
     await page.getByRole('button', { name: 'Familien(MGA)', exact: true }).click();
 
     // Find the family row for Bauer
-    const familyRow = page.locator('tr.family-group-row', { hasText: 'Bauer' });
+    const familyRow = page.locator('.families-table tbody tr', { hasText: 'Bauer' });
     await expect(familyRow).toBeVisible();
 
     // Add Child 1 (Lukas)
-    await familyRow.locator('.family-add-button').click();
+    const childrenCell = familyRow.locator('td[data-column-id="children"]');
+    await childrenCell.locator('button.family-add-button').click();
     await page.locator('#c-first-name').fill('Lukas');
     await page.locator('#c-last-name').fill('Bauer');
     await page.locator('#c-birth-date').fill('01.05.2021');
     await page.locator('form').getByRole('button', { name: 'Kind hinzufügen' }).click();
 
+    // Add Child 2 (Sophie) with an older date (15.03.2023)
+    await childrenCell.locator('button.family-add-button').click();
+    await page.locator('#c-first-name').fill('Sophie');
+    await page.locator('#c-last-name').fill('Bauer');
+    await page.locator('#c-birth-date').fill('10.02.2020');
+    await page.locator('form').getByRole('button', { name: 'Kind hinzufügen' }).click();
+
+    // Switch to Kinder(MGA) tab to manage group changes
+    await page.getByRole('button', { name: 'Kinder(MGA)', exact: true }).click();
+
     // Find Lukas's row and open group change editor
     const lukasRow = page.locator('tr', { hasText: 'Lukas' });
     await expect(lukasRow).toBeVisible();
-    await lukasRow.locator('button[title="Gruppenwechsel verwalten"]').click();
+    await lukasRow.locator('button[title="Gruppenwechsel verwalten"]').first().click();
 
     // Add group change with date 01.09.2024
     const popover = page.locator('div[style*="position: fixed"]');
@@ -57,16 +68,9 @@ test.describe('Test Case 2: Inferred Default Start Date from Oldest Group Change
     // Close the popover by pressing Escape
     await page.keyboard.press('Escape');
 
-    // Add Child 2 (Sophie) with an older date (15.03.2023)
-    await familyRow.locator('.family-add-button').click();
-    await page.locator('#c-first-name').fill('Sophie');
-    await page.locator('#c-last-name').fill('Bauer');
-    await page.locator('#c-birth-date').fill('10.02.2020');
-    await page.locator('form').getByRole('button', { name: 'Kind hinzufügen' }).click();
-
     const sophieRow = page.locator('tr', { hasText: 'Sophie' });
     await expect(sophieRow).toBeVisible();
-    await sophieRow.locator('button[title="Gruppenwechsel verwalten"]').click();
+    await sophieRow.locator('button[title="Gruppenwechsel verwalten"]').first().click();
 
     const sophieDateInput = popover.locator('input[type="text"]').first();
     await expect(sophieDateInput).toBeVisible();

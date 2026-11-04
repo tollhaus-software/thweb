@@ -25,7 +25,7 @@ test.describe('Test Case 4: Childcare Fees Tooltips & Translations', () => {
     await page.locator('form').getByRole('button', { name: 'Familie hinzufügen' }).click();
 
     // Verify family row is rendered
-    const familyRow1 = page.locator('tr.family-group-row', { hasText: 'Muster' });
+    const familyRow1 = page.locator('.families-table tbody tr', { hasText: 'Muster' });
     await expect(familyRow1).toBeVisible();
 
     // Step 2: Add a second Family with a child that is enrolled in Gruppe 1
@@ -34,20 +34,22 @@ test.describe('Test Case 4: Childcare Fees Tooltips & Translations', () => {
     await page.locator('#f-p1-last').fill('Bauer');
     await page.locator('form').getByRole('button', { name: 'Familie hinzufügen' }).click();
 
-    const familyRow2 = page.locator('tr.family-group-row', { hasText: 'Bauer' });
+    const familyRow2 = page.locator('.families-table tbody tr', { hasText: 'Bauer' });
     await expect(familyRow2).toBeVisible();
 
     // Add Child (Lukas) to Bauer family
-    await familyRow2.locator('.family-add-button').click();
+    const childrenCell = familyRow2.locator('td[data-column-id="children"]');
+    await childrenCell.locator('button.family-add-button').click();
     await page.locator('#c-first-name').fill('Lukas');
     await page.locator('#c-last-name').fill('Bauer');
     await page.locator('#c-birth-date').fill('01.05.2021');
     await page.locator('form').getByRole('button', { name: 'Kind hinzufügen' }).click();
 
     // Set group change for Lukas to Gruppe 1 as of 01.01.2025
+    await page.getByRole('button', { name: 'Kinder(MGA)', exact: true }).click();
     const lukasRow = page.locator('tr', { hasText: 'Lukas' });
     await expect(lukasRow).toBeVisible();
-    await lukasRow.locator('button[title="Gruppenwechsel verwalten"]').click();
+    await lukasRow.locator('button[title="Gruppenwechsel verwalten"]').first().click();
 
     const popover = page.locator('div[style*="position: fixed"]');
     const lukasDateInput = popover.locator('input[type="text"]').first();
