@@ -210,6 +210,36 @@ test.describe('Test Case 24: Families Overview Date-based Filtering', () => {
     await expect(page.locator('.data-table.overview-table tr.overview-child-row', { hasText: 'KindAktiv' })).toBeVisible();
     await expect(page.locator('.data-table.overview-table tr.overview-child-row', { hasText: 'KindOhneGruppe' })).toHaveCount(0);
 
+    // Test "Nach Gruppe" grouping mode with upcoming planned child vs active child
+    await page.setViewportSize({ width: 500, height: 800 });
+    const groupByGroupBtn = page.getByRole('button', { name: 'Nach Gruppe' });
+    await expect(groupByGroupBtn).toBeVisible();
+    await groupByGroupBtn.click();
+
+    // Group 1 header "Kleine Gruppe" should be visible
+    const grp1Header = page.locator('tr.family-group-row', { hasText: 'Kleine Gruppe' });
+    await expect(grp1Header).toBeVisible();
+
+    // In "by group" display:
+    // ChildAktiv (active in Group 1) is shown in Gruppe 1 section and HAS the group badge
+    const childAktivRow = page.locator('tr.overview-child-row', { hasText: 'ChildAktiv' });
+    await expect(childAktivRow).toBeVisible();
+    const aktivBadge = childAktivRow.locator('.overview-child-group-badge');
+    await expect(aktivBadge).toBeVisible();
+    await expect(aktivBadge).toHaveText('Kleine Gr.');
+
+    // ChildBald (planned start soon in Group 1, not in group yet) is also in Gruppe 1 section, but WITHOUT group badge
+    const childBaldRow = page.locator('tr.overview-child-row', { hasText: 'ChildBald' });
+    await expect(childBaldRow).toBeVisible();
+    await expect(childBaldRow.locator('.overview-child-group-badge')).toHaveCount(0);
+
+    // Reset viewport and switch back to desktop for step 3
+    await page.setViewportSize({ width: 1280, height: 720 });
+    const familyGroupingBtnBack = page.getByRole('button', { name: 'Nach Familie' });
+    if (await familyGroupingBtnBack.isVisible()) {
+      await familyGroupingBtnBack.click();
+    }
+
     // 3. Switch to Familien(MGA) management tab
     const mgaTab = page.getByRole('button', { name: 'MGA', exact: true });
     if (await mgaTab.isVisible()) {

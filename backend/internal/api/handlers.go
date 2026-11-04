@@ -384,42 +384,64 @@ type OverviewChild struct {
 	FirstNameForAddressList string                    `json:"first_name_for_address_list,omitempty"`
 	LastName                string                    `json:"last_name"`
 	CurrentGroup            *int                      `json:"current_group,omitempty"`
+	PlannedGroup            *int                      `json:"planned_group,omitempty"`
 	IsFormer                bool                      `json:"is_former,omitempty"`
 	GroupChanges            []models.ChildGroupChange `json:"group_changes,omitempty"`
 }
 
-func computeChildOverviewGroupStatus(changes []models.ChildGroupChange, now time.Time) (*int, bool) {
-	if len(changes) == 0 {
-		return nil, false
+func computeChildOverviewGroupStatus(rawChanges []models.ChildGroupChange, now time.Time) (*int, *int, bool) {
+	if len(rawChanges) == 0 {
+		return nil, nil, false
 	}
-	todayStr := now.Format("2006-01-02")
-	var firstEnroll *models.ChildGroupChange
-	for i := range changes {
-		if changes[i].TargetGroup > 0 {
-			firstEnroll = &changes[i]
-			break
+	changes := make([]models.ChildGroupChange, len(rawChanges))
+	copy(changes, rawChanges)
+	sort.SliceStable(changes, func(i, j int) bool {
+		if changes[i].ChangeDate.Equal(changes[j].ChangeDate) {
+			return changes[i].ID.String() < changes[j].ID.String()
 		}
-	}
-	if firstEnroll != nil && firstEnroll.ChangeDate.Format("2006-01-02") > todayStr {
-		return nil, false
-	}
+		return changes[i].ChangeDate.Before(changes[j].ChangeDate)
+	})
 
+	todayStr := now.Format("2006-01-02")
 	var effective []models.ChildGroupChange
+	var future []models.ChildGroupChange
 	for _, c := range changes {
 		if c.ChangeDate.Format("2006-01-02") <= todayStr {
 			effective = append(effective, c)
+		} else {
+			future = append(future, c)
 		}
 	}
+
+	var plannedGroup *int
+	for _, fc := range future {
+		if fc.TargetGroup > 0 {
+			pGrp := fc.TargetGroup
+			plannedGroup = &pGrp
+			break
+		}
+	}
+
 	if len(effective) == 0 {
-		return nil, false
+		return nil, plannedGroup, false
 	}
 
 	latest := effective[len(effective)-1]
 	if latest.TargetGroup == 0 {
-		return nil, true
+		hasPriorEnroll := false
+		for _, ech := range effective {
+			if ech.TargetGroup > 0 {
+				hasPriorEnroll = true
+				break
+			}
+		}
+		if hasPriorEnroll && plannedGroup == nil {
+			return nil, nil, true
+		}
+		return nil, plannedGroup, false
 	}
 	grp := latest.TargetGroup
-	return &grp, false
+	return &grp, plannedGroup, false
 }
 
 type OverviewParent struct {
@@ -608,7 +630,7 @@ func (s *Server) HandleListFamiliesOverview(w http.ResponseWriter, r *http.Reque
 			if !shouldIncludeChildInOverview(c, now) {
 				continue
 			}
-			currGrp, isFormer := computeChildOverviewGroupStatus(c.GroupChanges, now)
+			currGrp, plannedGrp, isFormer := computeChildOverviewGroupStatus(c.GroupChanges, now)
 			displayFirstName := c.FirstName
 			if strings.TrimSpace(c.FirstNameForAddressList) != "" {
 				displayFirstName = c.FirstNameForAddressList
@@ -619,6 +641,7 @@ func (s *Server) HandleListFamiliesOverview(w http.ResponseWriter, r *http.Reque
 				FirstNameForAddressList: c.FirstNameForAddressList,
 				LastName:                c.LastName,
 				CurrentGroup:            currGrp,
+				PlannedGroup:            plannedGrp,
 				IsFormer:                isFormer,
 			}
 			if canViewGroupChanges {
@@ -2289,7 +2312,7 @@ func (s *Server) HandleGetAllergiesSummary(w http.ResponseWriter, r *http.Reques
 				if len(c.AllergiesProtected) == 0 {
 					continue
 				}
-				currGrp, isFormer := computeChildOverviewGroupStatus(c.GroupChanges, targetDate)
+				currGrp, _, isFormer := computeChildOverviewGroupStatus(c.GroupChanges, targetDate)
 				if isFormer || currGrp == nil || *currGrp < 1 || *currGrp > 3 {
 					continue
 				}

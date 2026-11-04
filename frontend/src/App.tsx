@@ -361,6 +361,7 @@ interface ChildGroupCellProps {
   onOpenManage: (child: Child, anchor: HTMLElement | string) => void;
   readOnly?: boolean;
   compact?: boolean;
+  emptyText?: string;
 }
 
 const ChildGroupCell: React.FC<ChildGroupCellProps> = ({
@@ -369,10 +370,12 @@ const ChildGroupCell: React.FC<ChildGroupCellProps> = ({
   onOpenManage,
   readOnly = false,
   compact = false,
+  emptyText,
 }) => {
   const groupInfo = getChildGroupInfo(child.group_changes);
-  const cellId = `cell-group-${child.id}`;
+  const cellId = compact ? `cell-group-summary-${child.id}` : `cell-group-${child.id}`;
   const hasChanges = Boolean(child.group_changes && child.group_changes.length > 0);
+  const fallbackEmpty = emptyText || '-';
 
   if (readOnly && !hasChanges) {
     return (
@@ -387,7 +390,7 @@ const ChildGroupCell: React.FC<ChildGroupCellProps> = ({
           fontSize: compact ? '0.8rem' : 'inherit',
         }}
       >
-        <span>-</span>
+        <span>{fallbackEmpty}</span>
       </div>
     );
   }
@@ -429,11 +432,13 @@ const ChildGroupCell: React.FC<ChildGroupCellProps> = ({
           flex: 1,
           minWidth: 0,
           fontWeight: 'normal',
-          color: groupInfo.isExited ? 'var(--text-muted)' : 'inherit',
+          color: groupInfo.isExited || !hasChanges ? 'var(--text-muted)' : 'inherit',
         }}
       >
         <span className="child-group-compact-view">
-          {groupInfo.groupName && groupInfo.sinceText ? (
+          {!hasChanges ? (
+            fallbackEmpty
+          ) : groupInfo.groupName && groupInfo.sinceText ? (
             `${groupInfo.groupName} (${groupInfo.sinceText})${groupInfo.nextChangeText ? ` ${groupInfo.nextChangeText}` : ''}`
           ) : groupInfo.isFuture && groupInfo.groupName && groupInfo.futureDateText ? (
             `${groupInfo.groupName} (${groupInfo.futureDateText})`
@@ -442,7 +447,9 @@ const ChildGroupCell: React.FC<ChildGroupCellProps> = ({
           )}
         </span>
         <span className="child-group-full-view" style={{ display: 'inline-flex', alignItems: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {groupInfo.isFuture && groupInfo.groupName ? (
+          {!hasChanges ? (
+            <span>{fallbackEmpty}</span>
+          ) : groupInfo.isFuture && groupInfo.groupName ? (
             <span style={{ display: 'inline-flex', alignItems: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               <span
                 style={{
@@ -525,6 +532,7 @@ const ChildGroupCell: React.FC<ChildGroupCellProps> = ({
             onOpenManage(child, cellEl);
           }}
           title={t('manageGroupChanges')}
+          aria-label={t('manageGroupChanges')}
         >
           <Pencil size={compact ? 11 : 13} />
         </button>
@@ -668,16 +676,36 @@ interface OverviewChild {
   first_name_for_address_list?: string;
   last_name: string;
   current_group?: number | null;
+  planned_group?: number | null;
   is_former?: boolean;
   group_changes?: ChildGroupChange[];
 }
 
 const getOverviewChildGroupStatus = (
   child: OverviewChild
-): { currentGroup: number | null; isFormer: boolean; groupLabel: string } => {
+): { currentGroup: number | null; plannedGroup: number | null; isFormer: boolean; groupLabel: string } => {
+  let plannedGroup: number | null =
+    typeof child.planned_group === 'number' && child.planned_group > 0
+      ? child.planned_group
+      : null;
+
+  if (!plannedGroup && child.group_changes && child.group_changes.length > 0) {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const sortedChanges = [...child.group_changes].sort((a, b) =>
+      a.change_date.localeCompare(b.change_date)
+    );
+    const futureEnroll = sortedChanges.find(
+      (ch) => ch.change_date > todayStr && ch.target_group > 0
+    );
+    if (futureEnroll) {
+      plannedGroup = futureEnroll.target_group;
+    }
+  }
+
   if (typeof child.current_group === 'number' && child.current_group > 0) {
     return {
       currentGroup: child.current_group,
+      plannedGroup,
       isFormer: false,
       groupLabel: getGroupShortLabel(child.current_group),
     };
@@ -685,6 +713,7 @@ const getOverviewChildGroupStatus = (
   if (child.is_former) {
     return {
       currentGroup: null,
+      plannedGroup,
       isFormer: true,
       groupLabel: '-',
     };
@@ -697,12 +726,14 @@ const getOverviewChildGroupStatus = (
         : null;
     return {
       currentGroup: activeGrp,
+      plannedGroup,
       isFormer: info.isExited,
       groupLabel: activeGrp ? info.groupName || getGroupShortLabel(activeGrp) : '-',
     };
   }
   return {
     currentGroup: null,
+    plannedGroup,
     isFormer: false,
     groupLabel: '-',
   };
@@ -2541,14 +2572,6 @@ const Dashboard: React.FC = () => {
   const [activePersonForJobs, setActivePersonForJobs] = React.useState<PersonWithJobs | null>(null);
   const [overviewFamilies, setOverviewFamilies] = React.useState<OverviewFamily[]>([]);
   const [overviewGroupBy, setOverviewGroupBy] = React.useState<'family' | 'group'>('group');
-  const [expandedGroupParents, setExpandedGroupParents] = React.useState<Record<string, boolean>>({});
-
-  const handleToggleGroupParents = React.useCallback((key: string) => {
-    setExpandedGroupParents((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
-  }, []);
 
   const [familySortOrder, setFamilySortOrder] = React.useState<FamilySortOrder>(() => {
     try {
@@ -5545,41 +5568,6 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
     return sorted.filter((f) => f.matchesQuery);
   }, [families, globalFilter, familySortOrder]);
 
-function formatParentsSummary(parents: any[]): string {
-  if (!parents || parents.length === 0) return '';
-  const validParents = parents.filter((p) => p && ((p.first_name_for_address_list || p.first_name) || p.last_name));
-  if (validParents.length === 0) return '';
-  if (validParents.length === 1) {
-    const fn = ((validParents[0].first_name_for_address_list || validParents[0].first_name) || '').trim();
-    return `${fn} ${validParents[0].last_name || ''}`.trim() || 'Elternteil';
-  }
-  if (validParents.length === 2) {
-    const p1 = validParents[0];
-    const p2 = validParents[1];
-    const fn1 = ((p1.first_name_for_address_list || p1.first_name) || '').trim();
-    const ln1 = (p1.last_name || '').trim();
-    const fn2 = ((p2.first_name_for_address_list || p2.first_name) || '').trim();
-    const ln2 = (p2.last_name || '').trim();
-
-    if (ln1 && ln2 && ln1.toLowerCase() === ln2.toLowerCase()) {
-      if (fn1 && fn2) {
-        return `${fn1} & ${fn2} ${ln1}`;
-      }
-      return `${fn1 || fn2} ${ln1}`.trim();
-    }
-
-    const full1 = `${fn1} ${ln1}`.trim();
-    const full2 = `${fn2} ${ln2}`.trim();
-    if (full1 && full2) {
-      return `${full1} & ${full2}`;
-    }
-  }
-  return validParents
-    .map((p) => `${((p.first_name_for_address_list || p.first_name) || '').trim()} ${p.last_name || ''}`.trim())
-    .filter(Boolean)
-    .join(' & ');
-}
-
   const overviewFamiliesTabData = React.useMemo(() => {
     const query = (globalFilter || '').trim().toLowerCase();
 
@@ -5588,37 +5576,37 @@ function formatParentsSummary(parents: any[]): string {
         id: string;
         key: string;
         label: string;
-        matchesChild: (status: { currentGroup: number | null; isFormer: boolean }) => boolean;
+        matchesChild: (status: { currentGroup: number | null; plannedGroup: number | null; isFormer: boolean }) => boolean;
       }[] = [
         {
           id: 'overview-group-1',
           key: 'group1',
           label: t('overviewGroup1'),
-          matchesChild: (s) => s.currentGroup === 1,
+          matchesChild: (s) => s.currentGroup === 1 || (s.currentGroup === null && s.plannedGroup === 1),
         },
         {
           id: 'overview-group-2',
           key: 'group2',
           label: t('overviewGroup2'),
-          matchesChild: (s) => s.currentGroup === 2,
+          matchesChild: (s) => s.currentGroup === 2 || (s.currentGroup === null && s.plannedGroup === 2),
         },
         {
           id: 'overview-group-3',
           key: 'group3',
           label: t('overviewGroup3'),
-          matchesChild: (s) => s.currentGroup === 3,
+          matchesChild: (s) => s.currentGroup === 3 || (s.currentGroup === null && s.plannedGroup === 3),
         },
         {
           id: 'overview-group-none',
           key: 'none',
           label: t('overviewGroupNone'),
-          matchesChild: (s) => s.currentGroup === null && !s.isFormer,
+          matchesChild: (s) => s.currentGroup === null && !s.plannedGroup && !s.isFormer,
         },
         {
           id: 'overview-group-former',
           key: 'former',
           label: t('overviewGroupFormer'),
-          matchesChild: (s) => s.currentGroup === null && s.isFormer,
+          matchesChild: (s) => s.currentGroup === null && !s.plannedGroup && s.isFormer,
         },
       ];
 
@@ -5698,12 +5686,6 @@ function formatParentsSummary(parents: any[]): string {
             });
 
           const groupFamilyKey = `${bucket.key}-${f.id}`;
-          const isExplicitlyExpanded = expandedGroupParents[groupFamilyKey];
-          const parentNamesMatch = query ? parentNames.toLowerCase().includes(query) : false;
-          const autoExpandSearch = query ? Boolean(parentNamesMatch || parentContactMatch) : false;
-          const isExpanded =
-            childrenToInclude.length === 0 ||
-            (isExplicitlyExpanded !== undefined ? isExplicitlyExpanded : autoExpandSearch);
 
           const mappedParents = sortedParents.map((p) => ({
             ...p,
@@ -5715,26 +5697,13 @@ function formatParentsSummary(parents: any[]): string {
             family_id: f.id,
             family_name: familyName,
             isGroupModeParent: true,
-            isExpanded,
             groupFamilyKey,
           }));
-
-          const toggleRow = childrenToInclude.length > 0 && sortedParents.length > 0 ? {
-            id: `toggle-${groupFamilyKey}`,
-            _rowType: 'parents-toggle' as const,
-            groupFamilyKey,
-            family_id: f.id,
-            summaryText: formatParentsSummary(sortedParents),
-            isExpanded,
-            onToggle: () => handleToggleGroupParents(groupFamilyKey),
-          } : null;
 
           familyBlocks.push({
             familyId: f.id,
             familyName,
-            rows: toggleRow
-              ? [...childrenToInclude, toggleRow, ...mappedParents]
-              : [...childrenToInclude, ...mappedParents],
+            rows: [...childrenToInclude, ...mappedParents],
           });
         });
 
@@ -5838,7 +5807,7 @@ function formatParentsSummary(parents: any[]): string {
 
     if (!query) return mapped;
     return mapped.filter((f) => f.nameMatch || f.hasMatchingChildren);
-  }, [overviewFamilies, globalFilter, overviewGroupBy, expandedGroupParents, handleToggleGroupParents]);
+  }, [overviewFamilies, globalFilter, overviewGroupBy]);
 
   const hygieneColumns = React.useMemo<ColumnDef<any>[]>(() => {
     return [
@@ -6742,14 +6711,15 @@ function formatParentsSummary(parents: any[]): string {
                       )}
                     </div>
 
-                    {/* Read-only Group Summary vertically close to child name */}
-                    <div style={{ display: 'flex', alignItems: 'center', minHeight: '20px' }}>
+                    {/* Group Summary vertically close to child name with edit support */}
+                    <div style={{ display: 'flex', alignItems: 'center', minHeight: '20px', width: '100%' }}>
                       <ChildGroupCell
                         child={c}
-                        isActive={false}
+                        isActive={Boolean(groupPopoverAnchor && targetChildGroupChanges?.id === c.id)}
                         onOpenManage={openManageGroupChanges}
-                        readOnly={true}
+                        readOnly={!canWriteChildren}
                         compact
+                        emptyText="(nicht im Tollhaus)"
                       />
                     </div>
                   </div>
@@ -6878,6 +6848,8 @@ function formatParentsSummary(parents: any[]): string {
       openManageMentor,
       openFamilyNotes,
       openManageGroupChanges,
+      groupPopoverAnchor,
+      targetChildGroupChanges,
       mentorPopoverAnchor,
       activeFamilyForMentor,
       families,
@@ -6900,9 +6872,17 @@ function formatParentsSummary(parents: any[]): string {
             const displayName = item.hide_last_name
               ? effectiveFn || '-'
               : `${effectiveFn} ${item.last_name || ''}`.trim() || '-';
+            const groupStatus = getOverviewChildGroupStatus(item);
+            const displayGroup = groupStatus.groupLabel;
+            const hasGroupBadge = isMobile && groupStatus.currentGroup !== null && displayGroup && displayGroup !== '-';
             return (
               <span className="overview-person-name" style={isIndented ? { paddingLeft: '1.25rem', display: 'inline-block' } : undefined}>
                 {displayName}
+                {hasGroupBadge && (
+                  <span className="overview-child-group-badge">
+                    {displayGroup}
+                  </span>
+                )}
                 {canReadFamiliesAll && (
                   <button
                     type="button"
@@ -6949,32 +6929,49 @@ function formatParentsSummary(parents: any[]): string {
         minSize: 180,
         meta: {
           getColSpan: (row: any) => (row._rowType === 'child' ? 4 : 1),
+          skipCell: (row: any, isMobileParam?: boolean) => {
+            const mobile = isMobileParam ?? isMobile;
+            if (row._rowType === 'child') {
+              return mobile;
+            }
+            if (row._rowType === 'parent') {
+              if (mobile) {
+                const validPhones = (row.phones || []).filter(
+                  (ph: any) => isFlagActive(ph, 'address_list', true) && getEntryValue(ph).trim().length > 0
+                );
+                return validPhones.length === 0;
+              }
+            }
+            return false;
+          },
         },
         cell: (info) => {
           const item = info.row.original;
           if (item._rowType === 'parent') {
-            const phones = (item.phones || [])
-              .filter((ph: any) => isFlagActive(ph, 'address_list', true));
+            const phones = (item.phones || []).filter(
+              (ph: any) => isFlagActive(ph, 'address_list', true) && getEntryValue(ph).trim().length > 0
+            );
+            if (phones.length === 0) {
+              return isMobile ? null : <span style={{ color: 'var(--text-muted)' }}>-</span>;
+            }
             return (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
-                {phones.length === 0 ? (
-                  <span style={{ color: 'var(--text-muted)' }}>-</span>
-                ) : (
-                  <span style={{ whiteSpace: 'pre-line', minWidth: 0 }}>
-                    {phones.map((phoneEntry: any, idx: number) => {
-                      const phoneVal = getEntryValue(phoneEntry).trim();
-                      const phoneType = (typeof phoneEntry === 'object' && phoneEntry !== null && phoneEntry.type) ? phoneEntry.type : 'mobile';
-                      const symbol = getPhoneTypeSymbol(phoneType);
-                      return (
-                        <React.Fragment key={idx}>
-                          {idx > 0 && '\n'}
-                          <span
-                            className="phone-type-symbol"
-                            title={getPhoneTypeLabel(phoneType)}
-                            style={{ marginRight: '4px', userSelect: 'none' }}
-                          >
-                            {symbol}
-                          </span>
+              <div className="overview-parent-entries">
+                {phones.map((phoneEntry: any, idx: number) => {
+                  const phoneVal = getEntryValue(phoneEntry).trim();
+                  const phoneType = (typeof phoneEntry === 'object' && phoneEntry !== null && phoneEntry.type) ? phoneEntry.type : 'mobile';
+                  const symbol = getPhoneTypeSymbol(phoneType);
+                  return (
+                    <React.Fragment key={idx}>
+                      {idx > 0 && '\n'}
+                      <div className="overview-parent-entry">
+                        <span
+                          className="overview-entry-icon phone-type-symbol overview-contact-symbol"
+                          title={getPhoneTypeLabel(phoneType)}
+                          style={{ userSelect: 'none' }}
+                        >
+                          {symbol}
+                        </span>
+                        <div className="overview-entry-content">
                           <a
                             href={formatTelHref(phoneVal)}
                             className="overview-contact-link"
@@ -6982,20 +6979,20 @@ function formatParentsSummary(parents: any[]): string {
                           >
                             {phoneVal}
                           </a>
-                        </React.Fragment>
-                      );
-                    })}
-                  </span>
-                )}
+                        </div>
+                      </div>
+                    </React.Fragment>
+                  );
+                })}
               </div>
             );
           }
 
-          if (item.hide_group) {
+          const groupStatus = getOverviewChildGroupStatus(item);
+          if (item.hide_group || isMobile || groupStatus.currentGroup === null) {
             return null;
           }
 
-          const groupStatus = getOverviewChildGroupStatus(item);
           const displayGroup = groupStatus.groupLabel;
           return (
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.75rem' }}>
@@ -7012,7 +7009,18 @@ function formatParentsSummary(parents: any[]): string {
         size: 260,
         minSize: 200,
         meta: {
-          skipCell: (row: any) => row._rowType === 'child',
+          skipCell: (row: any, isMobileParam?: boolean) => {
+            if (row._rowType === 'child') return true;
+            const mobile = isMobileParam ?? isMobile;
+            if (mobile && row._rowType === 'parent') {
+              const emails = (row.emails || [])
+                .filter((e: any) => isFlagActive(e, 'address_list', true))
+                .map((e: any) => getEntryValue(e).trim())
+                .filter(Boolean);
+              return emails.length === 0;
+            }
+            return false;
+          },
         },
         cell: (info) => {
           const item = info.row.original;
@@ -7021,38 +7029,38 @@ function formatParentsSummary(parents: any[]): string {
             .filter((e: any) => isFlagActive(e, 'address_list', true))
             .map((e: any) => getEntryValue(e).trim())
             .filter(Boolean);
+          if (emails.length === 0) {
+            return isMobile ? null : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+                <span className="overview-contact-symbol" style={{ width: '1.25rem', flexShrink: 0, userSelect: 'none' }}>@</span>
+                <span style={{ color: 'var(--text-muted)' }}>-</span>
+              </div>
+            );
+          }
           return (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+            <div className="overview-parent-entry">
               <span
-                className="overview-contact-symbol"
+                className="overview-entry-icon overview-contact-symbol"
                 style={{
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '1.25rem',
-                  flexShrink: 0,
                   userSelect: 'none',
                 }}
               >
                 @
               </span>
-              {emails.length === 0 ? (
-                <span style={{ color: 'var(--text-muted)' }}>-</span>
-              ) : (
-                <span style={{ whiteSpace: 'pre-line', minWidth: 0 }}>
-                  {emails.map((email: string, idx: number) => (
-                    <React.Fragment key={idx}>
-                      {idx > 0 && '\n'}
-                      <a
-                        href={`mailto:${email}`}
-                        className="overview-contact-link"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {email}
-                      </a>
-                    </React.Fragment>
-                  ))}
-                </span>
-              )}
+              <div className="overview-entry-content" style={{ whiteSpace: 'pre-line' }}>
+                {emails.map((email: string, idx: number) => (
+                  <React.Fragment key={idx}>
+                    {idx > 0 && '\n'}
+                    <a
+                      href={`mailto:${email}`}
+                      className="overview-contact-link"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {email}
+                    </a>
+                  </React.Fragment>
+                ))}
+              </div>
             </div>
           );
         },
@@ -7063,34 +7071,42 @@ function formatParentsSummary(parents: any[]): string {
         size: 260,
         minSize: 200,
         meta: {
-          skipCell: (row: any) => row._rowType === 'child',
+          skipCell: (row: any, isMobileParam?: boolean) => {
+            if (row._rowType === 'child') return true;
+            const mobile = isMobileParam ?? isMobile;
+            if (mobile && row._rowType === 'parent') {
+              return !(row.address || '').trim();
+            }
+            return false;
+          },
         },
         cell: (info) => {
           const item = info.row.original;
           if (item._rowType !== 'parent') return null;
           const address = (item.address || '').trim();
+          if (!address) {
+            return isMobile ? null : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span className="overview-contact-symbol" style={{ width: '1.25rem', flexShrink: 0, userSelect: 'none' }}>🏠</span>
+                <span style={{ color: 'var(--text-muted)' }}>-</span>
+              </div>
+            );
+          }
           return (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div className="overview-parent-entry">
               <span
-                className="overview-contact-symbol"
+                className="overview-entry-icon overview-contact-symbol"
                 style={{
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '1.25rem',
-                  flexShrink: 0,
                   userSelect: 'none',
                 }}
               >
                 🏠
               </span>
-              <span
-                style={{
-                  whiteSpace: 'pre-line',
-                  color: !address ? 'var(--text-muted)' : 'var(--text)',
-                }}
-              >
-                {address || '-'}
-              </span>
+              <div className="overview-entry-content">
+                <span className="overview-entry-text" style={{ whiteSpace: 'pre-line' }}>
+                  {address}
+                </span>
+              </div>
             </div>
           );
         },
@@ -7101,39 +7117,52 @@ function formatParentsSummary(parents: any[]): string {
         size: 260,
         minSize: 200,
         meta: {
-          skipCell: (row: any) => row._rowType === 'child',
+          skipCell: (row: any, isMobileParam?: boolean) => {
+            if (row._rowType === 'child') return true;
+            const mobile = isMobileParam ?? isMobile;
+            if (mobile && row._rowType === 'parent') {
+              const jobs = (row.jobs || []).filter((j: any) => (j.name || '').trim().length > 0);
+              return jobs.length === 0;
+            }
+            return false;
+          },
         },
         cell: (info) => {
           const item = info.row.original;
           if (item._rowType !== 'parent') return null;
-          const parentJobs: JobItem[] = item.jobs || [];
-          return (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
-              {parentJobs.length === 0 ? (
+          const parentJobs: JobItem[] = (item.jobs || []).filter((j: any) => (j.name || '').trim().length > 0);
+          if (parentJobs.length === 0) {
+            return isMobile ? null : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
                 <span style={{ color: 'var(--text-muted)' }}>-</span>
-              ) : (
-                <span style={{ whiteSpace: 'pre-line', minWidth: 0 }}>
-                  {parentJobs.map((j: JobItem, idx: number) => (
-                    <React.Fragment key={j.id || idx}>
-                      {idx > 0 && '\n'}
-                      <span
-                        className="job-type-symbol"
-                        title={j.description || j.name}
-                        style={{ marginRight: '4px', userSelect: 'none' }}
-                      >
-                        🔨
-                      </span>
-                      <span title={j.description || j.name}>{j.name}</span>
-                    </React.Fragment>
-                  ))}
-                </span>
-              )}
+              </div>
+            );
+          }
+          return (
+            <div className="overview-parent-entries">
+              {parentJobs.map((j: JobItem, idx: number) => (
+                <React.Fragment key={j.id || idx}>
+                  {idx > 0 && '\n'}
+                  <div className="overview-parent-entry">
+                    <span
+                      className="overview-entry-icon job-type-symbol overview-contact-symbol"
+                      title={j.description || j.name}
+                      style={{ userSelect: 'none' }}
+                    >
+                      🔨
+                    </span>
+                    <div className="overview-entry-content">
+                      <span className="overview-entry-text" title={j.description || j.name}>{j.name}</span>
+                    </div>
+                  </div>
+                </React.Fragment>
+              ))}
             </div>
           );
         },
       },
     ],
-    [canReadFamiliesAll, handleJumpToChild, handleJumpToParent]
+    [canReadFamiliesAll, handleJumpToChild, handleJumpToParent, isMobile]
   );
 
   const memberColumns = React.useMemo<ColumnDef<MemberRow>[]>(

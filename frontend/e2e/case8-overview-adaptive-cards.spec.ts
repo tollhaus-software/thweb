@@ -207,12 +207,78 @@ test.describe('Test Case 8: Adaptive Card Layout for familiesOverview Tab', () =
     await expect(mobileHomeSymbol).toBeVisible();
     await expect(mobileHomeSymbol).toHaveText('🏠');
 
+    // Verify all icons for a parent are aligned under each other
+    const phoneIconBox = await hansRow.locator('.phone-type-symbol').boundingBox();
+    const emailIconBox = await hansRow.locator('.overview-contact-symbol').filter({ hasText: '@' }).boundingBox();
+    const homeIconBox = await hansRow.locator('.overview-contact-symbol').filter({ hasText: '🏠' }).boundingBox();
+    expect(phoneIconBox).not.toBeNull();
+    expect(emailIconBox).not.toBeNull();
+    expect(homeIconBox).not.toBeNull();
+    if (phoneIconBox && emailIconBox && homeIconBox) {
+      expect(Math.abs(phoneIconBox.x - emailIconBox.x)).toBeLessThan(2);
+      expect(Math.abs(emailIconBox.x - homeIconBox.x)).toBeLessThan(2);
+      expect(phoneIconBox.width).toBe(emailIconBox.width);
+      expect(emailIconBox.width).toBe(homeIconBox.width);
+    }
+
+    // Verify all data fields after the icon are aligned under each other
+    const phoneTextBox = await hansPhoneLink.boundingBox();
+    const emailTextBox = await hansEmailLink.boundingBox();
+    const homeTextBox = await hansRow.locator('td').nth(3).locator('.overview-entry-content').boundingBox();
+    expect(phoneTextBox).not.toBeNull();
+    expect(emailTextBox).not.toBeNull();
+    expect(homeTextBox).not.toBeNull();
+    if (phoneTextBox && emailTextBox && homeTextBox) {
+      expect(Math.abs(phoneTextBox.x - emailTextBox.x)).toBeLessThan(2);
+      expect(Math.abs(emailTextBox.x - homeTextBox.x)).toBeLessThan(2);
+    }
+
+    // Verify Hans has no job assigned: job line must be omitted (only 4 lines for Hans)
+    await expect(hansRow.locator('.job-type-symbol')).toHaveCount(0);
+    await expect(hansRow.locator('td')).toHaveCount(4);
+
+    // Verify MGA link in parent row is right-aligned in its row
+    const hansCardBox = await hansRow.boundingBox();
+    const hansMgaLink = hansRow.locator('.family-parent-link.overview-mga-link');
+    await expect(hansMgaLink).toBeVisible();
+    const hansMgaBox = await hansMgaLink.boundingBox();
+    expect(hansCardBox).not.toBeNull();
+    expect(hansMgaBox).not.toBeNull();
+    if (hansCardBox && hansMgaBox) {
+      expect(hansMgaBox.x + hansMgaBox.width).toBeGreaterThan(hansCardBox.x + hansCardBox.width - 40);
+    }
+
     // Verify child row is rendered as a compact card with group badge
     const miaRow = page.locator('tr.overview-child-row', { hasText: 'Mia' });
     await expect(miaRow).toBeVisible();
     const miaDisplay = await miaRow.evaluate((el) => getComputedStyle(el).display);
     expect(miaDisplay).toBe('flex');
-    await expect(miaRow.locator('.overview-child-group-badge')).toContainText('Kleine Gr.');
+
+    // Group badge for children in the "by family view" should be smaller and right next to child
+    const groupBadge = miaRow.locator('.overview-child-group-badge');
+    await expect(groupBadge).toBeVisible();
+    await expect(groupBadge).toContainText('Kleine Gr.');
+    const miaRowBox = await miaRow.boundingBox();
+    const groupBadgeBox = await groupBadge.boundingBox();
+    expect(miaRowBox).not.toBeNull();
+    expect(groupBadgeBox).not.toBeNull();
+    if (miaRowBox && groupBadgeBox) {
+      // Badge is positioned near the left, immediately after child name
+      expect(groupBadgeBox.x).toBeGreaterThan(miaRowBox.x);
+      expect(groupBadgeBox.x).toBeLessThan(miaRowBox.x + 80);
+    }
+    const badgeFontSize = await groupBadge.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    expect(badgeFontSize).toBeLessThanOrEqual(13);
+
+    // Verify MGA link in child row is right-aligned in its row
+    const miaMgaLink = miaRow.locator('.family-child-link.overview-mga-link');
+    await expect(miaMgaLink).toBeVisible();
+    const miaMgaBox = await miaMgaLink.boundingBox();
+    expect(miaMgaBox).not.toBeNull();
+    if (miaRowBox && miaMgaBox && groupBadgeBox) {
+      expect(miaMgaBox.x + miaMgaBox.width).toBeGreaterThan(miaRowBox.x + miaRowBox.width - 40);
+      expect(miaMgaBox.x).toBeGreaterThan(groupBadgeBox.x + 200);
+    }
 
     // Verify one card per family with alternating backgrounds in per-family mode
     const familyCards = page.locator('.data-table.overview-table tbody.family-card');
@@ -294,72 +360,43 @@ test.describe('Test Case 8: Adaptive Card Layout for familiesOverview Tab', () =
     const miaGroupCard = page.locator('tr.overview-child-row', { hasText: 'Mia Schmidt' });
     await expect(miaGroupCard).toBeVisible();
 
-    // Verify no horizontal separator between child and parents
-    const parentsToggleRow = page.locator('tr.overview-parents-toggle-row').first();
-    const toggleRowBorderTop = await parentsToggleRow.evaluate((el) => getComputedStyle(el).borderTopStyle);
-    expect(['none', 'hidden']).toContain(toggleRowBorderTop);
+    // In "by group" display, the group badge is shown next to the child's name
+    const miaGroupBadge = miaGroupCard.locator('.overview-child-group-badge');
+    await expect(miaGroupBadge).toBeVisible();
+    await expect(miaGroupBadge).toHaveText('Kleine Gr.');
 
-    // Expandable toggle button shows summary "Hans & Laura Schmidt" without "Eltern" label and without a box around it
-    const parentsToggleBtn = page.locator('.overview-parents-toggle-btn').filter({ hasText: 'Hans & Laura Schmidt' });
-    await expect(parentsToggleBtn).toBeVisible();
-    await expect(parentsToggleBtn).toContainText('Hans & Laura Schmidt');
-    await expect(parentsToggleBtn.locator('.overview-parents-toggle-badge')).toHaveCount(0);
-    expect(await parentsToggleBtn.innerText()).not.toContain('Eltern');
+    const felixGroupCard = page.locator('tr.overview-child-row', { hasText: 'Felix Weber' });
+    await expect(felixGroupCard).toBeVisible();
+    const felixGroupBadge = felixGroupCard.locator('.overview-child-group-badge');
+    await expect(felixGroupBadge).toBeVisible();
+    await expect(felixGroupBadge).toHaveText('Kleine Gr.');
 
-    const toggleBorder = await parentsToggleBtn.evaluate((el) => getComputedStyle(el).borderStyle);
-    expect(['none', 'hidden']).toContain(toggleBorder);
+    // In "by group" view, all parents should be visible all the time with no expand/collapse toggle
+    await expect(page.locator('.overview-parents-toggle-row')).toHaveCount(0);
+    await expect(page.locator('.overview-parents-toggle-btn')).toHaveCount(0);
 
-    const toggleBtnBg = await parentsToggleBtn.evaluate((el) => getComputedStyle(el).backgroundColor);
-    expect(['rgba(0, 0, 0, 0)', 'transparent']).toContain(toggleBtnBg);
+    // Both parents in family Schmidt are visible directly inside groupCard0
+    const groupHansRow = groupCard0.locator('tr.overview-parent-row', { hasText: 'Hans Schmidt' });
+    const groupLauraRow = groupCard0.locator('tr.overview-parent-row', { hasText: 'Laura Schmidt' });
+    await expect(groupHansRow).toBeVisible();
+    await expect(groupLauraRow).toBeVisible();
 
-    // Verify background remains constant on hover and click
-    await parentsToggleBtn.hover();
-    const hoverBtnBg = await parentsToggleBtn.evaluate((el) => getComputedStyle(el).backgroundColor);
-    expect(hoverBtnBg).toBe(toggleBtnBg);
+    const groupHansDisplay = await groupHansRow.evaluate((el) => getComputedStyle(el).display);
+    const groupHansFlexDirection = await groupHansRow.evaluate((el) => getComputedStyle(el).flexDirection);
+    expect(groupHansDisplay).toBe('flex');
+    expect(groupHansFlexDirection).toBe('column');
 
-    const toggleRowHoverBg = await parentsToggleRow.evaluate((el) => getComputedStyle(el).backgroundColor);
-    expect(['rgba(0, 0, 0, 0)', 'transparent']).toContain(toggleRowHoverBg);
+    const groupHansBg = await groupHansRow.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(['rgba(0, 0, 0, 0)', 'transparent']).toContain(groupHansBg);
 
-    // While collapsed: parent cards in group mode are hidden
-    const collapsedHansRow = page.locator('tr.overview-group-parent-row', { hasText: 'Hans Schmidt' });
-    const collapsedLauraRow = page.locator('tr.overview-group-parent-row', { hasText: 'Laura Schmidt' });
-    await expect(collapsedHansRow).toBeHidden();
-    await expect(collapsedLauraRow).toBeHidden();
-
-    // Click to expand parents
-    await parentsToggleBtn.click();
-    await expect(collapsedHansRow).toBeVisible();
-    await expect(collapsedLauraRow).toBeVisible();
-
-    const afterClickBtnBg = await parentsToggleBtn.evaluate((el) => getComputedStyle(el).backgroundColor);
-    expect(afterClickBtnBg).toBe(toggleBtnBg);
-
-    // Expanded parent card has no box (no border-left) and no separate background
-    const expandedHansBorderLeft = await collapsedHansRow.evaluate((el) => getComputedStyle(el).borderLeftStyle);
-    expect(['none', 'hidden']).toContain(expandedHansBorderLeft);
-
-    const expandedHansBg = await collapsedHansRow.evaluate((el) => getComputedStyle(el).backgroundColor);
-    expect(['rgba(0, 0, 0, 0)', 'transparent']).toContain(expandedHansBg);
-
-    // Verify parent cards are visually indented to the right relative to child card
-    const miaBox = await miaGroupCard.boundingBox();
-    const expandedHansBox = await collapsedHansRow.boundingBox();
-    expect(miaBox).not.toBeNull();
-    expect(expandedHansBox).not.toBeNull();
-    if (miaBox && expandedHansBox) {
-      expect(expandedHansBox.x).toBeGreaterThan(miaBox.x);
-    }
-
-    // Click again to collapse parents
-    await parentsToggleBtn.click();
-    await expect(collapsedHansRow).toBeHidden();
-    await expect(collapsedLauraRow).toBeHidden();
+    // Parent in family Weber is also visible directly inside groupCard1
+    const groupThomasRow = groupCard1.locator('tr.overview-parent-row', { hasText: 'Thomas Weber' });
+    await expect(groupThomasRow).toBeVisible();
 
     // 5. Resize to desktop viewport (> 768px)
     await page.setViewportSize({ width: 1200, height: 800 });
 
-    // On desktop in "Nach Gruppe": toggle button is hidden, parent rows are visible as table rows
-    await expect(page.locator('.overview-parents-toggle-row').first()).toBeHidden();
+    // On desktop in "Nach Gruppe": parent rows are visible as table rows
     const desktopHansRow = page.locator('tr.overview-parent-row', { hasText: 'Hans Schmidt' });
     await expect(desktopHansRow).toBeVisible();
     const desktopHansDisplay = await desktopHansRow.evaluate((el) => getComputedStyle(el).display);

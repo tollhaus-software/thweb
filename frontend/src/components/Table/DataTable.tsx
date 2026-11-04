@@ -243,15 +243,12 @@ export function DataTable<TData>({
 
     const noSpecialBg = Boolean((row.original as any).no_special_bg);
     const isGroupModeParent = Boolean((row.original as any).isGroupModeParent);
-    const isParentExpanded = Boolean((row.original as any).isExpanded);
     const rowClasses = [
       rowId === highlightedRowId ? 'highlighted-row' : '',
       rowType === 'parent' ? 'overview-parent-row' : '',
       rowType === 'child' ? 'overview-child-row' : '',
       noSpecialBg ? 'no-special-bg' : '',
       isGroupModeParent ? 'overview-group-parent-row' : '',
-      isGroupModeParent && !isParentExpanded ? 'group-parent-collapsed' : '',
-      isGroupModeParent && isParentExpanded ? 'group-parent-expanded' : '',
     ]
       .filter(Boolean)
       .join(' ');
@@ -277,7 +274,7 @@ export function DataTable<TData>({
         })()}
         {row.getVisibleCells().map((cell: any) => {
           const meta = cell.column.columnDef.meta as any;
-          if (meta?.skipCell?.(row.original)) {
+          if (meta?.skipCell?.(row.original, isMobile)) {
             return null;
           }
           if (isMobile && cell.column.id === 'actions' && meta?.hideOnMobile) {

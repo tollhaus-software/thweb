@@ -106,8 +106,11 @@ test.describe('Test Case 34: 1-Row-Per-Family Table View and Universal Family No
     // Check birth date and group summary are displayed
     await expect(childrenCell).toContainText('15.02.2021');
     await expect(childrenCell).toContainText('Kleine Gr.');
-    // Check that child birth date and group status are NOT editable (no pencil buttons in childrenCell)
-    await expect(childrenCell.locator('.easy-edit-button, .cell-edit-pencil-btn')).toHaveCount(0);
+    // Check that child birth date has no easy-edit button, but group summary has pencil button
+    await expect(childrenCell.locator('.easy-edit-button')).toHaveCount(0);
+    const groupPencilBtn = childrenCell.locator('.cell-edit-pencil-btn');
+    await expect(groupPencilBtn).toHaveCount(1);
+    await expect(groupPencilBtn).toBeVisible();
     // Check right-aligned add child '+' button exists on the child row
     const addChildBtn = childrenCell.locator('button.family-add-button');
     await expect(addChildBtn).toBeVisible();
@@ -244,5 +247,100 @@ test.describe('Test Case 34: 1-Row-Per-Family Table View and Universal Family No
     // Close popover and verify updated notes show in the table cell
     await popover.getByRole('button', { name: 'Schließen' }).click();
     await expect(page.locator('td[data-column-id="notes"]').first()).toContainText('Updated child notes for Max!');
+  });
+
+  test('displays "(nicht im Tollhaus)" with pencil button for child with no group changes and allows adding group change', async ({ request, page }) => {
+    // Reset DB
+    await request.post('/api/test/reset');
+
+    // Create family with a child that has NO group changes
+    const createFamRes = await request.post('/api/families', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        parents: [{ first_name: 'Julia', last_name: 'Klaus', emails: [{ value: 'julia@example.com', identifier_email: true, address_list: true }] }],
+      },
+    });
+    expect(createFamRes.ok()).toBeTruthy();
+    const fam = await createFamRes.json();
+
+    const childId = crypto.randomUUID();
+    const createChildRes = await request.post(`/api/families/${fam.id}/children`, {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        id: childId,
+        family_id: fam.id,
+        first_name: 'Lukas',
+        last_name: 'Klaus',
+        birth_date: '2023-05-10',
+      },
+    });
+    expect(createChildRes.ok()).toBeTruthy();
+    // No group changes added for Lukas
+
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+    });
+
+    await page.setViewportSize({ width: 1280, height: 850 });
+    await page.goto('/');
+
+    const toggleSidebarBtn = page.getByRole('button', { name: 'Seitenleiste umschalten' });
+    if (await toggleSidebarBtn.isVisible()) {
+      await toggleSidebarBtn.click();
+    }
+
+    // Navigate to MGA -> Familien(MGA)
+    const mgaCatBtn = page.getByRole('button', { name: 'MGA', exact: true });
+    if (await mgaCatBtn.isVisible()) {
+      await mgaCatBtn.click();
+    }
+    const familiesMgaBtn = page.getByRole('button', { name: 'Familien(MGA)' });
+    await expect(familiesMgaBtn).toBeVisible();
+    await familiesMgaBtn.click();
+
+    const famRow = page.locator(`tr#row-${fam.id}`);
+    await expect(famRow).toBeVisible();
+
+    const childrenCell = famRow.locator('td[data-column-id="children"]');
+    await expect(childrenCell).toContainText('Lukas Klaus');
+    // Field must display "(nicht im Tollhaus)"
+    await expect(childrenCell).toContainText('(nicht im Tollhaus)');
+
+    // Pencil button must exist next to "(nicht im Tollhaus)"
+    const groupPencilBtn = childrenCell.locator('.cell-edit-pencil-btn');
+    await expect(groupPencilBtn).toBeVisible();
+
+    // Switch to mobile viewport (<= 768px) and verify adaptive card layout also displays "(nicht im Tollhaus)" with pencil
+    await page.setViewportSize({ width: 500, height: 800 });
+    const mobileFamCard = page.locator(`tr#row-${fam.id}`);
+    await expect(mobileFamCard).toBeVisible();
+    const mobileChildrenCell = mobileFamCard.locator('td[data-column-id="children"]');
+    await expect(mobileChildrenCell).toContainText('(nicht im Tollhaus)');
+    const mobileGroupPencilBtn = mobileChildrenCell.locator('.cell-edit-pencil-btn');
+    await expect(mobileGroupPencilBtn).toBeVisible();
+
+    // Reset back to desktop viewport
+    await page.setViewportSize({ width: 1280, height: 850 });
+
+    // Click pencil button to open GroupChangesPopover
+    await groupPencilBtn.click();
+
+    // Popover opens
+    const popover = page.locator('.glass-popup');
+    await expect(popover).toBeVisible();
+    await expect(popover).toContainText('Kleine Gruppe');
+
+    // Add row form is open; save a new group change for Lukas (Kleine Gruppe)
+    const saveGroupBtn = popover.locator('button[title="Speichern"]');
+    await expect(saveGroupBtn).toBeVisible();
+    await saveGroupBtn.click();
+
+    // Close popover by pressing Escape or clicking outside
+    await page.keyboard.press('Escape');
+    await expect(popover).not.toBeVisible();
+
+    // Lukas now displays the newly assigned group instead of "(nicht im Tollhaus)"
+    await expect(childrenCell).toContainText('Kleine Gr.');
+    await expect(childrenCell).not.toContainText('(nicht im Tollhaus)');
   });
 });
