@@ -231,6 +231,18 @@ test.describe('Test Case 14: Essen/Wochenplan Tab and Print Layout', () => {
     // And verify the sheet is visible in print
     const sheetDisplayPrint = await sheet.evaluate((el) => window.getComputedStyle(el).display);
     expect(sheetDisplayPrint).not.toBe('none');
+
+    // Inner meal box has no additional inner border when printing and text is vertically centered
+    const innerMealsBoxStyle = await sheet.locator('.meal-plan-meals-box').first().evaluate((el) => {
+      const style = window.getComputedStyle(el);
+      return {
+        borderStyle: style.borderStyle,
+        borderWidth: style.borderWidth,
+        justifyContent: style.justifyContent,
+      };
+    });
+    expect(innerMealsBoxStyle.borderStyle).toBe('none');
+    expect(innerMealsBoxStyle.justifyContent).toBe('center');
   });
 
   test('direct printing from mealPlan tab on mobile phone viewport: hides app shell and outputs 5-column landscape grid in print', async ({ page }) => {
@@ -290,6 +302,18 @@ test.describe('Test Case 14: Essen/Wochenplan Tab and Print Layout', () => {
     // Sheet itself is visible
     const sheetPrint = await sheet.evaluate((el) => window.getComputedStyle(el).display);
     expect(sheetPrint).not.toBe('none');
+
+    // Inner meal box has no additional inner border when printing directly from mealPlan tab and is vertically centered
+    const mealBoxStyle = await sheet.locator('.meal-plan-meals-box').first().evaluate((el) => {
+      const style = window.getComputedStyle(el);
+      return {
+        borderStyle: style.borderStyle,
+        borderWidth: style.borderWidth,
+        justifyContent: style.justifyContent,
+      };
+    });
+    expect(mealBoxStyle.borderStyle).toBe('none');
+    expect(mealBoxStyle.justifyContent).toBe('center');
   });
 
   test('editing meal descriptions before printing: gray pencil icon, disclaimer note, revert to kochplan value, and session persistence across page reload', async ({ request, page }) => {

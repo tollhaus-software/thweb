@@ -173,6 +173,7 @@
   padding: 0.75rem;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 0.75rem;
   flex: 1;
 }
@@ -208,6 +209,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 0.4rem;
 }
 
@@ -537,7 +539,7 @@
 }
 
 .meal-plan-standalone-page .meal-plan-day-col {
-  background: #f8fafc;
+  background: white;
   border-color: #cbd5e1;
 }
 
@@ -554,10 +556,16 @@
   color: #64748b;
 }
 
-.meal-plan-standalone-page .meal-plan-cook-box,
-.meal-plan-standalone-page .meal-plan-meals-box {
+.meal-plan-standalone-page .meal-plan-cook-box {
   background: white;
   border-color: #e2e8f0;
+}
+
+.meal-plan-standalone-page .meal-plan-meals-box {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
 }
 
 .meal-plan-standalone-page .meal-plan-cook-name,
@@ -649,7 +657,7 @@
   }
 
   .meal-plan-day-col {
-    background: #f8fafc !important;
+    background: #ffffff !important;
     border: 1px solid #94a3b8 !important;
     border-radius: 4px !important;
     min-height: 480px !important;
@@ -674,12 +682,23 @@
   .meal-plan-day-body {
     padding: 0.5rem !important;
     gap: 0.5rem !important;
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
   }
 
+  /* Remove additional inner box and border on each day when printing, vertically center content */
   .meal-plan-meals-box {
-    background: #ffffff !important;
-    border: 1px solid #cbd5e1 !important;
-    padding: 0.4rem 0.5rem !important;
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
   }
 
   .meal-plan-meals-label {
@@ -693,6 +712,10 @@
     padding: 0.2rem 0 !important;
     border-bottom: 1px dashed #cbd5e1 !important;
     display: block !important;
+  }
+
+  .meal-plan-component-item:last-child {
+    border-bottom: none !important;
   }
 
   .print-only {
