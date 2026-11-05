@@ -690,4 +690,47 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await page.keyboard.press('Escape');
     await expect(allergiesPopup).toHaveCount(0);
   });
+
+  test('automatically returns to home view after inactivity timeout', async ({ request, page }) => {
+    // 1. Reset database state
+    const resetRes = await request.post('/api/test/reset');
+    expect(resetRes.ok()).toBeTruthy();
+
+    // 2. Authenticate as regular user and set a short test idle timeout (1200ms)
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+      (window as unknown as { __TEST_IDLE_TIMEOUT_MS__?: number }).__TEST_IDLE_TIMEOUT_MS__ = 1200;
+    });
+
+    // 3. Navigate to embedded dashboard
+    await page.goto('/#dashboard');
+    await page.waitForLoadState('networkidle');
+
+    const embeddedPage = page.locator('.kiosk-tablet-page.embedded');
+    await expect(embeddedPage).toBeVisible();
+
+    const initialDateText = await embeddedPage.locator('.kiosk-header-date').innerText();
+    const prevDayBtn = embeddedPage.locator('.kiosk-header-nav-btn.left');
+    await prevDayBtn.click();
+    await page.waitForTimeout(200);
+
+    const changedDateText = await embeddedPage.locator('.kiosk-header-date').innerText();
+    expect(changedDateText).not.toBe(initialDateText);
+
+    // Open allergies modal
+    const allergiesBtn = embeddedPage.locator('.kiosk-nav-btn', { hasText: 'Allergien' });
+    await allergiesBtn.click();
+    const allergiesPopup = embeddedPage.locator('[data-testid="kiosk-allergies-popup"]');
+    await expect(allergiesPopup).toBeVisible();
+
+    // Wait without interacting for the idle timeout to expire
+    await page.waitForTimeout(1600);
+
+    // Verify allergies modal has automatically closed
+    await expect(allergiesPopup).toHaveCount(0);
+
+    // Verify date has automatically reset back to initial (today)
+    const resetDateText = await embeddedPage.locator('.kiosk-header-date').innerText();
+    expect(resetDateText).toBe(initialDateText);
+  });
 });

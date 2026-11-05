@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useRealtime } from '../../hooks/useRealtime';
+import { useIdleTimer } from '../../hooks/useIdleTimer';
 import { t, formatDashboardDate } from '../../utils/i18n';
 import { AllergenIcon } from '../MealAllergens/AllergenIcon';
 import {
@@ -78,9 +79,13 @@ interface RealtimeEvent {
 export interface KioskDashboardProps {
   onBackToPortal?: () => void;
   embedded?: boolean;
+  idleTimeoutMs?: number;
 }
 
-export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false }) => {
+export const KioskDashboard: React.FC<KioskDashboardProps> = ({
+  embedded = false,
+  idleTimeoutMs,
+}) => {
   const { token, hasPermission } = useAuth();
   const canViewAllergiesSummary =
     !embedded || hasPermission('allergies.summary.read') || hasPermission('meal_allergens.read');
@@ -96,6 +101,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
   const [isEditingAllergens, setIsEditingAllergens] = useState<boolean>(false);
   const [flashAllergensBtn, setFlashAllergensBtn] = useState<boolean>(false);
   const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const contentAreaRef = useRef<HTMLElement | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState<Date>(() => new Date());
 
@@ -331,12 +337,30 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
     setSelectedDate(`${y}-${m}-${d}`);
   };
 
-  const handleHomeClick = () => {
+  const handleHomeClick = useCallback(() => {
     setShowAllergies(false);
+    setShowFeedbackModal(false);
     setIsEditingAllergens(false);
     setFlashAllergensBtn(false);
     setSelectedDate(null); // Omitting date fetches "today" from backend
-  };
+    if (contentAreaRef.current) {
+      contentAreaRef.current.scrollTop = 0;
+    }
+  }, []);
+
+  const effectiveIdleTimeoutMs =
+    idleTimeoutMs ??
+    (typeof window !== 'undefined'
+      ? (window as unknown as { __TEST_IDLE_TIMEOUT_MS__?: number }).__TEST_IDLE_TIMEOUT_MS__
+      : undefined) ??
+    5 * 60 * 1000;
+
+  useIdleTimer({
+    timeoutMs: effectiveIdleTimeoutMs,
+    onIdle: handleHomeClick,
+    enabled: true,
+    throttleMs: 5000,
+  });
 
   const displayDateStr = (data?.date || selectedDate || todayDateStr).split('T')[0];
   const isToday = selectedDate === null || displayDateStr === todayDateStr;
@@ -599,7 +623,10 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
       <div className="kiosk-tablet-container">
         
         {/* Content Area (taking up most of the screen space) */}
-        <main className={`kiosk-content-area ${isEditingAllergens ? 'editing-allergens' : ''}`}>
+        <main
+          ref={contentAreaRef}
+          className={`kiosk-content-area ${isEditingAllergens ? 'editing-allergens' : ''}`}
+        >
           {error && (
             <div className="kiosk-error-banner">
               <AlertCircle size={embedded ? 18 : 22} />
