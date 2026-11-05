@@ -342,12 +342,172 @@
 .kiosk-todo-item {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
+  text-align: left;
   gap: 1.15rem;
   padding: 0.95rem 1.15rem;
   border-radius: 14px;
   font-size: 1.45rem;
   font-weight: 700;
   line-height: 1.3;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s ease;
+}
+
+.kiosk-todo-item:hover:not(.kiosk-todo-disabled) {
+  transform: translateY(-1px);
+  filter: brightness(0.97);
+}
+
+.kiosk-todo-label {
+  flex-grow: 1;
+  text-align: left;
+}
+
+/* Open Allergens Editor button in todo item */
+.kiosk-todo-open-allergens-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.85rem;
+  font-size: 1rem;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1.5px solid #a21caf;
+  background-color: #86198f;
+  color: #ffffff;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-left: auto;
+  transition: all 0.15s ease-in-out;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.kiosk-todo-open-allergens-btn:hover {
+  background-color: #701a75;
+  border-color: #701a75;
+  transform: translateY(-1px);
+}
+
+.kiosk-todo-open-allergens-btn:active {
+  transform: translateY(0);
+}
+
+.kiosk-todo-open-allergens-btn:disabled,
+.kiosk-todo-open-allergens-btn.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+  box-shadow: none;
+  filter: grayscale(0.3);
+}
+
+/* Double flash highlight animation */
+@keyframes kiosk-btn-flash {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(162, 28, 175, 0.7);
+    filter: brightness(1);
+  }
+  20% {
+    transform: scale(1.08);
+    box-shadow: 0 0 0 7px rgba(162, 28, 175, 0.45);
+    filter: brightness(1.25);
+    background-color: #a21caf;
+  }
+  40% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(162, 28, 175, 0);
+    filter: brightness(1);
+    background-color: #86198f;
+  }
+  60% {
+    transform: scale(1.08);
+    box-shadow: 0 0 0 7px rgba(162, 28, 175, 0.45);
+    filter: brightness(1.25);
+    background-color: #a21caf;
+  }
+  80% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(162, 28, 175, 0);
+    filter: brightness(1);
+    background-color: #86198f;
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(162, 28, 175, 0);
+    filter: brightness(1);
+  }
+}
+
+.kiosk-todo-open-allergens-btn.flash {
+  animation: kiosk-btn-flash 0.8s ease-in-out;
+}
+
+/* Todo checkbox */
+.kiosk-todo-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  border-radius: 8px;
+  border: 2.5px solid currentColor;
+  background-color: transparent;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  flex-shrink: 0;
+  transition: all 0.15s ease-in-out;
+}
+
+.kiosk-todo-checkbox:hover:not(:disabled) {
+  opacity: 0.85;
+  transform: scale(1.08);
+}
+
+.kiosk-todo-checkbox.checked {
+  background-color: currentColor;
+}
+
+.kiosk-todo-checkbox.checked .kiosk-todo-check-icon {
+  color: #ffffff;
+}
+
+.kiosk-todo-checkbox.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.kiosk-todo-item.kiosk-todo-disabled {
+  cursor: not-allowed;
+}
+
+/* Strikethrough & smaller font for completed tasks */
+.kiosk-todo-item.kiosk-todo-completed {
+  opacity: 0.65;
+  font-size: 1.15rem;
+  padding: 0.75rem 1.15rem;
+}
+
+.kiosk-todo-item.kiosk-todo-completed .kiosk-todo-label {
+  text-decoration: line-through;
+}
+
+/* Task: Allergene eintragen */
+.kiosk-todo-allergens {
+  background-color: #fdf4ff;
+  border: 2px solid #f0abfc;
+  color: #86198f;
+}
+
+.kiosk-todo-allergens .kiosk-todo-icon {
+  color: #a21caf;
+  flex-shrink: 0;
 }
 
 /* Task: Gelbe Tonne (Yellow bin) */
@@ -679,6 +839,25 @@
   gap: 0.75rem;
 }
 
+.kiosk-tablet-page.embedded .kiosk-todo-item.kiosk-todo-completed {
+  font-size: 0.82rem;
+  padding: 0.45rem 0.75rem;
+}
+
+.kiosk-tablet-page.embedded .kiosk-todo-checkbox {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  border-width: 2px;
+  border-radius: 6px;
+}
+
+.kiosk-tablet-page.embedded .kiosk-todo-open-allergens-btn {
+  font-size: 0.82rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 6px;
+}
+
 .kiosk-tablet-page.embedded .kiosk-bottom-nav {
   border-radius: 0 0 16px 16px;
   height: 52px;
@@ -895,3 +1074,113 @@
   font-size: 0.75rem;
   padding: 0.15rem 0.45rem;
 }
+
+/* Dark mode for Todo Tasks */
+:root[data-theme='dark'] .kiosk-todo-yellow {
+  background-color: rgba(234, 179, 8, 0.15);
+  border-color: rgba(234, 179, 8, 0.4);
+  color: #fef08a;
+}
+:root[data-theme='dark'] .kiosk-todo-coffee {
+  background-color: rgba(249, 115, 22, 0.15);
+  border-color: rgba(249, 115, 22, 0.4);
+  color: #fed7aa;
+}
+:root[data-theme='dark'] .kiosk-todo-refrigerator {
+  background-color: rgba(14, 165, 233, 0.15);
+  border-color: rgba(14, 165, 233, 0.4);
+  color: #bae6fd;
+}
+:root[data-theme='dark'] .kiosk-todo-allergens {
+  background-color: rgba(217, 70, 239, 0.15);
+  border-color: rgba(217, 70, 239, 0.4);
+  color: #f5d0fe;
+}
+:root[data-theme='dark'] .kiosk-todo-default {
+  background-color: rgba(148, 163, 184, 0.15);
+  border-color: rgba(148, 163, 184, 0.4);
+  color: #e2e8f0;
+}
+:root[data-theme='dark'] .kiosk-todo-open-allergens-btn {
+  background-color: #a21caf;
+  border-color: #d946ef;
+  color: #ffffff;
+}
+
+@keyframes kiosk-btn-flash-dark {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(217, 70, 239, 0.7);
+    filter: brightness(1);
+  }
+  20% {
+    transform: scale(1.08);
+    box-shadow: 0 0 0 7px rgba(217, 70, 239, 0.45);
+    filter: brightness(1.3);
+    background-color: #c026d3;
+  }
+  40% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(217, 70, 239, 0);
+    filter: brightness(1);
+    background-color: #a21caf;
+  }
+  60% {
+    transform: scale(1.08);
+    box-shadow: 0 0 0 7px rgba(217, 70, 239, 0.45);
+    filter: brightness(1.3);
+    background-color: #c026d3;
+  }
+  80% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(217, 70, 239, 0);
+    filter: brightness(1);
+    background-color: #a21caf;
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(217, 70, 239, 0);
+    filter: brightness(1);
+  }
+}
+
+:root[data-theme='dark'] .kiosk-todo-open-allergens-btn.flash {
+  animation: kiosk-btn-flash-dark 0.8s ease-in-out;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .kiosk-todo-yellow {
+    background-color: rgba(234, 179, 8, 0.15);
+    border-color: rgba(234, 179, 8, 0.4);
+    color: #fef08a;
+  }
+  :root:not([data-theme='light']) .kiosk-todo-coffee {
+    background-color: rgba(249, 115, 22, 0.15);
+    border-color: rgba(249, 115, 22, 0.4);
+    color: #fed7aa;
+  }
+  :root:not([data-theme='light']) .kiosk-todo-refrigerator {
+    background-color: rgba(14, 165, 233, 0.15);
+    border-color: rgba(14, 165, 233, 0.4);
+    color: #bae6fd;
+  }
+  :root:not([data-theme='light']) .kiosk-todo-allergens {
+    background-color: rgba(217, 70, 239, 0.15);
+    border-color: rgba(217, 70, 239, 0.4);
+    color: #f5d0fe;
+  }
+  :root:not([data-theme='light']) .kiosk-todo-default {
+    background-color: rgba(148, 163, 184, 0.15);
+    border-color: rgba(148, 163, 184, 0.4);
+    color: #e2e8f0;
+  }
+  :root:not([data-theme='light']) .kiosk-todo-open-allergens-btn {
+    background-color: #a21caf;
+    border-color: #d946ef;
+    color: #ffffff;
+  }
+  :root:not([data-theme='light']) .kiosk-todo-open-allergens-btn.flash {
+    animation: kiosk-btn-flash-dark 0.8s ease-in-out;
+  }
+}
+

@@ -2091,7 +2091,121 @@ func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*model
 		resp.AllergenMealComponents = mealDay.MealComponents
 	}
 
+	// 6. Allergene eintragen ("enter_allergens") task:
+	// Applies on all weekdays (Monday-Friday) or whenever cooking is scheduled,
+	// unless meal allergens for that day are explicitly marked "not_relevant".
+	isNotRelevant := mealDay != nil && mealDay.Status == models.MealAllergenStatusNotRelevant
+	isWeekday := targetDate.Weekday() >= time.Monday && targetDate.Weekday() <= time.Friday
+	hasCooking := resp.WhoIsCooking != "" || len(resp.MealComponents) > 0 || (mealDay != nil && (mealDay.HasAllergenRecord || len(mealDay.MealComponents) > 0))
+	if !isNotRelevant && (isWeekday || hasCooking) {
+		resp.TasksAndInfo = append(resp.TasksAndInfo, "enter_allergens")
+	}
+
+	// 7. Completed tasks from completed_tasks table
+	completedTasks, err := s.GetCompletedTasks(ctx, targetDate)
+	if err == nil {
+		resp.CompletedTasks = completedTasks
+		for _, ct := range completedTasks {
+			resp.CompletedTaskIDs = append(resp.CompletedTaskIDs, ct.TaskTypeID)
+		}
+	}
+	if mealDay != nil && mealDay.Status == models.MealAllergenStatusFinalized {
+		hasAllergensCompleted := false
+		for _, id := range resp.CompletedTaskIDs {
+			if id == "enter_allergens" || id == "allergene_eintragen" {
+				hasAllergensCompleted = true
+				break
+			}
+		}
+		if !hasAllergensCompleted {
+			resp.CompletedTaskIDs = append(resp.CompletedTaskIDs, "enter_allergens")
+			resp.CompletedTasks = append(resp.CompletedTasks, models.CompletedTask{
+				TaskDate:    dateStr,
+				TaskTypeID:  "enter_allergens",
+				CompletedAt: time.Now(),
+			})
+		}
+	}
+
 	return resp, nil
+}
+
+func (s *Store) CompleteTask(ctx context.Context, targetDate time.Time, taskTypeID string, actor models.MealAllergenActor) (*models.CompletedTask, error) {
+	dateStr := targetDate.Format("2006-01-02")
+	var ct models.CompletedTask
+	var taskDate time.Time
+	err := s.db.QueryRow(ctx, `
+		INSERT INTO completed_tasks (task_date, task_type_id, completed_by, completed_by_email, is_kiosk, kiosk_name, completed_at)
+		VALUES ($1, $2, $3, $4, $5, $6, NOW())
+		ON CONFLICT (task_date, task_type_id) DO UPDATE
+		SET completed_by = EXCLUDED.completed_by,
+		    completed_by_email = EXCLUDED.completed_by_email,
+		    is_kiosk = EXCLUDED.is_kiosk,
+		    kiosk_name = EXCLUDED.kiosk_name,
+		    completed_at = NOW()
+		RETURNING id, task_date, task_type_id, completed_by, completed_by_email, is_kiosk, kiosk_name, completed_at
+	`, dateStr, taskTypeID, actor.UserID, actor.Email, actor.IsKiosk, actor.KioskName).Scan(
+		&ct.ID,
+		&taskDate,
+		&ct.TaskTypeID,
+		&ct.CompletedBy,
+		&ct.CompletedByEmail,
+		&ct.IsKiosk,
+		&ct.KioskName,
+		&ct.CompletedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to complete task %s for %s: %w", taskTypeID, dateStr, err)
+	}
+	ct.TaskDate = taskDate.Format("2006-01-02")
+	return &ct, nil
+}
+
+func (s *Store) UncompleteTask(ctx context.Context, targetDate time.Time, taskTypeID string) error {
+	dateStr := targetDate.Format("2006-01-02")
+	_, err := s.db.Exec(ctx, `
+		DELETE FROM completed_tasks
+		WHERE task_date = $1 AND task_type_id = $2
+	`, dateStr, taskTypeID)
+	if err != nil {
+		return fmt.Errorf("failed to uncomplete task %s for %s: %w", taskTypeID, dateStr, err)
+	}
+	return nil
+}
+
+func (s *Store) GetCompletedTasks(ctx context.Context, targetDate time.Time) ([]models.CompletedTask, error) {
+	dateStr := targetDate.Format("2006-01-02")
+	rows, err := s.db.Query(ctx, `
+		SELECT id, task_date, task_type_id, completed_by, completed_by_email, is_kiosk, kiosk_name, completed_at
+		FROM completed_tasks
+		WHERE task_date = $1
+		ORDER BY completed_at ASC
+	`, dateStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get completed tasks for %s: %w", dateStr, err)
+	}
+	defer rows.Close()
+
+	var result []models.CompletedTask
+	for rows.Next() {
+		var ct models.CompletedTask
+		var taskDate time.Time
+		if err := rows.Scan(
+			&ct.ID,
+			&taskDate,
+			&ct.TaskTypeID,
+			&ct.CompletedBy,
+			&ct.CompletedByEmail,
+			&ct.IsKiosk,
+			&ct.KioskName,
+			&ct.CompletedAt,
+		); err != nil {
+			return nil, err
+		}
+		ct.TaskDate = taskDate.Format("2006-01-02")
+		result = append(result, ct)
+	}
+	return result, rows.Err()
 }
 
 func (s *Store) ListEmployees(ctx context.Context) ([]models.Employee, error) {
@@ -2449,6 +2563,8 @@ func (s *Store) CreateActiveDEK(ctx context.Context, rec crypto.DEKRecord) (*cry
 func (s *Store) ResetTestData(ctx context.Context) error {
 	_, err := s.db.Exec(ctx, `
 		TRUNCATE TABLE 
+			completed_tasks,
+			yellow_bag_days,
 			employee_jobs,
 			parent_jobs,
 			jobs,
@@ -2482,6 +2598,20 @@ func (s *Store) SeedTestMealPlan(ctx context.Context, dateStr, cookName, comp1, 
 			food_component_3 = EXCLUDED.food_component_3
 	`, dateStr, cookName, comp1, comp2, comp3)
 	return err
+}
+
+func (s *Store) SeedTestYellowBagDays(ctx context.Context, dates []string) error {
+	for _, d := range dates {
+		_, err := s.db.Exec(ctx, `
+			INSERT INTO yellow_bag_days (date, fetched_at)
+			VALUES ($1, NOW())
+			ON CONFLICT (date) DO UPDATE SET fetched_at = NOW()
+		`, d)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Store) ListCookOptions(ctx context.Context) ([]models.CookOption, error) {
@@ -3333,6 +3463,12 @@ func (s *Store) UpsertMealAllergensWithCooks(
 		return nil, fmt.Errorf("failed to record meal_allergens_history for %s: %w", dateStr, err)
 	}
 
+	if status == models.MealAllergenStatusFinalized {
+		_, _ = s.CompleteTask(ctx, targetDate, "enter_allergens", act)
+	} else {
+		_ = s.UncompleteTask(ctx, targetDate, "enter_allergens")
+	}
+
 	return updated, nil
 }
 
@@ -3366,6 +3502,7 @@ func (s *Store) FinalizeMealAllergens(ctx context.Context, targetDate time.Time,
 		if err := s.recordMealAllergensHistory(ctx, dateStr, "FINALIZE", &beforeSnap, afterSnap, act); err != nil {
 			return nil, fmt.Errorf("failed to record meal_allergens_history for %s: %w", dateStr, err)
 		}
+		_, _ = s.CompleteTask(ctx, targetDate, "enter_allergens", act)
 		return updated, nil
 	}
 

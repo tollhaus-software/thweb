@@ -190,6 +190,149 @@ func TestGetDailyBrief(t *testing.T) {
 	}
 }
 
+func TestDashboardTasks_Store(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := NewStore(pool)
+
+	testDateStr := "2099-11-20"
+	testDate := time.Date(2099, time.November, 20, 0, 0, 0, 0, time.UTC)
+
+	// Clean up after test
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM completed_tasks WHERE task_date = $1", testDateStr)
+		_, _ = pool.Exec(ctx, "DELETE FROM meal_allergens WHERE date = $1", testDateStr)
+		_, _ = pool.Exec(ctx, "DELETE FROM meal_allergens_history WHERE cooking_date = $1", testDateStr)
+	}()
+
+	// 1. CompleteTask by authenticated user
+	userID := uuid.New()
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, 'task-user@example.com') ON CONFLICT (id) DO NOTHING", userID)
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", userID)
+	}()
+
+	userActor := models.MealAllergenActor{
+		UserID:    &userID,
+		Email:     "task-user@example.com",
+		IsKiosk:   false,
+		KioskName: "",
+	}
+
+	ctUser, err := appStore.CompleteTask(ctx, testDate, "clean_coffee_machine", userActor)
+	if err != nil {
+		t.Fatalf("CompleteTask failed for user: %v", err)
+	}
+	if ctUser.TaskTypeID != "clean_coffee_machine" || ctUser.TaskDate != testDateStr {
+		t.Errorf("unexpected task result: %+v", ctUser)
+	}
+	if ctUser.IsKiosk || ctUser.CompletedByEmail != "task-user@example.com" || ctUser.CompletedBy == nil || *ctUser.CompletedBy != userID {
+		t.Errorf("unexpected user completion metadata: %+v", ctUser)
+	}
+
+	// 2. CompleteTask by kiosk
+	kioskActor := models.MealAllergenActor{
+		UserID:    nil,
+		Email:     "kiosk+CN=kiosk-tablet-1@internal",
+		IsKiosk:   true,
+		KioskName: "kiosk-tablet-1",
+	}
+	ctKiosk, err := appStore.CompleteTask(ctx, testDate, "yellow_bin_put_out", kioskActor)
+	if err != nil {
+		t.Fatalf("CompleteTask failed for kiosk: %v", err)
+	}
+	if !ctKiosk.IsKiosk || ctKiosk.KioskName != "kiosk-tablet-1" || ctKiosk.CompletedBy != nil {
+		t.Errorf("unexpected kiosk completion metadata: %+v", ctKiosk)
+	}
+
+	// 3. Verify GetDailyBrief includes completed tasks
+	brief, err := appStore.GetDailyBrief(ctx, testDate)
+	if err != nil {
+		t.Fatalf("GetDailyBrief failed: %v", err)
+	}
+	if len(brief.CompletedTasks) < 2 {
+		t.Errorf("expected at least 2 completed tasks, got %d", len(brief.CompletedTasks))
+	}
+	hasCoffeeDone := false
+	hasYellowDone := false
+	for _, ct := range brief.CompletedTasks {
+		if ct.TaskTypeID == "clean_coffee_machine" {
+			hasCoffeeDone = true
+		}
+		if ct.TaskTypeID == "yellow_bin_put_out" {
+			hasYellowDone = true
+		}
+	}
+	if !hasCoffeeDone || !hasYellowDone {
+		t.Errorf("expected completed tasks in brief, got: %+v", brief.CompletedTasks)
+	}
+
+	// 4. UncompleteTask
+	if err := appStore.UncompleteTask(ctx, testDate, "yellow_bin_put_out"); err != nil {
+		t.Fatalf("UncompleteTask failed: %v", err)
+	}
+	completedAfterUncheck, err := appStore.GetCompletedTasks(ctx, testDate)
+	if err != nil {
+		t.Fatalf("GetCompletedTasks failed: %v", err)
+	}
+	for _, ct := range completedAfterUncheck {
+		if ct.TaskTypeID == "yellow_bin_put_out" {
+			t.Errorf("task yellow_bin_put_out should have been uncompleted")
+		}
+	}
+
+	// 5. Finalize meal allergens marks enter_allergens as completed
+	cookName := "Allergen Cook"
+	_, err = appStore.UpsertMealAllergensWithCooks(
+		ctx,
+		testDate,
+		models.MealAllergenCookList{},
+		nil,
+		nil,
+		cookName,
+		models.MealAllergenComponentList{{Name: "Suppe", Allergens: []string{"sellerie"}}},
+		models.MealAllergenDocumentation{},
+		nil,
+		userActor,
+	)
+	if err != nil {
+		t.Fatalf("UpsertMealAllergensWithCooks failed: %v", err)
+	}
+
+	_, err = appStore.FinalizeMealAllergens(ctx, testDate, userActor)
+	if err != nil {
+		t.Fatalf("FinalizeMealAllergens failed: %v", err)
+	}
+
+	completedAfterFinalize, err := appStore.GetCompletedTasks(ctx, testDate)
+	if err != nil {
+		t.Fatalf("GetCompletedTasks after finalize failed: %v", err)
+	}
+	hasAllergensDone := false
+	for _, ct := range completedAfterFinalize {
+		if ct.TaskTypeID == "enter_allergens" {
+			hasAllergensDone = true
+			if ct.CompletedByEmail != "task-user@example.com" {
+				t.Errorf("expected enter_allergens completed by task-user@example.com, got %s", ct.CompletedByEmail)
+			}
+		}
+	}
+	if !hasAllergensDone {
+		t.Errorf("expected enter_allergens to be completed after finalize, got %+v", completedAfterFinalize)
+	}
+}
+
 func TestAuditModifications_ExcludesVaccinationStatus(t *testing.T) {
 	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
 	ctx := context.Background()

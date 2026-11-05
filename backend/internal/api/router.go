@@ -46,6 +46,7 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 	if authenticator.AllowMockAuth {
 		r.Post("/api/test/reset", server.HandleTestReset)
 		r.Post("/api/test/meal-plan", server.HandleTestSeedMealPlan)
+		r.Post("/api/test/yellow-bag", server.HandleTestSeedYellowBag)
 	}
 
 	// Protected routes
@@ -135,6 +136,9 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 
 		// Dashboard / Daily Brief & Allergies Summary
 		r.Get("/api/dashboard/daily-brief", server.HandleGetDailyBrief)
+		r.Post("/api/dashboard/tasks/{taskTypeId}/complete", server.HandleCompleteTask)
+		r.Post("/api/dashboard/tasks/{taskTypeId}/uncomplete", server.HandleUncompleteTask)
+		r.Delete("/api/dashboard/tasks/{taskTypeId}", server.HandleUncompleteTask)
 		r.With(auth.RequireAnyPermission("allergies.summary.read", "meal_allergens.read")).Get("/api/allergies/summary", server.HandleGetAllergiesSummary)
 		r.With(auth.RequireAnyPermission("allergies.summary.read", "meal_allergens.read")).Get("/api/dashboard/allergies", server.HandleGetAllergiesSummary)
 

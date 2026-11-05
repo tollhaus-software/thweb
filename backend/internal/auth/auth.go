@@ -79,6 +79,8 @@ func IsAllowedKioskPath(path string) bool {
 	cleanPath := strings.TrimSuffix(path, "/")
 	return cleanPath == "/api/dashboard/daily-brief" ||
 		cleanPath == "/api/dashboard/allergies" ||
+		cleanPath == "/api/dashboard/tasks" ||
+		strings.HasPrefix(cleanPath, "/api/dashboard/tasks/") ||
 		cleanPath == "/api/allergies/summary" ||
 		cleanPath == "/api/meal-allergens" ||
 		strings.HasPrefix(cleanPath, "/api/meal-allergens/") ||

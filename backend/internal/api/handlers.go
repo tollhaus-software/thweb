@@ -1920,6 +1920,152 @@ func (s *Server) HandleGetDailyBrief(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, brief)
 }
 
+type UpdateTaskCompletionRequest struct {
+	Date      string `json:"date"`
+	Completed *bool  `json:"completed"`
+}
+
+func (s *Server) HandleCompleteTask(w http.ResponseWriter, r *http.Request) {
+	taskTypeID := strings.TrimSpace(chi.URLParam(r, "taskTypeId"))
+	if taskTypeID == "" {
+		httpErrorLog(w, r, "taskTypeId is required", http.StatusBadRequest, nil)
+		return
+	}
+
+	dateParam := strings.TrimSpace(r.URL.Query().Get("date"))
+	if dateParam == "" && r.Body != nil {
+		var req UpdateTaskCompletionRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		dateParam = strings.TrimSpace(req.Date)
+	}
+
+	loc, err := time.LoadLocation("Europe/Berlin")
+	var now time.Time
+	if err == nil {
+		now = time.Now().In(loc)
+	} else {
+		now = time.Now()
+	}
+	todayStr := now.Format("2006-01-02")
+
+	if dateParam == "" {
+		dateParam = todayStr
+	}
+
+	targetDate, err := time.Parse("2006-01-02", dateParam)
+	if err != nil {
+		httpErrorLog(w, r, "Invalid date format, expected YYYY-MM-DD", http.StatusBadRequest, err)
+		return
+	}
+
+	// Rule: One of the tasks should be "Allergene eintragen". When trying to check this, it should open the allergens editor instead.
+	// Finalizing allergens in that editor will also mark the task as done.
+	if taskTypeID == "enter_allergens" || taskTypeID == "allergene_eintragen" {
+		httpErrorLog(w, r, "Task 'Allergene eintragen' must be finalized through the allergens editor", http.StatusBadRequest, nil)
+		return
+	}
+
+	// Rule: It should only be possible to mark tasks as done for a day if today is the day
+	if dateParam != todayStr {
+		httpErrorLog(w, r, "Tasks can only be marked as done for the current day", http.StatusBadRequest, nil)
+		return
+	}
+
+	u := auth.GetActualUser(r.Context())
+	if u == nil {
+		httpErrorLog(w, r, "Unauthorized", http.StatusUnauthorized, nil)
+		return
+	}
+	actor := models.ActorFromUser(u)
+
+	completed, err := s.Store.CompleteTask(r.Context(), targetDate, taskTypeID, actor)
+	if err != nil {
+		httpErrorLog(w, r, "Failed to complete task", http.StatusInternalServerError, err)
+		return
+	}
+
+	if s.Hub != nil {
+		s.Hub.Broadcast(WSMessage{
+			Type:    "DASHBOARD_TASKS_UPDATED",
+			Payload: map[string]string{"date": dateParam, "task_type_id": taskTypeID},
+		})
+		s.Hub.Broadcast(WSMessage{
+			Type:    "DAILY_BRIEF_INVALIDATE",
+			Payload: map[string]string{"date": dateParam},
+		})
+	}
+
+	jsonResponse(w, completed)
+}
+
+func (s *Server) HandleUncompleteTask(w http.ResponseWriter, r *http.Request) {
+	taskTypeID := strings.TrimSpace(chi.URLParam(r, "taskTypeId"))
+	if taskTypeID == "" {
+		httpErrorLog(w, r, "taskTypeId is required", http.StatusBadRequest, nil)
+		return
+	}
+
+	dateParam := strings.TrimSpace(r.URL.Query().Get("date"))
+	if dateParam == "" && r.Body != nil {
+		var req UpdateTaskCompletionRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		dateParam = strings.TrimSpace(req.Date)
+	}
+
+	loc, err := time.LoadLocation("Europe/Berlin")
+	var now time.Time
+	if err == nil {
+		now = time.Now().In(loc)
+	} else {
+		now = time.Now()
+	}
+	todayStr := now.Format("2006-01-02")
+
+	if dateParam == "" {
+		dateParam = todayStr
+	}
+
+	targetDate, err := time.Parse("2006-01-02", dateParam)
+	if err != nil {
+		httpErrorLog(w, r, "Invalid date format, expected YYYY-MM-DD", http.StatusBadRequest, err)
+		return
+	}
+
+	if taskTypeID == "enter_allergens" || taskTypeID == "allergene_eintragen" {
+		httpErrorLog(w, r, "Allergens task cannot be uncompleted directly", http.StatusBadRequest, nil)
+		return
+	}
+
+	if dateParam != todayStr {
+		httpErrorLog(w, r, "Tasks can only be modified for the current day", http.StatusBadRequest, nil)
+		return
+	}
+
+	u := auth.GetActualUser(r.Context())
+	if u == nil {
+		httpErrorLog(w, r, "Unauthorized", http.StatusUnauthorized, nil)
+		return
+	}
+
+	if err := s.Store.UncompleteTask(r.Context(), targetDate, taskTypeID); err != nil {
+		httpErrorLog(w, r, "Failed to uncomplete task", http.StatusInternalServerError, err)
+		return
+	}
+
+	if s.Hub != nil {
+		s.Hub.Broadcast(WSMessage{
+			Type:    "DASHBOARD_TASKS_UPDATED",
+			Payload: map[string]string{"date": dateParam, "task_type_id": taskTypeID},
+		})
+		s.Hub.Broadcast(WSMessage{
+			Type:    "DAILY_BRIEF_INVALIDATE",
+			Payload: map[string]string{"date": dateParam},
+		})
+	}
+
+	jsonResponse(w, map[string]string{"status": "ok", "task_type_id": taskTypeID, "date": dateParam})
+}
+
 type IssueKioskCertRequest struct {
 	DeviceName string `json:"device_name"`
 	Password   string `json:"password"`
@@ -2513,6 +2659,25 @@ func (s *Server) HandleTestSeedMealPlan(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
+	jsonResponse(w, map[string]string{"status": "ok"})
+}
+
+func (s *Server) HandleTestSeedYellowBag(w http.ResponseWriter, r *http.Request) {
+	if s.Authenticator == nil || !s.Authenticator.AllowMockAuth {
+		httpErrorLog(w, r, "Test seed yellow bag is only available when mock auth is enabled", http.StatusForbidden, nil)
+		return
+	}
+	var req struct {
+		Dates []string `json:"dates"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpErrorLog(w, r, "Invalid request body", http.StatusBadRequest, err)
+		return
+	}
+	if err := s.Store.SeedTestYellowBagDays(r.Context(), req.Dates); err != nil {
+		httpErrorLog(w, r, "Failed to seed yellow bag days", http.StatusInternalServerError, err)
+		return
+	}
 	jsonResponse(w, map[string]string{"status": "ok"})
 }
 

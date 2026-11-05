@@ -28,14 +28,26 @@ import {
   AlertTriangle,
   Home,
   Pencil,
+  Check,
 } from 'lucide-react';
 import './KioskDashboard.css';
+
+interface CompletedTaskInfo {
+  task_type_id: string;
+  task_date: string;
+  completed_at: string;
+  completed_by_email?: string;
+  is_kiosk?: boolean;
+  kiosk_name?: string;
+}
 
 interface DailyBriefData {
   date: string;
   who_is_cooking: string;
   meal_components: string[];
   tasks_and_info: string[];
+  completed_tasks?: CompletedTaskInfo[];
+  completed_task_ids?: string[];
   has_allergen_record?: boolean;
   allergen_meal_components?: MealAllergenComponent[];
 }
@@ -78,8 +90,31 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
   const [allergiesData, setAllergiesData] = useState<AllergiesSummaryData | null>(null);
   const [showAllergies, setShowAllergies] = useState<boolean>(false);
   const [isEditingAllergens, setIsEditingAllergens] = useState<boolean>(false);
+  const [flashAllergensBtn, setFlashAllergensBtn] = useState<boolean>(false);
+  const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState<Date>(() => new Date());
+
+  const triggerAllergensFlash = useCallback(() => {
+    if (flashTimeoutRef.current) {
+      clearTimeout(flashTimeoutRef.current);
+    }
+    setFlashAllergensBtn(false);
+    requestAnimationFrame(() => {
+      setFlashAllergensBtn(true);
+      flashTimeoutRef.current = setTimeout(() => {
+        setFlashAllergensBtn(false);
+      }, 850);
+    });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (flashTimeoutRef.current) {
+        clearTimeout(flashTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Keep a ref to the current selectedDate for intervals and websocket callbacks
   const selectedDateRef = useRef<string | null>(selectedDate);
@@ -224,6 +259,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
     // If we receive an invalidation message or any backend event, re-fetch
     if (
       message?.type === 'DAILY_BRIEF_INVALIDATE' ||
+      message?.type === 'DASHBOARD_TASKS_UPDATED' ||
       message?.type === 'MEAL_PLAN_UPDATED' ||
       message?.type === 'MEAL_ALLERGENS_UPDATED' ||
       message?.type === 'YELLOW_BAG_DAYS_UPDATED' ||
@@ -264,6 +300,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
     const m = String(current.getMonth() + 1).padStart(2, '0');
     const d = String(current.getDate()).padStart(2, '0');
     setIsEditingAllergens(false);
+    setFlashAllergensBtn(false);
     setSelectedDate(`${y}-${m}-${d}`);
   };
 
@@ -274,21 +311,36 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
     const m = String(current.getMonth() + 1).padStart(2, '0');
     const d = String(current.getDate()).padStart(2, '0');
     setIsEditingAllergens(false);
+    setFlashAllergensBtn(false);
     setSelectedDate(`${y}-${m}-${d}`);
   };
 
   const handleHomeClick = () => {
     setShowAllergies(false);
     setIsEditingAllergens(false);
+    setFlashAllergensBtn(false);
     setSelectedDate(null); // Omitting date fetches "today" from backend
   };
 
   const displayDateStr = (data?.date || selectedDate || todayDateStr).split('T')[0];
   const isToday = selectedDate === null || displayDateStr === todayDateStr;
+  const isCurrentOrPastDay = displayDateStr <= todayDateStr;
+  const canEditAllergensOnDashboard = canEditMealAllergens && isCurrentOrPastDay;
   const formattedDate = formatDashboardDate(displayDateStr);
   const hours = String(currentTime.getHours()).padStart(2, '0');
   const minutes = String(currentTime.getMinutes()).padStart(2, '0');
   const formattedTime = `${hours}:${minutes}`;
+
+  const openMealAllergensEditor = (e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    if (!isCurrentOrPastDay) {
+      alert(t('allergensOnlyCurrentOrPast'));
+      return;
+    }
+    setIsEditingAllergens(true);
+  };
 
   const allergenComponents: MealAllergenComponent[] =
     data?.allergen_meal_components && data.allergen_meal_components.length > 0
@@ -299,7 +351,89 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
     allergenComponents.length > 0 &&
     (Boolean(data?.has_allergen_record) || allergenComponents.some((c) => c.allergens && c.allergens.length > 0));
 
-  const showAllergensSection = hasAllergensAdded || (isToday && canEditMealAllergens);
+  const showAllergensSection = hasAllergensAdded || canEditAllergensOnDashboard;
+
+  const isTaskCompleted = useCallback(
+    (taskKey: string): boolean => {
+      if (!data) return false;
+      if (data.completed_task_ids && data.completed_task_ids.includes(taskKey)) {
+        return true;
+      }
+      if (data.completed_tasks && data.completed_tasks.some((ct) => ct.task_type_id === taskKey)) {
+        return true;
+      }
+      if (taskKey === 'enter_allergens' || taskKey === 'allergene_eintragen') {
+        if (
+          data.completed_task_ids?.includes('enter_allergens') ||
+          data.completed_task_ids?.includes('allergene_eintragen')
+        ) {
+          return true;
+        }
+        if (
+          data.completed_tasks?.some(
+            (ct) => ct.task_type_id === 'enter_allergens' || ct.task_type_id === 'allergene_eintragen'
+          )
+        ) {
+          return true;
+        }
+      }
+      return false;
+    },
+    [data]
+  );
+
+  const handleTaskToggle = async (taskKey: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    // Rule: "For allergens too, let's only allow editing them for the current day or past days from the dashboard."
+    // "and then when a user clicks the checkbox / todo entry outside of the button, that button should somehow be highlighted (e.g. flash twice or whatever is easy to do )"
+    if (taskKey === 'enter_allergens' || taskKey === 'allergene_eintragen') {
+      if (!isCurrentOrPastDay) {
+        alert(t('allergensOnlyCurrentOrPast'));
+        return;
+      }
+      triggerAllergensFlash();
+      return;
+    }
+
+    // Rule: "it should only be possible to mark tasks as done for a day if today is the day"
+    if (!isToday) {
+      alert(t('taskOnlyToday'));
+      return;
+    }
+
+    const completed = isTaskCompleted(taskKey);
+    const action = completed ? 'uncomplete' : 'complete';
+    try {
+      const url = `/api/dashboard/tasks/${encodeURIComponent(taskKey)}/${action}?date=${encodeURIComponent(displayDateStr)}`;
+      const headers: Record<string, string> = {
+        'X-App-View': 'dashboard',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const res = await fetch(url, {
+        method: 'POST',
+        headers,
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.error || `Failed to update task (${res.status})`);
+      }
+      void fetchDailyBrief(selectedDate);
+    } catch (err: unknown) {
+      console.error('Error toggling task:', err);
+      alert(err instanceof Error ? err.message : 'Error updating task');
+    }
+  };
+
+  const sortedTasks = [...(data?.tasks_and_info || [])].sort((a, b) => {
+    const aDone = isTaskCompleted(a);
+    const bDone = isTaskCompleted(b);
+    if (aDone === bDone) return 0;
+    return aDone ? 1 : -1;
+  });
 
   return (
     <div className={`kiosk-tablet-page ${embedded ? 'embedded' : ''}`}>
@@ -545,11 +679,11 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
                   <div className="kiosk-meal-allergens-section" data-testid="kiosk-meal-allergens-section">
                     <div className="kiosk-meal-allergens-header">
                       <span>{t('componentsAndAllergensLabel')}</span>
-                      {isToday && canEditMealAllergens && (
+                      {canEditAllergensOnDashboard && (
                         <button
                           type="button"
                           className="kiosk-meal-allergens-edit-btn"
-                          onClick={() => setIsEditingAllergens(true)}
+                          onClick={(e) => openMealAllergensEditor(e)}
                           title={t('editMealAllergens')}
                           aria-label={t('editMealAllergens')}
                           data-testid="kiosk-edit-meal-allergens-btn"
@@ -595,45 +729,88 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
                   <span>{t('tasksAndInfoTitle')}</span>
                 </div>
                 <div className="kiosk-todos-list">
-                  {data?.tasks_and_info && data.tasks_and_info.length > 0 ? (
-                    data.tasks_and_info.map((task, idx) => {
+                  {sortedTasks.length > 0 ? (
+                    sortedTasks.map((task, idx) => {
+                      const isDone = isTaskCompleted(task);
+                      const isAllergens = task === 'enter_allergens' || task === 'allergene_eintragen';
+                      const isCheckable = isToday && !isAllergens;
+                      const showCheckbox = isDone || isCheckable;
+                      const isInteractive = isAllergens ? isCurrentOrPastDay : isToday;
+
+                      let icon = <AlertCircle size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
+                      let label = task;
+                      let colorClass = 'kiosk-todo-default';
+
                       if (task === 'yellow_bin_retrieve') {
-                        return (
-                          <div key={idx} className="kiosk-todo-item kiosk-todo-yellow">
-                            <Trash2 size={embedded ? 20 : 30} className="kiosk-todo-icon" />
-                            <span>{t('yellowBinRetrieve')}</span>
-                          </div>
-                        );
+                        icon = <Trash2 size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
+                        label = t('yellowBinRetrieve');
+                        colorClass = 'kiosk-todo-yellow';
+                      } else if (task === 'yellow_bin_put_out') {
+                        icon = <Trash2 size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
+                        label = t('yellowBinPutOut');
+                        colorClass = 'kiosk-todo-yellow';
+                      } else if (task === 'clean_coffe_machine' || task === 'clean_coffee_machine') {
+                        icon = <Coffee size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
+                        label = t('cleanCoffeeMachine');
+                        colorClass = 'kiosk-todo-coffee';
+                      } else if (task === 'clean_refrigerator') {
+                        icon = <Refrigerator size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
+                        label = t('cleanRefrigerator');
+                        colorClass = 'kiosk-todo-refrigerator';
+                      } else if (isAllergens) {
+                        icon = <UtensilsCrossed size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
+                        label = t('enterAllergens');
+                        colorClass = 'kiosk-todo-allergens';
                       }
-                      if (task === 'yellow_bin_put_out') {
-                        return (
-                          <div key={idx} className="kiosk-todo-item kiosk-todo-yellow">
-                            <Trash2 size={embedded ? 20 : 30} className="kiosk-todo-icon" />
-                            <span>{t('yellowBinPutOut')}</span>
-                          </div>
-                        );
-                      }
-                      if (task === 'clean_coffe_machine' || task === 'clean_coffee_machine') {
-                        return (
-                          <div key={idx} className="kiosk-todo-item kiosk-todo-coffee">
-                            <Coffee size={embedded ? 20 : 30} className="kiosk-todo-icon" />
-                            <span>{t('cleanCoffeeMachine')}</span>
-                          </div>
-                        );
-                      }
-                      if (task === 'clean_refrigerator') {
-                        return (
-                          <div key={idx} className="kiosk-todo-item kiosk-todo-refrigerator">
-                            <Refrigerator size={embedded ? 20 : 30} className="kiosk-todo-icon" />
-                            <span>{t('cleanRefrigerator')}</span>
-                          </div>
-                        );
-                      }
-                      // Fallback for any other custom task/info
+
                       return (
-                        <div key={idx} className="kiosk-todo-item kiosk-todo-default">
-                          <AlertCircle size={embedded ? 20 : 30} className="kiosk-todo-icon" />
-                          <span>{task}</span>
+                        <div
+                          key={`${task}-${idx}`}
+                          className={`kiosk-todo-item ${colorClass} ${isDone ? 'kiosk-todo-completed' : ''} ${!isInteractive ? 'kiosk-todo-disabled' : ''}`}
+                          data-testid={`kiosk-todo-item-${task}`}
+                          data-task-id={task}
+                          data-completed={isDone ? 'true' : 'false'}
+                          onClick={() => void handleTaskToggle(task)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              void handleTaskToggle(task);
+                            }
+                          }}
+                        >
+                          {showCheckbox && (
+                            <button
+                              type="button"
+                              className={`kiosk-todo-checkbox ${isDone ? 'checked' : ''} ${!isToday ? 'disabled' : ''}`}
+                              data-testid={`task-checkbox-${task}`}
+                              aria-label={`${label}: ${isDone ? t('taskDone') : ''}`}
+                              onClick={(e) => void handleTaskToggle(task, e)}
+                              disabled={!isToday}
+                            >
+                              {isDone && (
+                                <Check size={embedded ? 14 : 20} strokeWidth={3} className="kiosk-todo-check-icon" />
+                              )}
+                            </button>
+                          )}
+                          {icon}
+                          <span className="kiosk-todo-label" data-testid={`task-label-${task}`}>
+                            {label}
+                          </span>
+                          {isAllergens && (
+                            <button
+                              type="button"
+                              className={`kiosk-todo-open-allergens-btn ${flashAllergensBtn ? 'flash' : ''} ${!isCurrentOrPastDay ? 'disabled' : ''}`}
+                              data-testid="open-allergens-editor-btn"
+                              data-flashing={flashAllergensBtn ? 'true' : 'false'}
+                              disabled={!isCurrentOrPastDay}
+                              title={!isCurrentOrPastDay ? t('allergensOnlyCurrentOrPast') : t('openComponentsAndAllergens')}
+                              onClick={(e) => openMealAllergensEditor(e)}
+                            >
+                              {t('openComponentsAndAllergens')}
+                            </button>
+                          )}
                         </div>
                       );
                     })

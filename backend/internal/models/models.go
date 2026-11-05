@@ -770,11 +770,24 @@ type THMembership struct {
 	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
+type CompletedTask struct {
+	ID               uuid.UUID  `json:"id,omitempty"`
+	TaskDate         string     `json:"task_date"`
+	TaskTypeID       string     `json:"task_type_id"`
+	CompletedBy      *uuid.UUID `json:"completed_by,omitempty"`
+	CompletedByEmail string     `json:"completed_by_email,omitempty"`
+	IsKiosk          bool       `json:"is_kiosk"`
+	KioskName        string     `json:"kiosk_name,omitempty"`
+	CompletedAt      time.Time  `json:"completed_at"`
+}
+
 type DailyBriefResponse struct {
 	Date                   string                  `json:"date"`
 	WhoIsCooking           string                  `json:"who_is_cooking"`
 	MealComponents         []string                `json:"meal_components"`
 	TasksAndInfo           []string                `json:"tasks_and_info"`
+	CompletedTasks         []CompletedTask         `json:"completed_tasks,omitempty"`
+	CompletedTaskIDs       []string                `json:"completed_task_ids,omitempty"`
 	HasAllergenRecord      bool                    `json:"has_allergen_record"`
 	AllergenMealComponents []MealAllergenComponent `json:"allergen_meal_components,omitempty"`
 }

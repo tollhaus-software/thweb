@@ -3183,6 +3183,128 @@ func TestHandleUpdateFamilyNotes(t *testing.T) {
 	}
 }
 
+func TestDashboardTasks_Handlers(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to postgres: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping postgres: %v", err)
+	}
+
+	appStore := store.NewStore(pool)
+	server := &Server{
+		Store: appStore,
+	}
+
+	loc, _ := time.LoadLocation("Europe/Berlin")
+	todayStr := time.Now().In(loc).Format("2006-01-02")
+	yesterdayStr := time.Now().In(loc).AddDate(0, 0, -1).Format("2006-01-02")
+
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM completed_tasks WHERE task_date IN ($1, $2)", todayStr, yesterdayStr)
+	}()
+
+	userID := uuid.New()
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, 'handler-task-user@example.com') ON CONFLICT (id) DO NOTHING", userID)
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", userID)
+	}()
+
+	user := &models.UserWithPermissions{
+		ID:    userID,
+		Email: "handler-task-user@example.com",
+	}
+
+	kioskUser := &models.UserWithPermissions{
+		Email:     "kiosk+CN=kiosk-tablet-kitchen@internal",
+		IsKiosk:   true,
+		KioskName: "kiosk-tablet-kitchen",
+	}
+
+	// 1. Mark task as done for yesterday (not today) -> 400 Bad Request
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("taskTypeId", "clean_coffee_machine")
+	reqPast := httptest.NewRequest("POST", "/api/dashboard/tasks/clean_coffee_machine/complete?date="+yesterdayStr, nil)
+	reqPast = reqPast.WithContext(context.WithValue(context.WithValue(reqPast.Context(), chi.RouteCtxKey, rctx), auth.UserContextKey, user))
+	recPast := httptest.NewRecorder()
+	server.HandleCompleteTask(recPast, reqPast)
+	if recPast.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request for completing task on non-today date, got %d (%s)", recPast.Code, recPast.Body.String())
+	}
+
+	// 2. Mark enter_allergens as done directly -> 400 Bad Request
+	rctxAllergen := chi.NewRouteContext()
+	rctxAllergen.URLParams.Add("taskTypeId", "enter_allergens")
+	reqAllergen := httptest.NewRequest("POST", "/api/dashboard/tasks/enter_allergens/complete?date="+todayStr, nil)
+	reqAllergen = reqAllergen.WithContext(context.WithValue(context.WithValue(reqAllergen.Context(), chi.RouteCtxKey, rctxAllergen), auth.UserContextKey, user))
+	recAllergen := httptest.NewRecorder()
+	server.HandleCompleteTask(recAllergen, reqAllergen)
+	if recAllergen.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request for completing enter_allergens directly, got %d (%s)", recAllergen.Code, recAllergen.Body.String())
+	}
+
+	// 3. Mark task as done for today by regular user -> 200 OK
+	rctxToday := chi.NewRouteContext()
+	rctxToday.URLParams.Add("taskTypeId", "clean_coffee_machine")
+	reqToday := httptest.NewRequest("POST", "/api/dashboard/tasks/clean_coffee_machine/complete?date="+todayStr, nil)
+	reqToday = reqToday.WithContext(context.WithValue(context.WithValue(reqToday.Context(), chi.RouteCtxKey, rctxToday), auth.UserContextKey, user))
+	recToday := httptest.NewRecorder()
+	server.HandleCompleteTask(recToday, reqToday)
+	if recToday.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for completing task today, got %d (%s)", recToday.Code, recToday.Body.String())
+	}
+	var ctUser models.CompletedTask
+	if err := json.Unmarshal(recToday.Body.Bytes(), &ctUser); err != nil {
+		t.Fatalf("failed to unmarshal completed task: %v", err)
+	}
+	if ctUser.TaskTypeID != "clean_coffee_machine" || ctUser.CompletedByEmail != "handler-task-user@example.com" || ctUser.IsKiosk {
+		t.Errorf("unexpected completed task metadata: %+v", ctUser)
+	}
+
+	// 4. Mark task as done for today by kiosk -> 200 OK
+	rctxKiosk := chi.NewRouteContext()
+	rctxKiosk.URLParams.Add("taskTypeId", "yellow_bin_put_out")
+	reqKiosk := httptest.NewRequest("POST", "/api/dashboard/tasks/yellow_bin_put_out/complete?date="+todayStr, nil)
+	reqKiosk = reqKiosk.WithContext(context.WithValue(context.WithValue(reqKiosk.Context(), chi.RouteCtxKey, rctxKiosk), auth.UserContextKey, kioskUser))
+	recKiosk := httptest.NewRecorder()
+	server.HandleCompleteTask(recKiosk, reqKiosk)
+	if recKiosk.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for kiosk completing task, got %d (%s)", recKiosk.Code, recKiosk.Body.String())
+	}
+	var ctKiosk models.CompletedTask
+	if err := json.Unmarshal(recKiosk.Body.Bytes(), &ctKiosk); err != nil {
+		t.Fatalf("failed to unmarshal kiosk completed task: %v", err)
+	}
+	if !ctKiosk.IsKiosk || ctKiosk.KioskName != "kiosk-tablet-kitchen" {
+		t.Errorf("unexpected kiosk metadata: %+v", ctKiosk)
+	}
+
+	// 5. Uncomplete task for today -> 200 OK
+	reqUncomplete := httptest.NewRequest("POST", "/api/dashboard/tasks/clean_coffee_machine/uncomplete?date="+todayStr, nil)
+	reqUncomplete = reqUncomplete.WithContext(context.WithValue(context.WithValue(reqUncomplete.Context(), chi.RouteCtxKey, rctxToday), auth.UserContextKey, user))
+	recUncomplete := httptest.NewRecorder()
+	server.HandleUncompleteTask(recUncomplete, reqUncomplete)
+	if recUncomplete.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for uncompleting task, got %d (%s)", recUncomplete.Code, recUncomplete.Body.String())
+	}
+
+	// 6. Uncomplete task for yesterday -> 400 Bad Request
+	reqUncompletePast := httptest.NewRequest("POST", "/api/dashboard/tasks/clean_coffee_machine/uncomplete?date="+yesterdayStr, nil)
+	reqUncompletePast = reqUncompletePast.WithContext(context.WithValue(context.WithValue(reqUncompletePast.Context(), chi.RouteCtxKey, rctxToday), auth.UserContextKey, user))
+	recUncompletePast := httptest.NewRecorder()
+	server.HandleUncompleteTask(recUncompletePast, reqUncompletePast)
+	if recUncompletePast.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request for uncompleting task on non-today date, got %d (%s)", recUncompletePast.Code, recUncompletePast.Body.String())
+	}
+}
+
+
 
 
 

@@ -332,4 +332,253 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
       { name: 'Milchreis', allergens: ['laktose'] },
     ]);
   });
+
+  test('improves tasks handling in dashboard: todo boxes, strikethrough, bottom sorting, today-only restriction, and Allergene eintragen opening editor & marking done upon finalization', async ({ request, page }) => {
+    // Automatically accept confirm dialogs
+    page.on('dialog', (dialog) => dialog.accept());
+
+    // 1. Reset database state
+    const resetRes = await request.post('/api/test/reset');
+    expect(resetRes.ok()).toBeTruthy();
+
+    const authHeaders = {
+      Authorization: 'Bearer developer@example.com',
+      'Content-Type': 'application/json',
+    };
+
+    // Calculate dates
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`;
+
+    // Seed yellow bag for tomorrow so today has task "yellow_bin_put_out" ("Gelbe Tonne rausstellen")
+    const seedYellowRes = await request.post('/api/test/yellow-bag', {
+      headers: authHeaders,
+      data: { dates: [tomorrowStr] },
+    });
+    expect(seedYellowRes.ok()).toBeTruthy();
+
+    // Seed meal plan with cook for today and tomorrow
+    const seedPlanRes = await request.post('/api/test/meal-plan', {
+      headers: authHeaders,
+      data: [
+        {
+          date: todayStr,
+          cook_name: 'Küchenchef Anton',
+          food_component_1: 'Gemüsesuppe',
+          food_component_2: '',
+          food_component_3: '',
+        },
+        {
+          date: tomorrowStr,
+          cook_name: 'Koch Zukunft',
+          food_component_1: 'Reispfanne',
+          food_component_2: '',
+          food_component_3: '',
+        },
+      ],
+    });
+    expect(seedPlanRes.ok()).toBeTruthy();
+
+    // Authenticate and open dashboard
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+    });
+
+    await page.goto('/#dashboard');
+    await page.waitForLoadState('networkidle');
+
+    const embeddedPage = page.locator('.kiosk-tablet-page.embedded');
+    await expect(embeddedPage).toBeVisible();
+
+    const todosCard = embeddedPage.locator('.kiosk-card-todos');
+    await expect(todosCard).toBeVisible();
+
+    // Verify task items exist: yellow_bin_put_out and enter_allergens
+    const yellowTask = todosCard.locator('[data-testid="kiosk-todo-item-yellow_bin_put_out"]');
+    const allergenTask = todosCard.locator('[data-testid="kiosk-todo-item-enter_allergens"]');
+    await expect(yellowTask).toBeVisible();
+    await expect(allergenTask).toBeVisible();
+
+    // Verify:
+    // - yellow_bin_put_out is checkable today -> has checkbox, initially not checked
+    // - enter_allergens is NOT checkable directly -> has NO checkbox!
+    const yellowCheckbox = yellowTask.locator('[data-testid="task-checkbox-yellow_bin_put_out"]');
+    const allergenCheckbox = allergenTask.locator('[data-testid="task-checkbox-enter_allergens"]');
+    await expect(yellowCheckbox).toBeVisible();
+    await expect(allergenCheckbox).toHaveCount(0);
+
+    await expect(yellowTask).toHaveAttribute('data-completed', 'false');
+    await expect(allergenTask).toHaveAttribute('data-completed', 'false');
+    await expect(yellowCheckbox).not.toHaveClass(/checked/);
+
+    // 2. Check yellow_bin_put_out task on today
+    await yellowCheckbox.click();
+
+    // Verify it is now marked as done:
+    // - striked through in smaller font
+    // - check mark in todo box
+    // - placed at bottom of list
+    await expect(yellowTask).toHaveAttribute('data-completed', 'true');
+    await expect(yellowTask).toHaveClass(/kiosk-todo-completed/);
+    await expect(yellowCheckbox).toHaveClass(/checked/);
+    await expect(yellowCheckbox.locator('.kiosk-todo-check-icon')).toBeVisible();
+
+    const yellowLabel = yellowTask.locator('.kiosk-todo-label');
+    await expect(yellowLabel).toHaveCSS('text-decoration-line', 'line-through');
+
+    // Verify yellow_bin_put_out moved to the bottom after pending tasks
+    const todoItems = todosCard.locator('.kiosk-todo-item');
+    const lastTodo = todoItems.last();
+    await expect(lastTodo).toHaveAttribute('data-task-id', 'yellow_bin_put_out');
+
+    // 3. Verify backend database persistence with day, user, timestamp, task type id
+    const briefRes = await request.get('/api/dashboard/daily-brief', {
+      headers: authHeaders,
+    });
+    expect(briefRes.ok()).toBeTruthy();
+    const briefData = await briefRes.json();
+    expect(briefData.completed_tasks).toBeDefined();
+    const yellowCompleted = briefData.completed_tasks.find(
+      (ct: { task_type_id: string }) => ct.task_type_id === 'yellow_bin_put_out'
+    );
+    expect(yellowCompleted).toBeDefined();
+    expect(yellowCompleted.task_date).toBe(todayStr);
+    expect(yellowCompleted.completed_by_email).toBe('developer@example.com');
+    expect(yellowCompleted.is_kiosk).toBe(false);
+    expect(yellowCompleted.completed_at).toBeTruthy();
+
+    // 4. Verify date restriction: navigate to previous day (yesterday)
+    const prevDayBtn = embeddedPage.locator('.kiosk-header-nav-btn.left');
+    await prevDayBtn.click();
+    await page.waitForTimeout(300);
+
+    // On non-today date, tasks that are not checkable do NOT have a checkbox
+    const pastYellowCheckbox = todosCard.locator('[data-testid="task-checkbox-yellow_bin_put_out"]');
+    await expect(pastYellowCheckbox).toHaveCount(0);
+
+    const pastAttempt = await request.post(
+      `/api/dashboard/tasks/yellow_bin_put_out/complete?date=2026-01-01`,
+      { headers: authHeaders }
+    );
+    expect(pastAttempt.status()).toBe(400);
+
+    // Return to today via Home button
+    const homeBtn = embeddedPage.locator('.kiosk-nav-home-btn');
+    await homeBtn.click();
+    await page.waitForTimeout(300);
+
+    // 5. "Allergene eintragen...": "Komponenten und Allergene öffnen" button is always displayed!
+    const allergenLabel = allergenTask.locator('[data-testid="task-label-enter_allergens"]');
+    await expect(allergenLabel).toHaveText('Allergene eintragen...');
+
+    const openAllergensBtn = allergenTask.locator('[data-testid="open-allergens-editor-btn"]');
+    await expect(openAllergensBtn).toBeVisible();
+    await expect(openAllergensBtn).toHaveText('Komponenten und Allergene öffnen');
+
+    // Clicking the task row outside of the button highlights/flashes the button twice, does NOT open editor
+    await allergenLabel.click();
+    await expect(openAllergensBtn).toHaveClass(/flash/);
+    const editor = embeddedPage.locator('[data-testid="meal-allergens-editor"]');
+    await expect(editor).toHaveCount(0);
+
+    // Clicking the "Komponenten und Allergene öffnen" button directly opens the allergens editor!
+    await openAllergensBtn.click();
+    await expect(editor).toBeVisible();
+    await expect(editor).toHaveAttribute('data-loaded', 'true');
+
+    // Cook is already matched from meal plan (Küchenchef Anton). Add a component, then finalize
+    await editor.locator('[data-testid="add-meal-component-btn"]').first().click();
+    const compInput = page.getByTestId('meal-component-name-input-0');
+    await expect(compInput).toBeVisible();
+    await compInput.fill('Gemüsesuppe');
+    await page.getByTestId('popover-done-btn').click();
+
+    // Click finalize in editor
+    const finalizeBtn = editor.locator('[data-testid="finalize-allergens-btn"]');
+    await expect(finalizeBtn).toBeEnabled();
+    await finalizeBtn.click();
+
+    // Wait for finalization and return back to dashboard
+    await expect(editor.locator('[data-testid="allergens-editor-status"]')).toContainText('Abgeschlossen');
+
+    const backBtn = editor.locator('[data-testid="allergens-editor-back-btn"]');
+    await backBtn.click();
+    await expect(editor).toHaveCount(0);
+
+    // 6. Verify "Allergene eintragen" is now marked done on the dashboard!
+    const allergenTaskAfter = todosCard.locator('[data-testid="kiosk-todo-item-enter_allergens"]');
+    await expect(allergenTaskAfter).toBeVisible();
+    await expect(allergenTaskAfter).toHaveAttribute('data-completed', 'true');
+    await expect(allergenTaskAfter).toHaveClass(/kiosk-todo-completed/);
+
+    const allergenCheckboxAfter = allergenTaskAfter.locator('[data-testid="task-checkbox-enter_allergens"]');
+    await expect(allergenCheckboxAfter).toBeVisible();
+    await expect(allergenCheckboxAfter).toHaveClass(/checked/);
+    await expect(allergenCheckboxAfter.locator('.kiosk-todo-check-icon')).toBeVisible();
+
+    const allergenLabelAfter = allergenTaskAfter.locator('.kiosk-todo-label');
+    await expect(allergenLabelAfter).toHaveCSS('text-decoration-line', 'line-through');
+
+    // The open button remains displayed, and clicking the completed task row flashes the button
+    const openAllergensBtnAfter = allergenTaskAfter.locator('[data-testid="open-allergens-editor-btn"]');
+    await expect(openAllergensBtnAfter).toBeVisible();
+    await allergenCheckboxAfter.click();
+    await expect(openAllergensBtnAfter).toHaveClass(/flash/);
+    await expect(allergenTaskAfter).toHaveAttribute('data-completed', 'true');
+
+    // 7. Verify future date restriction: only allow editing allergens for current day or past days!
+    const nextDayBtn = embeddedPage.locator('.kiosk-header-nav-btn.right');
+    await nextDayBtn.click();
+    await page.waitForTimeout(300);
+
+    // On tomorrow (future date):
+    // - Card 3 pencil edit button is not visible
+    const tomorrowEditPencil = embeddedPage.locator('[data-testid="kiosk-edit-meal-allergens-btn"]');
+    await expect(tomorrowEditPencil).toHaveCount(0);
+
+    // - Card 4 allergen task button is disabled on future date
+    const futureAllergenTask = todosCard.locator('[data-testid="kiosk-todo-item-enter_allergens"]');
+    await expect(futureAllergenTask).toBeVisible();
+    await expect(futureAllergenTask.locator('[data-testid="task-checkbox-enter_allergens"]')).toHaveCount(0);
+
+    const futureOpenBtn = futureAllergenTask.locator('[data-testid="open-allergens-editor-btn"]');
+    await expect(futureOpenBtn).toBeVisible();
+    await expect(futureOpenBtn).toBeDisabled();
+
+    // Clicking it on the future date does NOT open editor
+    await futureAllergenTask.click();
+    await expect(embeddedPage.locator('[data-testid="meal-allergens-editor"]')).toHaveCount(0);
+
+    // 8. Verify past days ALLOW editing allergens from the dashboard!
+    // Navigate from tomorrow back to today, then to yesterday
+    const prevDayBtn2 = embeddedPage.locator('.kiosk-header-nav-btn.left');
+    await prevDayBtn2.click(); // back to today
+    await page.waitForTimeout(200);
+    await prevDayBtn2.click(); // to yesterday
+    await page.waitForTimeout(300);
+
+    // On yesterday (past day):
+    // - Regular tasks cannot be checked (no checkbox)
+    await expect(todosCard.locator('[data-testid="task-checkbox-yellow_bin_put_out"]')).toHaveCount(0);
+
+    // - Allergens task CAN be opened and edited on past days!
+    const yesterdayAllergenTask = todosCard.locator('[data-testid="kiosk-todo-item-enter_allergens"]');
+    await expect(yesterdayAllergenTask).toBeVisible();
+    const yesterdayOpenBtn = yesterdayAllergenTask.locator('[data-testid="open-allergens-editor-btn"]');
+    await expect(yesterdayOpenBtn).toBeVisible();
+    await expect(yesterdayOpenBtn).toBeEnabled();
+
+    // Clicking the open button opens the editor for yesterday
+    await yesterdayOpenBtn.click();
+    const yesterdayEditor = embeddedPage.locator('[data-testid="meal-allergens-editor"]');
+    await expect(yesterdayEditor).toBeVisible();
+    await expect(yesterdayEditor).toHaveAttribute('data-loaded', 'true');
+    await yesterdayEditor.locator('[data-testid="allergens-editor-back-btn"]').click();
+    await expect(yesterdayEditor).toHaveCount(0);
+  });
 });
