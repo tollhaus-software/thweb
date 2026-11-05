@@ -790,6 +790,7 @@ type DailyBriefResponse struct {
 	CompletedTaskIDs       []string                `json:"completed_task_ids,omitempty"`
 	HasAllergenRecord      bool                    `json:"has_allergen_record"`
 	AllergenMealComponents []MealAllergenComponent `json:"allergen_meal_components,omitempty"`
+	ScreensaverExitTimes   []string                `json:"screensaver_exit_times,omitempty"`
 }
 
 // MemberRow represents an active member displayed in the "Members" (Vereinsmitglieder) tab.

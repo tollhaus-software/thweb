@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -2125,6 +2126,20 @@ func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*model
 				CompletedAt: time.Now(),
 			})
 		}
+	}
+
+	// 8. Screensaver exit times for kiosk devices (defaults to 09:30 and 10:00)
+	exitTimesEnv := strings.TrimSpace(os.Getenv("KIOSK_SCREENSAVER_EXIT_TIMES"))
+	if exitTimesEnv != "" {
+		for _, part := range strings.Split(exitTimesEnv, ",") {
+			trimmed := strings.TrimSpace(part)
+			if trimmed != "" {
+				resp.ScreensaverExitTimes = append(resp.ScreensaverExitTimes, trimmed)
+			}
+		}
+	}
+	if len(resp.ScreensaverExitTimes) == 0 {
+		resp.ScreensaverExitTimes = []string{"09:30", "10:00"}
 	}
 
 	return resp, nil

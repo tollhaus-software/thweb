@@ -38,6 +38,7 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-mock}
       ALLOW_MOCK_AUTH: "true"
       ROLES_FILE: /etc/thweb/local_dev_roles.yaml
+      KIOSK_SCREENSAVER_EXIT_TIMES: "${KIOSK_SCREENSAVER_EXIT_TIMES:-09:30,10:00}"
     volumes:
       - ${KIOSK_CERTS_DIR:-./testing/certs/kiosk}:/etc/kioskcerts:ro
       - ./local_dev_roles.yaml:/etc/thweb/local_dev_roles.yaml:ro

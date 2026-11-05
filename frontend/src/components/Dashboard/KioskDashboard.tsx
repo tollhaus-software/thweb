@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useRealtime } from '../../hooks/useRealtime';
 import { useIdleTimer } from '../../hooks/useIdleTimer';
+import { useFullyKioskScreensaver } from '../../hooks/useFullyKioskScreensaver';
 import { t, formatDashboardDate } from '../../utils/i18n';
 import { AllergenIcon } from '../MealAllergens/AllergenIcon';
 import {
@@ -54,6 +55,7 @@ interface DailyBriefData {
   completed_task_ids?: string[];
   has_allergen_record?: boolean;
   allergen_meal_components?: MealAllergenComponent[];
+  screensaver_exit_times?: string[];
 }
 
 interface GroupAllergiesSummary {
@@ -360,6 +362,18 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     onIdle: handleHomeClick,
     enabled: true,
     throttleMs: 5000,
+  });
+
+  const handleScreensaverWake = useCallback(() => {
+    handleHomeClick();
+    void fetchDailyBrief(null);
+  }, [handleHomeClick, fetchDailyBrief]);
+
+  const { scheduledTimes } = useFullyKioskScreensaver({
+    serverTimes: data?.screensaver_exit_times,
+    currentTime,
+    onWake: handleScreensaverWake,
+    enabled: true,
   });
 
   const displayDateStr = (data?.date || selectedDate || todayDateStr).split('T')[0];
@@ -915,7 +929,12 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
 
           {/* Right: Clock */}
           <div className="kiosk-nav-right">
-            <div className="kiosk-clock">
+            <div
+              className="kiosk-clock"
+              data-testid="kiosk-clock"
+              data-wake-times={scheduledTimes.join(', ')}
+              title={scheduledTimes.length > 0 ? `Screensaver-Exit: ${scheduledTimes.join(', ')}` : undefined}
+            >
               {formattedTime}
             </div>
           </div>

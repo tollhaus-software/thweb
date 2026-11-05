@@ -154,6 +154,22 @@ func TestGetDailyBrief(t *testing.T) {
 		t.Errorf("expected 'clean_refrigerator' in tasks, got: %+v", briefFriday.TasksAndInfo)
 	}
 
+	// Verify default screensaver exit times
+	if len(briefFriday.ScreensaverExitTimes) != 2 || briefFriday.ScreensaverExitTimes[0] != "09:30" || briefFriday.ScreensaverExitTimes[1] != "10:00" {
+		t.Errorf("expected default screensaver exit times ['09:30', '10:00'], got %+v", briefFriday.ScreensaverExitTimes)
+	}
+
+	// Verify env override of screensaver exit times
+	os.Setenv("KIOSK_SCREENSAVER_EXIT_TIMES", "08:15, 12:45, 16:30")
+	briefEnv, err := appStore.GetDailyBrief(ctx, fridayDate)
+	os.Unsetenv("KIOSK_SCREENSAVER_EXIT_TIMES")
+	if err != nil {
+		t.Fatalf("GetDailyBrief failed with env: %v", err)
+	}
+	if len(briefEnv.ScreensaverExitTimes) != 3 || briefEnv.ScreensaverExitTimes[0] != "08:15" || briefEnv.ScreensaverExitTimes[1] != "12:45" || briefEnv.ScreensaverExitTimes[2] != "16:30" {
+		t.Errorf("expected overridden screensaver exit times, got %+v", briefEnv.ScreensaverExitTimes)
+	}
+
 	// Test 2: Thursday 2099-10-08
 	briefThursday, err := appStore.GetDailyBrief(ctx, thursdayDate)
 	if err != nil {

@@ -346,14 +346,16 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
       'Content-Type': 'application/json',
     };
 
-    // Calculate dates
-    const now = new Date();
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    // Calculate dates matching the backend's current day
+    const initialBriefRes = await request.get('/api/dashboard/daily-brief');
+    expect(initialBriefRes.ok()).toBeTruthy();
+    const initBriefData = await initialBriefRes.json();
+    const todayStr = initBriefData.date ? initBriefData.date.split('T')[0] : new Date().toISOString().split('T')[0];
 
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`;
+    const todayDateObj = new Date(todayStr + 'T12:00:00Z');
+    const tomorrowObj = new Date(todayDateObj);
+    tomorrowObj.setUTCDate(tomorrowObj.getUTCDate() + 1);
+    const tomorrowStr = tomorrowObj.toISOString().split('T')[0];
 
     // Seed yellow bag for tomorrow so today has task "yellow_bin_put_out" ("Gelbe Tonne rausstellen")
     const seedYellowRes = await request.post('/api/test/yellow-bag', {
@@ -732,5 +734,110 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     // Verify date has automatically reset back to initial (today)
     const resetDateText = await embeddedPage.locator('.kiosk-header-date').innerText();
     expect(resetDateText).toBe(initialDateText);
+  });
+
+  test('configures Fully Kiosk screensaver exit times (default 09:30 and 10:00, or via URL/config) and wakes kiosk', async ({ request, page }) => {
+    // 1. Reset database state
+    const resetRes = await request.post('/api/test/reset');
+    expect(resetRes.ok()).toBeTruthy();
+
+    // 2. Setup mock Fully Kiosk API on window before page load
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+
+      const calls: string[] = [];
+      const fullyMock = {
+        turnScreenOn: () => { calls.push('turnScreenOn'); },
+        stopScreensaver: () => { calls.push('stopScreensaver'); },
+        stopDaydream: () => { calls.push('stopDaydream'); },
+        bringToForeground: () => { calls.push('bringToForeground'); },
+        startScreensaver: () => { calls.push('startScreensaver'); },
+        startDaydream: () => { calls.push('startDaydream'); },
+        setBooleanSetting: (key: string, val: boolean) => { calls.push(`setBooleanSetting:${key}:${val}`); },
+        isScreenOn: () => true,
+      };
+
+      (window as unknown as {
+        fully?: typeof fullyMock;
+        __FULLY_CALLS__?: string[];
+        __KIOSK_SCREENSAVER_OFF_DURATION_MS__?: number;
+      }).fully = fullyMock;
+      (window as unknown as {
+        __FULLY_CALLS__?: string[];
+        __KIOSK_SCREENSAVER_OFF_DURATION_MS__?: number;
+      }).__FULLY_CALLS__ = calls;
+      (window as unknown as {
+        __KIOSK_SCREENSAVER_OFF_DURATION_MS__?: number;
+      }).__KIOSK_SCREENSAVER_OFF_DURATION_MS__ = 600;
+    });
+
+    // 3. Navigate to dashboard with default configuration
+    await page.goto('/#dashboard');
+    await page.waitForLoadState('networkidle');
+
+    const clock = page.locator('[data-testid="kiosk-clock"]');
+    await expect(clock).toBeVisible();
+
+    // Default exit times should be 09:30, 10:00
+    await expect(clock).toHaveAttribute('data-wake-times', '09:30, 10:00');
+
+    // 4. Test date navigation and open popup before wake
+    const embeddedPage = page.locator('.kiosk-tablet-page.embedded');
+    const initialDateText = await embeddedPage.locator('.kiosk-header-date').innerText();
+    const prevDayBtn = embeddedPage.locator('.kiosk-header-nav-btn.left');
+    await prevDayBtn.click();
+    await page.waitForTimeout(200);
+
+    const prevDateText = await embeddedPage.locator('.kiosk-header-date').innerText();
+    expect(prevDateText).not.toBe(initialDateText);
+
+    // Open allergies modal
+    const allergiesBtn = embeddedPage.locator('.kiosk-nav-btn', { hasText: 'Allergien' });
+    await allergiesBtn.click();
+    const allergiesPopup = embeddedPage.locator('[data-testid="kiosk-allergies-popup"]');
+    await expect(allergiesPopup).toBeVisible();
+
+    // 5. Trigger Fully screensaver exit programmatically
+    const exitResult = await page.evaluate(() => {
+      const win = window as unknown as {
+        __triggerFullyScreensaverExit?: () => boolean;
+        __FULLY_CALLS__?: string[];
+      };
+      const success = win.__triggerFullyScreensaverExit ? win.__triggerFullyScreensaverExit() : false;
+      return { success, calls: win.__FULLY_CALLS__ || [] };
+    });
+
+    expect(exitResult.success).toBe(true);
+    expect(exitResult.calls).toContain('turnScreenOn');
+    expect(exitResult.calls).toContain('stopScreensaver');
+    expect(exitResult.calls).toContain('setBooleanSetting:keepScreenOn:true');
+
+    // 6. Verify view resets back to today and popups close
+    await expect(allergiesPopup).toHaveCount(0);
+    const currentDateText = await embeddedPage.locator('.kiosk-header-date').innerText();
+    expect(currentDateText).toBe(initialDateText);
+
+    // 7. Verify that after the screensaver off duration (600ms in test), screensaver is re-engaged
+    await page.waitForTimeout(800);
+    const afterDurationCalls = await page.evaluate(() => {
+      const win = window as unknown as { __FULLY_CALLS__?: string[] };
+      return win.__FULLY_CALLS__ || [];
+    });
+    expect(afterDurationCalls).toContain('setBooleanSetting:keepScreenOn:false');
+    expect(afterDurationCalls).toContain('startScreensaver');
+
+    // 8. Verify configurable times override (e.g. for testing)
+    await page.addInitScript(() => {
+      (window as unknown as { __KIOSK_SCREENSAVER_EXIT_TIMES__?: string[] }).__KIOSK_SCREENSAVER_EXIT_TIMES__ = [
+        '08:15',
+        '11:45',
+        '15:30',
+      ];
+    });
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    const customClock = page.locator('[data-testid="kiosk-clock"]');
+    await expect(customClock).toBeVisible();
+    await expect(customClock).toHaveAttribute('data-wake-times', '08:15, 11:45, 15:30');
   });
 });
