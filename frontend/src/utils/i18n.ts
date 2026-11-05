@@ -6,6 +6,8 @@ const translations: Record<Locale, Record<string, string>> = {
   de: {
     title: 'TH Portal',
     impressum: 'Impressum',
+    privacy: 'Datenschutz',
+    datenschutz: 'Datenschutz',
     logout: 'Abmelden',
     parents: 'Eltern(MGA)',
     overviewParentsBadge: 'Eltern',
@@ -647,6 +649,8 @@ const translations: Record<Locale, Record<string, string>> = {
   en: {
     title: 'TH Portal',
     impressum: 'Impressum',
+    privacy: 'Privacy Policy',
+    datenschutz: 'Privacy Policy',
     logout: 'Sign out',
     parents: 'Parents(MGA)',
     overviewParentsBadge: 'Parents',

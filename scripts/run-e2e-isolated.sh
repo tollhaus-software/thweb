@@ -63,6 +63,8 @@ for i in $(seq 0 $((E2E_WORKERS - 1))); do
       USE_TLS: "false"
       DOMAIN_NAME: localhost
       BACKEND_HOST: backend-$i
+    volumes:
+      - $REPO_ROOT/testing/privacy:/etc/thweb/privacy:ro
     depends_on:
       - backend-$i
 
@@ -81,7 +83,7 @@ for i in $(seq 0 $((E2E_WORKERS - 1))); do
       OAUTH2_PROXY_CLIENT_ID: "mock"
       OAUTH2_PROXY_CLIENT_SECRET: "mock"
       OAUTH2_PROXY_EMAIL_DOMAINS: "*"
-      OAUTH2_PROXY_FOOTER: '<a href="https://www.tollhaus-stuttgart.de/impressum" target="_blank" rel="noopener noreferrer">Impressum</a>'
+      OAUTH2_PROXY_FOOTER: '<a href="https://www.tollhaus-stuttgart.de/impressum" target="_blank" rel="noopener noreferrer">Impressum</a> · <a href="/privacy" target="_blank" rel="noopener noreferrer">Datenschutz</a>'
     ports:
       - "$PORT:4180"
     depends_on:

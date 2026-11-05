@@ -1863,7 +1863,7 @@ const AuditLogView: React.FC<AuditLogViewProps> = ({
   );
 };
 
-const ImpressumFooter: React.FC = () => (
+const ImpressumFooter: React.FC<{ isInternal?: boolean }> = ({ isInternal }) => (
   <footer className="app-footer">
     <a
       href="https://www.tollhaus-stuttgart.de/impressum"
@@ -1872,6 +1872,16 @@ const ImpressumFooter: React.FC = () => (
       className="footer-impressum-link"
     >
       {t('impressum')}
+    </a>
+    <span className="footer-separator">·</span>
+    <a
+      href={isInternal ? '/privacy-intern' : '/privacy'}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="footer-privacy-link footer-datenschutz-link"
+      data-testid="footer-privacy-link"
+    >
+      {t('privacy')}
     </a>
   </footer>
 );
@@ -8588,7 +8598,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
           )}
       </main>
 
-      <ImpressumFooter />
+      <ImpressumFooter isInternal={true} />
 
       {/* Add Employee Modal */}
       {addEmployeeOpen && (

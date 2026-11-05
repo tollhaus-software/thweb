@@ -212,6 +212,19 @@ export const HeaderOverflowMenu: React.FC<HeaderOverflowMenuProps> = ({
             <span>{t('impressum')}</span>
           </a>
 
+          <a
+            href="/privacy-intern"
+            target="_blank"
+            rel="noopener noreferrer"
+            role="menuitem"
+            className="header-overflow-menu-item header-overflow-privacy header-overflow-datenschutz"
+            data-testid="overflow-privacy-link"
+            onClick={() => setIsOpen(false)}
+          >
+            <ExternalLink size={16} />
+            <span>{t('privacy')}</span>
+          </a>
+
           {onOpenFeedback && (
             <button
               type="button"

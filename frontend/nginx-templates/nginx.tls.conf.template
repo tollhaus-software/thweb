@@ -9,6 +9,27 @@ server {
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
 
+    # Static legal documents
+    location = /privacy {
+        root /usr/share/nginx/html;
+        try_files /privacy-external.html /datenschutz-external.html /index.html;
+    }
+
+    location = /datenschutz {
+        root /usr/share/nginx/html;
+        try_files /privacy-external.html /datenschutz-external.html /index.html;
+    }
+
+    location = /privacy-intern {
+        root /usr/share/nginx/html;
+        try_files /privacy-internal.html /datenschutz-internal.html /index.html;
+    }
+
+    location = /datenschutz-intern {
+        root /usr/share/nginx/html;
+        try_files /privacy-internal.html /datenschutz-internal.html /index.html;
+    }
+
     # Host frontend as static file
     location / {
         root /usr/share/nginx/html;

@@ -55,15 +55,24 @@ header h1,
   font-size: 0.75rem;
 }
 
-.footer-impressum-link {
+.footer-impressum-link,
+.footer-privacy-link,
+.footer-datenschutz-link {
   color: var(--text-muted, #64748b);
   text-decoration: none;
   transition: color 0.15s;
 }
 
-.footer-impressum-link:hover {
+.footer-impressum-link:hover,
+.footer-privacy-link:hover,
+.footer-datenschutz-link:hover {
   color: var(--text-h, #0f172a);
   text-decoration: underline;
+}
+
+.footer-separator {
+  margin: 0 0.5rem;
+  color: var(--text-muted, #64748b);
 }
 
 .dashboard-container .app-footer,

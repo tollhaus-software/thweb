@@ -48,6 +48,12 @@ test.describe('Test Case 11: Header Responsive Sign Out Overflow Menu & Branding
     await expect(impressumMenuItem).toHaveAttribute('href', 'https://www.tollhaus-stuttgart.de/impressum');
     await expect(impressumMenuItem).toHaveAttribute('target', '_blank');
 
+    const privacyMenuItem = dropdown.locator('[data-testid="overflow-privacy-link"]');
+    await expect(privacyMenuItem).toBeVisible();
+    await expect(privacyMenuItem).toHaveText(/Datenschutz|Privacy/i);
+    await expect(privacyMenuItem).toHaveAttribute('href', '/privacy-intern');
+    await expect(privacyMenuItem).toHaveAttribute('target', '_blank');
+
     const signOutMenuItem = dropdown.locator('[data-testid="overflow-signout-button"]');
     await expect(signOutMenuItem).toBeVisible();
     await expect(signOutMenuItem).toHaveText(/Abmelden|Sign out/i);
@@ -64,6 +70,12 @@ test.describe('Test Case 11: Header Responsive Sign Out Overflow Menu & Branding
     await expect(desktopFooterLink).toHaveText('Impressum');
     await expect(desktopFooterLink).toHaveAttribute('href', 'https://www.tollhaus-stuttgart.de/impressum');
     await expect(desktopFooterLink).toHaveAttribute('target', '_blank');
+
+    const desktopPrivacyLink = desktopFooter.locator('a.footer-privacy-link');
+    await expect(desktopPrivacyLink).toBeVisible();
+    await expect(desktopPrivacyLink).toHaveText(/Datenschutz|Privacy/i);
+    await expect(desktopPrivacyLink).toHaveAttribute('href', '/privacy-intern');
+    await expect(desktopPrivacyLink).toHaveAttribute('target', '_blank');
   });
 
   test('on small display layout (<= 768px): 3-dots overflow menu is visible and functional', async ({ page }) => {
@@ -110,6 +122,12 @@ test.describe('Test Case 11: Header Responsive Sign Out Overflow Menu & Branding
     await expect(impressumMenuItem).toHaveText(/Impressum/i);
     await expect(impressumMenuItem).toHaveAttribute('href', 'https://www.tollhaus-stuttgart.de/impressum');
     await expect(impressumMenuItem).toHaveAttribute('target', '_blank');
+
+    const privacyMenuItem = dropdown.locator('[data-testid="overflow-privacy-link"]');
+    await expect(privacyMenuItem).toBeVisible();
+    await expect(privacyMenuItem).toHaveText(/Datenschutz|Privacy/i);
+    await expect(privacyMenuItem).toHaveAttribute('href', '/privacy-intern');
+    await expect(privacyMenuItem).toHaveAttribute('target', '_blank');
 
     const signOutMenuItem = dropdown.locator('[data-testid="overflow-signout-button"]');
     await expect(signOutMenuItem).toBeVisible();
@@ -200,14 +218,11 @@ test.describe('Test Case 11: Header Responsive Sign Out Overflow Menu & Branding
 
   test('Impressum link on landing page and oauth2-proxy sign-in page', async ({ page }) => {
     // 1. Unauthenticated landing page should show Impressum link in footer
+    await page.route('**/api/me', (route) => route.fulfill({ status: 401, body: JSON.stringify({ error: 'Unauthorized' }), headers: { 'content-type': 'application/json' } }));
     await page.goto('/');
-    await page.evaluate(() => {
-      localStorage.removeItem('token');
-    });
-    await page.reload();
     await page.waitForLoadState('networkidle');
 
-    const landingFooter = page.locator('.app-footer');
+    const landingFooter = page.locator('.landing-page-container .app-footer');
     await expect(landingFooter).toBeVisible();
     const landingImpressumLink = landingFooter.locator('a.footer-impressum-link');
     await expect(landingImpressumLink).toBeVisible();
@@ -215,13 +230,24 @@ test.describe('Test Case 11: Header Responsive Sign Out Overflow Menu & Branding
     await expect(landingImpressumLink).toHaveAttribute('href', 'https://www.tollhaus-stuttgart.de/impressum');
     await expect(landingImpressumLink).toHaveAttribute('target', '_blank');
 
+    const landingPrivacyLink = landingFooter.locator('a.footer-privacy-link');
+    await expect(landingPrivacyLink).toBeVisible();
+    await expect(landingPrivacyLink).toHaveText(/Datenschutz|Privacy/i);
+    await expect(landingPrivacyLink).toHaveAttribute('href', '/privacy');
+    await expect(landingPrivacyLink).toHaveAttribute('target', '_blank');
+
     // 2. oauth2-proxy sign-in page should contain footer with Impressum link
+    await page.unroute('**/api/me');
     await page.goto('/oauth2/sign_in');
     const oauthFooter = page.locator('footer');
     await expect(oauthFooter).toBeVisible();
     const oauthImpressumLink = oauthFooter.locator('a[href="https://www.tollhaus-stuttgart.de/impressum"]');
     await expect(oauthImpressumLink).toBeVisible();
     await expect(oauthImpressumLink).toHaveText('Impressum');
+
+    const oauthPrivacyLink = oauthFooter.locator('a[href="/datenschutz"], a[href="/privacy"]');
+    await expect(oauthPrivacyLink).toBeVisible();
+    await expect(oauthPrivacyLink).toHaveText(/Datenschutz|Privacy/i);
   });
 
   test('Impressum link is consistently visible at the bottom of the screen across all pages (including mealAllergens and mealPlan)', async ({ page }) => {
@@ -244,6 +270,11 @@ test.describe('Test Case 11: Header Responsive Sign Out Overflow Menu & Branding
       await expect(footerLink).toBeVisible();
       await expect(footerLink).toHaveText('Impressum');
       await expect(footerLink).toHaveAttribute('href', 'https://www.tollhaus-stuttgart.de/impressum');
+
+      const privacyLink = footer.locator('a.footer-privacy-link');
+      await expect(privacyLink).toBeVisible();
+      await expect(privacyLink).toHaveText(/Datenschutz|Privacy/i);
+      await expect(privacyLink).toHaveAttribute('href', '/privacy-intern');
 
       // Verify the footer is positioned directly at the bottom of the viewport
       const isInViewport = await footer.evaluate((el) => {

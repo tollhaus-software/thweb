@@ -38,6 +38,13 @@ elif [ -f "/etc/thweb/favicon.png" ]; then
   APP_FAVICON_URL="/favicon.png"
 fi
 
+# Detect and copy injected privacy policy files
+if [ -d "/etc/thweb/privacy" ]; then
+  cp -f /etc/thweb/privacy/* /usr/share/nginx/html/ 2>/dev/null || true
+elif [ -d "/etc/thweb/datenschutz" ]; then
+  cp -f /etc/thweb/datenschutz/* /usr/share/nginx/html/ 2>/dev/null || true
+fi
+
 # Update index.html title tag if APP_TITLE is set
 if [ -n "${APP_TITLE}" ]; then
   ESCAPED_TITLE=$(printf '%s\n' "${APP_TITLE}" | sed -e 's/[\\/&]/\\&/g')

@@ -57,6 +57,8 @@ services:
       APP_TITLE: ${APP_TITLE:-}
       APP_LOGO_FILE: ${APP_LOGO_FILE:-}
       APP_FAVICON_FILE: ${APP_FAVICON_FILE:-}
+    volumes:
+      - ${PRIVACY_DIR:-./testing/privacy}:/etc/thweb/privacy:ro
     depends_on:
       - backend
 
@@ -76,7 +78,7 @@ services:
       OAUTH2_PROXY_CLIENT_ID: "mock"
       OAUTH2_PROXY_CLIENT_SECRET: "mock"
       OAUTH2_PROXY_EMAIL_DOMAINS: "*"
-      OAUTH2_PROXY_FOOTER: '<a href="https://www.tollhaus-stuttgart.de/impressum" target="_blank" rel="noopener noreferrer">Impressum</a>'
+      OAUTH2_PROXY_FOOTER: '<a href="https://www.tollhaus-stuttgart.de/impressum" target="_blank" rel="noopener noreferrer">Impressum</a> · <a href="/privacy" target="_blank" rel="noopener noreferrer">Datenschutz</a>'
     depends_on:
       - frontend
 
