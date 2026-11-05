@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MoreVertical, LogOut, Eye, ExternalLink, LayoutDashboard, History, Shield, Key, User, MessageSquare } from 'lucide-react';
+import { MoreVertical, LogOut, Eye, ExternalLink, LayoutDashboard, History, Shield, Key, User, MessageSquare, Activity } from 'lucide-react';
 import { t } from '../../utils/i18n';
 import type { TabId } from '../../utils/navigation';
 
@@ -13,6 +13,7 @@ export interface HeaderOverflowMenuProps {
   onSelectTab?: (tab: TabId) => void;
   canReadAudit?: boolean;
   canManageUsers?: boolean;
+  canViewActivity?: boolean;
   canProvisionKiosk?: boolean;
   activeTab?: string;
 }
@@ -27,6 +28,7 @@ export const HeaderOverflowMenu: React.FC<HeaderOverflowMenuProps> = ({
   onSelectTab,
   canReadAudit = false,
   canManageUsers = false,
+  canViewActivity = false,
   canProvisionKiosk = false,
   activeTab = '',
 }) => {
@@ -144,7 +146,23 @@ export const HeaderOverflowMenu: React.FC<HeaderOverflowMenuProps> = ({
                   }}
                 >
                   <Shield size={16} />
-                  <span>{t('admin')}</span>
+                  <span>{t('adminUsers')}</span>
+                </button>
+              )}
+
+              {(canViewActivity || canManageUsers) && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={`header-overflow-menu-item ${activeTab === 'activity' ? 'active' : ''}`}
+                  data-testid="overflow-activity-button"
+                  onClick={() => {
+                    setIsOpen(false);
+                    onSelectTab('activity');
+                  }}
+                >
+                  <Activity size={16} />
+                  <span>{t('feedbackAndActivity')}</span>
                 </button>
               )}
 

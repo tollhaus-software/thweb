@@ -145,7 +145,7 @@ export const ActivityDashboard: React.FC<ActivityDashboardProps> = ({ token }) =
   };
 
   return (
-    <div style={{ padding: '1.5rem', maxWidth: '1400px', margin: '0 auto' }}>
+    <div data-testid="activity-dashboard" style={{ width: '100%' }}>
       {/* Top Header & Navigation */}
       <div
         style={{
@@ -476,7 +476,7 @@ export const ActivityDashboard: React.FC<ActivityDashboardProps> = ({ token }) =
         </div>
 
         {/* Search Filter Input */}
-        <div style={{ position: 'relative', width: '280px' }}>
+        <div style={{ position: 'relative', width: '280px', maxWidth: '100%' }}>
           <Search
             size={16}
             style={{
@@ -485,6 +485,7 @@ export const ActivityDashboard: React.FC<ActivityDashboardProps> = ({ token }) =
               top: '50%',
               transform: 'translateY(-50%)',
               color: 'var(--text-secondary)',
+              pointerEvents: 'none',
             }}
           />
           <input
@@ -495,6 +496,7 @@ export const ActivityDashboard: React.FC<ActivityDashboardProps> = ({ token }) =
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{
+              boxSizing: 'border-box',
               width: '100%',
               padding: '0.5rem 0.75rem 0.5rem 2.25rem',
               borderRadius: '6px',
@@ -502,6 +504,7 @@ export const ActivityDashboard: React.FC<ActivityDashboardProps> = ({ token }) =
               background: 'var(--bg-subtle)',
               color: 'var(--text-main)',
               fontSize: '0.85rem',
+              fontFamily: 'inherit',
             }}
           />
         </div>

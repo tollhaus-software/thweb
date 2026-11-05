@@ -186,4 +186,57 @@ test.describe('Test Case 35: Dashboard Feedback Modal', () => {
     await cancelBtn.click();
     await expect(modal).not.toBeVisible();
   });
+
+  test('admin sections: Admin/Benutzer has users and roles tabs, and Admin/Feedback und Aktivität has feedback and activity tabs', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+    });
+
+    // 1. Visit Admin/Feedback und Aktivität (#activity)
+    await page.goto('/#activity');
+    await page.waitForLoadState('networkidle');
+
+    const feedbackActivityContainer = page.locator('[data-testid="feedback-and-activity-container"]');
+    await expect(feedbackActivityContainer).toBeVisible();
+
+    // Verify two sub-tabs: 1. Feedback, 2. Aktivität & Feature-Nutzung
+    const subtabFeedback = page.locator('[data-testid="subtab-feedback"]');
+    const subtabActivity = page.locator('[data-testid="subtab-activity"]');
+    await expect(subtabFeedback).toBeVisible();
+    await expect(subtabActivity).toBeVisible();
+
+    // Feedback tab is selected by default
+    await expect(subtabFeedback).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('[data-testid="feedback-dashboard"]')).toBeVisible();
+
+    // Switch to Aktivität subtab
+    await subtabActivity.click();
+    await expect(subtabActivity).toHaveAttribute('aria-selected', 'true');
+    const activityDashboard = page.locator('[data-testid="activity-dashboard"]');
+    await expect(activityDashboard).toBeVisible();
+
+    // Verify filter input does not stick out of the container layout
+    const filterInput = activityDashboard.locator('input[placeholder*="filtern"]');
+    await expect(filterInput).toBeVisible();
+    const filterBox = await filterInput.boundingBox();
+    const containerBox = await feedbackActivityContainer.boundingBox();
+    expect(filterBox).not.toBeNull();
+    expect(containerBox).not.toBeNull();
+    if (filterBox && containerBox) {
+      expect(filterBox.x + filterBox.width).toBeLessThanOrEqual(containerBox.x + containerBox.width + 1);
+    }
+
+    // 2. Visit Admin/Benutzer (#admin)
+    await page.goto('/#admin');
+    await page.waitForLoadState('networkidle');
+
+    const adminContainer = page.locator('.admin-container');
+    await expect(adminContainer).toBeVisible();
+
+    // Verify users and roles tabs
+    const usersBtn = adminContainer.locator('[data-testid="admin-subtab-users"]');
+    const rolesBtn = adminContainer.locator('[data-testid="admin-subtab-roles"]');
+    await expect(usersBtn).toBeVisible();
+    await expect(rolesBtn).toBeVisible();
+  });
 });

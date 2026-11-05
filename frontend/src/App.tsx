@@ -7,7 +7,7 @@ import './App.css';
 import { DataTable } from './components/Table/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import EasyEdit, { Types } from './components/InlineEdit';
-import { Pencil, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, ArrowUpRight, X, Clock, AlertCircle, ChevronLeft, ChevronRight, Plus, ArrowUpDown, Check, Eye, RefreshCw, Menu, Activity } from 'lucide-react';
+import { Pencil, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, ArrowUpRight, X, Clock, AlertCircle, ChevronLeft, ChevronRight, Plus, ArrowUpDown, Check, Eye, RefreshCw, Menu } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { MultiValueListEditor, type MultiValueFlagConfig, type MultiValueEntry, type MultiValueItem, getEntryValue, isFlagActive, PHONE_TYPES, getPhoneTypeSymbol, getPhoneTypeLabel } from './components/Table/MultiValueListEditor';
 import { AllergiesListEditor } from './components/Allergies/AllergiesListEditor';
@@ -27,7 +27,7 @@ import { MealPlanTab } from './components/MealPlan/MealPlanTab';
 import { MealPlanPrintView } from './components/MealPlan/MealPlanPrintView';
 import { MealAllergensTab } from './components/MealAllergens/MealAllergensTab';
 import { KioskProvisioning } from './components/Admin/KioskProvisioning';
-import { ActivityDashboard } from './components/Admin/ActivityDashboard';
+import { FeedbackAndActivityView } from './components/Admin/FeedbackAndActivityView';
 import { PermissionsSimulatorModal } from './components/Admin/PermissionsSimulatorModal';
 import { SimulatedRolesPermissionsModal } from './components/Admin/SimulatedRolesPermissionsModal';
 import { FeedbackModal } from './components/Dashboard/FeedbackModal';
@@ -2196,6 +2196,8 @@ const AdminView: React.FC<AdminViewProps> = ({ onOpenSimulator }) => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.75rem' }}>
         <div style={{ display: 'flex', gap: '1rem' }}>
           <button
+            type="button"
+            data-testid="admin-subtab-users"
             onClick={() => setSubTab('users')}
             style={{
               padding: '0.5rem 1rem',
@@ -2210,6 +2212,8 @@ const AdminView: React.FC<AdminViewProps> = ({ onOpenSimulator }) => {
             {t('users')} ({users.length})
           </button>
           <button
+            type="button"
+            data-testid="admin-subtab-roles"
             onClick={() => setSubTab('roles')}
             style={{
               padding: '0.5rem 1rem',
@@ -2222,24 +2226,6 @@ const AdminView: React.FC<AdminViewProps> = ({ onOpenSimulator }) => {
             }}
           >
             {t('roles')} ({roles.length})
-          </button>
-          <button
-            onClick={() => { window.location.hash = 'activity'; }}
-            style={{
-              padding: '0.5rem 1rem',
-              background: 'var(--bg-subtle)',
-              color: 'var(--text-secondary)',
-              border: 'none',
-              borderRadius: '6px',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.35rem',
-            }}
-          >
-            <Activity size={15} />
-            <span>{t('activity')}</span>
           </button>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
@@ -7935,6 +7921,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
               onSelectTab={handleTabClick}
               canReadAudit={canReadAudit}
               canManageUsers={canManageUsers || hasPermission('*')}
+              canViewActivity={canViewActivity}
               canProvisionKiosk={canProvisionKiosk}
               activeTab={activeTab}
             />
@@ -8580,7 +8567,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
             ) : activeTab === 'admin' && canManageUsers ? (
               <AdminView onOpenSimulator={() => setSimulatorModalOpen(true)} />
             ) : activeTab === 'activity' && canViewActivity ? (
-              <ActivityDashboard token={token} />
+              <FeedbackAndActivityView token={token} />
             ) : activeTab === 'kiosk' && canProvisionKiosk ? (
               <KioskProvisioning token={token} />
             ) : activeTab === 'mealPlan' && canViewMealPlan ? (
