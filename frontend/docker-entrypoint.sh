@@ -82,13 +82,14 @@ fi
 
 # Select Nginx template based on USE_TLS
 DOMAIN_NAME="${DOMAIN_NAME:-localhost}"
+BACKEND_HOST="${BACKEND_HOST:-backend}"
 
 if [ "${USE_TLS}" = "true" ] || [ "${USE_TLS}" = "1" ]; then
   echo "Configuring Nginx for TLS (HTTPS) on port 443 with DOMAIN_NAME=${DOMAIN_NAME}..."
-  envsubst '${DOMAIN_NAME} ${PROXY_SHARED_SECRET}' < /etc/nginx/templates/nginx.tls.conf.template > /etc/nginx/conf.d/default.conf
+  envsubst '${DOMAIN_NAME} ${PROXY_SHARED_SECRET} ${BACKEND_HOST}' < /etc/nginx/templates/nginx.tls.conf.template > /etc/nginx/conf.d/default.conf
 else
   echo "Configuring Nginx for HTTP on port 80 with DOMAIN_NAME=${DOMAIN_NAME}..."
-  envsubst '${DOMAIN_NAME} ${PROXY_SHARED_SECRET}' < /etc/nginx/templates/nginx.http.conf.template > /etc/nginx/conf.d/default.conf
+  envsubst '${DOMAIN_NAME} ${PROXY_SHARED_SECRET} ${BACKEND_HOST}' < /etc/nginx/templates/nginx.http.conf.template > /etc/nginx/conf.d/default.conf
 fi
 
 # Execute original Nginx CMD
