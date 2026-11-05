@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -127,3 +128,31 @@ func (s *Server) HandleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (s *Server) HandleGetActivityStats(w http.ResponseWriter, r *http.Request) {
+	days := 7
+	if dStr := r.URL.Query().Get("days"); dStr != "" {
+		if d, err := strconv.Atoi(dStr); err == nil && d > 0 && d <= 90 {
+			days = d
+		}
+	}
+	limit := 200
+	if lStr := r.URL.Query().Get("limit"); lStr != "" {
+		if l, err := strconv.Atoi(lStr); err == nil && l > 0 && l <= 1000 {
+			limit = l
+		}
+	}
+
+	ar := s.ActivityRecorder
+	if ar == nil && s.Authenticator != nil {
+		ar = s.Authenticator.ActivityRecorder
+	}
+
+	stats, err := ar.GetActivityStats(r.Context(), days, limit)
+	if err != nil {
+		httpErrorLog(w, r, "failed to get activity stats", http.StatusInternalServerError, err)
+		return
+	}
+	jsonResponse(w, stats)
+}
+

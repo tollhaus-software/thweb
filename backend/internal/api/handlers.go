@@ -20,6 +20,7 @@ import (
 	"github.com/pavolmarko/thweb-backend/internal/auth"
 	"github.com/pavolmarko/thweb-backend/internal/crypto"
 	"github.com/pavolmarko/thweb-backend/internal/kioskcert"
+	"github.com/pavolmarko/thweb-backend/internal/metrics"
 	"github.com/pavolmarko/thweb-backend/internal/models"
 	"github.com/pavolmarko/thweb-backend/internal/store"
 )
@@ -33,6 +34,7 @@ type Server struct {
 	AllergiesCipher      *crypto.CachedCipherContext
 	allergiesCipherMu    sync.Mutex
 	KioskGenerator       *kioskcert.Generator
+	ActivityRecorder     *metrics.ActivityRecorder
 }
 
 func (s *Server) getAllergiesCipher() *crypto.CachedCipherContext {

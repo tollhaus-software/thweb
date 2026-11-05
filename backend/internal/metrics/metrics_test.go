@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -146,5 +147,27 @@ func TestActivityRecorderAndHandlers(t *testing.T) {
 	ar.HandleClientActivityEvent(recInvalid, reqInvalid)
 	if recInvalid.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for invalid client feature, got %d", recInvalid.Code)
+	}
+
+	// 3. Test GetActivityStats with nil pool returns Available: false gracefully
+	stats, err := ar.GetActivityStats(context.Background(), 7, 200)
+	if err != nil {
+		t.Fatalf("unexpected error for GetActivityStats: %v", err)
+	}
+	if stats.Available {
+		t.Fatalf("expected Available: false when pool is nil")
+	}
+	if len(stats.Sites) != 0 || len(stats.Features) != 0 || len(stats.Users) != 0 {
+		t.Fatalf("expected empty slices for unconfigured activity stats")
+	}
+
+	// Also test with nil receiver
+	var nilAR *ActivityRecorder
+	nilStats, err := nilAR.GetActivityStats(context.Background(), 7, 200)
+	if err != nil {
+		t.Fatalf("unexpected error for nil receiver: %v", err)
+	}
+	if nilStats.Available {
+		t.Fatalf("expected Available: false for nil receiver")
 	}
 }

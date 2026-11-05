@@ -15,6 +15,7 @@ import {
   Hammer,
   ShieldAlert,
   Calendar,
+  Activity,
 } from 'lucide-react';
 import { t } from './i18n';
 
@@ -32,6 +33,7 @@ export type TabId =
   | 'mealAllergens'
   | 'audit'
   | 'admin'
+  | 'activity'
   | 'kiosk'
   | 'dashboard';
 
@@ -49,6 +51,7 @@ export interface UserPermissionsContext {
   hasHygieneWrite: boolean;
   canReadAudit: boolean;
   canManageUsers: boolean;
+  canViewActivity: boolean;
   canProvisionKiosk: boolean;
 }
 
@@ -285,6 +288,16 @@ export const NAVIGATION_CATEGORIES: NavCategory[] = [
         defaultDescription: 'Benutzerverwaltung und Berechtigungen.',
         icon: Shield,
         isVisible: (ctx) => ctx.canManageUsers,
+      },
+      {
+        id: 'activity',
+        labelKey: 'activity',
+        defaultLabel: 'Aktivität & Feature-Nutzung',
+        accessibleName: 'Aktivität & Feature-Nutzung',
+        descriptionKey: 'subtabDescActivity',
+        defaultDescription: 'Übersicht über Feature-Nutzung und authentifizierte Benutzer.',
+        icon: Activity,
+        isVisible: (ctx) => ctx.canViewActivity,
       },
       {
         id: 'kiosk',

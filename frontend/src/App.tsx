@@ -7,7 +7,7 @@ import './App.css';
 import { DataTable } from './components/Table/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import EasyEdit, { Types } from './components/InlineEdit';
-import { Pencil, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, ArrowUpRight, X, Clock, AlertCircle, ChevronLeft, ChevronRight, Plus, ArrowUpDown, Check, Eye, RefreshCw, Menu } from 'lucide-react';
+import { Pencil, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, ArrowUpRight, X, Clock, AlertCircle, ChevronLeft, ChevronRight, Plus, ArrowUpDown, Check, Eye, RefreshCw, Menu, Activity } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { MultiValueListEditor, type MultiValueFlagConfig, type MultiValueEntry, type MultiValueItem, getEntryValue, isFlagActive, PHONE_TYPES, getPhoneTypeSymbol, getPhoneTypeLabel } from './components/Table/MultiValueListEditor';
 import { AllergiesListEditor } from './components/Allergies/AllergiesListEditor';
@@ -27,6 +27,7 @@ import { MealPlanTab } from './components/MealPlan/MealPlanTab';
 import { MealPlanPrintView } from './components/MealPlan/MealPlanPrintView';
 import { MealAllergensTab } from './components/MealAllergens/MealAllergensTab';
 import { KioskProvisioning } from './components/Admin/KioskProvisioning';
+import { ActivityDashboard } from './components/Admin/ActivityDashboard';
 import { PermissionsSimulatorModal } from './components/Admin/PermissionsSimulatorModal';
 import { SimulatedRolesPermissionsModal } from './components/Admin/SimulatedRolesPermissionsModal';
 import { getAppConfig } from './config/appConfig';
@@ -2221,6 +2222,24 @@ const AdminView: React.FC<AdminViewProps> = ({ onOpenSimulator }) => {
           >
             {t('roles')} ({roles.length})
           </button>
+          <button
+            onClick={() => { window.location.hash = 'activity'; }}
+            style={{
+              padding: '0.5rem 1rem',
+              background: 'var(--bg-subtle)',
+              color: 'var(--text-secondary)',
+              border: 'none',
+              borderRadius: '6px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+            }}
+          >
+            <Activity size={15} />
+            <span>{t('activity')}</span>
+          </button>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
           {onOpenSimulator && (
@@ -2541,6 +2560,7 @@ const Dashboard: React.FC = () => {
 
   const canReadAudit = hasPermission('audit.view');
   const canManageUsers = hasPermission('users.all.manage') || hasPermission('*');
+  const canViewActivity = canManageUsers || hasPermission('activity.view') || hasPermission('*');
   const canProvisionKiosk = hasPermission('provision.kiosk.cert') || hasPermission('*');
   const canReadOverview = hasPermission('families.all.restrictedread');
   const canReadFamiliesAll = hasPermission('families.all.read');
@@ -2619,6 +2639,7 @@ const Dashboard: React.FC = () => {
     hasHygieneWrite: hasPermission('hygiene.all.write'),
     canReadAudit,
     canManageUsers: canManageUsers || hasPermission('*'),
+    canViewActivity,
     canProvisionKiosk,
   }), [
     canReadOverview,
@@ -2632,12 +2653,13 @@ const Dashboard: React.FC = () => {
     hasPermission,
     canReadAudit,
     canManageUsers,
+    canViewActivity,
     canProvisionKiosk,
   ]);
 
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [activeTab, setActiveTab] = React.useState<
-    'familiesOverview' | 'families' | 'parents' | 'children' | 'members' | 'jobs' | 'employees' | 'childcareFees' | 'hygieneBelehrung' | 'mealPlan' | 'mealAllergens' | 'audit' | 'admin' | 'kiosk' | 'dashboard' | string
+    'familiesOverview' | 'families' | 'parents' | 'children' | 'members' | 'jobs' | 'employees' | 'childcareFees' | 'hygieneBelehrung' | 'mealPlan' | 'mealAllergens' | 'audit' | 'admin' | 'activity' | 'kiosk' | 'dashboard' | string
   >(() => {
     const rawHash = window.location.hash.replace('#', '');
     const hash = rawHash.split('?')[0];
@@ -2654,6 +2676,7 @@ const Dashboard: React.FC = () => {
       hasHygieneWrite: hasPermission('hygiene.all.write'),
       canReadAudit,
       canManageUsers: canManageUsers || hasPermission('*'),
+      canViewActivity,
       canProvisionKiosk,
     };
     if (
@@ -2670,6 +2693,7 @@ const Dashboard: React.FC = () => {
       (hash === 'mealAllergens' && canReadMealAllergens) ||
       (hash === 'audit' && canReadAudit) ||
       (hash === 'admin' && canManageUsers) ||
+      (hash === 'activity' && canViewActivity) ||
       (hash === 'kiosk' && canProvisionKiosk) ||
       categoryHasLandingPage(hash, initialPerms) ||
       hash === 'dashboard' ||
@@ -2692,6 +2716,7 @@ const Dashboard: React.FC = () => {
       (saved === 'mealAllergens' && canReadMealAllergens) ||
       (saved === 'audit' && canReadAudit) ||
       (saved === 'admin' && canManageUsers) ||
+      (saved === 'activity' && canViewActivity) ||
       (saved === 'kiosk' && canProvisionKiosk) ||
       (saved && categoryHasLandingPage(saved, initialPerms)) ||
       saved === 'dashboard'
@@ -3899,6 +3924,7 @@ const Dashboard: React.FC = () => {
         (hash === 'mealAllergens' && canReadMealAllergens) ||
         (hash === 'audit' && canReadAudit) ||
         (hash === 'admin' && canManageUsers) ||
+        (hash === 'activity' && canViewActivity) ||
         (hash === 'kiosk' && canProvisionKiosk) ||
         categoryHasLandingPage(hash, navPerms) ||
         hash === 'dashboard'
@@ -3934,7 +3960,7 @@ const Dashboard: React.FC = () => {
         setActiveTab(fallback as any);
         localStorage.setItem('thweb_active_tab', fallback);
         window.location.hash = fallback;
-      } else if (hash === 'audit' || hash === 'admin' || hash === 'kiosk' || hash === 'mealPlan' || hash === 'mealAllergens') {
+      } else if (hash === 'audit' || hash === 'admin' || hash === 'activity' || hash === 'kiosk' || hash === 'mealPlan' || hash === 'mealAllergens') {
         const fallback = canReadFamiliesAll ? 'families' : canReadOverview ? 'familiesOverview' : 'childcareFees';
         setActiveTab(fallback as any);
         localStorage.setItem('thweb_active_tab', fallback);
@@ -3951,7 +3977,7 @@ const Dashboard: React.FC = () => {
       handleHashChange();
     }
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [canReadAudit, canManageUsers, canProvisionKiosk, canReadOverview, canReadFamiliesAll, canReadFees, canReadMembers, canReadJobs, canReadEmployees, canViewMealPlan, canReadMealAllergens, hasPermission, navPerms]);
+  }, [canReadAudit, canManageUsers, canViewActivity, canProvisionKiosk, canReadOverview, canReadFamiliesAll, canReadFees, canReadMembers, canReadJobs, canReadEmployees, canViewMealPlan, canReadMealAllergens, hasPermission, navPerms]);
 
   useRealtime(React.useCallback((message: any) => {
     if (
@@ -7782,6 +7808,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
         hasHygieneWrite={hasPermission('hygiene.all.write')}
         canReadAudit={canReadAudit}
         canManageUsers={canManageUsers || hasPermission('*')}
+        canViewActivity={canViewActivity}
         canProvisionKiosk={canProvisionKiosk}
         appTitle={appTitle}
         appLogoUrl={appLogoUrl}
@@ -8549,6 +8576,8 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
               />
             ) : activeTab === 'admin' && canManageUsers ? (
               <AdminView onOpenSimulator={() => setSimulatorModalOpen(true)} />
+            ) : activeTab === 'activity' && canViewActivity ? (
+              <ActivityDashboard token={token} />
             ) : activeTab === 'kiosk' && canProvisionKiosk ? (
               <KioskProvisioning token={token} />
             ) : activeTab === 'mealPlan' && canViewMealPlan ? (

@@ -100,6 +100,23 @@ func TestHandleGetKioskCertStatus_NoCA(t *testing.T) {
 	}
 }
 
+func TestHandleGetActivityStats_NilRecorder(t *testing.T) {
+	s := &Server{
+		ActivityRecorder: nil,
+	}
+	req := httptest.NewRequest("GET", "/api/admin/activity?days=7&limit=50", nil)
+	rec := httptest.NewRecorder()
+
+	s.HandleGetActivityStats(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if !strings.Contains(rec.Body.String(), `"available":false`) {
+		t.Errorf("expected available: false, got: %s", rec.Body.String())
+	}
+}
+
 func TestHandleIssueKioskCert_NoCA(t *testing.T) {
 	s := &Server{
 		KioskGenerator: nil,

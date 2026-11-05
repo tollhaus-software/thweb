@@ -61,6 +61,7 @@ export const SegmentedSubNav: React.FC<SegmentedSubNavProps> = ({
     hasHygieneWrite,
     canReadAudit: false,
     canManageUsers: false,
+    canViewActivity: false,
     canProvisionKiosk: false,
   };
 

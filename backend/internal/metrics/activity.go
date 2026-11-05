@@ -318,6 +318,194 @@ func (ar *ActivityRecorder) StartPurgeLoop(ctx context.Context, retentionDays in
 	}
 }
 
+// SiteSummary summarizes distinct active identities and request totals per host.
+type SiteSummary struct {
+	Host       string `json:"host"`
+	Active24h  int    `json:"active_24h"`
+	Active7d   int    `json:"active_7d"`
+	Active30d  int    `json:"active_30d"`
+	Requests7d int    `json:"requests_7d"`
+}
+
+// FeatureSummary summarizes feature usage by client mode for a given time window.
+type FeatureSummary struct {
+	Host         string `json:"host"`
+	Feature      string `json:"feature"`
+	ClientMode   string `json:"client_mode"`
+	UniqueUsers  int    `json:"unique_users"`
+	RequestCount int    `json:"request_count"`
+}
+
+// UserActivityDetail provides verbatim auth and feature activity for individual identities.
+type UserActivityDetail struct {
+	Host              string    `json:"host"`
+	AuthMethod        string    `json:"auth_method"`
+	ClientMode        string    `json:"client_mode"`
+	ForwardedEmail    string    `json:"forwarded_email"`
+	ForwardedUser     string    `json:"forwarded_user"`
+	PreferredUsername string    `json:"preferred_username"`
+	ForwardedGroups   string    `json:"forwarded_groups"`
+	ClientDN          string    `json:"client_dn"`
+	KioskMode         string    `json:"kiosk_mode"`
+	FeaturesUsed      string    `json:"features_used"`
+	TotalRequests     int       `json:"total_requests"`
+	LastActiveHourUTC time.Time `json:"last_active_hour_utc"`
+}
+
+// ActivityStatsResponse contains all activity aggregated data for the admin view.
+type ActivityStatsResponse struct {
+	Available bool                 `json:"available"`
+	Days      int                  `json:"days"`
+	Sites     []SiteSummary        `json:"sites"`
+	Features  []FeatureSummary     `json:"features"`
+	Users     []UserActivityDetail `json:"users"`
+}
+
+// GetActivityStats queries aggregated activity statistics from PostgreSQL.
+func (ar *ActivityRecorder) GetActivityStats(ctx context.Context, days int, limit int) (*ActivityStatsResponse, error) {
+	if days <= 0 || days > 90 {
+		days = 7
+	}
+	if limit <= 0 || limit > 1000 {
+		limit = 200
+	}
+
+	resp := &ActivityStatsResponse{
+		Available: false,
+		Days:      days,
+		Sites:     []SiteSummary{},
+		Features:  []FeatureSummary{},
+		Users:     []UserActivityDetail{},
+	}
+
+	if ar == nil || ar.pool == nil {
+		return resp, nil
+	}
+
+	// Flush any pending in-memory buffer so the latest counts are present in PostgreSQL
+	_ = ar.Flush(ctx)
+
+	resp.Available = true
+
+	// 1. Site Summary
+	siteRows, err := ar.pool.Query(ctx, `
+		SELECT
+			host,
+			COUNT(DISTINCT COALESCE(NULLIF(forwarded_email, ''), NULLIF(forwarded_user, ''), NULLIF(client_dn, ''))) FILTER (WHERE bucket_hour >= NOW() - INTERVAL '24 hours') AS active_24h,
+			COUNT(DISTINCT COALESCE(NULLIF(forwarded_email, ''), NULLIF(forwarded_user, ''), NULLIF(client_dn, ''))) FILTER (WHERE bucket_hour >= NOW() - INTERVAL '7 days') AS active_7d,
+			COUNT(DISTINCT COALESCE(NULLIF(forwarded_email, ''), NULLIF(forwarded_user, ''), NULLIF(client_dn, ''))) FILTER (WHERE bucket_hour >= NOW() - INTERVAL '30 days') AS active_30d,
+			COALESCE(SUM(request_count) FILTER (WHERE bucket_hour >= NOW() - INTERVAL '7 days'), 0) AS requests_7d
+		FROM user_activity
+		GROUP BY host
+		ORDER BY host
+	`)
+	if err != nil {
+		if strings.Contains(err.Error(), "does not exist") {
+			return resp, nil
+		}
+		return nil, err
+	}
+	defer siteRows.Close()
+
+	for siteRows.Next() {
+		var s SiteSummary
+		if err := siteRows.Scan(&s.Host, &s.Active24h, &s.Active7d, &s.Active30d, &s.Requests7d); err != nil {
+			return nil, err
+		}
+		resp.Sites = append(resp.Sites, s)
+	}
+	if err := siteRows.Err(); err != nil {
+		return nil, err
+	}
+
+	// 2. Feature Summary
+	featRows, err := ar.pool.Query(ctx, `
+		SELECT
+			host,
+			feature,
+			client_mode,
+			COUNT(DISTINCT COALESCE(NULLIF(forwarded_email, ''), NULLIF(forwarded_user, ''), NULLIF(client_dn, ''))) AS unique_users,
+			COALESCE(SUM(request_count), 0) AS request_count
+		FROM user_activity
+		WHERE bucket_hour >= NOW() - ($1 * INTERVAL '1 day')
+		GROUP BY host, feature, client_mode
+		ORDER BY host, request_count DESC
+	`, days)
+	if err != nil {
+		if strings.Contains(err.Error(), "does not exist") {
+			return resp, nil
+		}
+		return nil, err
+	}
+	defer featRows.Close()
+
+	for featRows.Next() {
+		var f FeatureSummary
+		if err := featRows.Scan(&f.Host, &f.Feature, &f.ClientMode, &f.UniqueUsers, &f.RequestCount); err != nil {
+			return nil, err
+		}
+		resp.Features = append(resp.Features, f)
+	}
+	if err := featRows.Err(); err != nil {
+		return nil, err
+	}
+
+	// 3. User Activity Details
+	userRows, err := ar.pool.Query(ctx, `
+		SELECT
+			host,
+			auth_method,
+			client_mode,
+			forwarded_email,
+			forwarded_user,
+			preferred_username,
+			forwarded_groups,
+			client_dn,
+			kiosk_mode,
+			COALESCE(STRING_AGG(DISTINCT feature, ', ' ORDER BY feature), '') AS features_used,
+			COALESCE(SUM(request_count), 0) AS total_requests,
+			COALESCE(MAX(bucket_hour), NOW()) AS last_active_hour_utc
+		FROM user_activity
+		WHERE bucket_hour >= NOW() - ($1 * INTERVAL '1 day')
+		GROUP BY host, auth_method, client_mode, forwarded_email, forwarded_user, preferred_username, forwarded_groups, client_dn, kiosk_mode
+		ORDER BY last_active_hour_utc DESC, total_requests DESC
+		LIMIT $2
+	`, days, limit)
+	if err != nil {
+		if strings.Contains(err.Error(), "does not exist") {
+			return resp, nil
+		}
+		return nil, err
+	}
+	defer userRows.Close()
+
+	for userRows.Next() {
+		var u UserActivityDetail
+		if err := userRows.Scan(
+			&u.Host,
+			&u.AuthMethod,
+			&u.ClientMode,
+			&u.ForwardedEmail,
+			&u.ForwardedUser,
+			&u.PreferredUsername,
+			&u.ForwardedGroups,
+			&u.ClientDN,
+			&u.KioskMode,
+			&u.FeaturesUsed,
+			&u.TotalRequests,
+			&u.LastActiveHourUTC,
+		); err != nil {
+			return nil, err
+		}
+		resp.Users = append(resp.Users, u)
+	}
+	if err := userRows.Err(); err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
 // HandleInternalActivity handles mirrored activity subrequests from the internal gateway listeners (:8082, :8083).
 func (ar *ActivityRecorder) HandleInternalActivity(w http.ResponseWriter, r *http.Request) {
 	if ar != nil {

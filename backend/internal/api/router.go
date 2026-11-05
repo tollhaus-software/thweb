@@ -29,6 +29,7 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		AllergiesKMSProvider: allergiesKMS,
 		AllergiesCipher:      allergiesCipher,
 		KioskGenerator:       kioskcert.NewGenerator(""),
+		ActivityRecorder:     authenticator.ActivityRecorder,
 	}
 
 	r := chi.NewRouter()
@@ -84,6 +85,9 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		r.With(auth.RequirePermission("users.all.manage")).Post("/api/admin/users", server.HandleCreateUser)
 		r.With(auth.RequirePermission("users.all.manage")).Put("/api/admin/users/{id}", server.HandleUpdateUser)
 		r.With(auth.RequirePermission("users.all.manage")).Delete("/api/admin/users/{id}", server.HandleDeleteUser)
+
+		// Admin - User Activity & Feature Usage
+		r.With(auth.RequireAnyPermission("users.all.manage", "activity.view")).Get("/api/admin/activity", server.HandleGetActivityStats)
 
 		// Admin - Kiosk Client Certificate Provisioning
 		r.With(auth.RequirePermission("provision.kiosk.cert")).Get("/api/admin/kiosk-certs/status", server.HandleGetKioskCertStatus)

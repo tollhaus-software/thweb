@@ -38,6 +38,7 @@ export interface SidebarProps {
   hasHygieneWrite: boolean;
   canReadAudit?: boolean;
   canManageUsers?: boolean;
+  canViewActivity?: boolean;
   canProvisionKiosk?: boolean;
   appTitle?: string;
   appLogoUrl?: string;
@@ -61,6 +62,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   hasHygieneWrite,
   canReadAudit = false,
   canManageUsers = false,
+  canViewActivity = false,
   canProvisionKiosk = false,
   appTitle = 'TH Portal',
   appLogoUrl,
@@ -79,6 +81,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     hasHygieneWrite,
     canReadAudit,
     canManageUsers,
+    canViewActivity: canViewActivity || canManageUsers,
     canProvisionKiosk,
   };
 

@@ -238,6 +238,7 @@ var AllKnownPermissions = []string{
 	"meal_allergens.read",
 	"meal_allergens.write",
 	"audit.view",
+	"activity.view",
 	"users.all.manage",
 	"vaccination.status.manage",
 	"provision.kiosk.cert",
