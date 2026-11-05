@@ -81,8 +81,8 @@ EOF
 fi
 
 # Select Nginx template based on USE_TLS
-DOMAIN_NAME="${DOMAIN_NAME:-localhost}"
-BACKEND_HOST="${BACKEND_HOST:-backend}"
+export DOMAIN_NAME="${DOMAIN_NAME:-localhost}"
+export BACKEND_HOST="${BACKEND_HOST:-backend}"
 
 if [ "${USE_TLS}" = "true" ] || [ "${USE_TLS}" = "1" ]; then
   echo "Configuring Nginx for TLS (HTTPS) on port 443 with DOMAIN_NAME=${DOMAIN_NAME}..."

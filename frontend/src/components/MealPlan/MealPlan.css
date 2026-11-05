@@ -590,6 +590,10 @@
   .meal-plan-component-edit-box,
   header,
   nav,
+  aside,
+  footer,
+  .app-sidebar,
+  .app-footer,
   .tabs-wrapper,
   .easy-edit-button {
     display: none !important;
@@ -657,10 +661,13 @@
   }
 
   .meal-plan-day-col {
+    display: flex !important;
+    flex-direction: column !important;
     background: #ffffff !important;
     border: 1px solid #94a3b8 !important;
     border-radius: 4px !important;
     min-height: 480px !important;
+    height: 100% !important;
   }
 
   .meal-plan-day-header {
@@ -682,7 +689,7 @@
   .meal-plan-day-body {
     padding: 0.5rem !important;
     gap: 0.5rem !important;
-    flex: 1 !important;
+    flex: 1 1 auto !important;
     display: flex !important;
     flex-direction: column !important;
     justify-content: center !important;
@@ -695,7 +702,9 @@
     border-radius: 0 !important;
     box-shadow: none !important;
     padding: 0 !important;
-    flex: 1 !important;
+    margin-top: auto !important;
+    margin-bottom: auto !important;
+    width: 100% !important;
     display: flex !important;
     flex-direction: column !important;
     justify-content: center !important;
