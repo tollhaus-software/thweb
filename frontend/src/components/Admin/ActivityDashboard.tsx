@@ -242,7 +242,7 @@ export const ActivityDashboard: React.FC<ActivityDashboardProps> = ({ token }) =
 
           {/* Link to Perses Monitoring Dashboard */}
           <a
-            href="https://monitoring.tollhaus.online"
+            href="https://monitoring.tollhaus.app"
             target="_blank"
             rel="noopener noreferrer"
             style={{
