@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MoreVertical, LogOut, Eye, ExternalLink, LayoutDashboard, History, Shield, Key, User } from 'lucide-react';
+import { MoreVertical, LogOut, Eye, ExternalLink, LayoutDashboard, History, Shield, Key, User, MessageSquare } from 'lucide-react';
 import { t } from '../../utils/i18n';
 import type { TabId } from '../../utils/navigation';
 
@@ -9,6 +9,7 @@ export interface HeaderOverflowMenuProps {
   userEmail?: string;
   canSimulate?: boolean;
   onOpenSimulator?: () => void;
+  onOpenFeedback?: () => void;
   onSelectTab?: (tab: TabId) => void;
   canReadAudit?: boolean;
   canManageUsers?: boolean;
@@ -22,6 +23,7 @@ export const HeaderOverflowMenu: React.FC<HeaderOverflowMenuProps> = ({
   userEmail,
   canSimulate = false,
   onOpenSimulator,
+  onOpenFeedback,
   onSelectTab,
   canReadAudit = false,
   canManageUsers = false,
@@ -191,6 +193,22 @@ export const HeaderOverflowMenu: React.FC<HeaderOverflowMenuProps> = ({
             <ExternalLink size={16} />
             <span>{t('impressum')}</span>
           </a>
+
+          {onOpenFeedback && (
+            <button
+              type="button"
+              role="menuitem"
+              className="header-overflow-menu-item"
+              data-testid="overflow-feedback-button"
+              onClick={() => {
+                setIsOpen(false);
+                onOpenFeedback();
+              }}
+            >
+              <MessageSquare size={16} />
+              <span>{t('sendFeedback')}</span>
+            </button>
+          )}
 
           <button
             type="button"

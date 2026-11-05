@@ -3304,6 +3304,86 @@ func TestDashboardTasks_Handlers(t *testing.T) {
 	}
 }
 
+func TestHandleFeedback(t *testing.T) {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to postgres: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping postgres: %v", err)
+	}
+
+	appStore := store.NewStore(pool)
+	server := &Server{Store: appStore}
+
+	// Clean up feedback before test
+	_, _ = pool.Exec(ctx, "DELETE FROM feedback WHERE description LIKE 'Test feedback%'")
+
+	// 1. Invalid payload -> 400 Bad Request
+	reqInvalid := httptest.NewRequest("POST", "/api/dashboard/feedback", strings.NewReader("invalid-json"))
+	recInvalid := httptest.NewRecorder()
+	server.HandleCreateFeedback(recInvalid, reqInvalid)
+	if recInvalid.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request for invalid JSON, got %d", recInvalid.Code)
+	}
+
+	// 2. Missing fields -> 400 Bad Request
+	reqMissing := httptest.NewRequest("POST", "/api/dashboard/feedback", strings.NewReader(`{"feedback_type":""}`))
+	recMissing := httptest.NewRecorder()
+	server.HandleCreateFeedback(recMissing, reqMissing)
+	if recMissing.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request for missing fields, got %d", recMissing.Code)
+	}
+
+	// 3. Create feedback as kiosk user -> 201 Created
+	kioskUser := &models.UserWithPermissions{
+		Email:     "kiosk@internal",
+		IsKiosk:   true,
+		KioskName: "tablet-kitchen",
+	}
+	payloadKiosk := `{"feedback_type":"Verbesserungsvorschlag","description":"Test feedback: mehr Tee","contact_name":"Anna"}`
+	reqKiosk := httptest.NewRequest("POST", "/api/dashboard/feedback", strings.NewReader(payloadKiosk))
+	reqKiosk = reqKiosk.WithContext(context.WithValue(reqKiosk.Context(), auth.UserContextKey, kioskUser))
+	recKiosk := httptest.NewRecorder()
+	server.HandleCreateFeedback(recKiosk, reqKiosk)
+	if recKiosk.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created for feedback, got %d (%s)", recKiosk.Code, recKiosk.Body.String())
+	}
+	var fb models.Feedback
+	if err := json.Unmarshal(recKiosk.Body.Bytes(), &fb); err != nil {
+		t.Fatalf("failed to decode feedback response: %v", err)
+	}
+	if fb.FeedbackType != "Verbesserungsvorschlag" || fb.Description != "Test feedback: mehr Tee" || fb.ContactName != "Anna" || !fb.IsKiosk || fb.KioskName != "tablet-kitchen" {
+		t.Errorf("unexpected feedback record: %+v", fb)
+	}
+
+	// 4. List feedback
+	reqList := httptest.NewRequest("GET", "/api/admin/feedback?limit=10", nil)
+	recList := httptest.NewRecorder()
+	server.HandleListFeedback(recList, reqList)
+	if recList.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for list feedback, got %d (%s)", recList.Code, recList.Body.String())
+	}
+	var list []models.Feedback
+	if err := json.Unmarshal(recList.Body.Bytes(), &list); err != nil {
+		t.Fatalf("failed to decode feedback list: %v", err)
+	}
+	if len(list) == 0 {
+		t.Errorf("expected at least 1 feedback item in list")
+	}
+
+	// Clean up
+	_, _ = pool.Exec(ctx, "DELETE FROM feedback WHERE description LIKE 'Test feedback%'")
+}
+
+
 
 
 

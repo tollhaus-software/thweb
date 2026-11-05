@@ -390,6 +390,8 @@ func TestIsAllowedKioskPath(t *testing.T) {
 		{"/api/dashboard/tasks/", true},
 		{"/api/dashboard/tasks/clean_coffee_machine/complete", true},
 		{"/api/dashboard/tasks/clean_coffee_machine/uncomplete", true},
+		{"/api/dashboard/feedback", true},
+		{"/api/dashboard/feedback/", true},
 		{"/api/allergies/summary", true},
 		{"/api/allergies/summary/", true},
 		{"/api/meal-allergens", true},

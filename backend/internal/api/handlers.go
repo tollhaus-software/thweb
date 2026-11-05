@@ -2066,6 +2066,64 @@ func (s *Server) HandleUncompleteTask(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, map[string]string{"status": "ok", "task_type_id": taskTypeID, "date": dateParam})
 }
 
+func (s *Server) HandleCreateFeedback(w http.ResponseWriter, r *http.Request) {
+	var req models.CreateFeedbackRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpErrorLog(w, r, "Invalid request body", http.StatusBadRequest, err)
+		return
+	}
+
+	req.FeedbackType = strings.TrimSpace(req.FeedbackType)
+	req.Description = strings.TrimSpace(req.Description)
+	req.ContactName = strings.TrimSpace(req.ContactName)
+
+	if req.FeedbackType == "" {
+		httpErrorLog(w, r, "feedback_type is required", http.StatusBadRequest, nil)
+		return
+	}
+	if req.Description == "" {
+		httpErrorLog(w, r, "description is required", http.StatusBadRequest, nil)
+		return
+	}
+
+	var actor models.MealAllergenActor
+	u := auth.GetActualUser(r.Context())
+	if u != nil {
+		actor = models.ActorFromUser(u)
+	} else {
+		actor = models.MealAllergenActor{
+			Email:   "kiosk@internal",
+			IsKiosk: true,
+		}
+	}
+
+	fb, err := s.Store.CreateFeedback(r.Context(), req.FeedbackType, req.Description, req.ContactName, actor)
+	if err != nil {
+		httpErrorLog(w, r, "Failed to create feedback", http.StatusInternalServerError, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	jsonResponse(w, fb)
+}
+
+func (s *Server) HandleListFeedback(w http.ResponseWriter, r *http.Request) {
+	limit := 50
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	list, err := s.Store.ListFeedback(r.Context(), limit)
+	if err != nil {
+		httpErrorLog(w, r, "Failed to list feedback", http.StatusInternalServerError, err)
+		return
+	}
+	jsonResponse(w, list)
+}
+
+
 type IssueKioskCertRequest struct {
 	DeviceName string `json:"device_name"`
 	Password   string `json:"password"`

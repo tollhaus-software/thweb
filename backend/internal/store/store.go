@@ -4201,6 +4201,69 @@ func (s *Store) SetJobAssignees(ctx context.Context, userID uuid.UUID, jobID uui
 	})
 }
 
+func (s *Store) CreateFeedback(ctx context.Context, feedbackType, description, contactName string, actor models.MealAllergenActor) (*models.Feedback, error) {
+	var f models.Feedback
+	err := s.db.QueryRow(ctx, `
+		INSERT INTO feedback (feedback_type, description, contact_name, submitted_by, submitted_by_email, is_kiosk, kiosk_name, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+		RETURNING id, feedback_type, description, contact_name, submitted_by, submitted_by_email, is_kiosk, kiosk_name, created_at
+	`, feedbackType, description, contactName, actor.UserID, actor.Email, actor.IsKiosk, actor.KioskName).Scan(
+		&f.ID,
+		&f.FeedbackType,
+		&f.Description,
+		&f.ContactName,
+		&f.SubmittedBy,
+		&f.SubmittedByEmail,
+		&f.IsKiosk,
+		&f.KioskName,
+		&f.CreatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create feedback: %w", err)
+	}
+	return &f, nil
+}
+
+func (s *Store) ListFeedback(ctx context.Context, limit int) ([]models.Feedback, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	rows, err := s.db.Query(ctx, `
+		SELECT id, feedback_type, description, contact_name, submitted_by, submitted_by_email, is_kiosk, kiosk_name, created_at
+		FROM feedback
+		ORDER BY created_at DESC
+		LIMIT $1
+	`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list feedback: %w", err)
+	}
+	defer rows.Close()
+
+	list := make([]models.Feedback, 0)
+	for rows.Next() {
+		var f models.Feedback
+		if err := rows.Scan(
+			&f.ID,
+			&f.FeedbackType,
+			&f.Description,
+			&f.ContactName,
+			&f.SubmittedBy,
+			&f.SubmittedByEmail,
+			&f.IsKiosk,
+			&f.KioskName,
+			&f.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan feedback: %w", err)
+		}
+		list = append(list, f)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows error listing feedback: %w", err)
+	}
+	return list, nil
+}
+
+
 
 
 

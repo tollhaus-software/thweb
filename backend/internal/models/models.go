@@ -1290,6 +1290,25 @@ type JobWithAssignees struct {
 	Employees []JobAssigneeEmployee `json:"employees"`
 }
 
+type Feedback struct {
+	ID               uuid.UUID  `json:"id,omitempty"`
+	FeedbackType     string     `json:"feedback_type"`
+	Description      string     `json:"description"`
+	ContactName      string     `json:"contact_name,omitempty"`
+	SubmittedBy      *uuid.UUID `json:"submitted_by,omitempty"`
+	SubmittedByEmail string     `json:"submitted_by_email,omitempty"`
+	IsKiosk          bool       `json:"is_kiosk"`
+	KioskName        string     `json:"kiosk_name,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+}
+
+type CreateFeedbackRequest struct {
+	FeedbackType string `json:"feedback_type"`
+	Description  string `json:"description"`
+	ContactName  string `json:"contact_name,omitempty"`
+}
+
+
 
 
 

@@ -30,6 +30,7 @@ import { KioskProvisioning } from './components/Admin/KioskProvisioning';
 import { ActivityDashboard } from './components/Admin/ActivityDashboard';
 import { PermissionsSimulatorModal } from './components/Admin/PermissionsSimulatorModal';
 import { SimulatedRolesPermissionsModal } from './components/Admin/SimulatedRolesPermissionsModal';
+import { FeedbackModal } from './components/Dashboard/FeedbackModal';
 import { getAppConfig } from './config/appConfig';
 import { HeaderOverflowMenu } from './components/Header/HeaderOverflowMenu';
 import { Sidebar } from './components/Navigation/Sidebar';
@@ -2530,6 +2531,7 @@ const Dashboard: React.FC = () => {
   const isMobile = useIsMobile();
   const [simulatorModalOpen, setSimulatorModalOpen] = React.useState(false);
   const [viewRolesModalOpen, setViewRolesModalOpen] = React.useState(false);
+  const [feedbackModalOpen, setFeedbackModalOpen] = React.useState(false);
   const appConfig = getAppConfig();
   const appTitle = appConfig.title || t('title');
   const appLogoUrl = appConfig.logoUrl;
@@ -7928,6 +7930,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
               userEmail={user?.email}
               canSimulate={canSimulate}
               onOpenSimulator={() => setSimulatorModalOpen(true)}
+              onOpenFeedback={() => setFeedbackModalOpen(true)}
               onLogout={logout}
               onSelectTab={handleTabClick}
               canReadAudit={canReadAudit}
@@ -9103,6 +9106,13 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
           onClose={() => setViewRolesModalOpen(false)}
           simulation={user?.simulation}
           effectivePermissions={user?.effective_permissions}
+        />
+
+        {/* Feedback Modal from Header Overflow Menu */}
+        <FeedbackModal
+          isOpen={feedbackModalOpen}
+          onClose={() => setFeedbackModalOpen(false)}
+          token={token}
         />
       </div>
     </div>

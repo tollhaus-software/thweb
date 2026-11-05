@@ -30,7 +30,9 @@ import {
   Pencil,
   Check,
   ArrowLeft,
+  MessageSquare,
 } from 'lucide-react';
+import { FeedbackModal } from './FeedbackModal';
 import './KioskDashboard.css';
 
 interface CompletedTaskInfo {
@@ -90,6 +92,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
   const [data, setData] = useState<DailyBriefData | null>(null);
   const [allergiesData, setAllergiesData] = useState<AllergiesSummaryData | null>(null);
   const [showAllergies, setShowAllergies] = useState<boolean>(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState<boolean>(false);
   const [isEditingAllergens, setIsEditingAllergens] = useState<boolean>(false);
   const [flashAllergensBtn, setFlashAllergensBtn] = useState<boolean>(false);
   const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -867,6 +870,20 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
                 <span>{t('allergies')}</span>
               </button>
             )}
+
+            <button
+              onClick={() => {
+                setIsEditingAllergens(false);
+                setShowAllergies(false);
+                setShowFeedbackModal(true);
+              }}
+              className={`kiosk-nav-btn ${showFeedbackModal ? 'active' : ''}`}
+              title={t('sendFeedback')}
+              data-testid="kiosk-feedback-btn"
+            >
+              <MessageSquare size={embedded ? 16 : 20} />
+              <span>{t('sendFeedback')}</span>
+            </button>
           </div>
 
           {/* Right: Clock */}
@@ -914,6 +931,14 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({ embedded = false
             </div>
           </div>
         )}
+
+        {/* Modal for Feedback */}
+        <FeedbackModal
+          isOpen={showFeedbackModal}
+          onClose={() => setShowFeedbackModal(false)}
+          embedded={embedded}
+          token={token}
+        />
 
       </div>
     </div>
