@@ -337,6 +337,12 @@ test.describe('Test Case 27: Allergen & Allergy Matching (MealAllergens Tab & Al
     await expect(empErdnuesseWarning).toContainText('Dessert');
     await expect(empErdnuesseWarning).toHaveCSS('color', 'rgb(69, 26, 3)');
 
+    // Go back from Allergies popup via the small back button on top
+    const backBtn = embeddedPage.locator('[data-testid="kiosk-allergies-back-btn"]');
+    await expect(backBtn).toBeVisible();
+    await backBtn.click();
+    await expect(embeddedPage.locator('[data-testid="kiosk-allergies-popup"]')).toHaveCount(0);
+
     // 9. Verify editing allergens on a date before child's enrollment start date (yesterday):
     // Child is not yet started on yesterday, so child group warning does not appear.
     // Employee warning does appear because employees are active.
@@ -386,18 +392,22 @@ test.describe('Test Case 27: Allergen & Allergy Matching (MealAllergens Tab & Al
     await expect(erdnuesseYesterdayWarning).toBeVisible();
     await expect(erdnuesseYesterdayWarning).toContainText('Mitarbeitende');
 
-    // 10. Navigate back to Dashboard -> toggle Allergies -> navigate to yesterday -> verify component abbreviation
+    // 10. Navigate back to Dashboard -> navigate to yesterday -> open Allergies popover -> verify component abbreviation
     await dashboardTab.click();
     await expect(dashboardTab).toHaveClass(/active/);
+    await navigateDashboardByOffset(diffFromRealToday - 1);
     await toggleAllergiesBtn.click();
     await expect(allergiesView).toBeVisible();
-
-    await navigateDashboardByOffset(diffFromRealToday - 1);
 
     // Verify employee allergy warning abbreviates >16 chars component name
     const empWarningYesterday = page.getByTestId('employee-allergy-warning-0');
     await expect(empWarningYesterday).toBeVisible();
     await expect(empWarningYesterday).toContainText('Käsebrot mit Spe...');
     await expect(empWarningYesterday).toHaveAttribute('title', 'Käsebrot mit Spezialbelag');
+
+    // Go back by clicking outside (on the overlay backdrop)
+    const allergiesOverlay = page.locator('[data-testid="kiosk-allergies-overlay"]');
+    await allergiesOverlay.click({ position: { x: 10, y: 10 } });
+    await expect(page.locator('[data-testid="kiosk-allergies-popup"]')).toHaveCount(0);
   });
 });

@@ -581,4 +581,113 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await yesterdayEditor.locator('[data-testid="allergens-editor-back-btn"]').click();
     await expect(yesterdayEditor).toHaveCount(0);
   });
+
+  test('opens Allergies button in a modal popover with group allergies, and allows going back via back arrow on top or clicking outside', async ({ request, page }) => {
+    // 1. Reset database state
+    const resetRes = await request.post('/api/test/reset');
+    expect(resetRes.ok()).toBeTruthy();
+
+    const authHeaders = {
+      Authorization: 'Bearer developer@example.com',
+      'Content-Type': 'application/json',
+    };
+
+    // 2. Create child with allergy in Group 1
+    const famRes = await request.post('/api/families', {
+      headers: authHeaders,
+      data: {
+        parents: [{ first_name: 'Maria', last_name: 'Test' }],
+      },
+    });
+    expect(famRes.ok()).toBeTruthy();
+    const fam = await famRes.json();
+
+    const childId = crypto.randomUUID();
+    const childRes = await request.put(`/api/children/${childId}`, {
+      headers: authHeaders,
+      data: {
+        id: childId,
+        family_id: fam.id,
+        first_name: 'Lukas',
+        last_name: 'Test',
+        birth_date: '2022-01-01',
+        allergies: [{ name: 'Milch/Laktose', category: 'lebensmittel' }],
+      },
+    });
+    expect(childRes.ok()).toBeTruthy();
+
+    const addGcRes = await request.post(`/api/children/${childId}/group_changes`, {
+      headers: authHeaders,
+      data: {
+        child_id: childId,
+        change_date: '2024-01-01',
+        target_group: 1,
+      },
+    });
+    expect(addGcRes.ok()).toBeTruthy();
+
+    // 3. Open dashboard tab
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+    });
+
+    await page.goto('/#dashboard');
+    await page.waitForLoadState('networkidle');
+
+    const embeddedPage = page.locator('.kiosk-tablet-page.embedded');
+    await expect(embeddedPage).toBeVisible();
+
+    // Verify main dashboard cards (cook, meal, todos) are visible
+    await expect(embeddedPage.locator('.kiosk-card-cook')).toBeVisible();
+    await expect(embeddedPage.locator('.kiosk-card-meal')).toBeVisible();
+    await expect(embeddedPage.locator('.kiosk-card-todos')).toBeVisible();
+
+    // Modal is initially not present
+    const allergiesPopup = page.locator('[data-testid="kiosk-allergies-popup"]');
+    const allergiesOverlay = page.locator('[data-testid="kiosk-allergies-overlay"]');
+    await expect(allergiesPopup).toHaveCount(0);
+
+    // 4. Click the Allergies ("Allergien") button in the bottom navigation
+    const allergiesBtn = embeddedPage.locator('.kiosk-nav-btn', { hasText: 'Allergien' });
+    await expect(allergiesBtn).toBeVisible();
+    await allergiesBtn.click();
+
+    // 5. Verify the modal-ish popover/popup appears
+    await expect(allergiesPopup).toBeVisible();
+    await expect(allergiesOverlay).toBeVisible();
+
+    // Verify group allergies are displayed inside the popup
+    const allergiesView = allergiesPopup.locator('.kiosk-allergies-view');
+    await expect(allergiesView).toBeVisible();
+    const group1 = allergiesView.locator('.kiosk-card-allergies-group').first();
+    await expect(group1).toBeVisible();
+    await expect(group1.locator('.kiosk-allergy-badge', { hasText: 'Milch/Laktose' })).toBeVisible();
+
+    // 6. Verify small "back" arrow on top
+    const backBtn = allergiesPopup.locator('[data-testid="kiosk-allergies-back-btn"]');
+    await expect(backBtn).toBeVisible();
+
+    // 7. Click the small "back" arrow on top to go back
+    await backBtn.click();
+    await expect(allergiesPopup).toHaveCount(0);
+    await expect(allergiesOverlay).toHaveCount(0);
+
+    // Main dashboard cards remain visible
+    await expect(embeddedPage.locator('.kiosk-card-cook')).toBeVisible();
+
+    // 8. Re-open Allergies popover, and go back by clicking OUTSIDE of the popup (on the backdrop overlay)
+    await allergiesBtn.click();
+    await expect(allergiesPopup).toBeVisible();
+
+    // Click outside of the popup content card (e.g. at top-left corner of the overlay)
+    await allergiesOverlay.click({ position: { x: 10, y: 10 } });
+    await expect(allergiesPopup).toHaveCount(0);
+    await expect(allergiesOverlay).toHaveCount(0);
+
+    // 9. Re-open Allergies popover, and verify pressing Escape also goes back
+    await allergiesBtn.click();
+    await expect(allergiesPopup).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(allergiesPopup).toHaveCount(0);
+  });
 });
