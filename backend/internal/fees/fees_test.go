@@ -284,3 +284,77 @@ func TestDetermineChange_Familiencard(t *testing.T) {
 		t.Errorf("expected 'Bart: Keine Familiencard mehr', got '%s'", changeTo2027)
 	}
 }
+
+func TestGroupName(t *testing.T) {
+	tests := []struct {
+		group int
+		want  string
+	}{
+		{1, "Kleine Gruppe"},
+		{2, "Große Gruppe"},
+		{3, "Hort"},
+		{4, "Gruppe 4"},
+	}
+	for _, tt := range tests {
+		if got := GroupName(tt.group); got != tt.want {
+			t.Errorf("GroupName(%d) = %q, want %q", tt.group, got, tt.want)
+		}
+	}
+}
+
+func TestLookupFee_GroupNames(t *testing.T) {
+	month := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	_, desc1 := LookupFee(month, 1, FeeType{Group: 1})
+	if desc1 != "Kleine Gruppe, 1 Kind im Haushalt" {
+		t.Errorf("expected 'Kleine Gruppe, 1 Kind im Haushalt', got %q", desc1)
+	}
+
+	_, desc2 := LookupFee(month, 2, FeeType{Group: 2})
+	if desc2 != "Große Gruppe, 2 Kinder im Haushalt" {
+		t.Errorf("expected 'Große Gruppe, 2 Kinder im Haushalt', got %q", desc2)
+	}
+
+	_, desc3 := LookupFee(month, 3, FeeType{Group: 3})
+	if desc3 != "Hort, 3 Kinder im Haushalt" {
+		t.Errorf("expected 'Hort, 3 Kinder im Haushalt', got %q", desc3)
+	}
+}
+
+func TestDetermineChange_GroupTransitions(t *testing.T) {
+	prev := FeeRelevantData{
+		childrenFeeTypes: map[string]FeeType{
+			"Tom": {Group: 1},
+		},
+		childrenUnder18: map[string]struct{}{
+			"Tom": {},
+		},
+	}
+	cur := FeeRelevantData{
+		childrenFeeTypes: map[string]FeeType{
+			"Tom": {Group: 2},
+		},
+		childrenUnder18: map[string]struct{}{
+			"Tom": {},
+		},
+	}
+
+	change := DetermineChange(time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC), prev, cur)
+	if change != "Tom: Kleine Gruppe -> Große Gruppe" {
+		t.Errorf("expected 'Tom: Kleine Gruppe -> Große Gruppe', got %q", change)
+	}
+
+	cur2 := FeeRelevantData{
+		childrenFeeTypes: map[string]FeeType{
+			"Tom": {Group: 3},
+		},
+		childrenUnder18: map[string]struct{}{
+			"Tom": {},
+		},
+	}
+
+	change2 := DetermineChange(time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC), cur, cur2)
+	if change2 != "Tom: Große Gruppe -> Hort" {
+		t.Errorf("expected 'Tom: Große Gruppe -> Hort', got %q", change2)
+	}
+}

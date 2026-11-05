@@ -127,7 +127,7 @@ test.describe('Test Case 4: Childcare Fees Tooltips & Translations', () => {
 
     // Verify tooltip contents (fee breakdown)
     await expect(portalTooltip).toContainText('Lukas');
-    await expect(portalTooltip).toContainText('Gruppe 1');
+    await expect(portalTooltip).toContainText('Kleine Gruppe');
 
     // Verify tooltip positioning within viewport (not clipped)
     const tooltipBox = await portalTooltip.boundingBox();

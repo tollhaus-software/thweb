@@ -160,18 +160,21 @@ func DetermineFee(month time.Time, data FeeRelevantData) (float64, string) {
 	return result, strings.Join(parts, "\n")
 }
 
-func describeFee(ft FeeType) string {
-	groupName := ""
-	switch ft.Group {
+func GroupName(group int) string {
+	switch group {
 	case 1:
-		groupName = "Kleine Gruppe"
+		return "Kleine Gruppe"
 	case 2:
-		groupName = "Grosse Gruppe"
+		return "Große Gruppe"
 	case 3:
-		groupName = "Hort"
+		return "Hort"
 	default:
-		groupName = fmt.Sprintf("Gruppe %d", ft.Group)
+		return fmt.Sprintf("Gruppe %d", group)
 	}
+}
+
+func describeFee(ft FeeType) string {
+	groupName := GroupName(ft.Group)
 	halfText := ""
 	if ft.IsHalf {
 		halfText = " (Halber Monat)"
@@ -275,12 +278,13 @@ func LookupFee(month time.Time, numChildrenUnder18 int, feeType FeeType) (float6
 
 	var fee float64
 	var desc string
+	grpName := GroupName(feeType.Group)
 	if !feeType.Familiencard {
 		fee = FeesAsOf2025Regular[groupIndex][indexInArray]
-		desc = fmt.Sprintf("Gruppe %d, %s im Haushalt", feeType.Group, formatNumChildren(numChildrenUnder18))
+		desc = fmt.Sprintf("%s, %s im Haushalt", grpName, formatNumChildren(numChildrenUnder18))
 	} else {
 		fee = FeesAsOf2025Familiencard[groupIndex][indexInArray]
-		desc = fmt.Sprintf("Gruppe %d, %s im Haushalt, Familiencard", feeType.Group, formatNumChildren(numChildrenUnder18))
+		desc = fmt.Sprintf("%s, %s im Haushalt, Familiencard", grpName, formatNumChildren(numChildrenUnder18))
 	}
 
 	if feeType.IsHalf {
