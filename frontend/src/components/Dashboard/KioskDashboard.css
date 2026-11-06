@@ -1045,35 +1045,63 @@
 }
 
 /* Dark mode for Allergies Popover */
-:root:not([data-theme='light']) .kiosk-allergies-popup,
+:root[data-theme='dark'] .kiosk-allergies-popup,
 [data-theme='dark'] .kiosk-allergies-popup {
   background-color: var(--bg-surface, #1e293b);
   border-color: var(--border, #334155);
   color: var(--text, #f1f5f9);
 }
 
-:root:not([data-theme='light']) .kiosk-allergies-popup-header,
+:root[data-theme='dark'] .kiosk-allergies-popup-header,
 [data-theme='dark'] .kiosk-allergies-popup-header {
   background-color: rgba(30, 41, 59, 0.85);
   border-bottom-color: var(--border, #334155);
 }
 
-:root:not([data-theme='light']) .kiosk-allergies-popup-back-btn,
+:root[data-theme='dark'] .kiosk-allergies-popup-back-btn,
 [data-theme='dark'] .kiosk-allergies-popup-back-btn {
   background-color: var(--bg-surface-soft, #334155);
   border-color: var(--border, #475569);
   color: var(--text, #f1f5f9);
 }
 
-:root:not([data-theme='light']) .kiosk-allergies-popup-back-btn:hover,
+:root[data-theme='dark'] .kiosk-allergies-popup-back-btn:hover,
 [data-theme='dark'] .kiosk-allergies-popup-back-btn:hover {
   background-color: var(--bg-hover, #475569);
   color: #ffffff;
 }
 
-:root:not([data-theme='light']) .kiosk-allergies-popup-title,
+:root[data-theme='dark'] .kiosk-allergies-popup-title,
 [data-theme='dark'] .kiosk-allergies-popup-title {
   color: var(--text-h, #ffffff);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .kiosk-allergies-popup {
+    background-color: var(--bg-surface, #1e293b);
+    border-color: var(--border, #334155);
+    color: var(--text, #f1f5f9);
+  }
+
+  :root:not([data-theme='light']) .kiosk-allergies-popup-header {
+    background-color: rgba(30, 41, 59, 0.85);
+    border-bottom-color: var(--border, #334155);
+  }
+
+  :root:not([data-theme='light']) .kiosk-allergies-popup-back-btn {
+    background-color: var(--bg-surface-soft, #334155);
+    border-color: var(--border, #475569);
+    color: var(--text, #f1f5f9);
+  }
+
+  :root:not([data-theme='light']) .kiosk-allergies-popup-back-btn:hover {
+    background-color: var(--bg-hover, #475569);
+    color: #ffffff;
+  }
+
+  :root:not([data-theme='light']) .kiosk-allergies-popup-title {
+    color: var(--text-h, #ffffff);
+  }
 }
 
 /* Allergies View in Kiosk Dashboard */

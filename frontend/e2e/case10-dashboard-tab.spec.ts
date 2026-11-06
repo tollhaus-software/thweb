@@ -419,7 +419,24 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await expect(yellowCheckbox).not.toHaveClass(/checked/);
 
     // 2. Check yellow_bin_put_out task on today
+    // Clicking the checkbox should open confirmation modal ("<task> abhaken?")
     await yellowCheckbox.click();
+    const confirmModal = page.locator('[data-testid="task-confirm-modal"]');
+    await expect(confirmModal).toBeVisible();
+    await expect(confirmModal.locator('[data-testid="task-confirm-modal-title"]')).toHaveText(
+      'Gelbe Tonne rausstellen abhaken?'
+    );
+
+    // Cancel first to verify dismissal
+    await confirmModal.locator('[data-testid="task-confirm-cancel-btn"]').click();
+    await expect(confirmModal).not.toBeVisible();
+    await expect(yellowTask).toHaveAttribute('data-completed', 'false');
+
+    // Click again and confirm
+    await yellowCheckbox.click();
+    await expect(confirmModal).toBeVisible();
+    await confirmModal.locator('[data-testid="task-confirm-confirm-btn"]').click();
+    await expect(confirmModal).not.toBeVisible();
 
     // Verify it is now marked as done:
     // - striked through in smaller font
@@ -657,6 +674,12 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     // 5. Verify the modal-ish popover/popup appears
     await expect(allergiesPopup).toBeVisible();
     await expect(allergiesOverlay).toBeVisible();
+
+    // Verify header in light mode has light styling (not dark slate background)
+    const popupHeader = allergiesPopup.locator('.kiosk-allergies-popup-header');
+    await expect(popupHeader).toBeVisible();
+    const headerBg = await popupHeader.evaluate((el) => window.getComputedStyle(el).backgroundColor);
+    expect(headerBg).not.toContain('30, 41, 59');
 
     // Verify group allergies are displayed inside the popup
     const allergiesView = allergiesPopup.locator('.kiosk-allergies-view');

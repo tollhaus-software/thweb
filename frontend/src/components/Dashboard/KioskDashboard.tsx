@@ -35,6 +35,7 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { FeedbackModal } from './FeedbackModal';
+import { TaskConfirmModal } from './TaskConfirmModal';
 import { InfoPagesView } from './InfoPagesView';
 import './KioskDashboard.css';
 
@@ -103,6 +104,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
   const [showInfoPages, setShowInfoPages] = useState<boolean>(false);
   const [activeInfoPageId, setActiveInfoPageId] = useState<string | null>(null);
   const [showFeedbackModal, setShowFeedbackModal] = useState<boolean>(false);
+  const [taskToConfirm, setTaskToConfirm] = useState<string | null>(null);
   const [isEditingAllergens, setIsEditingAllergens] = useState<boolean>(false);
   const [flashAllergensBtn, setFlashAllergensBtn] = useState<boolean>(false);
   const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -328,6 +330,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     const d = String(current.getDate()).padStart(2, '0');
     setIsEditingAllergens(false);
     setFlashAllergensBtn(false);
+    setTaskToConfirm(null);
     setSelectedDate(`${y}-${m}-${d}`);
   };
 
@@ -339,6 +342,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     const d = String(current.getDate()).padStart(2, '0');
     setIsEditingAllergens(false);
     setFlashAllergensBtn(false);
+    setTaskToConfirm(null);
     setSelectedDate(`${y}-${m}-${d}`);
   };
 
@@ -347,6 +351,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     setActiveInfoPageId(null);
     setShowAllergies(false);
     setShowFeedbackModal(false);
+    setTaskToConfirm(null);
     setIsEditingAllergens(false);
     setFlashAllergensBtn(false);
     setSelectedDate(null); // Omitting date fetches "today" from backend
@@ -359,6 +364,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     setIsEditingAllergens(false);
     setShowAllergies(false);
     setShowFeedbackModal(false);
+    setTaskToConfirm(null);
     if (!showInfoPages) {
       setShowInfoPages(true);
       setActiveInfoPageId(null);
@@ -413,6 +419,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
       return;
     }
     setShowAllergies(false);
+    setTaskToConfirm(null);
     setIsEditingAllergens(true);
   };
 
@@ -456,6 +463,45 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     [data]
   );
 
+  const getTaskLabel = useCallback((taskKey: string): string => {
+    if (taskKey === 'yellow_bin_retrieve') {
+      return t('yellowBinRetrieve');
+    } else if (taskKey === 'yellow_bin_put_out') {
+      return t('yellowBinPutOut');
+    } else if (taskKey === 'clean_coffe_machine' || taskKey === 'clean_coffee_machine') {
+      return t('cleanCoffeeMachine');
+    } else if (taskKey === 'clean_refrigerator') {
+      return t('cleanRefrigerator');
+    } else if (taskKey === 'enter_allergens' || taskKey === 'allergene_eintragen') {
+      return t('enterAllergens');
+    }
+    return taskKey;
+  }, []);
+
+  const executeTaskToggle = async (taskKey: string, action: 'complete' | 'uncomplete') => {
+    try {
+      const url = `/api/dashboard/tasks/${encodeURIComponent(taskKey)}/${action}?date=${encodeURIComponent(displayDateStr)}`;
+      const headers: Record<string, string> = {
+        'X-App-View': 'dashboard',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const res = await fetch(url, {
+        method: 'POST',
+        headers,
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.error || `Failed to update task (${res.status})`);
+      }
+      void fetchDailyBrief(selectedDate);
+    } catch (err: unknown) {
+      console.error('Error toggling task:', err);
+      alert(err instanceof Error ? err.message : 'Error updating task');
+    }
+  };
+
   const handleTaskToggle = async (taskKey: string, e?: React.MouseEvent) => {
     if (e) {
       e.stopPropagation();
@@ -478,28 +524,20 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     }
 
     const completed = isTaskCompleted(taskKey);
-    const action = completed ? 'uncomplete' : 'complete';
-    try {
-      const url = `/api/dashboard/tasks/${encodeURIComponent(taskKey)}/${action}?date=${encodeURIComponent(displayDateStr)}`;
-      const headers: Record<string, string> = {
-        'X-App-View': 'dashboard',
-      };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-      const res = await fetch(url, {
-        method: 'POST',
-        headers,
-      });
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => null);
-        throw new Error(errJson?.error || `Failed to update task (${res.status})`);
-      }
-      void fetchDailyBrief(selectedDate);
-    } catch (err: unknown) {
-      console.error('Error toggling task:', err);
-      alert(err instanceof Error ? err.message : 'Error updating task');
+    if (!completed) {
+      // Ask for confirmation in a modal dialog ("<task> abhaken?")
+      setTaskToConfirm(taskKey);
+      return;
     }
+
+    await executeTaskToggle(taskKey, 'uncomplete');
+  };
+
+  const handleConfirmCheckOff = async () => {
+    if (!taskToConfirm) return;
+    const key = taskToConfirm;
+    setTaskToConfirm(null);
+    await executeTaskToggle(key, 'complete');
   };
 
   const sortedTasks = [...(data?.tasks_and_info || [])].sort((a, b) => {
@@ -821,28 +859,20 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                       const isInteractive = isAllergens ? isCurrentOrPastDay : isToday;
 
                       let icon = <AlertCircle size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
-                      let label = task;
+                      const label = getTaskLabel(task);
                       let colorClass = 'kiosk-todo-default';
 
-                      if (task === 'yellow_bin_retrieve') {
+                      if (task === 'yellow_bin_retrieve' || task === 'yellow_bin_put_out') {
                         icon = <Trash2 size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
-                        label = t('yellowBinRetrieve');
-                        colorClass = 'kiosk-todo-yellow';
-                      } else if (task === 'yellow_bin_put_out') {
-                        icon = <Trash2 size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
-                        label = t('yellowBinPutOut');
                         colorClass = 'kiosk-todo-yellow';
                       } else if (task === 'clean_coffe_machine' || task === 'clean_coffee_machine') {
                         icon = <Coffee size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
-                        label = t('cleanCoffeeMachine');
                         colorClass = 'kiosk-todo-coffee';
                       } else if (task === 'clean_refrigerator') {
                         icon = <Refrigerator size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
-                        label = t('cleanRefrigerator');
                         colorClass = 'kiosk-todo-refrigerator';
                       } else if (isAllergens) {
                         icon = <UtensilsCrossed size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
-                        label = t('enterAllergens');
                         colorClass = 'kiosk-todo-allergens';
                       }
 
@@ -950,11 +980,11 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                 setShowFeedbackModal(true);
               }}
               className={`kiosk-nav-btn ${showFeedbackModal ? 'active' : ''}`}
-              title={t('sendFeedback')}
+              title={t('feedback')}
               data-testid="kiosk-feedback-btn"
             >
               <MessageSquare size={embedded ? 16 : 20} />
-              <span>{t('sendFeedback')}</span>
+              <span>{t('feedback')}</span>
             </button>
           </div>
 
@@ -1015,6 +1045,15 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
           onClose={() => setShowFeedbackModal(false)}
           embedded={embedded}
           token={token}
+        />
+
+        {/* Modal for Task Confirmation */}
+        <TaskConfirmModal
+          isOpen={Boolean(taskToConfirm)}
+          taskLabel={taskToConfirm ? getTaskLabel(taskToConfirm) : ''}
+          onConfirm={() => void handleConfirmCheckOff()}
+          onClose={() => setTaskToConfirm(null)}
+          embedded={embedded}
         />
 
       </div>

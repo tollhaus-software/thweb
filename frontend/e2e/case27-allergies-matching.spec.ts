@@ -98,8 +98,16 @@ test.describe('Test Case 27: Allergen & Allergy Matching (MealAllergens Tab & Al
       const day = String(d.getDate()).padStart(2, '0');
       return `${y}-${m}-${day}`;
     };
-    const now = new Date();
-    const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const initBriefRes = await request.get('/api/dashboard/daily-brief', { headers: authHeaders });
+    const initBriefData = initBriefRes.ok() ? await initBriefRes.json() : null;
+    let todayMidnight: Date;
+    if (initBriefData?.date) {
+      const [by, bm, bd] = initBriefData.date.split('T')[0].split('-').map(Number);
+      todayMidnight = new Date(by, bm - 1, bd);
+    } else {
+      const now = new Date();
+      todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    }
     const dow = todayMidnight.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
     // Ensure both targetDate and the day before it are weekdays (Mon-Fri) visible in the 5-day calendar grid
     const targetDate = new Date(todayMidnight);
