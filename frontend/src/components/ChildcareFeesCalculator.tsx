@@ -15,6 +15,7 @@ interface Parent {
 
 interface Family {
   id: string;
+  family_name?: string;
   parents: Parent[];
 }
 
@@ -353,9 +354,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
   const [selectedFamilyIds, setSelectedFamilyIds] = useState<string[]>(() =>
     families.map((f) => f.id)
   );
-  const [mobileSelectedFamilyId, setMobileSelectedFamilyId] = useState<string>(() =>
-    families[0]?.id || ''
-  );
+  const [mobileSelectedFamilyId, setMobileSelectedFamilyId] = useState<string>('');
   const [familySearch, setFamilySearch] = useState('');
   const [isFamiliesExpanded, setIsFamiliesExpanded] = useState<boolean>(false);
 
@@ -369,7 +368,6 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
   useEffect(() => {
     if (families && families.length > 0 && !hasInitializedRef.current) {
       setSelectedFamilyIds(families.map((f) => f.id));
-      setMobileSelectedFamilyId((prev) => prev || families[0]?.id || '');
       hasInitializedRef.current = true;
     }
   }, [families]);
@@ -379,21 +377,48 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
     return formatFamilyNameHelper(f);
   }, []);
 
+  const getCanonicalFamilyName = useCallback(
+    (familyId: string, fallbackName?: string) => {
+      const fam = families.find((f) => f.id === familyId);
+      if (fam) return getFamilyName(fam);
+      return fallbackName || '';
+    },
+    [families, getFamilyName]
+  );
+
+  const compareCanonicalNames = useCallback((nameA: string, nameB: string) => {
+    return (
+      nameA.localeCompare(nameB, CURRENT_LOCALE, { sensitivity: 'base' }) ||
+      nameA.localeCompare(nameB, CURRENT_LOCALE)
+    );
+  }, []);
+
+  const sortedFamilies = useMemo(() => {
+    return [...families].sort((a, b) => {
+      const nameA = getFamilyName(a);
+      const nameB = getFamilyName(b);
+      const cmp = compareCanonicalNames(nameA, nameB);
+      if (cmp !== 0) return cmp;
+      return a.id.localeCompare(b.id);
+    });
+  }, [families, getFamilyName, compareCanonicalNames]);
+
   const mobileSelectableFamilies = useMemo(() => {
     if (canSelectFamilies) {
-      return families.map((f) => ({ id: f.id, name: getFamilyName(f) }));
+      return sortedFamilies.map((f) => ({ id: f.id, name: getFamilyName(f) }));
     }
     if (results?.family_fees) {
-      return results.family_fees.map((r) => {
+      const list = results.family_fees.map((r) => {
         const fam = families.find((f) => f.id === r.family_id);
         return {
           id: r.family_id,
           name: fam ? getFamilyName(fam) : r.family_name,
         };
       });
+      return list.sort((a, b) => compareCanonicalNames(a.name, b.name));
     }
     return [];
-  }, [canSelectFamilies, families, results, getFamilyName]);
+  }, [canSelectFamilies, sortedFamilies, families, results, getFamilyName, compareCanonicalNames]);
 
   const activeMobileFamilyId = useMemo(() => {
     if (mobileSelectableFamilies.length === 0) return '';
@@ -460,36 +485,44 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
 
   const error = validationError || apiError;
 
-  // Sort family fees results to match the order of the families prop, filtered by selected families
+  // Sort family fees results alphabetically by canonical family name when multiple families are shown
   const sortedFamilyFees = useMemo(() => {
     if (!results || !results.family_fees) return [];
-    if (!canSelectFamilies) {
-      return results.family_fees;
-    }
-    return results.family_fees
-      .filter((res) => selectedFamilyIds.includes(res.family_id))
-      .sort((a, b) => {
-        const indexA = families.findIndex((f) => f.id === a.family_id);
-        const indexB = families.findIndex((f) => f.id === b.family_id);
-        return indexA - indexB;
-      });
-  }, [results, families, selectedFamilyIds, canSelectFamilies]);
+    const list = canSelectFamilies
+      ? results.family_fees.filter((res) => selectedFamilyIds.includes(res.family_id))
+      : results.family_fees;
 
-  // Sort fee changes primarily by "Wirksamer Monat" (month string), then secondary by family name, filtered by selected families
+    if (list.length <= 1) {
+      return list;
+    }
+
+    return [...list].sort((a, b) => {
+      const nameA = getCanonicalFamilyName(a.family_id, a.family_name);
+      const nameB = getCanonicalFamilyName(b.family_id, b.family_name);
+      const cmp = compareCanonicalNames(nameA, nameB);
+      if (cmp !== 0) return cmp;
+      return a.family_id.localeCompare(b.family_id);
+    });
+  }, [results, canSelectFamilies, selectedFamilyIds, getCanonicalFamilyName, compareCanonicalNames]);
+
+  // Sort fee changes primarily by "Wirksamer Monat" (month string), then secondary by canonical family name
   const sortedFeeChanges = useMemo(() => {
     if (!results || !results.fee_changes) return [];
-    if (!canSelectFamilies) {
-      return results.fee_changes;
-    }
-    return results.fee_changes
-      .filter((chg) => selectedFamilyIds.includes(chg.family_id))
-      .sort((a, b) => {
-        if (a.month !== b.month) {
-          return a.month.localeCompare(b.month);
-        }
-        return (a.family_name || '').localeCompare(b.family_name || '');
-      });
-  }, [results, selectedFamilyIds, canSelectFamilies]);
+    const list = canSelectFamilies
+      ? results.fee_changes.filter((chg) => selectedFamilyIds.includes(chg.family_id))
+      : results.fee_changes;
+
+    return [...list].sort((a, b) => {
+      if (a.month !== b.month) {
+        return a.month.localeCompare(b.month);
+      }
+      const nameA = getCanonicalFamilyName(a.family_id, a.family_name);
+      const nameB = getCanonicalFamilyName(b.family_id, b.family_name);
+      const cmp = compareCanonicalNames(nameA, nameB);
+      if (cmp !== 0) return cmp;
+      return a.family_id.localeCompare(b.family_id);
+    });
+  }, [results, selectedFamilyIds, canSelectFamilies, getCanonicalFamilyName, compareCanonicalNames]);
 
   const activeMobileFamilyFee = useMemo(() => {
     if (!results || !results.family_fees) return null;
@@ -510,12 +543,15 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
       .sort((a, b) => a.month.localeCompare(b.month));
   }, [results, activeMobileFamilyFee]);
 
-  // Filtered families list based on search query
-  const filteredFamilies = families.filter((f) => {
-    const name = getFamilyName(f).toLowerCase();
-    const query = familySearch.toLowerCase();
-    return name.includes(query);
-  });
+  // Filtered families list based on search query, using alphabetically sorted families
+  const filteredFamilies = useMemo(() => {
+    const query = familySearch.toLowerCase().trim();
+    if (!query) return sortedFamilies;
+    return sortedFamilies.filter((f) => {
+      const name = getFamilyName(f).toLowerCase();
+      return name.includes(query);
+    });
+  }, [sortedFamilies, familySearch, getFamilyName]);
 
   const handleSelectAll = () => {
     setSelectedFamilyIds(families.map((f) => f.id));
@@ -529,6 +565,28 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
     setSelectedFamilyIds((prev) =>
       prev.includes(id) ? prev.filter((fid) => fid !== id) : [...prev, id]
     );
+  };
+
+  const handleSelectOnlyFamily = (id: string) => {
+    setSelectedFamilyIds([id]);
+    setMobileSelectedFamilyId(id);
+  };
+
+  const handleSelectOnlyFiltered = () => {
+    if (filteredFamilies.length > 0) {
+      setSelectedFamilyIds(filteredFamilies.map((f) => f.id));
+      setMobileSelectedFamilyId(filteredFamilies[0].id);
+    }
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSelectOnlyFiltered();
+    } else if (e.key === 'Escape' && familySearch) {
+      e.preventDefault();
+      setFamilySearch('');
+    }
   };
 
   useEffect(() => {
@@ -838,22 +896,52 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
                 {t('selectFamilies') || 'Select Families'}
               </span>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 400 }}>
-                ({selectedFamilyIds.length} {t('familiesSelected') || 'families selected'})
+                ({selectedFamilyIds.length}{' '}
+                {selectedFamilyIds.length === 1
+                  ? t('familySelected') || 'family selected'
+                  : t('familiesSelected') || 'families selected'})
               </span>
             </button>
           </div>
 
           {isFamiliesExpanded && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                 <input
                   type="text"
                   placeholder={t('searchFamilies') || 'Search families...'}
                   value={familySearch}
                   onChange={(e) => setFamilySearch(e.target.value)}
+                  onKeyDown={handleSearchKeyDown}
                   className="search-input"
                   style={{ width: '220px', padding: '0.35rem 0.5rem', fontSize: '0.875rem', marginBottom: 0 }}
                 />
+                {familySearch.trim().length > 0 && filteredFamilies.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleSelectOnlyFiltered}
+                    className="fees-select-only-filtered-btn"
+                    title={
+                      filteredFamilies.length === 1
+                        ? t('selectOnlyThisFamily') || 'Nur diese Familie auswählen'
+                        : t('selectOnlyMatchesTitle') || 'Nur gefilterte Treffer auswählen'
+                    }
+                    style={{
+                      padding: '0.35rem 0.6rem',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      border: '1px solid var(--primary)',
+                      background: 'var(--primary)',
+                      color: '#ffffff',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {filteredFamilies.length === 1
+                      ? t('onlyThis') || 'Nur diese'
+                      : t('selectOnlyMatches') || 'Nur Treffer'}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={handleSelectAll}
@@ -911,10 +999,18 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
                     return (
                       <div
                         key={f.id}
-                        onClick={() => handleToggleFamily(f.id)}
+                        className="fees-family-checkbox-row"
+                        onClick={(e) => {
+                          if (e.altKey) {
+                            handleSelectOnlyFamily(f.id);
+                          } else {
+                            handleToggleFamily(f.id);
+                          }
+                        }}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
+                          justifyContent: 'space-between',
                           gap: '0.5rem',
                           padding: '0.25rem 0.5rem',
                           borderRadius: '4px',
@@ -929,14 +1025,49 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
                           if (!isSelected) e.currentTarget.style.background = 'transparent';
                         }}
                       >
-                        {isSelected ? (
-                          <CheckSquare size={16} style={{ color: 'var(--primary)' }} />
-                        ) : (
-                          <Square size={16} style={{ color: 'var(--text-muted)' }} />
-                        )}
-                        <span style={{ fontSize: '0.875rem', color: 'var(--text-h)', fontWeight: isSelected ? 600 : 500 }}>
-                          {getFamilyName(f)}
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: 0 }}>
+                          {isSelected ? (
+                            <CheckSquare size={16} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                          ) : (
+                            <Square size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                          )}
+                          <span
+                            style={{
+                              fontSize: '0.875rem',
+                              color: 'var(--text-h)',
+                              fontWeight: isSelected ? 600 : 500,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {getFamilyName(f)}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          className="fees-select-only-btn"
+                          title={t('selectOnlyThisFamily') || 'Nur diese Familie auswählen'}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelectOnlyFamily(f.id);
+                          }}
+                          style={{
+                            padding: '0.15rem 0.45rem',
+                            fontSize: '0.75rem',
+                            fontWeight: 500,
+                            border: '1px solid var(--border)',
+                            borderRadius: '3px',
+                            background: 'var(--bg-surface)',
+                            color: 'var(--text-secondary)',
+                            cursor: 'pointer',
+                            marginLeft: '0.5rem',
+                            flexShrink: 0,
+                            lineHeight: 1.2,
+                          }}
+                        >
+                          {t('onlyThis') || 'Nur diese'}
+                        </button>
                       </div>
                     );
                   })
@@ -998,7 +1129,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
                         {activeMobileFamilyFee
                           ? `${t('fee')} (${
                               mobileSelectableFamilies.find((f) => f.id === activeMobileFamilyFee.family_id)?.name ||
-                              activeMobileFamilyFee.family_name
+                              getCanonicalFamilyName(activeMobileFamilyFee.family_id, activeMobileFamilyFee.family_name)
                             })`
                           : t('fee')}
                       </th>
@@ -1064,7 +1195,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
                   <tbody>
                     {sortedFamilyFees.map((res) => (
                       <tr key={res.family_id}>
-                        <td className="sticky-col" style={{ fontWeight: 600, color: 'var(--text-h)', border: '1px solid var(--border)', padding: '0.5rem', whiteSpace: 'nowrap', width: '1%' }}>{res.family_name}</td>
+                        <td className="sticky-col" style={{ fontWeight: 600, color: 'var(--text-h)', border: '1px solid var(--border)', padding: '0.5rem', whiteSpace: 'nowrap', width: '1%' }}>{getCanonicalFamilyName(res.family_id, res.family_name)}</td>
                         {monthsColumns.map((m) => {
                           const monthData = (res.monthly_fees || []).find((mf) => mf.month === m);
                           const change = (results.fee_changes || []).find(
@@ -1159,7 +1290,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
                   <tbody>
                     {sortedFeeChanges.map((chg, idx) => (
                       <tr key={`${chg.family_id}-${chg.month}-${idx}`}>
-                        <td className="sticky-col" style={{ fontWeight: 600, color: 'var(--text-h)', border: '1px solid var(--border)', padding: '0.5rem', whiteSpace: 'nowrap' }}>{chg.family_name}</td>
+                        <td className="sticky-col" style={{ fontWeight: 600, color: 'var(--text-h)', border: '1px solid var(--border)', padding: '0.5rem', whiteSpace: 'nowrap' }}>{getCanonicalFamilyName(chg.family_id, chg.family_name)}</td>
                         <td style={{ border: '1px solid var(--border)', padding: '0.5rem' }}>{formatMonth(chg.month)}</td>
                         <td style={{ textAlign: 'right', color: 'var(--text-muted)', border: '1px solid var(--border)', padding: '0.5rem' }}>{chg.previous_fee.toFixed(2)} EUR</td>
                         <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--primary)', border: '1px solid var(--border)', padding: '0.5rem' }}>

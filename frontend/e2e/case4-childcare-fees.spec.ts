@@ -290,5 +290,90 @@ test.describe('Test Case 4: Childcare Fees Tooltips & Translations', () => {
     await expect(page.locator('.fee-change-card')).toHaveCount(1);
     await expect(page.locator('.fee-change-card-header').first()).toHaveText(`Jun ${currentYear}`);
   });
+
+  test('sorts multiple families alphabetically by canonical family name and provides single-family quick selection', async ({ request, page }) => {
+    const authHeaders = { Authorization: 'Bearer developer@example.com' };
+    // Create 3 families out of alphabetical order: Zimmermann, Aalberg, Bauer
+    await request.post('/api/families', {
+      headers: authHeaders,
+      data: {
+        parents: [{ first_name: 'Stefan', last_name: 'Zimmermann' }],
+      },
+    });
+    await request.post('/api/families', {
+      headers: authHeaders,
+      data: {
+        parents: [
+          { first_name: 'Zachary', last_name: 'Aalberg' },
+          { first_name: 'Benjamin', last_name: 'Aalberg' },
+        ],
+      },
+    });
+    await request.post('/api/families', {
+      headers: authHeaders,
+      data: {
+        parents: [{ first_name: 'Maria', last_name: 'Bauer' }],
+      },
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Betreuungsgebühren' }).click();
+    await expect(page.getByRole('heading', { name: 'Monatliche Gebühren pro Familie' })).toBeVisible();
+
+    const table = page.locator('table.data-table').first();
+    await expect(table).toBeVisible();
+
+    // Verify desktop table rows are sorted alphabetically: Aalberg, Bauer, Zimmermann
+    const familyNames = await table.locator('tbody tr td.sticky-col').allTextContents();
+    expect(familyNames).toEqual(['Aalberg', 'Bauer', 'Zimmermann']);
+
+    // Expand the "Familien auswählen" checklist
+    const expandBtn = page.getByRole('button', { name: /Familien auswählen/i });
+    await expandBtn.click();
+    await expect(expandBtn).toContainText('(3 Familien ausgewählt)');
+
+    // Verify checklist items are also in alphabetical order
+    const checklistFamilyNames = await page.locator('.fees-family-checkbox-row span').allTextContents();
+    expect(checklistFamilyNames).toEqual(['Aalberg', 'Bauer', 'Zimmermann']);
+
+    // Test "Nur diese" button on a row (e.g. click "Nur diese" on Zimmermann)
+    const zimmermannRow = page.locator('.fees-family-checkbox-row', { hasText: 'Zimmermann' });
+    await zimmermannRow.locator('button.fees-select-only-btn').click();
+
+    // Now only Zimmermann is selected
+    await expect(expandBtn).toContainText('(1 Familie ausgewählt)');
+    const tableAfterSelectOnly = await table.locator('tbody tr td.sticky-col').allTextContents();
+    expect(tableAfterSelectOnly).toEqual(['Zimmermann']);
+
+    // Restore all families
+    await page.getByRole('button', { name: 'Alle auswählen' }).click();
+    await expect(expandBtn).toContainText('(3 Familien ausgewählt)');
+    expect(await table.locator('tbody tr td.sticky-col').allTextContents()).toEqual(['Aalberg', 'Bauer', 'Zimmermann']);
+
+    // Test search filter with Enter key
+    const searchInput = page.locator('.search-input');
+    await searchInput.fill('Bauer');
+    // Button "Nur diese" should appear next to the search box since exactly 1 match
+    const filterSelectBtn = page.locator('button.fees-select-only-filtered-btn');
+    await expect(filterSelectBtn).toBeVisible();
+    await expect(filterSelectBtn).toHaveText('Nur diese');
+
+    // Press Enter to select only the matching family
+    await searchInput.press('Enter');
+    await expect(expandBtn).toContainText('(1 Familie ausgewählt)');
+    expect(await table.locator('tbody tr td.sticky-col').allTextContents()).toEqual(['Bauer']);
+
+    // Clear search and restore all
+    await searchInput.fill('');
+    await page.getByRole('button', { name: 'Alle auswählen' }).click();
+    await expect(expandBtn).toContainText('(3 Familien ausgewählt)');
+
+    // Test toolbar "Nur diese" / "Nur Treffer" button click
+    await searchInput.fill('Aal');
+    await expect(filterSelectBtn).toBeVisible();
+    await filterSelectBtn.click();
+    await expect(expandBtn).toContainText('(1 Familie ausgewählt)');
+    expect(await table.locator('tbody tr td.sticky-col').allTextContents()).toEqual(['Aalberg']);
+  });
 });
 
