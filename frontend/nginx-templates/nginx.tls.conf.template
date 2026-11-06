@@ -36,6 +36,13 @@ server {
         add_header Cache-Control "no-cache, must-revalidate";
     }
 
+    # Static info pages
+    location /info-pages/ {
+        root /usr/share/nginx/html;
+        try_files $uri $uri/ =404;
+        add_header Cache-Control "no-cache, must-revalidate";
+    }
+
     # Host frontend as static file
     location / {
         root /usr/share/nginx/html;

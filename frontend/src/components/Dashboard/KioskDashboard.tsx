@@ -35,6 +35,7 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { FeedbackModal } from './FeedbackModal';
+import { InfoPagesView } from './InfoPagesView';
 import './KioskDashboard.css';
 
 interface CompletedTaskInfo {
@@ -99,6 +100,8 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
   const [data, setData] = useState<DailyBriefData | null>(null);
   const [allergiesData, setAllergiesData] = useState<AllergiesSummaryData | null>(null);
   const [showAllergies, setShowAllergies] = useState<boolean>(false);
+  const [showInfoPages, setShowInfoPages] = useState<boolean>(false);
+  const [activeInfoPageId, setActiveInfoPageId] = useState<string | null>(null);
   const [showFeedbackModal, setShowFeedbackModal] = useState<boolean>(false);
   const [isEditingAllergens, setIsEditingAllergens] = useState<boolean>(false);
   const [flashAllergensBtn, setFlashAllergensBtn] = useState<boolean>(false);
@@ -340,6 +343,8 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
   };
 
   const handleHomeClick = useCallback(() => {
+    setShowInfoPages(false);
+    setActiveInfoPageId(null);
     setShowAllergies(false);
     setShowFeedbackModal(false);
     setIsEditingAllergens(false);
@@ -349,6 +354,20 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
       contentAreaRef.current.scrollTop = 0;
     }
   }, []);
+
+  const handleInfoPagesClick = useCallback(() => {
+    setIsEditingAllergens(false);
+    setShowAllergies(false);
+    setShowFeedbackModal(false);
+    if (!showInfoPages) {
+      setShowInfoPages(true);
+      setActiveInfoPageId(null);
+    } else if (activeInfoPageId) {
+      setActiveInfoPageId(null);
+    } else {
+      setShowInfoPages(false);
+    }
+  }, [showInfoPages, activeInfoPageId]);
 
   const effectiveIdleTimeoutMs =
     idleTimeoutMs ??
@@ -648,7 +667,17 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
             </div>
           )}
 
-          {isEditingAllergens ? (
+          {showInfoPages ? (
+            <InfoPagesView
+              embedded={embedded}
+              activePageId={activeInfoPageId}
+              onSelectPage={setActiveInfoPageId}
+              onBackToDashboard={() => {
+                setShowInfoPages(false);
+                setActiveInfoPageId(null);
+              }}
+            />
+          ) : isEditingAllergens ? (
             <MealAllergensEditor
               initialDay={{
                 ...createEmptyMealAllergenDay(displayDateStr),
@@ -893,10 +922,12 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
             </button>
 
             <button
-              className="kiosk-nav-btn"
-              title={t('anleitungen')}
+              onClick={handleInfoPagesClick}
+              className={`kiosk-nav-btn ${showInfoPages ? 'active' : ''}`}
+              title={t('infoPages')}
+              data-testid="kiosk-info-pages-btn"
             >
-              <span>{t('anleitungen')}</span>
+              <span>{t('infoPages')}</span>
             </button>
 
             {canViewAllergiesSummary && (

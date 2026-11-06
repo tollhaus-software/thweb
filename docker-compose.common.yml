@@ -60,6 +60,7 @@ services:
       APP_FAVICON_FILE: ${APP_FAVICON_FILE:-}
     volumes:
       - ${PRIVACY_DIR:-./testing/privacy}:/etc/thweb/privacy:ro
+      - ${INFO_PAGES_DIR:-./testing/info-pages}:/etc/thweb/info-pages:ro
     depends_on:
       - backend
 

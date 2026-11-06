@@ -65,6 +65,7 @@ for i in $(seq 0 $((E2E_WORKERS - 1))); do
       BACKEND_HOST: backend-$i
     volumes:
       - $REPO_ROOT/testing/privacy:/etc/thweb/privacy:ro
+      - $REPO_ROOT/testing/info-pages:/etc/thweb/info-pages:ro
     depends_on:
       - backend-$i
 

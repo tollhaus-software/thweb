@@ -45,6 +45,12 @@ elif [ -d "/etc/thweb/datenschutz" ]; then
   cp -f /etc/thweb/datenschutz/* /usr/share/nginx/html/ 2>/dev/null || true
 fi
 
+# Detect and copy injected info pages
+if [ -d "/etc/thweb/info-pages" ]; then
+  mkdir -p /usr/share/nginx/html/info-pages
+  cp -rf /etc/thweb/info-pages/* /usr/share/nginx/html/info-pages/ 2>/dev/null || true
+fi
+
 # Update index.html title tag if APP_TITLE is set
 if [ -n "${APP_TITLE}" ]; then
   ESCAPED_TITLE=$(printf '%s\n' "${APP_TITLE}" | sed -e 's/[\\/&]/\\&/g')

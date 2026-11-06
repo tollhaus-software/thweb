@@ -1,0 +1,30 @@
+[
+  {
+    "id": "kaffeemaschine",
+    "title": "Kaffeemaschine",
+    "url": "/info-pages/kaffeemaschine.html",
+    "icon": "coffee",
+    "description": "Bedienung, Reinigung und Pflege der Kaffeemaschine"
+  },
+  {
+    "id": "herd",
+    "title": "Herd",
+    "url": "/info-pages/herd.html",
+    "icon": "flame",
+    "description": "Bedienung der Kochfelder und des Backofens"
+  },
+  {
+    "id": "spuelmaschine",
+    "title": "Spülmaschine",
+    "url": "/info-pages/spuelmaschine.html",
+    "icon": "sparkles",
+    "description": "Einräumen, Spülprogramme und Siebreinigung"
+  },
+  {
+    "id": "schneidehilfe",
+    "title": "Schneidehilfe",
+    "url": "/info-pages/schneidehilfe.html",
+    "icon": "scissors",
+    "description": "Sicherer Umgang und Reinigung der Schneidehilfe"
+  }
+]
