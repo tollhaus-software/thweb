@@ -4981,10 +4981,14 @@ const Dashboard: React.FC = () => {
             parents: createdFamily.parents || [],
           }
         });
+        setGlobalFilter('');
         if (canReadFamiliesAll) fetchFamilies();
-    if (canReadMembers) fetchMembers();
-    if (canReadOverview) fetchOverviewFamilies();
+        if (canReadMembers) fetchMembers();
+        if (canReadOverview) fetchOverviewFamilies();
         setAddFamilyOpen(false);
+        if (createdFamily?.id) {
+          setHighlightTarget({ id: createdFamily.id, key: Date.now() });
+        }
       })
       .catch((err) => alert(err.message));
   };
