@@ -77,11 +77,8 @@ func ExtractKioskNameFromDN(dn string) string {
 // IsAllowedKioskPath returns true if the request path is permitted for mTLS kiosk access.
 func IsAllowedKioskPath(path string) bool {
 	cleanPath := strings.TrimSuffix(path, "/")
-	return cleanPath == "/api/dashboard/daily-brief" ||
-		cleanPath == "/api/dashboard/allergies" ||
-		cleanPath == "/api/dashboard/tasks" ||
-		strings.HasPrefix(cleanPath, "/api/dashboard/tasks/") ||
-		cleanPath == "/api/dashboard/feedback" ||
+	return cleanPath == "/api/dashboard" ||
+		strings.HasPrefix(cleanPath, "/api/dashboard/") ||
 		cleanPath == "/api/allergies/summary" ||
 		cleanPath == "/api/meal-allergens" ||
 		strings.HasPrefix(cleanPath, "/api/meal-allergens/") ||
