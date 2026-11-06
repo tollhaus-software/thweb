@@ -15,6 +15,7 @@ export interface HeaderOverflowMenuProps {
   canManageUsers?: boolean;
   canViewActivity?: boolean;
   canProvisionKiosk?: boolean;
+  canUseDashboard?: boolean;
   activeTab?: string;
 }
 
@@ -30,6 +31,7 @@ export const HeaderOverflowMenu: React.FC<HeaderOverflowMenuProps> = ({
   canManageUsers = false,
   canViewActivity = false,
   canProvisionKiosk = false,
+  canUseDashboard = false,
   activeTab = '',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -104,19 +106,21 @@ export const HeaderOverflowMenu: React.FC<HeaderOverflowMenuProps> = ({
           )}
           {onSelectTab && (
             <>
-              <button
-                type="button"
-                role="menuitem"
-                className={`header-overflow-menu-item ${activeTab === 'dashboard' ? 'active' : ''}`}
-                data-testid="overflow-dashboard-button"
-                onClick={() => {
-                  setIsOpen(false);
-                  onSelectTab('dashboard');
-                }}
-              >
-                <LayoutDashboard size={16} />
-                <span>{t('dashboard')}</span>
-              </button>
+              {canUseDashboard && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={`header-overflow-menu-item ${activeTab === 'dashboard' ? 'active' : ''}`}
+                  data-testid="overflow-dashboard-button"
+                  onClick={() => {
+                    setIsOpen(false);
+                    onSelectTab('dashboard');
+                  }}
+                >
+                  <LayoutDashboard size={16} />
+                  <span>{t('dashboard')}</span>
+                </button>
+              )}
 
               {canReadAudit && (
                 <button

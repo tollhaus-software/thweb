@@ -35,8 +35,8 @@ func TestLoadDefault(t *testing.T) {
 	if len(kioskRoles) == 0 || kioskRoles[0] != "kiosk" {
 		t.Errorf("expected kiosk_cert trigger to return kiosk role, got %v", kioskRoles)
 	}
-	if len(kioskPerms) == 0 || kioskPerms[0] != "dashboard.read" {
-		t.Errorf("expected kiosk_cert trigger to return dashboard.read permission, got %v", kioskPerms)
+	if len(kioskPerms) == 0 || kioskPerms[0] != "dashboard.use" {
+		t.Errorf("expected kiosk_cert trigger to return dashboard.use permission, got %v", kioskPerms)
 	}
 
 	identRoles, identPerms := cfg.RolesForTrigger(AutoGrantParentIdentifierEmail)

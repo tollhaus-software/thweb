@@ -105,6 +105,8 @@ func MapRouteToFeature(routePattern, rawPath string) string {
 		return "session"
 	case strings.HasPrefix(p, "/api/dashboard") || p == "/api/allergies/summary":
 		return "dashboard"
+	case strings.HasPrefix(p, "/api/mealplan"):
+		return "mealplan"
 	case strings.HasPrefix(p, "/api/meal-allergens"):
 		return "meal_allergens"
 	case strings.HasPrefix(p, "/api/hygiene-events") || strings.HasSuffix(p, "/hygiene-events"):

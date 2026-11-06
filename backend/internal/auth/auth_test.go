@@ -157,6 +157,64 @@ func TestRequirePermission_AuditView(t *testing.T) {
 	}
 }
 
+func TestRequirePermission_DashboardUse(t *testing.T) {
+	middleware := RequirePermission("dashboard.use")
+	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	})
+
+	handler := middleware(nextHandler)
+
+	tests := []struct {
+		name       string
+		user       *models.UserWithPermissions
+		wantStatus int
+	}{
+		{
+			name: "allowed with dashboard.use",
+			user: &models.UserWithPermissions{
+				Email:                "kiosk@internal",
+				EffectivePermissions: []string{"dashboard.use"},
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name: "allowed with admin wildcard",
+			user: &models.UserWithPermissions{
+				Email:                "admin@example.com",
+				EffectivePermissions: []string{"*"},
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name: "forbidden for regular parent without dashboard.use",
+			user: &models.UserWithPermissions{
+				Email:                "parent@example.com",
+				EffectivePermissions: []string{"families.all.restrictedread", "fees.self.read", "mealplan.view"},
+			},
+			wantStatus: http.StatusForbidden,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/api/dashboard/daily-brief", nil)
+			if tt.user != nil {
+				ctx := context.WithValue(req.Context(), UserContextKey, tt.user)
+				req = req.WithContext(ctx)
+			}
+			rec := httptest.NewRecorder()
+
+			handler.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Errorf("RequirePermission(dashboard.use) status = %d, want %d", rec.Code, tt.wantStatus)
+			}
+		})
+	}
+}
+
 func TestExtractKmsAccessToken(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -523,8 +581,8 @@ func TestAuthenticator_Middleware_Kiosk(t *testing.T) {
 				if recordedUser.KioskName != tt.wantKioskName {
 					t.Errorf("expected KioskName = %q, got %q", tt.wantKioskName, recordedUser.KioskName)
 				}
-				if !recordedUser.HasPermission("dashboard.read") {
-					t.Errorf("expected user to have 'dashboard.read' permission, got: %v", recordedUser.EffectivePermissions)
+				if !recordedUser.HasPermission("dashboard.use") {
+					t.Errorf("expected user to have 'dashboard.use' permission, got: %v", recordedUser.EffectivePermissions)
 				}
 				if !recordedUser.HasPermission("meal_allergens.read") || !recordedUser.HasPermission("meal_allergens.write") {
 					t.Errorf("expected kiosk user to have meal_allergens.read and meal_allergens.write permissions, got: %v", recordedUser.EffectivePermissions)
@@ -720,7 +778,7 @@ roles:
     auto_grant_on:
       - kiosk_cert
     permissions:
-      - dashboard.read
+      - dashboard.use
       - mealplan.view
 `
 	cfg, err := roles.LoadFromBytes([]byte(customYAML))

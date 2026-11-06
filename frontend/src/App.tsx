@@ -2560,6 +2560,7 @@ const Dashboard: React.FC = () => {
   const canManageUsers = hasPermission('users.all.manage') || hasPermission('*');
   const canViewActivity = canManageUsers || hasPermission('activity.view') || hasPermission('*');
   const canProvisionKiosk = hasPermission('provision.kiosk.cert') || hasPermission('*');
+  const canUseDashboard = hasPermission('dashboard.use');
   const canReadOverview = hasPermission('families.all.restrictedread');
   const canReadFamiliesAll = hasPermission('families.all.read');
   const canReadFees = hasPermission('fees.all.read') || hasPermission('fees.self.read');
@@ -2639,6 +2640,7 @@ const Dashboard: React.FC = () => {
     canManageUsers: canManageUsers || hasPermission('*'),
     canViewActivity,
     canProvisionKiosk,
+    canUseDashboard,
   }), [
     canReadOverview,
     canReadFamiliesAll,
@@ -2653,6 +2655,7 @@ const Dashboard: React.FC = () => {
     canManageUsers,
     canViewActivity,
     canProvisionKiosk,
+    canUseDashboard,
   ]);
 
   const [globalFilter, setGlobalFilter] = React.useState('');
@@ -2676,6 +2679,7 @@ const Dashboard: React.FC = () => {
       canManageUsers: canManageUsers || hasPermission('*'),
       canViewActivity,
       canProvisionKiosk,
+      canUseDashboard,
     };
     if (
       (hash === 'familiesOverview' && canReadOverview) ||
@@ -2694,8 +2698,7 @@ const Dashboard: React.FC = () => {
       (hash === 'activity' && canViewActivity) ||
       (hash === 'kiosk' && canProvisionKiosk) ||
       categoryHasLandingPage(hash, initialPerms) ||
-      hash === 'dashboard' ||
-      pathname === '/dashboard'
+      ((hash === 'dashboard' || pathname === '/dashboard') && canUseDashboard)
     ) {
       return (pathname === '/dashboard' ? 'dashboard' : hash) as any;
     }
@@ -2717,7 +2720,7 @@ const Dashboard: React.FC = () => {
       (saved === 'activity' && canViewActivity) ||
       (saved === 'kiosk' && canProvisionKiosk) ||
       (saved && categoryHasLandingPage(saved, initialPerms)) ||
-      saved === 'dashboard'
+      (saved === 'dashboard' && canUseDashboard)
     ) {
       return saved as any;
     }
@@ -3925,7 +3928,7 @@ const Dashboard: React.FC = () => {
         (hash === 'activity' && canViewActivity) ||
         (hash === 'kiosk' && canProvisionKiosk) ||
         categoryHasLandingPage(hash, navPerms) ||
-        hash === 'dashboard'
+        (hash === 'dashboard' && canUseDashboard)
       ) {
         setActiveTab(hash as any);
         localStorage.setItem('thweb_active_tab', hash);
@@ -3958,7 +3961,7 @@ const Dashboard: React.FC = () => {
         setActiveTab(fallback as any);
         localStorage.setItem('thweb_active_tab', fallback);
         window.location.hash = fallback;
-      } else if (hash === 'audit' || hash === 'admin' || hash === 'activity' || hash === 'kiosk' || hash === 'mealPlan' || hash === 'mealAllergens') {
+      } else if (hash === 'audit' || hash === 'admin' || hash === 'activity' || hash === 'kiosk' || hash === 'mealPlan' || hash === 'mealAllergens' || hash === 'dashboard') {
         const fallback = canReadFamiliesAll ? 'families' : canReadOverview ? 'familiesOverview' : 'childcareFees';
         setActiveTab(fallback as any);
         localStorage.setItem('thweb_active_tab', fallback);
@@ -3967,7 +3970,12 @@ const Dashboard: React.FC = () => {
     };
     window.addEventListener('hashchange', handleHashChange);
     if (window.location.pathname.replace(/\/+$/, '') === '/dashboard') {
-      window.history.replaceState(null, '', '/#dashboard');
+      if (canUseDashboard) {
+        window.history.replaceState(null, '', '/#dashboard');
+      } else {
+        const fallback = canReadFamiliesAll ? 'families' : canReadOverview ? 'familiesOverview' : 'childcareFees';
+        window.history.replaceState(null, '', '/#' + fallback);
+      }
     }
     if (!window.location.hash) {
       window.location.hash = activeTab;
@@ -3975,7 +3983,7 @@ const Dashboard: React.FC = () => {
       handleHashChange();
     }
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [canReadAudit, canManageUsers, canViewActivity, canProvisionKiosk, canReadOverview, canReadFamiliesAll, canReadFees, canReadMembers, canReadJobs, canReadEmployees, canViewMealPlan, canReadMealAllergens, hasPermission, navPerms]);
+  }, [canReadAudit, canManageUsers, canViewActivity, canProvisionKiosk, canUseDashboard, canReadOverview, canReadFamiliesAll, canReadFees, canReadMembers, canReadJobs, canReadEmployees, canViewMealPlan, canReadMealAllergens, hasPermission, navPerms]);
 
   useRealtime(React.useCallback((message: any) => {
     if (
@@ -7938,6 +7946,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
         canManageUsers={canManageUsers || hasPermission('*')}
         canViewActivity={canViewActivity}
         canProvisionKiosk={canProvisionKiosk}
+        canUseDashboard={canUseDashboard}
         appTitle={appTitle}
         appLogoUrl={appLogoUrl}
       />
@@ -8063,6 +8072,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
               canManageUsers={canManageUsers || hasPermission('*')}
               canViewActivity={canViewActivity}
               canProvisionKiosk={canProvisionKiosk}
+              canUseDashboard={canUseDashboard}
               activeTab={activeTab}
             />
           </div>
@@ -8722,7 +8732,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
               <MealPlanTab />
             ) : activeTab === 'mealAllergens' && canReadMealAllergens ? (
               <MealAllergensTab />
-            ) : activeTab === 'dashboard' ? (
+            ) : activeTab === 'dashboard' && canUseDashboard ? (
               <KioskDashboard embedded={true} />
             ) : activeTab === 'childcareFees' && canReadFees ? (
               <ChildcareFeesCalculator

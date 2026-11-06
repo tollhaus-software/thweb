@@ -2021,6 +2021,37 @@ func (s *Store) DeleteUser(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+func (s *Store) GetMealPlanDay(ctx context.Context, targetDate time.Time) (*models.MealPlanDayResponse, error) {
+	dateStr := targetDate.Format("2006-01-02")
+	resp := &models.MealPlanDayResponse{
+		Date:           dateStr,
+		WhoIsCooking:   "",
+		MealComponents: []string{},
+	}
+
+	var cookName, comp1, comp2, comp3 string
+	err := s.db.QueryRow(ctx, `
+		SELECT cook_name, food_component_1, food_component_2, food_component_3
+		FROM meal_plan_from_sheets
+		WHERE date = $1
+	`, dateStr).Scan(&cookName, &comp1, &comp2, &comp3)
+	if err != nil && err != pgx.ErrNoRows {
+		return nil, fmt.Errorf("failed to query meal_plan_from_sheets: %w", err)
+	}
+
+	if err == nil {
+		resp.WhoIsCooking = strings.TrimSpace(cookName)
+		for _, comp := range []string{comp1, comp2, comp3} {
+			trimmed := strings.TrimSpace(comp)
+			if trimmed != "" {
+				resp.MealComponents = append(resp.MealComponents, trimmed)
+			}
+		}
+	}
+
+	return resp, nil
+}
+
 func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*models.DailyBriefResponse, error) {
 	dateStr := targetDate.Format("2006-01-02")
 	nextDateStr := targetDate.AddDate(0, 0, 1).Format("2006-01-02")

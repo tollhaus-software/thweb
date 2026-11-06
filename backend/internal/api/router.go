@@ -134,12 +134,15 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		// Childcare Fees Calculation
 		r.With(auth.RequirePermission("fees.self.read")).Post("/api/fees/calculate", server.HandleCalculateFees)
 
+		// Weekly Meal Plan (Kochplan)
+		r.With(auth.RequirePermission("mealplan.view")).Get("/api/mealplan", server.HandleGetMealPlanDay)
+
 		// Dashboard / Daily Brief & Allergies Summary
-		r.Get("/api/dashboard/daily-brief", server.HandleGetDailyBrief)
-		r.Post("/api/dashboard/tasks/{taskTypeId}/complete", server.HandleCompleteTask)
-		r.Post("/api/dashboard/tasks/{taskTypeId}/uncomplete", server.HandleUncompleteTask)
-		r.Delete("/api/dashboard/tasks/{taskTypeId}", server.HandleUncompleteTask)
-		r.Post("/api/dashboard/feedback", server.HandleCreateFeedback)
+		r.With(auth.RequirePermission("dashboard.use")).Get("/api/dashboard/daily-brief", server.HandleGetDailyBrief)
+		r.With(auth.RequirePermission("dashboard.use")).Post("/api/dashboard/tasks/{taskTypeId}/complete", server.HandleCompleteTask)
+		r.With(auth.RequirePermission("dashboard.use")).Post("/api/dashboard/tasks/{taskTypeId}/uncomplete", server.HandleUncompleteTask)
+		r.With(auth.RequirePermission("dashboard.use")).Delete("/api/dashboard/tasks/{taskTypeId}", server.HandleUncompleteTask)
+		r.With(auth.RequirePermission("dashboard.use")).Post("/api/dashboard/feedback", server.HandleCreateFeedback)
 		r.With(auth.RequireAnyPermission("users.all.manage", "activity.view")).Get("/api/admin/feedback", server.HandleListFeedback)
 		r.With(auth.RequireAnyPermission("allergies.summary.read", "meal_allergens.read")).Get("/api/allergies/summary", server.HandleGetAllergiesSummary)
 		r.With(auth.RequireAnyPermission("allergies.summary.read", "meal_allergens.read")).Get("/api/dashboard/allergies", server.HandleGetAllergiesSummary)

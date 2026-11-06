@@ -58,13 +58,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email: 'kiosk@tablet',
         roles: ['kiosk'],
         permissions: [
-          'dashboard.read',
+          'dashboard.use',
           'allergies.summary.read',
           'meal_allergens.read',
           'meal_allergens.write',
         ],
         effective_permissions: [
-          'dashboard.read',
+          'dashboard.use',
           'allergies.summary.read',
           'meal_allergens.read',
           'meal_allergens.write',

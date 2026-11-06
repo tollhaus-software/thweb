@@ -242,7 +242,7 @@ var AllKnownPermissions = []string{
 	"users.all.manage",
 	"vaccination.status.manage",
 	"provision.kiosk.cert",
-	"dashboard.read",
+	"dashboard.use",
 	"permissions.simulate",
 	"jobs.all.read",
 	"jobs.all.write",
@@ -779,6 +779,12 @@ type CompletedTask struct {
 	IsKiosk          bool       `json:"is_kiosk"`
 	KioskName        string     `json:"kiosk_name,omitempty"`
 	CompletedAt      time.Time  `json:"completed_at"`
+}
+
+type MealPlanDayResponse struct {
+	Date           string   `json:"date"`
+	WhoIsCooking   string   `json:"who_is_cooking"`
+	MealComponents []string `json:"meal_components"`
 }
 
 type DailyBriefResponse struct {

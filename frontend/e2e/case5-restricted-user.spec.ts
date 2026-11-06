@@ -156,6 +156,15 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     // - Admin and Historie tabs must NOT be visible
     await expect(page.getByRole('button', { name: 'Admin' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Historie' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Dashboard' })).toHaveCount(0);
+
+    // Overflow menu must NOT show Dashboard link
+    const threeDotsBtn = page.locator('button.header-overflow-btn');
+    if (await threeDotsBtn.isVisible()) {
+      await threeDotsBtn.click();
+      await expect(page.getByTestId('overflow-dashboard-button')).toHaveCount(0);
+      await page.keyboard.press('Escape');
+    }
 
     // Verify no "Familie hinzufügen" button
     await expect(page.getByRole('button', { name: 'Familie hinzufügen' })).toHaveCount(0);

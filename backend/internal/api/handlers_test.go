@@ -83,6 +83,18 @@ func TestHandleGetDailyBrief_InvalidDate(t *testing.T) {
 	}
 }
 
+func TestHandleGetMealPlanDay_InvalidDate(t *testing.T) {
+	s := &Server{}
+	req := httptest.NewRequest("GET", "/api/mealplan?date=invalid-date", nil)
+	rec := httptest.NewRecorder()
+
+	s.HandleGetMealPlanDay(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("HandleGetMealPlanDay with invalid date got status %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
 func TestHandleGetKioskCertStatus_NoCA(t *testing.T) {
 	s := &Server{
 		KioskGenerator: nil,

@@ -53,6 +53,7 @@ export interface UserPermissionsContext {
   canManageUsers: boolean;
   canViewActivity: boolean;
   canProvisionKiosk: boolean;
+  canUseDashboard: boolean;
 }
 
 export interface NavSubItem {
@@ -267,7 +268,7 @@ export const NAVIGATION_CATEGORIES: NavCategory[] = [
         descriptionKey: 'subtabDescDashboard',
         defaultDescription: 'Tagesübersicht für den Kiosk-Modus.',
         icon: LayoutDashboard,
-        isVisible: () => true,
+        isVisible: (ctx) => ctx.canUseDashboard,
       },
       {
         id: 'audit',

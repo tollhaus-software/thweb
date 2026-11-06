@@ -63,6 +63,7 @@ export const SegmentedSubNav: React.FC<SegmentedSubNavProps> = ({
     canManageUsers: false,
     canViewActivity: false,
     canProvisionKiosk: false,
+    canUseDashboard: false,
   };
 
   const visibleItems = getVisibleSubTabsForCategory(effectiveCategory, effectivePerms);

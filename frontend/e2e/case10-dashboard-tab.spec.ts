@@ -836,4 +836,64 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await expect(customClock).toBeVisible();
     await expect(customClock).toHaveAttribute('data-wake-times', '08:15, 11:45, 15:30');
   });
+
+  test('only shows dashboard link to users with dashboard.use permission', async ({ request, page }) => {
+    // 1. Reset database state
+    const resetRes = await request.post('/api/test/reset');
+    expect(resetRes.ok()).toBeTruthy();
+
+    // 2. Create family with identifier email for a parent without dashboard.use
+    const parentEmail = 'regular.parent@tollhaus-stuttgart.de';
+    const famRes = await request.post('/api/families', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        parents: [
+          {
+            first_name: 'Regular',
+            last_name: 'Parent',
+            emails: [{ value: parentEmail, identifier_email: true, address_list: true }],
+            phones: [{ value: '012345678', address_list: true }],
+          },
+        ],
+      },
+    });
+    expect(famRes.ok()).toBeTruthy();
+
+    // 3. Log in as regular parent
+    await page.addInitScript((email) => {
+      localStorage.setItem('token', email);
+    }, parentEmail);
+
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // 4. Verify Dashboard link is NOT shown in sidebar navigation or tabs
+    await expect(page.getByRole('button', { name: 'Dashboard' })).toHaveCount(0);
+
+    // 5. Verify Dashboard link is NOT shown in header overflow menu
+    const overflowBtn = page.locator('button.header-overflow-btn');
+    if (await overflowBtn.isVisible()) {
+      await overflowBtn.click();
+      await expect(page.getByTestId('overflow-dashboard-button')).toHaveCount(0);
+      await page.keyboard.press('Escape');
+    }
+
+    // 6. Direct navigation to /#dashboard falls back to default allowed tab and does not show dashboard
+    await page.goto('/#dashboard');
+    await page.waitForLoadState('networkidle');
+    await expect(page.locator('.kiosk-tablet-page.embedded')).toHaveCount(0);
+
+    // 7. Log in as admin (developer@example.com) who has wildcard * including dashboard.use
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+    });
+
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // 8. Verify Dashboard link IS accessible for user with dashboard.use
+    await page.goto('/#dashboard');
+    await page.waitForLoadState('networkidle');
+    await expect(page.locator('.kiosk-tablet-page.embedded')).toBeVisible();
+  });
 });

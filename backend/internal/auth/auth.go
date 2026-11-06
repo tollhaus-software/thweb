@@ -103,7 +103,7 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 				kioskRoles = []string{"kiosk"}
 			}
 			if len(kioskPerms) == 0 {
-				kioskPerms = []string{"dashboard.read", "allergies.summary.read", "meal_allergens.read", "meal_allergens.write"}
+				kioskPerms = []string{"dashboard.use", "allergies.summary.read", "meal_allergens.read", "meal_allergens.write"}
 			}
 			kioskUser := &models.UserWithPermissions{
 				Email:                kioskEmail,

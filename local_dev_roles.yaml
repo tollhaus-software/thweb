@@ -54,7 +54,7 @@ roles:
     auto_grant_on:
       - kiosk_cert
     permissions:
-      - dashboard.read
+      - dashboard.use
       - allergies.summary.read
       - meal_allergens.read
       - meal_allergens.write

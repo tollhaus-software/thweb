@@ -49,7 +49,7 @@ export const MealPlanPrintView: React.FC = () => {
         const results = await Promise.all(
           days.map(async (dayDate) => {
             const dateStr = formatDateKey(dayDate);
-            const res = await fetch(`/api/dashboard/daily-brief?date=${encodeURIComponent(dateStr)}`, { headers });
+            const res = await fetch(`/api/mealplan?date=${encodeURIComponent(dateStr)}`, { headers });
             if (!res.ok) {
               throw new Error(`Failed to fetch meal plan (${res.status} ${res.statusText})`);
             }

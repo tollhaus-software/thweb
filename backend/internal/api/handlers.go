@@ -1890,6 +1890,36 @@ func (s *Server) HandleUpdateTHMembership(w http.ResponseWriter, r *http.Request
 	jsonResponse(w, updated)
 }
 
+func (s *Server) HandleGetMealPlanDay(w http.ResponseWriter, r *http.Request) {
+	dateParam := strings.TrimSpace(r.URL.Query().Get("date"))
+	var targetDate time.Time
+	if dateParam == "" {
+		loc, err := time.LoadLocation("Europe/Berlin")
+		var now time.Time
+		if err == nil {
+			now = time.Now().In(loc)
+		} else {
+			now = time.Now()
+		}
+		targetDate = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	} else {
+		parsed, err := time.Parse("2006-01-02", dateParam)
+		if err != nil {
+			httpErrorLog(w, r, "Invalid date format, expected YYYY-MM-DD", http.StatusBadRequest, err)
+			return
+		}
+		targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 0, 0, 0, 0, time.UTC)
+	}
+
+	plan, err := s.Store.GetMealPlanDay(r.Context(), targetDate)
+	if err != nil {
+		httpErrorLog(w, r, "Failed to get meal plan", http.StatusInternalServerError, err)
+		return
+	}
+
+	jsonResponse(w, plan)
+}
+
 func (s *Server) HandleGetDailyBrief(w http.ResponseWriter, r *http.Request) {
 	dateParam := strings.TrimSpace(r.URL.Query().Get("date"))
 	var targetDate time.Time

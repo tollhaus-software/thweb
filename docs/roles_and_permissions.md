@@ -51,7 +51,7 @@ roles:
     auto_grant_on:
       - kiosk_cert
     permissions:
-      - dashboard.read
+      - dashboard.use
 
   - id: parent_default
     name: Parent (default)
@@ -111,7 +111,7 @@ roles:
 | `audit.view` | View change history and audit logs (entity details scoped to domain permissions) | Auditors, Viewers |
 | `users.all.manage` | Admin access to manage users, assign roles, and view user permissions | Administrators |
 | `provision.kiosk.cert` | Issue new mTLS client certificates for kiosk tablets | Administrators |
-| `dashboard.read` | Access kiosk dashboard endpoints and live WebSocket updates | Kiosk Terminals |
+| `dashboard.use` | Access daily brief, checklist tasks, and dashboard view in portal or kiosk | Kiosk Terminals, Administrators, Staff |
 | `mealplan.view` | View weekly meal plans (*Kochplan*) | Staff, Parents, Kiosks |
 | `meal_allergens.read` | View meal allergens overview and documentation | Staff, Cooks, Parents |
 | `meal_allergens.write` | Edit and finalize meal allergens documentation (implies `meal_allergens.read`) | Staff, Cooks, Parents |
