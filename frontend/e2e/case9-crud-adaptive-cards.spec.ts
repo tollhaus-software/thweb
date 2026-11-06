@@ -132,6 +132,24 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
       expect(Math.abs(parentRightEdges[i] - parentRightEdges[0])).toBeLessThan(3);
     }
 
+    // Verify field values in parent card (given name Vorname, surname Nachname, emails, etc.) are horizontally aligned at the exact same left coordinate
+    const parentFnVal = sabineRow.locator('td[data-column-id="first_name"] span').first();
+    const parentLnVal = sabineRow.locator('td[data-column-id="last_name"] .easy-edit-value, td[data-column-id="last_name"] span').first();
+    const parentEmailVal = sabineRow.locator('td[data-column-id="emails"] span').first();
+    await expect(parentFnVal).toBeVisible();
+    await expect(parentLnVal).toBeVisible();
+    await expect(parentEmailVal).toBeVisible();
+    const fnBox = await parentFnVal.boundingBox();
+    const lnBox = await parentLnVal.boundingBox();
+    const emailBox = await parentEmailVal.boundingBox();
+    expect(fnBox).not.toBeNull();
+    expect(lnBox).not.toBeNull();
+    expect(emailBox).not.toBeNull();
+    if (fnBox && lnBox && emailBox) {
+      expect(Math.abs(fnBox.x - lnBox.x)).toBeLessThan(1.5);
+      expect(Math.abs(fnBox.x - emailBox.x)).toBeLessThan(1.5);
+    }
+
     // Verify "Add family" is next to the search box ("Familien suchen" text box)
     const parentsAddFamilyBtn = page.getByRole('button', { name: 'Familie hinzufügen' });
     const searchInput = page.locator('.search-input');
@@ -257,6 +275,24 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
 
     const childFirstNameCell = timRow.locator('td[data-column-id="first_name"]');
     await expect(childFirstNameCell).toHaveClass(/sticky-col/);
+
+    // Verify child card field values are horizontally aligned (Vorname, Nachname, Geb., etc.)
+    const childFnVal = timRow.locator('td[data-column-id="first_name"] span').first();
+    const childLnVal = timRow.locator('td[data-column-id="last_name"] .easy-edit-value, td[data-column-id="last_name"] span').first();
+    const childBdVal = timRow.locator('td[data-column-id="birth_date"] .easy-edit-value, td[data-column-id="birth_date"] span').first();
+    await expect(childFnVal).toBeVisible();
+    await expect(childLnVal).toBeVisible();
+    await expect(childBdVal).toBeVisible();
+    const cFnBox = await childFnVal.boundingBox();
+    const cLnBox = await childLnVal.boundingBox();
+    const cBdBox = await childBdVal.boundingBox();
+    expect(cFnBox).not.toBeNull();
+    expect(cLnBox).not.toBeNull();
+    expect(cBdBox).not.toBeNull();
+    if (cFnBox && cLnBox && cBdBox) {
+      expect(Math.abs(cFnBox.x - cLnBox.x)).toBeLessThan(1.5);
+      expect(Math.abs(cFnBox.x - cBdBox.x)).toBeLessThan(1.5);
+    }
 
     const childBirthDateCell = timRow.locator('td[data-column-id="birth_date"]');
     await expect(childBirthDateCell).toHaveAttribute('data-label', 'Geb.');

@@ -191,7 +191,7 @@ export const AddressEditor = <T extends AddressEditorParent>({
           minHeight: '28px',
           borderRadius: '4px',
           backgroundColor: isEditing ? 'var(--accent-bg)' : 'transparent',
-          padding: '2px 4px',
+          padding: '2px 0',
           transition: 'background-color 0.15s ease-in-out',
         }}
         title={currentDisplayAddress || placeholder || t('addAddress')}

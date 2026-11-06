@@ -1805,10 +1805,13 @@ tr.family-group-row td {
     font-size: 0.8rem !important;
     font-weight: 600 !important;
     color: var(--text-secondary) !important;
-    min-width: 85px !important;
-    max-width: 120px !important;
-    flex-shrink: 0 !important;
+    width: 110px !important;
+    min-width: 110px !important;
+    max-width: 110px !important;
+    flex: 0 0 110px !important;
     text-align: left !important;
+    box-sizing: border-box !important;
+    overflow-wrap: break-word !important;
   }
 
   .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td[data-label=""]::before,
@@ -1864,20 +1867,26 @@ tr.family-group-row td {
     box-shadow: none !important;
   }
 
-  .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td > * {
+  .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td:not(.card-person-header):not([data-column-id="actions"]) > * {
     max-width: 100% !important;
+    flex: 1 !important;
+    min-width: 0 !important;
+    text-align: left !important;
   }
 
-  .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td > div {
+  .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td:not(.card-person-header):not([data-column-id="actions"]):not([data-column-id="paten_von"]) > div {
     flex: 1 !important;
     width: 100% !important;
     min-width: 0 !important;
     display: flex !important;
     justify-content: space-between !important;
     align-items: center !important;
+    padding-left: 0 !important;
     padding-right: 0 !important;
   }
 
+  .data-table.card-table .first-name-editor-cell,
+  .data-table.card-table .easy-edit-wrapper,
   .data-table.card-table .address-cell-wrapper,
   .data-table.card-table .notes-cell-wrapper,
   .data-table.card-table .membership-cell-wrapper,
@@ -1889,17 +1898,26 @@ tr.family-group-row td {
   .data-table.card-table .emails-cell-wrapper,
   .data-table.card-table .phones-cell-wrapper,
   .data-table.card-table .paten-cell-wrapper,
-  .data-table.card-table .paten-von-cell-wrapper {
+  .data-table.card-table .paten-von-cell-wrapper,
+  .data-table.card-table .jobs-cell-wrapper,
+  .data-table.card-table .job-assignees-cell-wrapper,
+  .data-table.card-table .job-roles-cell-wrapper {
+    padding-left: 0 !important;
     padding-right: 0 !important;
   }
 
-  .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td .paten-von-cell-wrapper,
-  .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td[data-column-id="paten_von"] > div {
+  .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td[data-column-id="paten_von"] > div,
+  .data-table.card-table tr:not(.family-group-row):not(.empty-sub-row) td .paten-von-cell-wrapper {
+    flex: 1 !important;
+    width: 100% !important;
+    min-width: 0 !important;
     display: flex !important;
     flex-direction: column !important;
     align-items: flex-start !important;
     justify-content: flex-start !important;
     text-align: left !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
   }
 
   .data-table.card-table .cell-edit-pencil-btn,

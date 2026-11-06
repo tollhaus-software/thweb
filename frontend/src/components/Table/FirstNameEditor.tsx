@@ -89,7 +89,7 @@ export const FirstNameEditor: React.FC<FirstNameEditorProps> = ({
         minHeight: '28px',
         borderRadius: '4px',
         backgroundColor: isEditing ? 'var(--accent-bg, rgba(59, 130, 246, 0.08))' : 'transparent',
-        padding: '2px 4px',
+        padding: '2px 0',
         transition: 'background-color 0.15s ease-in-out',
         width: '100%',
         boxSizing: 'border-box',

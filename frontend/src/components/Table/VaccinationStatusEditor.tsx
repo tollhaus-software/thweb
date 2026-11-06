@@ -149,7 +149,7 @@ export const VaccinationStatusCell: React.FC<VaccinationStatusCellProps> = ({
         gap: '0.25rem',
         minHeight: '28px',
         borderRadius: '4px',
-        padding: '2px 4px',
+        padding: '2px 0',
         backgroundColor: isActive ? 'var(--accent-bg)' : 'transparent',
         transition: 'background-color 0.15s ease-in-out',
         fontWeight: 'normal',

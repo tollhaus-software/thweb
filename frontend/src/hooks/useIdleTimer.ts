@@ -34,10 +34,12 @@ export function useIdleTimer({
       timerId = setTimeout(triggerIdle, timeoutMs);
     };
 
+    const effectiveThrottle = Math.min(throttleMs, Math.max(50, Math.floor(timeoutMs / 4)));
+
     const handleActivity = () => {
       const now = Date.now();
-      // Throttle event checks to at most once every throttleMs (default 5 seconds)
-      if (now - lastActivity >= throttleMs) {
+      // Throttle event checks to at most once every effectiveThrottle
+      if (now - lastActivity >= effectiveThrottle) {
         resetTimer();
       }
     };

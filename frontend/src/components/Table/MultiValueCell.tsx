@@ -50,7 +50,7 @@ export const MultiValueCell: React.FC<MultiValueCellProps> = ({
         width: '100%',
         minHeight: '28px',
         borderRadius: '4px',
-        padding: '2px 4px',
+        padding: '2px 0',
         backgroundColor: isActive ? 'var(--accent-bg)' : 'transparent',
         transition: 'background-color 0.15s ease-in-out',
         gap: '0.25rem',
