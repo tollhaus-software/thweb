@@ -8,6 +8,8 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
+
+	"github.com/pavolmarko/thweb-backend/internal/models"
 )
 
 func TestApplySchemaMigrations(t *testing.T) {
@@ -324,3 +326,57 @@ func TestApplySchemaMigrations(t *testing.T) {
 		t.Fatalf("expected roles table to exist after re-applying migrations: %v", err)
 	}
 }
+
+func TestSQLCanonicalEmailParityWithGo(t *testing.T) {
+	adminURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	db, err := sql.Open("pgx", adminURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to postgres: %v", err)
+	}
+	defer db.Close()
+
+	if err := db.Ping(); err != nil {
+		t.Skipf("skipping test: unable to ping postgres: %v", err)
+	}
+
+	testCases := []string{
+		"test@example.com",
+		"  test@example.com  ",
+		"First.Last@gmail.com",
+		"first.last.1.2.3@googlemail.com",
+		"  FIRST.LAST@GOOGLEMAIL.COM  ",
+		"user.name@tollhaus-stuttgart.de",
+		"jane.doe@othergmail.com",
+		"no-at-sign",
+		"",
+		"a@gmail.com",
+		"a.b@gmail.com",
+		"a.b.c@gmail.com",
+		"hello.world@sub.gmail.com",
+		"hello.world@googlemail.com",
+		"user.name+tag@gmail.com",
+		"user.name+tag@googlemail.com",
+	}
+
+	query := `
+		SELECT CASE 
+			WHEN lower(trim($1)) ~ '@(gmail|googlemail)\.com$' THEN
+				replace(regexp_replace(lower(trim($1)), '@(gmail|googlemail)\.com$', ''), '.', '') || '@gmail.com'
+			ELSE
+				lower(trim($1))
+		END;
+	`
+
+	for _, tc := range testCases {
+		var sqlResult string
+		err := db.QueryRow(query, tc).Scan(&sqlResult)
+		if err != nil {
+			t.Fatalf("failed to query sql canonical email for %q: %v", tc, err)
+		}
+		goResult := models.CanonicalEmail(tc)
+		if sqlResult != goResult {
+			t.Errorf("mismatch for %q: SQL returned %q, Go returned %q", tc, sqlResult, goResult)
+		}
+	}
+}
+

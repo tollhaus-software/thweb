@@ -126,7 +126,7 @@ func (s *Server) HandleGetSimulationOptions(w http.ResponseWriter, r *http.Reque
 	candidatesMap := make(map[string]*models.SimulationCandidate)
 
 	for _, u := range users {
-		norm := models.NormalizeEmail(u.Email)
+		norm := models.CanonicalEmail(u.Email)
 		cand := &models.SimulationCandidate{
 			Email:                norm,
 			Source:               "user",
@@ -207,10 +207,10 @@ func (s *Server) HandleGetSimulationOptions(w http.ResponseWriter, r *http.Reque
 	// Collect all unique identifier emails (parent and employee)
 	allIdentEmails := make(map[string]bool)
 	for email := range identEmails {
-		allIdentEmails[models.NormalizeEmail(email)] = true
+		allIdentEmails[models.CanonicalEmail(email)] = true
 	}
 	for email := range empIdentEmails {
-		allIdentEmails[models.NormalizeEmail(email)] = true
+		allIdentEmails[models.CanonicalEmail(email)] = true
 	}
 
 	for norm := range allIdentEmails {
@@ -322,7 +322,7 @@ func (s *Server) HandleStartSimulation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Mode == "user" {
-		req.UserEmail = models.NormalizeEmail(req.UserEmail)
+		req.UserEmail = models.CanonicalEmail(req.UserEmail)
 		if req.UserEmail == "" {
 			http.Error(w, "User email is required for user simulation", http.StatusBadRequest)
 			return
@@ -1017,7 +1017,7 @@ func (s *Server) HandleUpdateFamilyParents(w http.ResponseWriter, r *http.Reques
 				}
 				found := false
 				for _, newEmail := range matchingReqParent.Emails {
-					if models.NormalizeEmail(newEmail.Value) == models.NormalizeEmail(oldEmail.Value) && newEmail.IdentifierEmail {
+					if models.CanonicalEmail(newEmail.Value) == models.CanonicalEmail(oldEmail.Value) && newEmail.IdentifierEmail {
 						found = true
 						break
 					}
@@ -1050,7 +1050,7 @@ func (s *Server) HandleUpdateFamilyParents(w http.ResponseWriter, r *http.Reques
 				}
 				alreadyIdentifier := false
 				for _, oldEmail := range ep.Emails {
-					if models.NormalizeEmail(oldEmail.Value) == models.NormalizeEmail(newEmail.Value) && oldEmail.IdentifierEmail {
+					if models.CanonicalEmail(oldEmail.Value) == models.CanonicalEmail(newEmail.Value) && oldEmail.IdentifierEmail {
 						alreadyIdentifier = true
 						break
 					}

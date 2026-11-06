@@ -13,18 +13,20 @@ import (
 
 // User represents the database table entity for users.
 type User struct {
-	ID          uuid.UUID  `json:"id"`
-	Email       string     `json:"email"`
-	Permissions []string   `json:"permissions"` // direct custom permission overrides
-	LastLogin   *time.Time `json:"last_login,omitempty"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	ID             uuid.UUID  `json:"id"`
+	Email          string     `json:"email"`
+	CanonicalEmail string     `json:"canonical_email"`
+	Permissions    []string   `json:"permissions"` // direct custom permission overrides
+	LastLogin      *time.Time `json:"last_login,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
 // UserWithPermissions represents a user with computed roles and effective permissions.
 type UserWithPermissions struct {
 	ID                   uuid.UUID             `json:"id"`
 	Email                string                `json:"email"`
+	CanonicalEmail       string                `json:"canonical_email"`
 	Roles                []string              `json:"roles"`
 	Permissions          []string              `json:"permissions"`
 	EffectivePermissions []string              `json:"effective_permissions"`
@@ -174,10 +176,22 @@ func (s *UserWithPermissions) RemovePermissions(denied []string) {
 	s.EffectivePermissions = filtered
 }
 
-// NormalizeEmail trims surrounding whitespace and converts the email address to lowercase,
-// preserving dots in the username/local-part to support Google Workspace accounts.
-func NormalizeEmail(email string) string {
-	return strings.ToLower(strings.TrimSpace(email))
+// CanonicalEmail trims surrounding whitespace, converts to lowercase, and canonicalizes
+// Gmail/Googlemail addresses by stripping dots from the username/local-part and normalizing
+// the domain to "gmail.com". For all other domains (such as Google Workspace or third-party
+// providers), dots in the username are preserved.
+func CanonicalEmail(email string) string {
+	norm := strings.ToLower(strings.TrimSpace(email))
+	atIdx := strings.LastIndex(norm, "@")
+	if atIdx == -1 {
+		return norm
+	}
+	local := norm[:atIdx]
+	domain := norm[atIdx+1:]
+	if domain == "gmail.com" || domain == "googlemail.com" {
+		return strings.ReplaceAll(local, ".", "") + "@gmail.com"
+	}
+	return norm
 }
 
 // SimulationInfo holds state and metadata about an active permissions simulation.
@@ -369,6 +383,7 @@ func (f Family) DisplayName() string {
 
 type MultiValueEntry struct {
 	Value           string `json:"value"`
+	CanonicalValue  string `json:"canonical_value,omitempty"`
 	AddressList     bool   `json:"address_list"`
 	IdentifierEmail bool   `json:"identifier_email"`
 	Type            string `json:"type,omitempty"`
@@ -378,6 +393,7 @@ func (m *MultiValueEntry) UnmarshalJSON(data []byte) error {
 	var str string
 	if err := json.Unmarshal(data, &str); err == nil {
 		m.Value = str
+		m.CanonicalValue = CanonicalEmail(str)
 		m.AddressList = true
 		m.IdentifierEmail = false
 		m.Type = ""
@@ -386,6 +402,7 @@ func (m *MultiValueEntry) UnmarshalJSON(data []byte) error {
 	type Alias MultiValueEntry
 	var alias struct {
 		Alias
+		CanonicalValueCamel  *string `json:"canonicalValue"`
 		AddressListCamel     *bool   `json:"addressList"`
 		IdentifierEmailCamel *bool   `json:"identifierEmail"`
 		TypeCamel            *string `json:"type"`
@@ -394,6 +411,9 @@ func (m *MultiValueEntry) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*m = MultiValueEntry(alias.Alias)
+	if alias.CanonicalValueCamel != nil && *alias.CanonicalValueCamel != "" {
+		m.CanonicalValue = *alias.CanonicalValueCamel
+	}
 	if alias.AddressListCamel != nil {
 		m.AddressList = *alias.AddressListCamel
 	}
@@ -402,6 +422,9 @@ func (m *MultiValueEntry) UnmarshalJSON(data []byte) error {
 	}
 	if alias.TypeCamel != nil {
 		m.Type = *alias.TypeCamel
+	}
+	if m.CanonicalValue == "" && m.Value != "" {
+		m.CanonicalValue = CanonicalEmail(m.Value)
 	}
 	return nil
 }

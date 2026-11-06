@@ -343,7 +343,7 @@ func TestHandleUpdateFamilyParents_IdentifierEmailPermissions(t *testing.T) {
 	// Create test family with one parent having an identifier email and a normal email
 	testUserID := uuid.New()
 	testUserEmail := "test-user-" + testUserID.String() + "@example.com"
-	_, err = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2)", testUserID, testUserEmail)
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, $2, $2)", testUserID, testUserEmail)
 	if err != nil {
 		t.Fatalf("failed to insert test user: %v", err)
 	}
@@ -463,7 +463,7 @@ func TestHandleListFamiliesOverview_ProjectionAndScoping(t *testing.T) {
 	s := &Server{Store: appStore}
 
 	testUserID := uuid.New()
-	_, err = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2)", testUserID, "test-user-"+testUserID.String()+"@example.com")
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, $2, $2)", testUserID, "test-user-"+testUserID.String()+"@example.com")
 	if err != nil {
 		t.Fatalf("failed to insert test user: %v", err)
 	}
@@ -657,7 +657,7 @@ func TestHandleListFamiliesOverview_DateFiltering(t *testing.T) {
 	s := &Server{Store: appStore}
 
 	testUserID := uuid.New()
-	_, err = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2)", testUserID, "test-user-"+testUserID.String()+"@example.com")
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, $2, $2)", testUserID, "test-user-"+testUserID.String()+"@example.com")
 	if err != nil {
 		t.Fatalf("failed to insert test user: %v", err)
 	}
@@ -805,7 +805,7 @@ func TestHandleCalculateFees_RestrictedUser(t *testing.T) {
 	s := &Server{Store: appStore}
 
 	testUserID := uuid.New()
-	_, err = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2)", testUserID, "test-user-"+testUserID.String()+"@example.com")
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, $2, $2)", testUserID, "test-user-"+testUserID.String()+"@example.com")
 	if err != nil {
 		t.Fatalf("failed to insert test user: %v", err)
 	}
@@ -893,7 +893,7 @@ func TestParentAddress_PersistenceAndRetrieval(t *testing.T) {
 
 	testUserID := uuid.New()
 	testUserEmail := "test-user-addr-" + testUserID.String() + "@example.com"
-	_, err = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2)", testUserID, testUserEmail)
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, $2, $2)", testUserID, testUserEmail)
 	if err != nil {
 		t.Fatalf("failed to insert test user: %v", err)
 	}
@@ -1566,7 +1566,7 @@ func TestEmployee_APIEndpointsAndPermissions(t *testing.T) {
 		Email:                writeEmail,
 		EffectivePermissions: []string{"employees.all.write"},
 	}
-	if _, err := pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2)", uWrite.ID, uWrite.Email); err != nil {
+	if _, err := pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, $2, $2)", uWrite.ID, uWrite.Email); err != nil {
 		t.Fatalf("failed to insert test user: %v", err)
 	}
 
@@ -1756,7 +1756,7 @@ func TestHandleListAuditLogs_PaginationAndSearch(t *testing.T) {
 
 	testUserID := uuid.New()
 	userEmail := "audit-handler-tester@example.com"
-	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING", testUserID, userEmail)
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, $2, $2) ON CONFLICT (id) DO NOTHING", testUserID, userEmail)
 	defer func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", testUserID)
 	}()
@@ -1868,7 +1868,7 @@ func TestAllergies_ChildrenEmployeesSummaryAndAudit(t *testing.T) {
 
 	testUserID := uuid.New()
 	userEmail := "allergies-tester@example.com"
-	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING", testUserID, userEmail)
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, $2, $2) ON CONFLICT (id) DO NOTHING", testUserID, userEmail)
 	defer func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", testUserID)
 	}()
@@ -2123,7 +2123,7 @@ func TestAllergies_CachedCipherContextInServer(t *testing.T) {
 
 	testUserID := uuid.New()
 	userEmail := "cache-tester@example.com"
-	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING", testUserID, userEmail)
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, $2, $2) ON CONFLICT (id) DO NOTHING", testUserID, userEmail)
 	defer func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", testUserID)
 	}()
@@ -2294,7 +2294,7 @@ func TestMealAllergensHandlers(t *testing.T) {
 	}
 
 	userID := uuid.New()
-	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING", userID, "cook-history-test@example.com")
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, $2, $2) ON CONFLICT (id) DO NOTHING", userID, "cook-history-test@example.com")
 	defer func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", userID)
 	}()
@@ -2505,9 +2505,9 @@ func TestJobs_APIHandlersAndPermissions(t *testing.T) {
 	readerID := uuid.New()
 	writerID := uuid.New()
 
-	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, permissions) VALUES ($1, $2, '[]'::jsonb) ON CONFLICT (id) DO NOTHING", viewerID, viewerEmail)
-	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, permissions) VALUES ($1, $2, '[\"jobs.all.read\"]'::jsonb) ON CONFLICT (id) DO NOTHING", readerID, readerEmail)
-	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, permissions) VALUES ($1, $2, '[\"jobs.all.write\"]'::jsonb) ON CONFLICT (id) DO NOTHING", writerID, writerEmail)
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email, permissions) VALUES ($1, $2, $2, '[]'::jsonb) ON CONFLICT (id) DO NOTHING", viewerID, viewerEmail)
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email, permissions) VALUES ($1, $2, $2, '[\"jobs.all.read\"]'::jsonb) ON CONFLICT (id) DO NOTHING", readerID, readerEmail)
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email, permissions) VALUES ($1, $2, $2, '[\"jobs.all.write\"]'::jsonb) ON CONFLICT (id) DO NOTHING", writerID, writerEmail)
 	defer func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id IN ($1, $2, $3)", viewerID, readerID, writerID)
 	}()
@@ -2797,9 +2797,9 @@ func TestJobs_RolesAPI(t *testing.T) {
 	mgaID := uuid.New()
 
 	// Admin has "*"
-	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, permissions) VALUES ($1, $2, '[\"*\"]'::jsonb) ON CONFLICT (id) DO NOTHING", adminID, adminEmail)
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email, permissions) VALUES ($1, $2, $2, '[\"*\"]'::jsonb) ON CONFLICT (id) DO NOTHING", adminID, adminEmail)
 	// MGA has jobs.all.read, jobs.all.write but NOT job.role_assignment.*
-	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, permissions) VALUES ($1, $2, '[\"jobs.all.read\", \"jobs.all.write\"]'::jsonb) ON CONFLICT (id) DO NOTHING", mgaID, mgaEmail)
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email, permissions) VALUES ($1, $2, $2, '[\"jobs.all.read\", \"jobs.all.write\"]'::jsonb) ON CONFLICT (id) DO NOTHING", mgaID, mgaEmail)
 	defer func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id IN ($1, $2)", adminID, mgaID)
 	}()
@@ -2949,7 +2949,7 @@ func TestHandleUpdateFamilyMentor(t *testing.T) {
 
 	adminUserID := uuid.New()
 	adminEmail := "mentor-admin-" + adminUserID.String() + "@example.com"
-	_, err = pool.Exec(ctx, "INSERT INTO users (id, email, permissions) VALUES ($1, $2, $3)", adminUserID, adminEmail, []string{"*"})
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email, permissions) VALUES ($1, $2, $2, $3)", adminUserID, adminEmail, []string{"*"})
 	if err != nil {
 		t.Fatalf("failed to insert admin user: %v", err)
 	}
@@ -2959,7 +2959,7 @@ func TestHandleUpdateFamilyMentor(t *testing.T) {
 
 	readOnlyUserID := uuid.New()
 	readOnlyEmail := "mentor-readonly-" + readOnlyUserID.String() + "@example.com"
-	_, err = pool.Exec(ctx, "INSERT INTO users (id, email, permissions) VALUES ($1, $2, $3)", readOnlyUserID, readOnlyEmail, []string{"families.all.read"})
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email, permissions) VALUES ($1, $2, $2, $3)", readOnlyUserID, readOnlyEmail, []string{"families.all.read"})
 	if err != nil {
 		t.Fatalf("failed to insert read-only user: %v", err)
 	}
@@ -3128,7 +3128,7 @@ func TestHandleUpdateFamilyNotes(t *testing.T) {
 
 	adminUserID := uuid.New()
 	adminEmail := "notes-admin-" + adminUserID.String() + "@example.com"
-	_, err = pool.Exec(ctx, "INSERT INTO users (id, email, permissions) VALUES ($1, $2, $3)", adminUserID, adminEmail, []string{"*"})
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email, permissions) VALUES ($1, $2, $2, $3)", adminUserID, adminEmail, []string{"*"})
 	if err != nil {
 		t.Fatalf("failed to insert admin user: %v", err)
 	}
@@ -3138,7 +3138,7 @@ func TestHandleUpdateFamilyNotes(t *testing.T) {
 
 	readOnlyUserID := uuid.New()
 	readOnlyEmail := "notes-ro-" + readOnlyUserID.String() + "@example.com"
-	_, err = pool.Exec(ctx, "INSERT INTO users (id, email, permissions) VALUES ($1, $2, $3)", readOnlyUserID, readOnlyEmail, []string{"families.all.read"})
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email, permissions) VALUES ($1, $2, $2, $3)", readOnlyUserID, readOnlyEmail, []string{"families.all.read"})
 	if err != nil {
 		t.Fatalf("failed to insert read-only user: %v", err)
 	}
@@ -3223,7 +3223,7 @@ func TestDashboardTasks_Handlers(t *testing.T) {
 	}()
 
 	userID := uuid.New()
-	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, 'handler-task-user@example.com') ON CONFLICT (id) DO NOTHING", userID)
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, 'handler-task-user@example.com', 'handler-task-user@example.com') ON CONFLICT (id) DO NOTHING", userID)
 	defer func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", userID)
 	}()

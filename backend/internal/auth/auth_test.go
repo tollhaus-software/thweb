@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -694,7 +695,7 @@ func TestAuthenticator_Middleware_RestrictedUser(t *testing.T) {
 	authenticator.ProxySharedSecret = "secret123"
 
 	testUserID := uuid.New()
-	_, err = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2)", testUserID, "test-user-"+testUserID.String()+"@example.com")
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, $2, $2)", testUserID, "test-user-"+testUserID.String()+"@example.com")
 	if err != nil {
 		t.Fatalf("failed to insert test user: %v", err)
 	}
@@ -877,7 +878,7 @@ roles:
 		t.Fatalf("failed to insert erzieher role: %v", err)
 	}
 
-	_, err = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2)", erzieherID, erzieherEmail)
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, $2, $2)", erzieherID, erzieherEmail)
 	if err != nil {
 		t.Fatalf("failed to insert user: %v", err)
 	}
@@ -1281,7 +1282,7 @@ func TestAuthenticator_JobGrantedRoles(t *testing.T) {
 
 	testEmail := "bernd.jobtest@example.com"
 	testAdminID := uuid.New()
-	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, 'audit-admin@example.com') ON CONFLICT (id) DO NOTHING", testAdminID)
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, 'audit-admin@example.com', 'audit-admin@example.com') ON CONFLICT (id) DO NOTHING", testAdminID)
 	defer func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", testAdminID)
 	}()
@@ -1379,6 +1380,120 @@ func TestAuthenticator_JobGrantedRoles(t *testing.T) {
 	}
 	if !simUser.HasPermission("families.all.write") {
 		t.Fatalf("expected simulated user to have families.all.write granted via job role, got: %+v", simUser.EffectivePermissions)
+	}
+}
+
+func TestAuthenticator_CanonicalEmail_GooglemailVsGmail(t *testing.T) {
+	pool := getTestPool(t)
+	defer pool.Close()
+	ctx := context.Background()
+
+	cfg := roles.LoadDefault()
+	appStore := store.NewStore(pool)
+	authenticator := NewAuthenticator("test-client", false, appStore, cfg)
+	testSecret := "secret-canonical-123"
+	authenticator.ProxySharedSecret = testSecret
+
+	var recordedUser *models.UserWithPermissions
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recordedUser = GetUser(r.Context())
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := authenticator.Middleware(next)
+
+	// 1. User registered with @googlemail.com in users table
+	userUID := uuid.New()
+	googlemailUser := fmt.Sprintf("user-%s@googlemail.com", userUID.String()[:8])
+	gmailUser := strings.Replace(googlemailUser, "@googlemail.com", "@gmail.com", 1)
+
+	u, err := appStore.CreateUser(ctx, googlemailUser, []string{}, []string{"families.all.read"})
+	if err != nil {
+		t.Fatalf("CreateUser failed: %v", err)
+	}
+	defer func() {
+		_ = appStore.DeleteUser(ctx, u.ID)
+	}()
+
+	// User logs in via proxy as @gmail.com
+	req := httptest.NewRequest("GET", "/api/test", nil)
+	req.Header.Set("X-Proxy-Secret", testSecret)
+	req.Header.Set("X-Forwarded-Email", gmailUser)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for gmail login matching googlemail user, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if recordedUser == nil || !recordedUser.HasPermission("families.all.read") {
+		t.Fatalf("expected user to have 'families.all.read' permission, got: %+v", recordedUser)
+	}
+
+	// 2. Parent registered with @googlemail.com as identifier email
+	parentID := uuid.New()
+	familyID := uuid.New()
+	parentGooglemail := fmt.Sprintf("parent-%s@googlemail.com", parentID.String()[:8])
+	parentGmail := strings.Replace(parentGooglemail, "@googlemail.com", "@gmail.com", 1)
+
+	parent := models.Parent{
+		ID:        parentID,
+		FamilyID:  familyID,
+		FirstName: "Auth",
+		LastName:  "Canonical",
+		Emails: models.MultiValueList{
+			{
+				Value:           parentGooglemail,
+				IdentifierEmail: true,
+				AddressList:     true,
+			},
+		},
+	}
+	if err := appStore.UpdateFamilyParents(ctx, u.ID, familyID, []models.Parent{parent}); err != nil {
+		t.Fatalf("UpdateFamilyParents failed: %v", err)
+	}
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM families WHERE id = $1", familyID)
+	}()
+
+	// Parent logs in as @gmail.com
+	req = httptest.NewRequest("GET", "/api/test", nil)
+	req.Header.Set("X-Proxy-Secret", testSecret)
+	req.Header.Set("X-Forwarded-Email", parentGmail)
+	rec = httptest.NewRecorder()
+	recordedUser = nil
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for gmail login matching googlemail parent, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if recordedUser == nil || recordedUser.FamilyID == nil || *recordedUser.FamilyID != familyID {
+		t.Fatalf("expected parent to be authenticated with familyID %v, got user: %+v", familyID, recordedUser)
+	}
+
+	// 3. User with dotted @googlemail.com logs in as dotless @gmail.com
+	dottedUser := fmt.Sprintf("user.dot.%s@googlemail.com", uuid.New().String()[:6])
+	u2, err := appStore.CreateUser(ctx, dottedUser, []string{}, []string{"families.all.read"})
+	if err != nil {
+		t.Fatalf("CreateUser failed: %v", err)
+	}
+	defer func() {
+		_ = appStore.DeleteUser(ctx, u2.ID)
+	}()
+
+	parts := strings.Split(dottedUser, "@")
+	dotlessGmail := strings.ReplaceAll(parts[0], ".", "") + "@gmail.com"
+
+	req = httptest.NewRequest("GET", "/api/test", nil)
+	req.Header.Set("X-Proxy-Secret", testSecret)
+	req.Header.Set("X-Forwarded-Email", dotlessGmail)
+	rec = httptest.NewRecorder()
+	recordedUser = nil
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for dotless gmail login matching dotted googlemail user, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if recordedUser == nil || !recordedUser.HasPermission("families.all.read") {
+		t.Fatalf("expected user to have 'families.all.read' permission, got: %+v", recordedUser)
 	}
 }
 

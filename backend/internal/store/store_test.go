@@ -234,7 +234,7 @@ func TestDashboardTasks_Store(t *testing.T) {
 
 	// 1. CompleteTask by authenticated user
 	userID := uuid.New()
-	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, 'task-user@example.com') ON CONFLICT (id) DO NOTHING", userID)
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, 'task-user@example.com', 'task-user@example.com') ON CONFLICT (id) DO NOTHING", userID)
 	defer func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", userID)
 	}()
@@ -367,7 +367,7 @@ func TestAuditModifications_ExcludesVaccinationStatus(t *testing.T) {
 	testUserID := uuid.New()
 
 	// Ensure test user exists in users table for FK
-	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, 'audit-tester@example.com') ON CONFLICT (id) DO NOTHING", testUserID)
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, 'audit-tester@example.com', 'audit-tester@example.com') ON CONFLICT (id) DO NOTHING", testUserID)
 	defer func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", testUserID)
 	}()
@@ -626,7 +626,7 @@ func TestListAuditLogsForUser_PermissionsAndVisibility(t *testing.T) {
 	}
 
 	testUserID := uuid.New()
-	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, 'audit-perm-tester@example.com') ON CONFLICT (id) DO NOTHING", testUserID)
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, 'audit-perm-tester@example.com', 'audit-perm-tester@example.com') ON CONFLICT (id) DO NOTHING", testUserID)
 	defer func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", testUserID)
 	}()
@@ -832,7 +832,7 @@ func TestEmployee_CRUDAndAudit(t *testing.T) {
 
 	appStore := NewStore(pool)
 	testUserID := uuid.New()
-	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, 'emp-tester@example.com') ON CONFLICT (id) DO NOTHING", testUserID)
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, 'emp-tester@example.com', 'emp-tester@example.com') ON CONFLICT (id) DO NOTHING", testUserID)
 
 	// 1. Validation tests
 	_, err = appStore.CreateEmployee(ctx, testUserID, models.Employee{
@@ -1088,7 +1088,7 @@ func TestStore_FirstNameForAddressList(t *testing.T) {
 	appStore := NewStore(pool)
 
 	testUserID := uuid.New()
-	_, err = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2)", testUserID, "test-user-"+testUserID.String()+"@example.com")
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, $2, $2)", testUserID, "test-user-"+testUserID.String()+"@example.com")
 	if err != nil {
 		t.Fatalf("failed to insert test user: %v", err)
 	}
@@ -1240,7 +1240,7 @@ func TestQueryAuditLogsForUser_PaginationAndSearch(t *testing.T) {
 
 	testUserID := uuid.New()
 	userEmail := "audit-query-user@example.com"
-	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING", testUserID, userEmail)
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, $2, $2) ON CONFLICT (id) DO NOTHING", testUserID, userEmail)
 	defer func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", testUserID)
 	}()
@@ -1485,7 +1485,7 @@ func TestJobs_CRUDAndAssignments(t *testing.T) {
 
 	appStore := NewStore(pool)
 	testUserID := uuid.New()
-	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, 'jobs-tester@example.com') ON CONFLICT (id) DO NOTHING", testUserID)
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, 'jobs-tester@example.com', 'jobs-tester@example.com') ON CONFLICT (id) DO NOTHING", testUserID)
 	defer func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", testUserID)
 	}()
@@ -1669,7 +1669,7 @@ func TestJobs_PermissionsAndResolution(t *testing.T) {
 
 	appStore := NewStore(pool)
 	testUserID := uuid.New()
-	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, 'jobs-perm-tester@example.com') ON CONFLICT (id) DO NOTHING", testUserID)
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, 'jobs-perm-tester@example.com', 'jobs-perm-tester@example.com') ON CONFLICT (id) DO NOTHING", testUserID)
 	defer func() {
 		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", testUserID)
 	}()
@@ -1778,6 +1778,159 @@ func TestJobs_PermissionsAndResolution(t *testing.T) {
 	}
 	if len(empRoles) != 3 {
 		t.Fatalf("expected 3 roles for employee, got: %+v", empRoles)
+	}
+}
+
+func TestCanonicalEmail_UsersParentsEmployees(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := NewStore(pool)
+
+	adminID := uuid.New()
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, 'canonical-admin@example.com', 'canonical-admin@example.com') ON CONFLICT (id) DO NOTHING", adminID)
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", adminID)
+	}()
+
+	// 1. Users test: create with @googlemail.com and query with @gmail.com and @googlemail.com
+	testUserEmail := "test.googlemail.user@googlemail.com"
+	u, err := appStore.CreateUser(ctx, testUserEmail, []string{}, []string{"families.all.read"})
+	if err != nil {
+		t.Fatalf("CreateUser failed: %v", err)
+	}
+	defer func() {
+		_ = appStore.DeleteUser(ctx, u.ID)
+	}()
+
+	if u.Email != testUserEmail {
+		t.Errorf("expected u.Email to be %q, got %q", testUserEmail, u.Email)
+	}
+	if u.CanonicalEmail != "testgooglemailuser@gmail.com" {
+		t.Errorf("expected u.CanonicalEmail to be 'testgooglemailuser@gmail.com', got %q", u.CanonicalEmail)
+	}
+
+	foundViaGooglemail, err := appStore.GetUserWithPermissionsByEmail(ctx, "test.googlemail.user@googlemail.com")
+	if err != nil || foundViaGooglemail.ID != u.ID {
+		t.Fatalf("GetUserWithPermissionsByEmail via googlemail failed: user=%v, err=%v", foundViaGooglemail, err)
+	}
+
+	foundViaGmail, err := appStore.GetUserWithPermissionsByEmail(ctx, "test.googlemail.user@gmail.com")
+	if err != nil || foundViaGmail.ID != u.ID {
+		t.Fatalf("GetUserWithPermissionsByEmail via gmail failed: user=%v, err=%v", foundViaGmail, err)
+	}
+
+	foundViaNoDots, err := appStore.GetUserWithPermissionsByEmail(ctx, "testgooglemailuser@gmail.com")
+	if err != nil || foundViaNoDots.ID != u.ID {
+		t.Fatalf("GetUserWithPermissionsByEmail via no-dots gmail failed: user=%v, err=%v", foundViaNoDots, err)
+	}
+
+	// 2. Parents test: save with @googlemail.com and query with @gmail.com
+	familyID := uuid.New()
+	parentID := uuid.New()
+	parent := models.Parent{
+		ID:        parentID,
+		FamilyID:  familyID,
+		FirstName: "Canonical",
+		LastName:  "Parent",
+		Emails: models.MultiValueList{
+			{
+				Value:           "parent.canonical@googlemail.com",
+				IdentifierEmail: true,
+				AddressList:     true,
+			},
+		},
+	}
+	if err := appStore.UpdateFamilyParents(ctx, adminID, familyID, []models.Parent{parent}); err != nil {
+		t.Fatalf("UpdateFamilyParents failed: %v", err)
+	}
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM families WHERE id = $1", familyID)
+	}()
+
+	// Query via @googlemail.com
+	pID1, fID1, err := appStore.GetParentInfoByIdentifierEmail(ctx, "parent.canonical@googlemail.com")
+	if err != nil || pID1 == nil || *pID1 != parentID || fID1 == nil || *fID1 != familyID {
+		t.Fatalf("GetParentInfoByIdentifierEmail via googlemail failed: pID=%v, fID=%v, err=%v", pID1, fID1, err)
+	}
+
+	// Query via @gmail.com
+	pID2, fID2, err := appStore.GetParentInfoByIdentifierEmail(ctx, "parent.canonical@gmail.com")
+	if err != nil || pID2 == nil || *pID2 != parentID || fID2 == nil || *fID2 != familyID {
+		t.Fatalf("GetParentInfoByIdentifierEmail via gmail failed: pID=%v, fID=%v, err=%v", pID2, fID2, err)
+	}
+
+	// Query via dotless @gmail.com
+	pID3, fID3, err := appStore.GetParentInfoByIdentifierEmail(ctx, "parentcanonical@gmail.com")
+	if err != nil || pID3 == nil || *pID3 != parentID || fID3 == nil || *fID3 != familyID {
+		t.Fatalf("GetParentInfoByIdentifierEmail via dotless gmail failed: pID=%v, fID=%v, err=%v", pID3, fID3, err)
+	}
+
+	// Verify ListIdentifyingEmails includes canonical gmail address
+	identEmails, err := appStore.ListIdentifyingEmails(ctx)
+	if err != nil {
+		t.Fatalf("ListIdentifyingEmails failed: %v", err)
+	}
+	if _, ok := identEmails["parentcanonical@gmail.com"]; !ok {
+		t.Errorf("expected ListIdentifyingEmails to contain 'parentcanonical@gmail.com', got %+v", identEmails)
+	}
+
+	// 3. Employee test: save with @googlemail.com and query with @gmail.com
+	emp := models.Employee{
+		FirstName:    "Canonical",
+		LastName:     "Employee",
+		EmployeeType: "caregiver",
+		Emails: models.MultiValueList{
+			{
+				Value:           "emp.canonical@googlemail.com",
+				IdentifierEmail: true,
+				AddressList:     true,
+			},
+		},
+	}
+	createdEmp, err := appStore.CreateEmployee(ctx, adminID, emp)
+	if err != nil {
+		t.Fatalf("CreateEmployee failed: %v", err)
+	}
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM employees WHERE id = $1", createdEmp.ID)
+	}()
+
+	// Query employee via @googlemail.com
+	eID1, types1, err := appStore.GetEmployeeInfoByIdentifierEmail(ctx, "emp.canonical@googlemail.com")
+	if err != nil || eID1 == nil || *eID1 != createdEmp.ID || len(types1) != 1 || types1[0] != "caregiver" {
+		t.Fatalf("GetEmployeeInfoByIdentifierEmail via googlemail failed: eID=%v, types=%v, err=%v", eID1, types1, err)
+	}
+
+	// Query employee via @gmail.com
+	eID2, types2, err := appStore.GetEmployeeInfoByIdentifierEmail(ctx, "emp.canonical@gmail.com")
+	if err != nil || eID2 == nil || *eID2 != createdEmp.ID || len(types2) != 1 || types2[0] != "caregiver" {
+		t.Fatalf("GetEmployeeInfoByIdentifierEmail via gmail failed: eID=%v, types=%v, err=%v", eID2, types2, err)
+	}
+
+	// Query employee via dotless @gmail.com
+	eID3, types3, err := appStore.GetEmployeeInfoByIdentifierEmail(ctx, "empcanonical@gmail.com")
+	if err != nil || eID3 == nil || *eID3 != createdEmp.ID || len(types3) != 1 || types3[0] != "caregiver" {
+		t.Fatalf("GetEmployeeInfoByIdentifierEmail via dotless gmail failed: eID=%v, types=%v, err=%v", eID3, types3, err)
+	}
+
+	// Verify ListEmployeeIdentifyingEmails includes canonical gmail address
+	empIdentEmails, err := appStore.ListEmployeeIdentifyingEmails(ctx)
+	if err != nil {
+		t.Fatalf("ListEmployeeIdentifyingEmails failed: %v", err)
+	}
+	if _, ok := empIdentEmails["empcanonical@gmail.com"]; !ok {
+		t.Errorf("expected ListEmployeeIdentifyingEmails to contain 'empcanonical@gmail.com', got %+v", empIdentEmails)
 	}
 }
 

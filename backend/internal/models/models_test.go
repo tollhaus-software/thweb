@@ -196,26 +196,31 @@ func TestParent_VaccinationJSON(t *testing.T) {
 	}
 }
 
-func TestNormalizeEmail(t *testing.T) {
+func TestCanonicalEmail(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
 		want  string
 	}{
 		{
-			name:  "mixed case with dots and spaces",
+			name:  "mixed case with dots and spaces on custom domain",
 			input: "  max.Mustermann@tollhaus-stuttgart.de \t\n",
 			want:  "max.mustermann@tollhaus-stuttgart.de",
 		},
 		{
-			name:  "all uppercase local and domain with dots",
+			name:  "all uppercase local and domain with dots on custom domain",
 			input: "MAX.MUSTERMANN@TOLLHAUS-STUTTGART.DE",
 			want:  "max.mustermann@tollhaus-stuttgart.de",
 		},
 		{
-			name:  "dots preserved in local-part",
+			name:  "dots stripped for gmail.com",
 			input: "john.doe.personal@gmail.com",
-			want:  "john.doe.personal@gmail.com",
+			want:  "johndoepersonal@gmail.com",
+		},
+		{
+			name:  "googlemail canonicalized to gmail and dots stripped",
+			input: "  Bla.User@googlemail.com \t",
+			want:  "blauser@gmail.com",
 		},
 		{
 			name:  "already normalized",
@@ -231,9 +236,9 @@ func TestNormalizeEmail(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := NormalizeEmail(tt.input)
+			got := CanonicalEmail(tt.input)
 			if got != tt.want {
-				t.Errorf("NormalizeEmail(%q) = %q, want %q", tt.input, got, tt.want)
+				t.Errorf("CanonicalEmail(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
 	}

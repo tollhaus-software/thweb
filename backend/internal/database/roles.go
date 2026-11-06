@@ -69,7 +69,7 @@ func SeedMockUsers(ctx context.Context, pool *pgxpool.Pool, cfg *roles.Config) e
 	}
 
 	// 1. developer@example.com
-	_, err := pool.Exec(ctx, `INSERT INTO users (email) VALUES ('developer@example.com') ON CONFLICT (email) DO NOTHING`)
+	_, err := pool.Exec(ctx, `INSERT INTO users (email, canonical_email) VALUES ('developer@example.com', 'developer@example.com') ON CONFLICT (email) DO NOTHING`)
 	if err != nil {
 		return fmt.Errorf("failed to seed developer user: %w", err)
 	}
@@ -87,7 +87,7 @@ func SeedMockUsers(ctx context.Context, pool *pgxpool.Pool, cfg *roles.Config) e
 
 	// 2. caregiver@example.com (if caregiver role exists)
 	if cfg.GetRole("caregiver") != nil {
-		_, err = pool.Exec(ctx, `INSERT INTO users (email) VALUES ('caregiver@example.com') ON CONFLICT (email) DO NOTHING`)
+		_, err = pool.Exec(ctx, `INSERT INTO users (email, canonical_email) VALUES ('caregiver@example.com', 'caregiver@example.com') ON CONFLICT (email) DO NOTHING`)
 		if err != nil {
 			return fmt.Errorf("failed to seed caregiver user: %w", err)
 		}

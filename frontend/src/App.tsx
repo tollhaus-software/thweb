@@ -1941,6 +1941,7 @@ const LandingPage: React.FC = () => {
 interface AdminUser {
   id: string;
   email: string;
+  canonical_email?: string;
   roles: string[];
   permissions: string[];
   effective_permissions: string[];

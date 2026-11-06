@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -80,12 +81,12 @@ func (s *Server) HandleCreateUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	req.Email = models.NormalizeEmail(req.Email)
-	if req.Email == "" {
+	rawEmail := strings.TrimSpace(req.Email)
+	if rawEmail == "" {
 		http.Error(w, "Email is required", http.StatusBadRequest)
 		return
 	}
-	created, err := s.Store.CreateUser(r.Context(), req.Email, req.Roles, req.Permissions)
+	created, err := s.Store.CreateUser(r.Context(), rawEmail, req.Roles, req.Permissions)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

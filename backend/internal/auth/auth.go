@@ -177,7 +177,7 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 			}
 		}
 
-		email = models.NormalizeEmail(email)
+		email = models.CanonicalEmail(email)
 
 		var user *models.UserWithPermissions
 		if a.Store != nil {
@@ -532,7 +532,7 @@ func (a *Authenticator) PermissionsForRoles(ctx context.Context, roleIDs []strin
 // ResolveSimulatedUser determines the roles, permissions, and family ID for a simulated target.
 func (a *Authenticator) ResolveSimulatedUser(ctx context.Context, cfg models.SimulationConfig) (*models.UserWithPermissions, error) {
 	if cfg.Mode == "user" {
-		email := models.NormalizeEmail(cfg.UserEmail)
+		email := models.CanonicalEmail(cfg.UserEmail)
 		if email == "" {
 			return nil, fmt.Errorf("user email is required for user simulation")
 		}

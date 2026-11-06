@@ -46,6 +46,7 @@ export const PHONE_TYPES: MultiValueTypeConfig[] = [
 
 export interface MultiValueEntry {
   value: string;
+  canonical_value?: string;
   type?: string;
   address_list?: boolean;
   identifier_email?: boolean;

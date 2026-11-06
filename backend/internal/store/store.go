@@ -31,6 +31,12 @@ func sanitizeSlice(s models.MultiValueList) models.MultiValueList {
 	if s == nil {
 		return models.MultiValueList{}
 	}
+	for i := range s {
+		s[i].Value = strings.TrimSpace(s[i].Value)
+		if s[i].Value != "" {
+			s[i].CanonicalValue = models.CanonicalEmail(s[i].Value)
+		}
+	}
 	return s
 }
 
@@ -473,7 +479,7 @@ func (s *Store) GetParentsByFamilyID(ctx context.Context, familyID uuid.UUID) ([
 }
 
 func (s *Store) GetFamilyIDByIdentifierEmail(ctx context.Context, email string) (*uuid.UUID, error) {
-	norm := models.NormalizeEmail(email)
+	norm := models.CanonicalEmail(email)
 	if norm == "" {
 		return nil, nil
 	}
@@ -481,7 +487,15 @@ func (s *Store) GetFamilyIDByIdentifierEmail(ctx context.Context, email string) 
 		SELECT p.family_id
 		FROM parents p, jsonb_array_elements(p.emails) AS elem
 		WHERE elem->>'identifier_email' = 'true'
-		  AND lower(trim(elem->>'value')) = $1
+		  AND COALESCE(
+		      NULLIF(elem->>'canonical_value', ''),
+		      CASE
+		          WHEN lower(elem->>'value') ~ '@(gmail|googlemail)\.com$' THEN
+		              replace(split_part(lower(trim(elem->>'value')), '@', 1), '.', '') || '@gmail.com'
+		          ELSE
+		              lower(trim(elem->>'value'))
+		      END
+		  ) = $1
 		LIMIT 1
 	`
 	var familyID uuid.UUID
@@ -497,7 +511,15 @@ func (s *Store) GetFamilyIDByIdentifierEmail(ctx context.Context, email string) 
 
 func (s *Store) ListIdentifyingEmails(ctx context.Context) (map[string]uuid.UUID, error) {
 	query := `
-		SELECT lower(trim(elem->>'value')) AS email, p.family_id
+		SELECT lower(trim(COALESCE(
+		    NULLIF(elem->>'canonical_value', ''),
+		    CASE
+		        WHEN lower(elem->>'value') ~ '@(gmail|googlemail)\.com$' THEN
+		            replace(split_part(lower(trim(elem->>'value')), '@', 1), '.', '') || '@gmail.com'
+		        ELSE
+		            lower(trim(elem->>'value'))
+		    END
+		))) AS email, p.family_id
 		FROM parents p, jsonb_array_elements(p.emails) AS elem
 		WHERE elem->>'identifier_email' = 'true'
 		  AND lower(trim(elem->>'value')) <> ''
@@ -523,7 +545,7 @@ func (s *Store) ListIdentifyingEmails(ctx context.Context) (map[string]uuid.UUID
 }
 
 func (s *Store) GetEmployeeTypesByIdentifierEmail(ctx context.Context, email string) ([]string, error) {
-	norm := models.NormalizeEmail(email)
+	norm := models.CanonicalEmail(email)
 	if norm == "" {
 		return nil, nil
 	}
@@ -531,7 +553,15 @@ func (s *Store) GetEmployeeTypesByIdentifierEmail(ctx context.Context, email str
 		SELECT DISTINCT e.employee_type
 		FROM employees e, jsonb_array_elements(e.emails) AS elem
 		WHERE elem->>'identifier_email' = 'true'
-		  AND lower(trim(elem->>'value')) = $1
+		  AND COALESCE(
+		      NULLIF(elem->>'canonical_value', ''),
+		      CASE
+		          WHEN lower(elem->>'value') ~ '@(gmail|googlemail)\.com$' THEN
+		              replace(split_part(lower(trim(elem->>'value')), '@', 1), '.', '') || '@gmail.com'
+		          ELSE
+		              lower(trim(elem->>'value'))
+		      END
+		  ) = $1
 	`
 	rows, err := s.db.Query(ctx, query, norm)
 	if err != nil {
@@ -553,7 +583,7 @@ func (s *Store) GetEmployeeTypesByIdentifierEmail(ctx context.Context, email str
 }
 
 func (s *Store) GetParentInfoByIdentifierEmail(ctx context.Context, email string) (*uuid.UUID, *uuid.UUID, error) {
-	norm := models.NormalizeEmail(email)
+	norm := models.CanonicalEmail(email)
 	if norm == "" {
 		return nil, nil, nil
 	}
@@ -561,7 +591,15 @@ func (s *Store) GetParentInfoByIdentifierEmail(ctx context.Context, email string
 		SELECT p.id, p.family_id
 		FROM parents p, jsonb_array_elements(p.emails) AS elem
 		WHERE elem->>'identifier_email' = 'true'
-		  AND lower(trim(elem->>'value')) = $1
+		  AND COALESCE(
+		      NULLIF(elem->>'canonical_value', ''),
+		      CASE
+		          WHEN lower(elem->>'value') ~ '@(gmail|googlemail)\.com$' THEN
+		              replace(split_part(lower(trim(elem->>'value')), '@', 1), '.', '') || '@gmail.com'
+		          ELSE
+		              lower(trim(elem->>'value'))
+		      END
+		  ) = $1
 		LIMIT 1
 	`
 	var parentID, familyID uuid.UUID
@@ -576,7 +614,7 @@ func (s *Store) GetParentInfoByIdentifierEmail(ctx context.Context, email string
 }
 
 func (s *Store) GetEmployeeInfoByIdentifierEmail(ctx context.Context, email string) (*uuid.UUID, []string, error) {
-	norm := models.NormalizeEmail(email)
+	norm := models.CanonicalEmail(email)
 	if norm == "" {
 		return nil, nil, nil
 	}
@@ -584,7 +622,15 @@ func (s *Store) GetEmployeeInfoByIdentifierEmail(ctx context.Context, email stri
 		SELECT e.id, e.employee_type
 		FROM employees e, jsonb_array_elements(e.emails) AS elem
 		WHERE elem->>'identifier_email' = 'true'
-		  AND lower(trim(elem->>'value')) = $1
+		  AND COALESCE(
+		      NULLIF(elem->>'canonical_value', ''),
+		      CASE
+		          WHEN lower(elem->>'value') ~ '@(gmail|googlemail)\.com$' THEN
+		              replace(split_part(lower(trim(elem->>'value')), '@', 1), '.', '') || '@gmail.com'
+		          ELSE
+		              lower(trim(elem->>'value'))
+		      END
+		  ) = $1
 	`
 	rows, err := s.db.Query(ctx, query, norm)
 	if err != nil {
@@ -675,7 +721,15 @@ func (s *Store) GetJobRolesForEmployee(ctx context.Context, employeeID uuid.UUID
 
 func (s *Store) ListEmployeeIdentifyingEmails(ctx context.Context) (map[string][]string, error) {
 	query := `
-		SELECT lower(trim(elem->>'value')) AS email, e.employee_type
+		SELECT lower(trim(COALESCE(
+		    NULLIF(elem->>'canonical_value', ''),
+		    CASE
+		        WHEN lower(elem->>'value') ~ '@(gmail|googlemail)\.com$' THEN
+		            replace(split_part(lower(trim(elem->>'value')), '@', 1), '.', '') || '@gmail.com'
+		        ELSE
+		            lower(trim(elem->>'value'))
+		    END
+		))) AS email, e.employee_type
 		FROM employees e, jsonb_array_elements(e.emails) AS elem
 		WHERE elem->>'identifier_email' = 'true'
 		  AND lower(trim(elem->>'value')) <> ''
@@ -1803,11 +1857,12 @@ func (s *Store) DeleteRole(ctx context.Context, id string) error {
 }
 
 func (s *Store) GetUserWithPermissionsByEmail(ctx context.Context, email string) (*models.UserWithPermissions, error) {
-	email = models.NormalizeEmail(email)
+	norm := models.CanonicalEmail(email)
 	query := `
 		SELECT 
 			u.id, 
 			u.email, 
+			COALESCE(u.canonical_email, lower(regexp_replace(trim(u.email), '@googlemail\.com$', '@gmail.com', 'i'))),
 			u.permissions,
 			u.last_login,
 			u.created_at,
@@ -1818,15 +1873,16 @@ func (s *Store) GetUserWithPermissionsByEmail(ctx context.Context, email string)
 		FROM users u
 		LEFT JOIN user_roles ur ON u.id = ur.user_id
 		LEFT JOIN roles r ON ur.role_id = r.id
-		WHERE u.email = $1
-		GROUP BY u.id, u.email, u.permissions, u.last_login, u.created_at, u.updated_at
+		WHERE COALESCE(u.canonical_email, lower(regexp_replace(trim(u.email), '@googlemail\.com$', '@gmail.com', 'i'))) = $1
+		   OR lower(trim(u.email)) = $1
+		GROUP BY u.id, u.email, u.canonical_email, u.permissions, u.last_login, u.created_at, u.updated_at
 	`
 
 	var u models.UserWithPermissions
 	var userPermissionsJSON, rolePermissionsJSON, roleDenyPermissionsJSON []byte
 
-	err := s.db.QueryRow(ctx, query, email).Scan(
-		&u.ID, &u.Email, &userPermissionsJSON, &u.LastLogin, &u.CreatedAt, &u.UpdatedAt, &u.Roles, &rolePermissionsJSON, &roleDenyPermissionsJSON,
+	err := s.db.QueryRow(ctx, query, norm).Scan(
+		&u.ID, &u.Email, &u.CanonicalEmail, &userPermissionsJSON, &u.LastLogin, &u.CreatedAt, &u.UpdatedAt, &u.Roles, &rolePermissionsJSON, &roleDenyPermissionsJSON,
 	)
 	if err != nil {
 		return nil, err
@@ -1877,6 +1933,7 @@ func (s *Store) ListUsers(ctx context.Context) ([]models.UserWithPermissions, er
 		SELECT 
 			u.id, 
 			u.email, 
+			COALESCE(u.canonical_email, lower(regexp_replace(trim(u.email), '@googlemail\.com$', '@gmail.com', 'i'))),
 			u.permissions,
 			u.last_login,
 			u.created_at,
@@ -1887,7 +1944,7 @@ func (s *Store) ListUsers(ctx context.Context) ([]models.UserWithPermissions, er
 		FROM users u
 		LEFT JOIN user_roles ur ON u.id = ur.user_id
 		LEFT JOIN roles r ON ur.role_id = r.id
-		GROUP BY u.id, u.email, u.permissions, u.last_login, u.created_at, u.updated_at
+		GROUP BY u.id, u.email, u.canonical_email, u.permissions, u.last_login, u.created_at, u.updated_at
 		ORDER BY u.created_at ASC
 	`
 	rows, err := s.db.Query(ctx, query)
@@ -1901,7 +1958,7 @@ func (s *Store) ListUsers(ctx context.Context) ([]models.UserWithPermissions, er
 		var u models.UserWithPermissions
 		var userPermissionsJSON, rolePermissionsJSON, roleDenyPermissionsJSON []byte
 
-		err := rows.Scan(&u.ID, &u.Email, &userPermissionsJSON, &u.LastLogin, &u.CreatedAt, &u.UpdatedAt, &u.Roles, &rolePermissionsJSON, &roleDenyPermissionsJSON)
+		err := rows.Scan(&u.ID, &u.Email, &u.CanonicalEmail, &userPermissionsJSON, &u.LastLogin, &u.CreatedAt, &u.UpdatedAt, &u.Roles, &rolePermissionsJSON, &roleDenyPermissionsJSON)
 		if err != nil {
 			return nil, err
 		}
@@ -1949,7 +2006,8 @@ func (s *Store) ListUsers(ctx context.Context) ([]models.UserWithPermissions, er
 }
 
 func (s *Store) CreateUser(ctx context.Context, email string, roles []string, permissions []string) (*models.UserWithPermissions, error) {
-	email = models.NormalizeEmail(email)
+	rawEmail := strings.TrimSpace(email)
+	canonicalEmail := models.CanonicalEmail(rawEmail)
 	if permissions == nil {
 		permissions = []string{}
 	}
@@ -1960,7 +2018,7 @@ func (s *Store) CreateUser(ctx context.Context, email string, roles []string, pe
 
 	userID := uuid.New()
 	err = s.WithTx(ctx, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, "INSERT INTO users (id, email, permissions) VALUES ($1, $2, $3)", userID, email, permsJSON)
+		_, err := tx.Exec(ctx, "INSERT INTO users (id, email, canonical_email, permissions) VALUES ($1, $2, $3, $4)", userID, rawEmail, canonicalEmail, permsJSON)
 		if err != nil {
 			return err
 		}
@@ -1979,10 +2037,11 @@ func (s *Store) CreateUser(ctx context.Context, email string, roles []string, pe
 	}
 
 	return &models.UserWithPermissions{
-		ID:          userID,
-		Email:       email,
-		Roles:       roles,
-		Permissions: permissions,
+		ID:             userID,
+		Email:          rawEmail,
+		CanonicalEmail: canonicalEmail,
+		Roles:          roles,
+		Permissions:    permissions,
 	}, nil
 }
 
