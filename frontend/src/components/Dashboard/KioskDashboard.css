@@ -353,6 +353,7 @@
   cursor: pointer;
   user-select: none;
   transition: all 0.2s ease;
+  color: #0f172a;
 }
 
 .kiosk-todo-item:hover:not(.kiosk-todo-disabled) {
@@ -455,12 +456,12 @@
   height: 30px;
   min-width: 30px;
   border-radius: 8px;
-  border: 2.5px solid currentColor;
-  background-color: transparent;
+  border: 2.5px solid #334155;
+  background-color: #ffffff;
   cursor: pointer;
   padding: 0;
   margin: 0;
-  color: inherit;
+  color: #0f172a;
   flex-shrink: 0;
   transition: all 0.15s ease-in-out;
 }
@@ -468,10 +469,12 @@
 .kiosk-todo-checkbox:hover:not(:disabled) {
   opacity: 0.85;
   transform: scale(1.08);
+  border-color: #0f172a;
 }
 
 .kiosk-todo-checkbox.checked {
-  background-color: currentColor;
+  background-color: #0f172a;
+  border-color: #0f172a;
 }
 
 .kiosk-todo-checkbox.checked .kiosk-todo-check-icon {
@@ -500,9 +503,9 @@
 
 /* Task: Allergene eintragen */
 .kiosk-todo-allergens {
-  background-color: #fdf4ff;
+  background-color: #fae8ff;
   border: 2px solid #f0abfc;
-  color: #86198f;
+  color: #0f172a;
 }
 
 .kiosk-todo-allergens .kiosk-todo-icon {
@@ -512,9 +515,9 @@
 
 /* Task: Gelbe Tonne (Yellow bin) */
 .kiosk-todo-yellow {
-  background-color: #fefce8;
-  border: 2px solid #fef08a;
-  color: #854d0e;
+  background-color: #fef9c3;
+  border: 2px solid #fde047;
+  color: #0f172a;
 }
 
 .kiosk-todo-yellow .kiosk-todo-icon {
@@ -524,21 +527,21 @@
 
 /* Task: Kaffeemaschine reinigen (Coffee machine) */
 .kiosk-todo-coffee {
-  background-color: #fff7ed;
-  border: 2px solid #ffedd5;
-  color: #9a3412;
+  background-color: #ffedd5;
+  border: 2px solid #fed7aa;
+  color: #0f172a;
 }
 
 .kiosk-todo-coffee .kiosk-todo-icon {
-  color: #c2410c;
+  color: #ea580c;
   flex-shrink: 0;
 }
 
 /* Task: Kühlschrank reinigen (Clean refrigerator) */
 .kiosk-todo-refrigerator {
-  background-color: #f0f9ff;
+  background-color: #e0f2fe;
   border: 2px solid #bae6fd;
-  color: #0369a1;
+  color: #0f172a;
 }
 
 .kiosk-todo-refrigerator .kiosk-todo-icon {
@@ -548,9 +551,14 @@
 
 /* Default task fallback */
 .kiosk-todo-default {
-  background-color: #f8fafc;
-  border: 2px solid #e2e8f0;
-  color: #334155;
+  background-color: #f1f5f9;
+  border: 2px solid #cbd5e1;
+  color: #0f172a;
+}
+
+.kiosk-todo-default .kiosk-todo-icon {
+  color: #475569;
+  flex-shrink: 0;
 }
 
 .kiosk-todo-empty {
@@ -1281,6 +1289,18 @@
   border-color: rgba(148, 163, 184, 0.4);
   color: #e2e8f0;
 }
+:root[data-theme='dark'] .kiosk-todo-checkbox {
+  border-color: currentColor;
+  background-color: rgba(255, 255, 255, 0.08);
+  color: inherit;
+}
+:root[data-theme='dark'] .kiosk-todo-checkbox.checked {
+  background-color: currentColor;
+  border-color: currentColor;
+}
+:root[data-theme='dark'] .kiosk-todo-checkbox.checked .kiosk-todo-check-icon {
+  color: #0f172a;
+}
 :root[data-theme='dark'] .kiosk-todo-open-allergens-btn {
   background-color: #a21caf;
   border-color: #d946ef;
@@ -1353,6 +1373,18 @@
     background-color: rgba(148, 163, 184, 0.15);
     border-color: rgba(148, 163, 184, 0.4);
     color: #e2e8f0;
+  }
+  :root:not([data-theme='light']) .kiosk-todo-checkbox {
+    border-color: currentColor;
+    background-color: rgba(255, 255, 255, 0.08);
+    color: inherit;
+  }
+  :root:not([data-theme='light']) .kiosk-todo-checkbox.checked {
+    background-color: currentColor;
+    border-color: currentColor;
+  }
+  :root:not([data-theme='light']) .kiosk-todo-checkbox.checked .kiosk-todo-check-icon {
+    color: #0f172a;
   }
   :root:not([data-theme='light']) .kiosk-todo-open-allergens-btn {
     background-color: #a21caf;
