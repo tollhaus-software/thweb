@@ -141,7 +141,7 @@ test.describe('Test Case 8: Adaptive Card Layout for familiesOverview Tab', () =
     if (await toggleSidebarBtn.isVisible()) {
       await toggleSidebarBtn.click();
     }
-    const overviewTab = page.getByRole('button', { name: 'Familien', exact: true });
+    const overviewTab = page.locator('.sidebar-nav-item', { hasText: 'Familien' });
     await expect(overviewTab).toBeVisible();
     await overviewTab.click();
     await expect(overviewTab).toHaveClass(/active/);
@@ -156,11 +156,11 @@ test.describe('Test Case 8: Adaptive Card Layout for familiesOverview Tab', () =
     const isHorizontallyScrollable = await tableContainer.evaluate((el) => el.scrollWidth > el.clientWidth);
     expect(isHorizontallyScrollable).toBeFalsy();
 
-    // Verify default grouping is "Nach Gruppe"
-    await expect(page.getByRole('button', { name: 'Nach Gruppe' })).toHaveAttribute('aria-pressed', 'true');
+    // Verify default grouping is "Gruppen"
+    await expect(page.locator('.overview-grouping-btn', { hasText: 'Gruppen' })).toHaveAttribute('aria-pressed', 'true');
 
-    // Switch to "Nach Familie" mode to verify parent and child card rendering in family mode
-    await page.getByRole('button', { name: 'Nach Familie' }).click();
+    // Switch to "Familien" grouping mode to verify parent and child card rendering in family mode
+    await page.locator('.overview-grouping-btn', { hasText: 'Familien' }).click();
 
     // In "Nach Familie" mode: Verify parent row is rendered as a vertical card
     const hansRow = page.locator('tr.overview-parent-row', { hasText: 'Hans Schmidt' });
@@ -310,8 +310,8 @@ test.describe('Test Case 8: Adaptive Card Layout for familiesOverview Tab', () =
     const schmidtParentBg = await schmidtParentTd.evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(['rgba(0, 0, 0, 0)', 'transparent']).toContain(schmidtParentBg);
 
-    // 4. Test "Nach Gruppe" grouping toggle in mobile card view with expandable parents
-    await page.getByRole('button', { name: 'Nach Gruppe' }).click();
+    // 4. Test "Gruppen" grouping toggle in mobile card view with expandable parents
+    await page.locator('.overview-grouping-btn', { hasText: 'Gruppen' }).click();
     const groupHeaderRow = page.locator('tr.family-group-row', { hasText: 'Kleine Gruppe' });
     await expect(groupHeaderRow).toBeVisible();
     const groupHeaderDisplay = await groupHeaderRow.evaluate((el) => getComputedStyle(el).display);

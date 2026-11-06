@@ -459,10 +459,10 @@ test.describe('Test Case 28: Jobs and Assignments (MGA)', () => {
     // =========================================================================
     // Part 7: Check familiesOverview: Hammer icon and multiple rows
     // =========================================================================
-    const overviewTabBtn = page.getByRole('button', { name: 'Familien', exact: true });
+    const overviewTabBtn = page.locator('.sidebar-nav-item', { hasText: 'Familien' });
     await expect(overviewTabBtn).toBeVisible();
     await overviewTabBtn.click();
-    const nachFamilieBtn = page.getByRole('button', { name: 'Nach Familie' });
+    const nachFamilieBtn = page.locator('.overview-grouping-btn', { hasText: 'Familien' });
     if (await nachFamilieBtn.isVisible()) {
       await nachFamilieBtn.click();
     }

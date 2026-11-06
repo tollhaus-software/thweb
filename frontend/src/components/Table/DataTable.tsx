@@ -32,7 +32,7 @@ interface DataTableProps<TData> {
   getCardActions?: (item: any) => React.ReactNode;
   stickyFirstColumn?: boolean;
   enableSorting?: boolean;
-  familyCardMode?: 'family' | 'group';
+  familyCardMode?: 'family' | 'group' | 'job';
 }
 
 export function DataTable<TData>({
@@ -244,7 +244,7 @@ export function DataTable<TData>({
     const noSpecialBg = Boolean((row.original as any).no_special_bg);
     const isGroupModeParent = Boolean((row.original as any).isGroupModeParent);
     const rowClasses = [
-      rowId === highlightedRowId ? 'highlighted-row' : '',
+      rowId === highlightedRowId || (row.original as any)?.original_id === highlightedRowId ? 'highlighted-row' : '',
       rowType === 'parent' ? 'overview-parent-row' : '',
       rowType === 'child' ? 'overview-child-row' : '',
       noSpecialBg ? 'no-special-bg' : '',
@@ -507,7 +507,7 @@ export function DataTable<TData>({
               });
             }
 
-            if (familyCardMode === 'group') {
+            if (familyCardMode === 'group' || familyCardMode === 'job') {
               const topRows = table.getRowModel().rows.filter((r) => r.depth === 0);
               return topRows.map((groupRow, groupIndex) => {
                 const familyBlocks: { familyId: string; rows: any[] }[] = [];
@@ -539,7 +539,7 @@ export function DataTable<TData>({
                       const isEven = blockIndex % 2 === 0;
                       return (
                         <tbody
-                          key={`${groupRow.id}-${block.familyId}`}
+                          key={`${groupRow.id}-${block.familyId}-${blockIndex}`}
                           className={`family-card ${isEven ? 'family-card-even' : 'family-card-odd'}`}
                         >
                           {block.rows.map((subRow) => renderRow(subRow))}

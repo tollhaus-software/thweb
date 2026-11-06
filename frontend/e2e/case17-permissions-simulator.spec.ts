@@ -108,7 +108,7 @@ test.describe('Test Case 17: Role and Permissions Simulator', () => {
 
     // 7. Verify system behaves as restricted parent (intersection with admin = restricted permissions)
     // "Familien" overview tab is visible
-    await expect(page.getByRole('button', { name: 'Familien', exact: true })).toBeVisible();
+    await expect(page.locator('.sidebar-nav-item', { hasText: 'Familien' })).toBeVisible();
     // "Betreuungsgebühren" is visible
     await expect(page.getByRole('button', { name: 'Betreuungsgebühren', exact: true })).toBeVisible();
     // MGA and Admin tabs must NOT be visible
@@ -292,6 +292,9 @@ test.describe('Test Case 17: Role and Permissions Simulator', () => {
   });
 
   test('simulates employee identifier email with caregiver_default role', async ({ request, page }) => {
+    const resetRes = await request.post('/api/test/reset');
+    expect(resetRes.ok()).toBeTruthy();
+
     const caregiverEmail = `caregiver.${Date.now()}@example.com`;
     // Seed an employee of type caregiver with an identifier email
     const createEmpRes = await request.post('/api/employees', {

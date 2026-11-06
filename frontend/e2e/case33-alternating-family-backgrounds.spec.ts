@@ -108,12 +108,12 @@ test.describe('Test Case 33: Alternating Family Backgrounds in Tables & Cards, S
     }
 
     // --- A. familiesOverview Tab in Table View ---
-    const overviewTab = page.getByRole('button', { name: 'Familien', exact: true });
+    const overviewTab = page.locator('.sidebar-nav-item', { hasText: 'Familien' });
     await expect(overviewTab).toBeVisible();
     await overviewTab.click();
 
-    // Switch to "Nach Familie" mode
-    const byFamilyBtn = page.getByRole('button', { name: 'Nach Familie' });
+    // Switch to "Familien" mode
+    const byFamilyBtn = page.locator('.overview-grouping-btn', { hasText: 'Familien' });
     await expect(byFamilyBtn).toBeVisible();
     await byFamilyBtn.click();
 

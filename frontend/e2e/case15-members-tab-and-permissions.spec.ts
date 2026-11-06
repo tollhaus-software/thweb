@@ -172,7 +172,7 @@ test.describe('Test Case 15: Members Tab and Read-Only Membership Permissions', 
     await expect(restrictedMembersTab).toBeHidden();
 
     // In Overview tab, membership status is not shown for parents
-    const nachFamilieBtn = restrictedPage.getByRole('button', { name: 'Nach Familie' });
+    const nachFamilieBtn = restrictedPage.locator('.overview-grouping-btn', { hasText: 'Familien' });
     if (await nachFamilieBtn.isVisible()) {
       await nachFamilieBtn.click();
     }

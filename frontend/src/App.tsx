@@ -2589,7 +2589,7 @@ const Dashboard: React.FC = () => {
   const [jobsPopoverAnchor, setJobsPopoverAnchor] = React.useState<HTMLElement | null>(null);
   const [activePersonForJobs, setActivePersonForJobs] = React.useState<PersonWithJobs | null>(null);
   const [overviewFamilies, setOverviewFamilies] = React.useState<OverviewFamily[]>([]);
-  const [overviewGroupBy, setOverviewGroupBy] = React.useState<'family' | 'group'>('group');
+  const [overviewGroupBy, setOverviewGroupBy] = React.useState<'family' | 'group' | 'job'>('group');
 
   const [familySortOrder, setFamilySortOrder] = React.useState<FamilySortOrder>(() => {
     try {
@@ -5599,6 +5599,132 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
   const overviewFamiliesTabData = React.useMemo(() => {
     const query = (globalFilter || '').trim().toLowerCase();
 
+    if (overviewGroupBy === 'job') {
+      const jobMap = new Map<string, { id: string; name: string }>();
+      overviewFamilies.forEach((f) => {
+        (f.parents || []).forEach((p) => {
+          (p.jobs || []).forEach((j: any) => {
+            const trimmedName = (j.name || '').trim();
+            if (!trimmedName) return;
+            const key = j.id || trimmedName;
+            if (!jobMap.has(key)) {
+              jobMap.set(key, { id: key, name: trimmedName });
+            }
+          });
+        });
+      });
+
+      const sortedJobs = Array.from(jobMap.values()).sort((a, b) =>
+        a.name.localeCompare(b.name, CURRENT_LOCALE)
+      );
+
+      const sections: {
+        id: string;
+        key: string;
+        label: string;
+        matchesParent: (p: OverviewParent) => boolean;
+      }[] = [
+        ...sortedJobs.map((job) => ({
+          id: `overview-job-${job.id}`,
+          key: job.id,
+          label: job.name,
+          matchesParent: (p: OverviewParent) =>
+            (p.jobs || []).some(
+              (j: any) =>
+                (j.id && j.id === job.id) ||
+                (j.name || '').trim().toLowerCase() === job.name.toLowerCase()
+            ),
+        })),
+        {
+          id: 'overview-job-none',
+          key: 'none',
+          label: t('overviewJobNone') || 'Aktuell kein Tollhaus Job',
+          matchesParent: (p: OverviewParent) =>
+            !(p.jobs || []).some((j: any) => (j.name || '').trim().length > 0),
+        },
+      ];
+
+      const sectionsData = sections.map((section) => {
+        const bucketLabelMatches = query ? section.label.toLowerCase().includes(query) : false;
+
+        const familyBlocks: {
+          familyId: string;
+          familyName: string;
+          rows: any[];
+        }[] = [];
+
+        overviewFamilies.forEach((f) => {
+          const parentsInSection = (f.parents || []).filter(section.matchesParent);
+          if (parentsInSection.length === 0) return;
+
+          const familyName = getFamilyName(f);
+
+          const sortedParents = [...parentsInSection].sort((a, b) => {
+            const fnA = ((a.first_name_for_address_list || a.first_name) || '').trim();
+            const fnB = ((b.first_name_for_address_list || b.first_name) || '').trim();
+            const cmp = fnA.localeCompare(fnB, CURRENT_LOCALE);
+            if (cmp !== 0) return cmp;
+            return (a.last_name || '').localeCompare(b.last_name || '', CURRENT_LOCALE);
+          });
+
+          const mappedParents = sortedParents.map((p) => ({
+            ...p,
+            id: `${p.id}-${section.id}`,
+            original_id: p.id,
+            _rowType: 'parent' as const,
+            indent_name: false,
+            no_special_bg: true,
+            family_id: f.id,
+            family_name: familyName,
+          }));
+
+          const filteredParents = mappedParents.filter((p) => {
+            if (!query || bucketLabelMatches) return true;
+            const effectiveFn = ((p.first_name_for_address_list || p.first_name) || '').trim();
+            const fullName = `${effectiveFn} ${p.last_name || ''}`.trim().toLowerCase();
+            const fnMatch = effectiveFn.toLowerCase().includes(query) || (p.first_name || '').toLowerCase().includes(query);
+            const lnMatch = (p.last_name || '').toLowerCase().includes(query);
+            const emailMatch = (p.emails || []).some((e: any) => getEntryValue(e).toLowerCase().includes(query));
+            const phoneMatch = (p.phones || []).some((ph: any) => getEntryValue(ph).toLowerCase().includes(query));
+            const addressMatch = (p.address || '').toLowerCase().includes(query);
+            const famMatch = familyName.toLowerCase().includes(query);
+            const childMatch = (f.children || []).some((c) => {
+              const cFn = ((c.first_name_for_address_list || c.first_name) || '').trim();
+              const cFull = `${cFn} ${c.last_name || ''}`.trim().toLowerCase();
+              return cFn.toLowerCase().includes(query) || (c.first_name || '').toLowerCase().includes(query) || (c.last_name || '').toLowerCase().includes(query) || cFull.includes(query);
+            });
+            return fnMatch || lnMatch || fullName.includes(query) || emailMatch || phoneMatch || addressMatch || famMatch || childMatch;
+          });
+
+          if (filteredParents.length > 0) {
+            familyBlocks.push({
+              familyId: f.id,
+              familyName,
+              rows: filteredParents,
+            });
+          }
+        });
+
+        familyBlocks.sort((a, b) => {
+          const cmp = a.familyName.localeCompare(b.familyName, CURRENT_LOCALE);
+          if (cmp !== 0) return cmp;
+          return (a.familyId || '').localeCompare(b.familyId || '');
+        });
+
+        const subRows = familyBlocks.flatMap((fb) => fb.rows);
+
+        return {
+          id: section.id,
+          family_name: section.label,
+          subRows,
+          hasMatchingRows: subRows.length > 0,
+          nameMatch: bucketLabelMatches,
+        };
+      });
+
+      return sectionsData.filter((s) => s.subRows.length > 0);
+    }
+
     if (overviewGroupBy === 'group') {
       const groupBuckets: {
         id: string;
@@ -8136,6 +8262,14 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                     className={`overview-grouping-btn ${overviewGroupBy === 'group' ? 'active' : ''}`}
                   >
                     {t('groupByGroup')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOverviewGroupBy('job')}
+                    aria-pressed={overviewGroupBy === 'job'}
+                    className={`overview-grouping-btn ${overviewGroupBy === 'job' ? 'active' : ''}`}
+                  >
+                    {t('groupByJob')}
                   </button>
                 </div>
               )}

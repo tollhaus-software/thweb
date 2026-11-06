@@ -174,13 +174,13 @@ test.describe('Test Case 24: Families Overview Date-based Filtering', () => {
     await page.goto('/');
 
     // 2. Navigate to Familien (familiesOverview)
-    const overviewTab = page.getByRole('button', { name: 'Familien', exact: true });
+    const overviewTab = page.locator('.sidebar-nav-item', { hasText: 'Familien' });
     await expect(overviewTab).toBeVisible();
     await overviewTab.click();
     await expect(overviewTab).toHaveClass(/active/);
 
     // Switch to Family Grouping view on familiesOverview for easy family-row lookup
-    const familyGroupingBtn = page.getByRole('button', { name: 'Nach Familie' });
+    const familyGroupingBtn = page.locator('.overview-grouping-btn', { hasText: 'Familien' });
     if (await familyGroupingBtn.isVisible()) {
       await familyGroupingBtn.click();
     }
@@ -210,9 +210,9 @@ test.describe('Test Case 24: Families Overview Date-based Filtering', () => {
     await expect(page.locator('.data-table.overview-table tr.overview-child-row', { hasText: 'KindAktiv' })).toBeVisible();
     await expect(page.locator('.data-table.overview-table tr.overview-child-row', { hasText: 'KindOhneGruppe' })).toHaveCount(0);
 
-    // Test "Nach Gruppe" grouping mode with upcoming planned child vs active child
+    // Test "Gruppen" grouping mode with upcoming planned child vs active child
     await page.setViewportSize({ width: 500, height: 800 });
-    const groupByGroupBtn = page.getByRole('button', { name: 'Nach Gruppe' });
+    const groupByGroupBtn = page.locator('.overview-grouping-btn', { hasText: 'Gruppen' });
     await expect(groupByGroupBtn).toBeVisible();
     await groupByGroupBtn.click();
 
@@ -235,7 +235,7 @@ test.describe('Test Case 24: Families Overview Date-based Filtering', () => {
 
     // Reset viewport and switch back to desktop for step 3
     await page.setViewportSize({ width: 1280, height: 720 });
-    const familyGroupingBtnBack = page.getByRole('button', { name: 'Nach Familie' });
+    const familyGroupingBtnBack = page.locator('.overview-grouping-btn', { hasText: 'Familien' });
     if (await familyGroupingBtnBack.isVisible()) {
       await familyGroupingBtnBack.click();
     }

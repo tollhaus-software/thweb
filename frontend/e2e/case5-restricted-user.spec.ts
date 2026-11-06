@@ -141,7 +141,7 @@ test.describe('Test Case 5: Restricted Users Support', () => {
 
     // Verify Tab visibility:
     // - "Familien" (familiesOverview) must be visible
-    const familiesOverviewTab = page.getByRole('button', { name: 'Familien', exact: true });
+    const familiesOverviewTab = page.locator('.sidebar-nav-item', { hasText: 'Familien' });
     await expect(familiesOverviewTab).toBeVisible();
 
     // - MGA tabs must NOT be visible
@@ -165,11 +165,11 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     await expect(page.locator('table.data-table th')).toHaveCount(0);
     await expect(page.locator('table.data-table td.sticky-col').first()).toBeVisible();
 
-    // Verify default grouping is "Nach Gruppe"
-    await expect(page.getByRole('button', { name: 'Nach Gruppe' })).toHaveAttribute('aria-pressed', 'true');
+    // Verify default grouping is "Gruppen"
+    await expect(page.locator('.overview-grouping-btn', { hasText: 'Gruppen' })).toHaveAttribute('aria-pressed', 'true');
 
-    // Switch to "Nach Familie" mode to test family view structure
-    await page.getByRole('button', { name: 'Nach Familie' }).click();
+    // Switch to "Familien" grouping mode to test family view structure
+    await page.locator('.overview-grouping-btn', { hasText: 'Familien' }).click();
 
     // Verify family group header rows are rendered in overview
     const schmidtHeaderRow = page.locator('tr.family-group-row', { hasText: 'Schmidt' });
@@ -251,15 +251,15 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     // For other family child, current group is also shown (without exposing full group change history)
     await expect(tomRow.locator('td').last()).toContainText('Grosse Gr.');
 
-    // Toggle grouping to "Nach Gruppe" and verify group headers and family block layout
-    await page.getByRole('button', { name: 'Nach Gruppe' }).click();
+    // Toggle grouping to "Gruppen" and verify group headers and family block layout
+    await page.locator('.overview-grouping-btn', { hasText: 'Gruppen' }).click();
     await expect(page.locator('tr.family-group-row', { hasText: 'Kleine Gruppe' })).toBeVisible();
     await expect(page.locator('tr.family-group-row', { hasText: 'Große Gruppe' })).toBeVisible();
     // Empty groups are not shown
     await expect(page.locator('tr.family-group-row', { hasText: 'Hort' })).toHaveCount(0);
     await expect(page.locator('tr.family-group-row', { hasText: 'Noch keine Gruppe' })).toHaveCount(0);
     await expect(page.locator('tr.family-group-row', { hasText: 'Ehemalige' })).toHaveCount(0);
-    // In "Nach Gruppe" mode, Mia's row displays her full name ("Mia Schmidt") and empty 2nd column
+    // In "Gruppen" mode, Mia's row displays her full name ("Mia Schmidt") and empty 2nd column
     const miaByGroupRow = page.locator('tr.overview-child-row', { hasText: 'Mia Schmidt' });
     const hansByGroupRow = page.locator('tr.overview-parent-row', { hasText: 'Hans Schmidt' }).first();
     await expect(miaByGroupRow).toBeVisible();
@@ -269,12 +269,12 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     const hansGroupPadding = await hansByGroupRow.locator('td').first().locator('span').evaluate((el) => parseFloat(getComputedStyle(el).paddingLeft));
     expect(miaGroupPadding).toBe(0);
     expect(hansGroupPadding).toBeGreaterThan(miaGroupPadding);
-    // Child and parent rows have no special background color in "Nach Gruppe" mode
+    // Child and parent rows have no special background color in "Gruppen" mode
     const miaGroupBg = await miaByGroupRow.locator('td').first().evaluate((el) => getComputedStyle(el).backgroundColor);
     const hansGroupBg = await hansByGroupRow.locator('td').first().evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(hansGroupBg).toBe(miaGroupBg);
-    // Switch back to "Nach Familie"
-    await page.getByRole('button', { name: 'Nach Familie' }).click();
+    // Switch back to "Familien"
+    await page.locator('.overview-grouping-btn', { hasText: 'Familien' }).click();
 
     // Step 5: Switch to "Betreuungsgebühren" tab
     await feesTab.click();
@@ -387,11 +387,11 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     });
     await page.goto('/');
 
-    const overviewTab = page.getByRole('button', { name: 'Familien', exact: true });
+    const overviewTab = page.locator('.sidebar-nav-item', { hasText: 'Familien' });
     await expect(overviewTab).toBeVisible();
 
     // Verify default grouping is "By Group"
-    await expect(page.getByRole('button', { name: 'Nach Gruppe' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.overview-grouping-btn', { hasText: 'Gruppen' })).toHaveAttribute('aria-pressed', 'true');
 
     // 1. Within "Kleine Gruppe" (default "By Group" mode):
     // Within "Kleine Gruppe", families are sorted alphabetically: Adams before Becker
@@ -402,8 +402,8 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     await expect(groupBeckerChildren.nth(1)).toContainText('Clara Becker');
     await expect(groupBeckerChildren.nth(2)).toContainText('Zoe Becker');
 
-    // 2. Switch to "By Family":
-    await page.getByRole('button', { name: 'Nach Familie' }).click();
+    // 2. Switch to "Familien":
+    await page.locator('.overview-grouping-btn', { hasText: 'Familien' }).click();
 
     // Families sorted alphabetically: Adams before Becker
     const familyHeaders = page.locator('tr.family-group-row');

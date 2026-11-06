@@ -735,8 +735,8 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     await expect(parentRow).toContainText('Voll');
 
     // 4. In Familien (Overview tab), Felix Sommer should NOT have membership status displayed
-    await page.getByRole('button', { name: 'Familien', exact: true }).click();
-    const nachFamilieBtn = page.getByRole('button', { name: 'Nach Familie' });
+    await page.locator('.sidebar-nav-item', { hasText: 'Familien' }).click();
+    const nachFamilieBtn = page.locator('.overview-grouping-btn', { hasText: 'Familien' });
     if (await nachFamilieBtn.isVisible()) {
       await nachFamilieBtn.click();
     }

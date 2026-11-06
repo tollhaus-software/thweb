@@ -150,10 +150,10 @@ test.describe('Test Case 21: Custom Address List Given Name for Parents and Chil
     // ==========================================
     // STEP 3: Verify display on Address list ("Familien")
     // ==========================================
-    const overviewTabBtn = page.getByRole('button', { name: 'Familien', exact: true });
+    const overviewTabBtn = page.locator('.sidebar-nav-item', { hasText: 'Familien' });
     await overviewTabBtn.click();
     await expect(overviewTabBtn).toHaveClass(/active/);
-    const nachFamilieBtn = page.getByRole('button', { name: 'Nach Familie' });
+    const nachFamilieBtn = page.locator('.overview-grouping-btn', { hasText: 'Familien' });
     if (await nachFamilieBtn.isVisible()) {
       await nachFamilieBtn.click();
     }
@@ -212,7 +212,7 @@ test.describe('Test Case 21: Custom Address List Given Name for Parents and Chil
       await toggleSidebarBtn.click();
     }
     await overviewTabBtn.click();
-    const nachFamilieMobileBtn = page.getByRole('button', { name: 'Nach Familie' });
+    const nachFamilieMobileBtn = page.locator('.overview-grouping-btn', { hasText: 'Familien' });
     if (await nachFamilieMobileBtn.isVisible()) {
       await nachFamilieMobileBtn.click();
     }
