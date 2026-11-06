@@ -4,7 +4,6 @@ import {
   resolveScreensaverOffDurationMs,
   exitFullyScreensaver,
   startFullyScreensaver,
-  setFullyKeepScreenOn,
 } from '../utils/fullyKiosk';
 
 export interface UseFullyKioskScreensaverOptions {
@@ -69,7 +68,6 @@ export function useFullyKioskScreensaver({
       wakeLockRef.current.release().catch(() => {});
       wakeLockRef.current = null;
     }
-    setFullyKeepScreenOn(false);
     setIsWakeActive(false);
   }, []);
 
@@ -95,10 +93,7 @@ export function useFullyKioskScreensaver({
     const invoked = exitFullyScreensaver();
     setIsWakeActive(true);
 
-    // 1. Tell Fully Kiosk to keep screen on for this wake window
-    setFullyKeepScreenOn(true);
-
-    // 2. Modern Screen Wake Lock API if available in WebView
+    // Screen Wake Lock API if available in WebView
     if (typeof navigator !== 'undefined' && 'wakeLock' in navigator) {
       (navigator as unknown as { wakeLock: { request: (type: string) => Promise<{ release: () => Promise<void> }> } })
         .wakeLock.request('screen')

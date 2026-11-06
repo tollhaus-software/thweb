@@ -1,13 +1,10 @@
 export interface FullyKioskApi {
   turnScreenOn?: () => void;
   stopScreensaver?: () => void;
-  stopDaydream?: () => void;
-  bringToForeground?: () => void;
+  stopScreenSaver?: () => void;
   startScreensaver?: () => void;
-  startDaydream?: () => void;
+  startScreenSaver?: () => void;
   isScreenOn?: () => boolean;
-  setBooleanSetting?: (key: string, value: boolean) => void;
-  setStringSetting?: (key: string, value: string) => void;
 }
 
 export const DEFAULT_SCREENSAVER_EXIT_TIMES: readonly string[] = ['09:30', '10:00'];
@@ -120,30 +117,13 @@ export function exitFullyScreensaver(): boolean {
   }
 
   try {
-    if (typeof fully.stopScreensaver === 'function') {
-      fully.stopScreensaver();
+    const stopFn = fully.stopScreensaver ?? fully.stopScreenSaver;
+    if (typeof stopFn === 'function') {
+      stopFn.call(fully);
       invoked = true;
     }
   } catch (err) {
     console.warn('[FullyKiosk] stopScreensaver error:', err);
-  }
-
-  try {
-    if (typeof fully.stopDaydream === 'function') {
-      fully.stopDaydream();
-      invoked = true;
-    }
-  } catch (err) {
-    console.warn('[FullyKiosk] stopDaydream error:', err);
-  }
-
-  try {
-    if (typeof fully.bringToForeground === 'function') {
-      fully.bringToForeground();
-      invoked = true;
-    }
-  } catch (err) {
-    console.warn('[FullyKiosk] bringToForeground error:', err);
   }
 
   console.log(`[FullyKiosk] Screensaver exit invoked at ${timeStr}`);
@@ -185,39 +165,15 @@ export function startFullyScreensaver(): boolean {
 
   let invoked = false;
   try {
-    if (typeof fully.startScreensaver === 'function') {
-      fully.startScreensaver();
+    const startFn = fully.startScreensaver ?? fully.startScreenSaver;
+    if (typeof startFn === 'function') {
+      startFn.call(fully);
       invoked = true;
     }
   } catch (err) {
     console.warn('[FullyKiosk] startScreensaver error:', err);
   }
 
-  try {
-    if (typeof fully.startDaydream === 'function') {
-      fully.startDaydream();
-      invoked = true;
-    }
-  } catch (err) {
-    console.warn('[FullyKiosk] startDaydream error:', err);
-  }
-
   return invoked;
-}
-
-/**
- * Modifies keepScreenOn setting in Fully Kiosk if supported.
- */
-export function setFullyKeepScreenOn(keepOn: boolean): void {
-  const fully = getFullyKiosk();
-  if (!fully) return;
-
-  try {
-    if (typeof fully.setBooleanSetting === 'function') {
-      fully.setBooleanSetting('keepScreenOn', keepOn);
-    }
-  } catch (err) {
-    console.warn('[FullyKiosk] setBooleanSetting(keepScreenOn) error:', err);
-  }
 }
 

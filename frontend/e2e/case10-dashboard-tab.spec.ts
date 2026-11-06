@@ -749,11 +749,7 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
       const fullyMock = {
         turnScreenOn: () => { calls.push('turnScreenOn'); },
         stopScreensaver: () => { calls.push('stopScreensaver'); },
-        stopDaydream: () => { calls.push('stopDaydream'); },
-        bringToForeground: () => { calls.push('bringToForeground'); },
         startScreensaver: () => { calls.push('startScreensaver'); },
-        startDaydream: () => { calls.push('startDaydream'); },
-        setBooleanSetting: (key: string, val: boolean) => { calls.push(`setBooleanSetting:${key}:${val}`); },
         isScreenOn: () => true,
       };
 
@@ -810,7 +806,8 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     expect(exitResult.success).toBe(true);
     expect(exitResult.calls).toContain('turnScreenOn');
     expect(exitResult.calls).toContain('stopScreensaver');
-    expect(exitResult.calls).toContain('setBooleanSetting:keepScreenOn:true');
+    expect(exitResult.calls).not.toContain('stopDaydream');
+    expect(exitResult.calls).not.toContain('bringToForeground');
 
     // 6. Verify view resets back to today and popups close
     await expect(allergiesPopup).toHaveCount(0);
@@ -823,7 +820,6 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
       const win = window as unknown as { __FULLY_CALLS__?: string[] };
       return win.__FULLY_CALLS__ || [];
     });
-    expect(afterDurationCalls).toContain('setBooleanSetting:keepScreenOn:false');
     expect(afterDurationCalls).toContain('startScreensaver');
 
     // 8. Verify configurable times override (e.g. for testing)
