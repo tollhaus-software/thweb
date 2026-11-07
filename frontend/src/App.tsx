@@ -52,6 +52,7 @@ import { ConfirmDeleteModal } from './components/Table/ConfirmDeleteModal';
 import { MgaLinkIcon } from './components/MgaLinkIcon';
 import { JobsPopover, JobsCell, type PersonWithJobs, type JobItem } from './components/Table/JobsPopover';
 import { JobsTab, type JobWithAssignees } from './components/Jobs/JobsTab';
+import { TableZoomControl } from './components/Table/TableZoomControl';
 import type { Role } from './components/Jobs/JobRolesPopover';
 import { t, CURRENT_LOCALE, formatDisplayDate, parseInputDate, formatTollhausEmail, compareBirthDates } from './utils/i18n';
 import {
@@ -8503,6 +8504,13 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                   </CellPopover>
                 </>
               )}
+            </div>
+
+            <div
+              className="controls-right desktop-only"
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: 'auto', flexShrink: 0 }}
+            >
+              <TableZoomControl />
             </div>
           </div>
         )}

@@ -215,6 +215,10 @@ header {
   border: none !important;
 }
 
+:root {
+  --table-zoom: 1;
+}
+
 .table-container {
   background: var(--bg-surface);
   border: 1px solid var(--border);
@@ -227,14 +231,23 @@ header {
 .data-table {
   width: 100%;
   border-collapse: collapse;
+  font-size: 0.84rem;
+}
+
+@media (min-width: 769px) {
+  .data-table,
+  .table-container > table {
+    zoom: var(--table-zoom, 1);
+  }
 }
 
 .data-table th, .data-table td {
-  padding: 0.4rem 0.6rem;
+  padding: 0.28rem 0.5rem;
   text-align: left;
   border-bottom: 1px solid var(--border);
   border-right: 1px solid var(--border);
   color: var(--text);
+  line-height: 1.35;
 }
 
 .data-table th:last-child,
@@ -437,6 +450,60 @@ tr.overview-parents-toggle-row td {
 .dashboard-container.table-view-active .controls-row {
   flex-shrink: 0;
   margin-bottom: 0.75rem !important;
+}
+
+.table-zoom-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text);
+  white-space: nowrap;
+  flex-shrink: 0;
+  height: 34px;
+  box-sizing: border-box;
+  font-size: 0.85rem;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.table-zoom-button:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--border-strong, var(--border));
+}
+
+.table-zoom-option-btn {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  transition: background-color 0.15s ease;
+}
+
+.table-zoom-option-btn:hover {
+  background-color: var(--bg-hover);
+}
+
+.table-zoom-option-btn.active {
+  background-color: var(--primary-subtle, rgba(0, 100, 200, 0.08));
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.table-zoom-reset-btn:hover {
+  background-color: var(--bg-hover) !important;
 }
 
 .data-table-wrapper {
@@ -655,8 +722,8 @@ tr.overview-parents-toggle-row td {
   align-items: center;
   justify-content: center;
   transition: background-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   opacity: 0.65;
   flex-shrink: 0;
 }
@@ -684,9 +751,9 @@ tr.family-group-row td {
   color: var(--text-h);
   background-color: var(--bg-subtle);
   letter-spacing: 0.025em;
-  font-size: 0.85rem;
+  font-size: 0.825rem;
   border-bottom: 2px solid var(--border);
-  padding: 0.35rem 0.6rem;
+  padding: 0.25rem 0.5rem;
 }
 
 /* Table view alternating family backgrounds for familiesOverview and families */

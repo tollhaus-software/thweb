@@ -5,6 +5,7 @@ import { t, CURRENT_LOCALE } from '../utils/i18n';
 import { getFamilyName as formatFamilyNameHelper } from '../utils/family';
 import { useAuth } from '../context/AuthContext';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { TableZoomControl } from './Table/TableZoomControl';
 
 interface Parent {
   id: string;
@@ -729,11 +730,16 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
           <h3 style={{ margin: 0, color: 'var(--text-h)', fontSize: '1.1rem' }}>
             {t('childcareFees') || 'Childcare Fees'}
           </h3>
-          {loading && (
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-              {t('calculating') || 'Calculating...'}
-            </span>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            {loading && (
+              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                {t('calculating') || 'Calculating...'}
+              </span>
+            )}
+            <div className="desktop-only">
+              <TableZoomControl />
+            </div>
+          </div>
         </div>
 
         <div
