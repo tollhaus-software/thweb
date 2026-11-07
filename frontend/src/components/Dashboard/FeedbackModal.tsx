@@ -221,9 +221,6 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
                 required
                 data-testid="feedback-description-input"
               />
-              <span className="feedback-modal-dictation-hint">
-                {t('feedbackDictationTip')}
-              </span>
             </div>
 
             {/* Contact Name (Optional) */}

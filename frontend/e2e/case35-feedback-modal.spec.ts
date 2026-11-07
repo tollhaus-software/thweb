@@ -53,10 +53,8 @@ test.describe('Test Case 35: Dashboard Feedback Modal', () => {
     const descInput = modal.locator('[data-testid="feedback-description-input"]');
     const submitBtn = modal.locator('[data-testid="feedback-submit-btn"]');
     const contactInput = modal.locator('[data-testid="feedback-contact-input"]');
-    const dictationHint = modal.locator('.feedback-modal-dictation-hint');
 
     await expect(descInput).toBeVisible();
-    await expect(dictationHint).toBeVisible();
     await expect(contactInput).toBeVisible();
     // Should be pre-filled with authenticated user's email
     await expect(contactInput).toHaveValue('developer@example.com');
