@@ -349,7 +349,14 @@
   padding: 1.25rem;
   box-shadow: var(--shadow);
   width: 100%;
+  flex: 1;
+  min-height: calc(100vh - 180px);
   box-sizing: border-box;
+}
+
+.meal-allergens-editor.is-dashboard {
+  min-height: unset;
+  flex: 1;
 }
 
 .meal-allergens-editor-header {
@@ -446,26 +453,28 @@
   display: flex;
   align-items: center;
   gap: 0.85rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   padding: 0.5rem 0;
-  margin-top: 1rem;
+  margin-top: auto;
 }
 
 @media (max-width: __MOBILE_BREAKPOINT__) {
   .meal-allergens-finalize-section {
     flex-direction: column;
     align-items: stretch;
+    flex-wrap: wrap;
   }
 }
 
 .meal-allergens-completion-checklist {
   display: inline-flex;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .meal-allergens-checklist-items {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 0.6rem;
 }
@@ -746,6 +755,29 @@
   font-size: 0.85rem;
   color: var(--text-muted);
   font-style: italic;
+}
+
+.meal-allergens-cooks-custom-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.65rem;
+  margin-top: 0.25rem;
+}
+
+.meal-allergens-cooks-custom-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.meal-allergens-cooks-custom-input {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 0.88rem;
 }
 
 .meal-allergens-empty-dropzone {
@@ -1339,6 +1371,78 @@
   cursor: pointer;
 }
 
+.meal-comp-name-static-box {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.45rem;
+  background: transparent !important;
+  border: none !important;
+  padding: 0 0 0.35rem 0;
+  margin-bottom: 0.15rem;
+  box-sizing: border-box;
+}
+
+.meal-comp-name-static-value {
+  font-size: 1.05rem;
+  color: var(--text-h);
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.meal-comp-name-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: none !important;
+  background: transparent !important;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.meal-comp-name-edit-btn:hover {
+  background: var(--bg-hover) !important;
+  color: var(--text-h);
+}
+
+.meal-comp-popover-next-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.meal-allergens-editor-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1.5rem;
+  gap: 0.85rem;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.meal-allergens-spin {
+  animation: meal-allergens-spin 1s linear infinite;
+  color: var(--primary);
+}
+
+@keyframes meal-allergens-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (min-width: 769px) {
   .meal-component-popover-desktop-backdrop {
     position: fixed;
@@ -1350,13 +1454,10 @@
 
   .meal-component-popover {
     position: fixed !important;
-    top: 10vh !important;
     left: 50% !important;
     transform: translateX(-50%) !important;
     width: min(720px, 90vw) !important;
     max-width: 90vw !important;
-    height: 80vh !important;
-    max-height: 80vh !important;
     display: flex !important;
     flex-direction: column !important;
     box-shadow: 0 20px 45px rgba(0, 0, 0, 0.3) !important;
@@ -1365,10 +1466,67 @@
     border-radius: 12px !important;
   }
 
+  .meal-component-popover.step-name {
+    top: 20vh !important;
+    height: auto !important;
+    max-height: 80vh !important;
+  }
+
+  .meal-component-popover.step-allergens {
+    top: 10vh !important;
+    height: 80vh !important;
+    max-height: 80vh !important;
+  }
+
   .meal-comp-popover-body {
     flex: 1;
     min-height: 0;
   }
+}
+
+.meal-comp-popover-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 1rem;
+  margin-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.meal-comp-popover-footer button {
+  flex: 1;
+  min-width: 120px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1.25rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  box-sizing: border-box;
+}
+
+@keyframes meal-button-highlight-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(59, 130, 246, 0);
+    transform: scale(1.04);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+    transform: scale(1);
+  }
+}
+
+.meal-allergens-highlight-btn {
+  animation: meal-button-highlight-pulse 0.7s ease-in-out 3 !important;
+  border-color: #3b82f6 !important;
+  outline: 2px solid #3b82f6 !important;
+  outline-offset: 2px !important;
 }
 
 @media (max-width: 768px) {
@@ -1754,10 +1912,21 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
+  gap: 0.75rem;
   width: 100%;
   padding-left: calc(38px + 0.85rem);
   box-sizing: border-box;
+}
+
+.meal-allergens-editor.is-dashboard .meal-allergens-editor-status-row {
+  padding-left: 0;
+}
+
+.meal-allergens-status-group {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-shrink: 0;
 }
 
 .meal-allergens-history-btn {
@@ -1772,7 +1941,7 @@
   color: var(--text-secondary);
   cursor: pointer;
   padding: 0;
-  margin-left: auto;
+  margin-left: 0;
   flex-shrink: 0;
   transition: all 0.15s ease;
 }

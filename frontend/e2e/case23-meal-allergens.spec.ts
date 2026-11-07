@@ -426,9 +426,13 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     if (backBtnBox && titleBox && copyBtnBox && statusBox && historyBtnBox && planRefBox && cookLabelBox) {
       // Status text aligns with date title
       expect(Math.abs(statusBox.x - titleBox.x)).toBeLessThanOrEqual(2);
-      // History button is on the same horizontal row as status text and right-aligned
+      // History button is immediately after status text on the same horizontal row
       expect(Math.abs((statusBox.y + statusBox.height / 2) - (historyBtnBox.y + historyBtnBox.height / 2))).toBeLessThanOrEqual(6);
-      expect(Math.abs((historyBtnBox.x + historyBtnBox.width) - (copyBtnBox.x + copyBtnBox.width))).toBeLessThanOrEqual(2);
+      expect(historyBtnBox.x).toBeGreaterThan(statusBox.x);
+      expect(historyBtnBox.x - (statusBox.x + statusBox.width)).toBeLessThanOrEqual(15);
+      // Copy button is on the same status row, right-aligned
+      expect(Math.abs((statusBox.y + statusBox.height / 2) - (copyBtnBox.y + copyBtnBox.height / 2))).toBeLessThanOrEqual(6);
+      expect(copyBtnBox.x).toBeGreaterThan(historyBtnBox.x + historyBtnBox.width);
       // Laut Speiseplan is placed on the left (not indented under date/status)
       expect(Math.abs(planRefBox.x - backBtnBox.x)).toBeLessThanOrEqual(2);
       expect(Math.abs(cookLabelBox.x - backBtnBox.x)).toBeLessThanOrEqual(2);
@@ -452,16 +456,26 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     if (mobileBackBox && mobileTitleBox && mobileCopyBox && mobileStatusBox && mobileHistoryBox && mobilePlanRefBox) {
       expect(Math.abs(mobileStatusBox.x - mobileTitleBox.x)).toBeLessThanOrEqual(2);
       expect(Math.abs((mobileStatusBox.y + mobileStatusBox.height / 2) - (mobileHistoryBox.y + mobileHistoryBox.height / 2))).toBeLessThanOrEqual(6);
-      expect(Math.abs((mobileHistoryBox.x + mobileHistoryBox.width) - (mobileCopyBox.x + mobileCopyBox.width))).toBeLessThanOrEqual(2);
+      expect(mobileHistoryBox.x).toBeGreaterThan(mobileStatusBox.x);
       expect(Math.abs(mobilePlanRefBox.x - mobileBackBox.x)).toBeLessThanOrEqual(2);
     }
     await page.setViewportSize({ width: 1280, height: 800 });
+
+    // Verify "Aus Speiseplan übernehmen" is NOT displayed on the main page of the editor
+    await expect(page.locator('.meal-allergens-add-plan-shortcuts')).toHaveCount(0);
 
     // 7. Verify meal plan components are NOT transferred to allergens by default
     await expect(page.locator('[data-testid^="meal-component-card-"]')).toHaveCount(0);
 
     // Empty state dropzone is removed (not shown)
     await expect(page.getByTestId('components-empty-dropzone')).toHaveCount(0);
+
+    // On Desktop, verify Finalize button and checklist warnings are on the same line
+    const finalizeBox = await page.getByTestId('finalize-allergens-btn').boundingBox();
+    const checklistBox = await page.getByTestId('editor-completion-checklist').boundingBox();
+    if (finalizeBox && checklistBox) {
+      expect(Math.abs((finalizeBox.y + finalizeBox.height / 2) - (checklistBox.y + checklistBox.height / 2))).toBeLessThanOrEqual(6);
+    }
 
     // Verify completion checklist next to Finalisieren button:
     // Cook was matched from plan ("Anna Köchin"), so cook requirement is satisfied (disappears)
@@ -510,13 +524,14 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     // Component popover opens with name input
     await expect(page.getByTestId('meal-component-name-input-0')).toBeVisible();
 
-    // Verify popover covers 80% of screen height on desktop (800 * 0.8 = 640)
+    // Verify popover in Step 1 is compact (sized to content, not huge 80% height)
     const popoverEl = page.locator('.meal-component-popover');
     await expect(popoverEl).toBeVisible();
+    await expect(popoverEl).toHaveClass(/step-name/);
     const popoverBox = await popoverEl.boundingBox();
     expect(popoverBox).not.toBeNull();
     if (popoverBox) {
-      expect(Math.round(popoverBox.height)).toBe(640);
+      expect(popoverBox.height).toBeLessThan(450);
     }
 
     // Verify discarding empty component:
@@ -528,22 +543,46 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     await addCompBtn.click();
     await expect(page.getByTestId('meal-component-name-input-0')).toBeVisible();
 
-    // Verify allergens section is locked/disabled and shows hint until name is given
-    await expect(page.getByTestId('name-required-hint')).toBeVisible();
-    await expect(page.getByTestId('allergen-option-0-gluten')).toBeDisabled();
-    await expect(page.getByTestId('custom-allergen-input-0')).toBeDisabled();
-    await expect(page.getByTestId('custom-allergen-add-btn-0')).toBeDisabled();
+    // Verify Step 1: allergens section is NOT visible, and "Weiter" is disabled until name is given
+    await expect(page.getByTestId('allergen-picker-panel-0')).toHaveCount(0);
+    await expect(page.getByTestId('component-step-next-btn')).toBeDisabled();
 
-    // Popover footer should NOT have a delete button, only "Fertig"
-    await expect(page.locator('[data-testid^="remove-meal-component-btn-popover"]')).toHaveCount(0);
-    await expect(page.getByTestId('popover-done-btn')).toBeVisible();
+    // Popover footer in Step 1 has Abbrechen and Weiter with same size
+    const cancelBtn = page.getByTestId('component-step1-cancel-btn');
+    const nextBtn = page.getByTestId('component-step-next-btn');
+    await expect(cancelBtn).toBeVisible();
+    await expect(cancelBtn).toHaveText('Abbrechen');
+    await expect(nextBtn).toBeVisible();
+    await expect(nextBtn).toHaveText('Weiter');
+    const cancelBox = await cancelBtn.boundingBox();
+    const nextBox = await nextBtn.boundingBox();
+    if (cancelBox && nextBox) {
+      expect(Math.abs(cancelBox.width - nextBox.width)).toBeLessThanOrEqual(2);
+      expect(Math.abs(cancelBox.height - nextBox.height)).toBeLessThanOrEqual(2);
+    }
 
-    // Verify taking component from meal plan fills into the name input, unlocks allergens, and closing saves
+    // Verify taking component from meal plan directly selects name and advances to Step 2
     await page.getByTestId('take-plan-component-btn-0-0').click();
-    await expect(page.getByTestId('meal-component-name-input-0')).toHaveValue('Spaghetti Bolognese');
-    await expect(page.getByTestId('name-required-hint')).toHaveCount(0);
-    await expect(page.getByTestId('allergen-option-0-gluten')).toBeEnabled();
-    await page.getByTestId('meal-component-name-input-0').press('Enter');
+    await expect(popoverEl).toHaveClass(/step-allergens/);
+    await expect(page.getByTestId('component-name-static-value')).toHaveText('Spaghetti Bolognese');
+    // Header in Step 2 shows only component name + pencil icon (no "Name der Komponente" and no "Name ändern" text)
+    await expect(page.getByTestId('component-name-display-box')).not.toContainText('Name der Komponente');
+    await expect(page.getByTestId('component-name-display-box')).not.toContainText('Name ändern');
+    const renameBtn = page.getByTestId('component-rename-btn');
+    await expect(renameBtn).toBeVisible();
+
+    // Verify pencil icon is on the exact same row as component name and has transparent background
+    const staticNameBox = await page.getByTestId('component-name-static-value').boundingBox();
+    const renameBtnBox = await renameBtn.boundingBox();
+    expect(staticNameBox && renameBtnBox).toBeTruthy();
+    if (staticNameBox && renameBtnBox) {
+      expect(Math.abs((staticNameBox.y + staticNameBox.height / 2) - (renameBtnBox.y + renameBtnBox.height / 2))).toBeLessThanOrEqual(5);
+      expect(renameBtnBox.x).toBeGreaterThan(staticNameBox.x);
+    }
+    const renameBtnBg = await renameBtn.evaluate((el) => window.getComputedStyle(el).backgroundColor);
+    expect(renameBtnBg).toBe('rgba(0, 0, 0, 0)');
+    await expect(page.getByTestId('allergen-option-0-gluten')).toBeVisible();
+    await page.getByTestId('popover-done-btn').click();
     await expect(page.getByTestId('meal-component-name-text-0')).toHaveText('Spaghetti Bolognese');
     // Empty state dropzone disappears once components exist
     await expect(page.getByTestId('components-empty-dropzone')).toHaveCount(0);
@@ -572,13 +611,13 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     // Add second component (Gurkensalat) from meal plan suggestion
     await addCompBtn.click();
     await page.getByTestId('take-plan-component-btn-1-1').click();
-    await expect(page.getByTestId('meal-component-name-input-1')).toHaveValue('Gurkensalat');
-    await page.getByTestId('meal-component-name-input-1').press('Enter');
+    await expect(page.getByTestId('component-name-static-value')).toHaveText('Gurkensalat');
+    await page.getByTestId('popover-done-btn').click();
     await expect(page.getByTestId('meal-component-name-text-1')).toHaveText('Gurkensalat');
 
-    // Clicking pencil icon opens component popover
+    // Clicking pencil icon opens component popover in Step 2 with static name
     await page.getByTestId('edit-meal-component-name-btn-0').click();
-    await expect(page.getByTestId('meal-component-name-input-0')).toBeVisible();
+    await expect(page.getByTestId('component-name-static-value')).toHaveText('Spaghetti Bolognese');
 
     // 9. Verify allergen list presentation:
     // - main name in bold
@@ -613,13 +652,15 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     await addCompBtn.click();
     await expect(page.getByTestId('meal-component-name-input-2')).toBeVisible();
     await page.getByTestId('meal-component-name-input-2').fill('Vanillepudding');
-    await page.getByTestId('meal-component-name-input-2').press('Enter');
+    await page.getByTestId('component-step-next-btn').click();
+    await page.getByTestId('popover-done-btn').click();
     await expect(page.getByTestId('meal-component-name-text-2')).toHaveText('Vanillepudding');
 
-    // Click pencil on component 2, clear name, and press Enter -> displays "Unbenannte Komponente"
+    // Click pencil on component 2, click rename to go to Step 1, clear name, and done -> displays "Unbenannte Komponente"
     await page.getByTestId('edit-meal-component-name-btn-2').click();
+    await page.getByTestId('component-rename-btn').click();
     await page.getByTestId('meal-component-name-input-2').fill('');
-    await page.getByTestId('meal-component-name-input-2').press('Enter');
+    await page.getByTestId('close-component-popover-btn').click();
     await expect(page.getByTestId('meal-component-name-text-2')).toHaveText('Unbenannte Komponente');
 
     // Delete component 2 using the RowActionsMenu (... menu) on the card
@@ -730,14 +771,14 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
 
     // Verify exiting edit popover without making changes does NOT reset status to draft
     await page.getByTestId('edit-meal-component-name-btn-0').click();
-    await expect(page.getByTestId('meal-component-name-input-0')).toBeVisible();
+    await expect(page.getByTestId('component-name-static-value')).toHaveText('Spaghetti Bolognese');
     await page.getByTestId('popover-done-btn').click();
     await expect(page.getByTestId('allergens-editor-status')).toHaveText('Status: Abgeschlossen');
     await expect(finalizeBtn).toBeDisabled();
 
     // 14. Edit allergens -> verify editing resets status to "Entwurf", and Finalisieren is re-enabled
     await page.getByTestId('edit-meal-component-name-btn-0').click();
-    await expect(page.getByTestId('meal-component-name-input-0')).toBeVisible();
+    await expect(page.getByTestId('component-name-static-value')).toHaveText('Spaghetti Bolognese');
     await page.getByTestId('remove-allergen-btn-0-Knoblauch').click();
     await page.getByTestId('popover-done-btn').click();
     await expect(page.getByTestId('allergens-editor-status')).toHaveText('Status: Entwurf');
@@ -776,6 +817,7 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     const unseededCompInput = page.getByTestId('meal-component-name-input-0');
     await unseededCompInput.fill('Suppe');
     await unseededCompInput.press('Enter');
+    await page.getByTestId('popover-done-btn').click();
 
     // Dropzone disappears, component checklist item satisfied (disappears), but cook is still pending -> Finalize remains disabled
     await expect(page.getByTestId('components-empty-dropzone')).toHaveCount(0);
@@ -783,10 +825,16 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     await expect(page.getByTestId('checklist-item-cook')).toBeVisible();
     await expect(page.getByTestId('finalize-allergens-btn')).toBeDisabled();
 
-    // Clicking cook checklist item opens the cooks popover
+    // Clicking cook checklist item highlights the cook button without opening the popover
     await page.getByTestId('checklist-item-cook').click();
+    await expect(page.getByTestId('edit-cooks-btn')).toHaveAttribute('data-highlighted', 'true');
+    await expect(page.getByTestId('cooks-popover')).toHaveCount(0);
+
+    // Clicking edit cooks button opens the popover
+    await page.getByTestId('edit-cooks-btn').click();
     const unseededPopover = page.getByTestId('cooks-popover');
     await expect(unseededPopover).toBeVisible();
+    await expect(unseededPopover.getByTestId('cooks-custom-input')).toBeVisible();
 
     // Select two people with the same surname ("Anton Becker" and "Zoe Becker")
     await unseededPopover.locator('.meal-allergens-cook-checkbox-item', { hasText: 'Anton Becker' }).click();

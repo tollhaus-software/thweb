@@ -261,10 +261,20 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await expect(editBtn).toBeVisible();
 
     // 4. Click edit icon to open MealAllergensEditor inside dashboard
+    const mainHeaderDateBox = await page.locator('.kiosk-header-date').boundingBox();
     await editBtn.click();
     const editor = embeddedPage.locator('[data-testid="meal-allergens-editor"]');
     await expect(editor).toBeVisible();
     await expect(editor).toHaveAttribute('data-loaded', 'true');
+
+    // Header center date does not jump between main dashboard view and allergens editor view
+    const editorHeaderDateBox = await page.locator('.kiosk-header-date').boundingBox();
+    await expect(page.locator('.kiosk-header-date')).toContainText('Allergene für');
+    if (mainHeaderDateBox && editorHeaderDateBox) {
+      const mainCenter = mainHeaderDateBox.x + mainHeaderDateBox.width / 2;
+      const editorCenter = editorHeaderDateBox.x + editorHeaderDateBox.width / 2;
+      expect(Math.abs(mainCenter - editorCenter)).toBeLessThanOrEqual(2);
+    }
 
     // Verify "Laut Speiseplan:" is NOT shown when editing from dashboard, and cook label is "Es kocht"
     await expect(editor.locator('[data-testid="meal-plan-reference-box"]')).toHaveCount(0);
@@ -282,6 +292,7 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     const nameInput = page.getByTestId('meal-component-name-input-0');
     await expect(nameInput).toBeVisible();
     await nameInput.fill('Milchreis');
+    await page.getByTestId('component-step-next-btn').click();
     await page.getByTestId('allergen-option-0-laktose').click();
     await page.getByTestId('popover-done-btn').click();
     await expect(page.locator('.meal-component-popover')).toHaveCount(0);
@@ -302,8 +313,10 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await dashboardHistoryModal.getByTestId('close-history-modal-btn').click();
     await expect(dashboardHistoryModal).toHaveCount(0);
 
-    // 5. Click Back in the editor to return to dashboard view
-    await editor.locator('[data-testid="allergens-editor-back-btn"]').click();
+    // 5. Verify dashboard day header is shown without < > navigation buttons, and click Back to return to dashboard view
+    await expect(page.locator('.kiosk-header-date')).toBeVisible();
+    await expect(page.locator('.kiosk-header-nav-btn')).toHaveCount(0);
+    await page.getByTestId('allergens-editor-back-btn').click();
     await expect(editor).toHaveCount(0);
 
     // 6. Verify dashboard now displays the saved component and the matching group warning badge
@@ -499,14 +512,9 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await expect(openAllergensBtn).toBeVisible();
     await expect(openAllergensBtn).toHaveText('Komponenten und Allergene öffnen');
 
-    // Clicking the task row outside of the button highlights/flashes the button twice, does NOT open editor
+    // Clicking anywhere on the "Allergene eintragen" TODO item opens the allergens editor directly!
     await allergenLabel.click();
-    await expect(openAllergensBtn).toHaveClass(/flash/);
     const editor = embeddedPage.locator('[data-testid="meal-allergens-editor"]');
-    await expect(editor).toHaveCount(0);
-
-    // Clicking the "Komponenten und Allergene öffnen" button directly opens the allergens editor!
-    await openAllergensBtn.click();
     await expect(editor).toBeVisible();
     await expect(editor).toHaveAttribute('data-loaded', 'true');
 
@@ -515,6 +523,7 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     const compInput = page.getByTestId('meal-component-name-input-0');
     await expect(compInput).toBeVisible();
     await compInput.fill('Gemüsesuppe');
+    await page.getByTestId('component-step-next-btn').click();
     await page.getByTestId('popover-done-btn').click();
 
     // Click finalize in editor
@@ -525,7 +534,7 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     // Wait for finalization and return back to dashboard
     await expect(editor.locator('[data-testid="allergens-editor-status"]')).toContainText('Abgeschlossen');
 
-    const backBtn = editor.locator('[data-testid="allergens-editor-back-btn"]');
+    const backBtn = page.getByTestId('allergens-editor-back-btn');
     await backBtn.click();
     await expect(editor).toHaveCount(0);
 
@@ -543,11 +552,13 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     const allergenLabelAfter = allergenTaskAfter.locator('.kiosk-todo-label');
     await expect(allergenLabelAfter).toHaveCSS('text-decoration-line', 'line-through');
 
-    // The open button remains displayed, and clicking the completed task row flashes the button
+    // The open button remains displayed, and clicking the completed task row opens the editor
     const openAllergensBtnAfter = allergenTaskAfter.locator('[data-testid="open-allergens-editor-btn"]');
     await expect(openAllergensBtnAfter).toBeVisible();
     await allergenCheckboxAfter.click();
-    await expect(openAllergensBtnAfter).toHaveClass(/flash/);
+    await expect(editor).toBeVisible();
+    await page.getByTestId('allergens-editor-back-btn').click();
+    await expect(editor).toHaveCount(0);
     await expect(allergenTaskAfter).toHaveAttribute('data-completed', 'true');
 
     // 7. Verify future date restriction: only allow editing allergens for current day or past days!
@@ -597,7 +608,7 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     const yesterdayEditor = embeddedPage.locator('[data-testid="meal-allergens-editor"]');
     await expect(yesterdayEditor).toBeVisible();
     await expect(yesterdayEditor).toHaveAttribute('data-loaded', 'true');
-    await yesterdayEditor.locator('[data-testid="allergens-editor-back-btn"]').click();
+    await page.getByTestId('allergens-editor-back-btn').click();
     await expect(yesterdayEditor).toHaveCount(0);
   });
 

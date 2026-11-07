@@ -213,6 +213,7 @@ test.describe('Test Case 27: Allergen & Allergy Matching (MealAllergens Tab & Al
     const nameInput = page.getByTestId('meal-component-name-input-0');
     await expect(nameInput).toBeVisible();
     await nameInput.fill('Suppe');
+    await page.getByTestId('component-step-next-btn').click();
 
     // In the allergen picker panel:
     // Check that laktose option displays the warning "Kleine Gruppe"
@@ -266,6 +267,7 @@ test.describe('Test Case 27: Allergen & Allergy Matching (MealAllergens Tab & Al
     const nameInput1 = page.getByTestId('meal-component-name-input-1');
     await expect(nameInput1).toBeVisible();
     await nameInput1.fill('Dessert');
+    await page.getByTestId('component-step-next-btn').click();
 
     const erdnuesseOption = page.getByTestId('allergen-option-1-erdnuesse');
     await erdnuesseOption.click();
@@ -380,6 +382,7 @@ test.describe('Test Case 27: Allergen & Allergy Matching (MealAllergens Tab & Al
     const compNameInput = page.getByTestId('meal-component-name-input-0');
     await expect(compNameInput).toBeVisible();
     await compNameInput.fill('Käsebrot mit Spezialbelag');
+    await page.getByTestId('component-step-next-btn').click();
 
     const laktoseYesterday = page.getByTestId('allergen-option-0-laktose');
     await laktoseYesterday.click();

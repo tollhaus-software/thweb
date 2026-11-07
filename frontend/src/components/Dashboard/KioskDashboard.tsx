@@ -106,32 +106,9 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
   const [showFeedbackModal, setShowFeedbackModal] = useState<boolean>(false);
   const [taskToConfirm, setTaskToConfirm] = useState<string | null>(null);
   const [isEditingAllergens, setIsEditingAllergens] = useState<boolean>(false);
-  const [flashAllergensBtn, setFlashAllergensBtn] = useState<boolean>(false);
-  const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const contentAreaRef = useRef<HTMLElement | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState<Date>(() => new Date());
-
-  const triggerAllergensFlash = useCallback(() => {
-    if (flashTimeoutRef.current) {
-      clearTimeout(flashTimeoutRef.current);
-    }
-    setFlashAllergensBtn(false);
-    requestAnimationFrame(() => {
-      setFlashAllergensBtn(true);
-      flashTimeoutRef.current = setTimeout(() => {
-        setFlashAllergensBtn(false);
-      }, 850);
-    });
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (flashTimeoutRef.current) {
-        clearTimeout(flashTimeoutRef.current);
-      }
-    };
-  }, []);
 
   // Keep a ref to the current selectedDate for intervals and websocket callbacks
   const selectedDateRef = useRef<string | null>(selectedDate);
@@ -329,7 +306,6 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     const m = String(current.getMonth() + 1).padStart(2, '0');
     const d = String(current.getDate()).padStart(2, '0');
     setIsEditingAllergens(false);
-    setFlashAllergensBtn(false);
     setTaskToConfirm(null);
     setSelectedDate(`${y}-${m}-${d}`);
   };
@@ -341,7 +317,6 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     const m = String(current.getMonth() + 1).padStart(2, '0');
     const d = String(current.getDate()).padStart(2, '0');
     setIsEditingAllergens(false);
-    setFlashAllergensBtn(false);
     setTaskToConfirm(null);
     setSelectedDate(`${y}-${m}-${d}`);
   };
@@ -353,7 +328,6 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     setShowFeedbackModal(false);
     setTaskToConfirm(null);
     setIsEditingAllergens(false);
-    setFlashAllergensBtn(false);
     setSelectedDate(null); // Omitting date fetches "today" from backend
     if (contentAreaRef.current) {
       contentAreaRef.current.scrollTop = 0;
@@ -506,14 +480,13 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     if (e) {
       e.stopPropagation();
     }
-    // Rule: "For allergens too, let's only allow editing them for the current day or past days from the dashboard."
-    // "and then when a user clicks the checkbox / todo entry outside of the button, that button should somehow be highlighted (e.g. flash twice or whatever is easy to do )"
+    // Rule: Whole "Allergene eintragen" TODO item opens the allergens editor for current/past days
     if (taskKey === 'enter_allergens' || taskKey === 'allergene_eintragen') {
       if (!isCurrentOrPastDay) {
         alert(t('allergensOnlyCurrentOrPast'));
         return;
       }
-      triggerAllergensFlash();
+      openMealAllergensEditor(e);
       return;
     }
 
@@ -716,25 +689,51 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
               }}
             />
           ) : isEditingAllergens ? (
-            <MealAllergensEditor
-              initialDay={{
-                ...createEmptyMealAllergenDay(displayDateStr),
-                has_allergen_record: Boolean(data?.has_allergen_record),
-                meal_components: allergenComponents,
-                plan_meal_components: data?.meal_components || [],
-                plan_cook_name: data?.who_is_cooking || '',
-              }}
-              hidePlanReference={true}
-              onBack={() => {
-                setIsEditingAllergens(false);
-                void fetchDailyBrief(selectedDate);
-                void fetchAllergiesSummary(selectedDate);
-              }}
-              onDaySaved={() => {
-                void fetchDailyBrief(selectedDate);
-                void fetchAllergiesSummary(selectedDate);
-              }}
-            />
+            <>
+              {/* Dashboard day header without < > navigation items, showing date and clear Back button */}
+              <header className="kiosk-header" data-testid="kiosk-dashboard-header">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditingAllergens(false);
+                    void fetchDailyBrief(selectedDate);
+                    void fetchAllergiesSummary(selectedDate);
+                  }}
+                  className="kiosk-header-back-btn"
+                  data-testid="allergens-editor-back-btn"
+                  title={t('back') || 'Zurück'}
+                  aria-label={t('back') || 'Zurück'}
+                >
+                  <ArrowLeft size={embedded ? 20 : 26} />
+                  <span>{t('back') || 'Zurück'}</span>
+                </button>
+
+                <h1 className="kiosk-header-date">{t('allergensForDate')} {formattedDate}</h1>
+
+                <div className="kiosk-header-right" />
+              </header>
+
+              <MealAllergensEditor
+                initialDay={{
+                  ...createEmptyMealAllergenDay(displayDateStr),
+                  has_allergen_record: Boolean(data?.has_allergen_record),
+                  meal_components: allergenComponents,
+                  plan_meal_components: data?.meal_components || [],
+                  plan_cook_name: data?.who_is_cooking || '',
+                }}
+                hidePlanReference={true}
+                isDashboard={true}
+                onBack={() => {
+                  setIsEditingAllergens(false);
+                  void fetchDailyBrief(selectedDate);
+                  void fetchAllergiesSummary(selectedDate);
+                }}
+                onDaySaved={() => {
+                  void fetchDailyBrief(selectedDate);
+                  void fetchAllergiesSummary(selectedDate);
+                }}
+              />
+            </>
           ) : (
             <>
               {/* Header: Just centered text saying the current date, with left/right day switch arrows at the screen sides */}
@@ -914,9 +913,8 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                           {isAllergens && (
                             <button
                               type="button"
-                              className={`kiosk-todo-open-allergens-btn ${flashAllergensBtn ? 'flash' : ''} ${!isCurrentOrPastDay ? 'disabled' : ''}`}
+                              className={`kiosk-todo-open-allergens-btn ${!isCurrentOrPastDay ? 'disabled' : ''}`}
                               data-testid="open-allergens-editor-btn"
-                              data-flashing={flashAllergensBtn ? 'true' : 'false'}
                               disabled={!isCurrentOrPastDay}
                               title={!isCurrentOrPastDay ? t('allergensOnlyCurrentOrPast') : t('openComponentsAndAllergens')}
                               onClick={(e) => openMealAllergensEditor(e)}
