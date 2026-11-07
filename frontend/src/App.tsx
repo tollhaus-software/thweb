@@ -8655,6 +8655,11 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
               onNavigate={handleTabClick}
               canViewMealPlan={canViewMealPlan}
               canUseDashboard={canUseDashboard}
+              canReadOverview={canReadOverview}
+              canReadFees={canReadFees}
+              canReadMealAllergens={canReadMealAllergens}
+              canAccessMga={canReadFamiliesAll || canReadMembers || canReadJobs}
+              targetMgaTab={categoryHasLandingPage('mga', navPerms) ? 'mga' : getFirstPermittedTabForCategory('mga', navPerms)}
               userName={currentAuthUserFirstName}
             />
           </div>

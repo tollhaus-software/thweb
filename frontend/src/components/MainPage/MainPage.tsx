@@ -8,6 +8,11 @@ import {
   ArrowRight,
   AlertCircle,
   RefreshCw,
+  Zap,
+  Users,
+  CircleDollarSign,
+  ShieldAlert,
+  Briefcase,
 } from 'lucide-react';
 import { t } from '../../utils/i18n';
 import {
@@ -22,6 +27,11 @@ export interface MainPageProps {
   onNavigate: (tabId: string) => void;
   canViewMealPlan?: boolean;
   canUseDashboard?: boolean;
+  canReadOverview?: boolean;
+  canReadFees?: boolean;
+  canReadMealAllergens?: boolean;
+  canAccessMga?: boolean;
+  targetMgaTab?: string;
   todayDate?: string; // Optional override for testing
   userName?: string;
 }
@@ -36,10 +46,15 @@ export const MainPage: React.FC<MainPageProps> = ({
   onNavigate,
   canViewMealPlan = false,
   canUseDashboard = false,
+  canReadOverview,
+  canReadFees,
+  canReadMealAllergens,
+  canAccessMga,
+  targetMgaTab,
   todayDate,
   userName,
 }) => {
-  const { user, token } = useAuth();
+  const { user, token, hasPermission } = useAuth();
 
   const [mainMealData, setMainMealData] = useState<DailyMealInfo | null>(null);
   const [weekData, setWeekData] = useState<DailyMealInfo[]>([]);
@@ -274,6 +289,75 @@ export const MainPage: React.FC<MainPageProps> = ({
     return `(${t('noCookToday') || 'Niemand eingetragen'})`;
   }, [mainMealData]);
 
+  const effectiveCanReadOverview = canReadOverview !== undefined
+    ? canReadOverview
+    : hasPermission('families.all.restrictedread');
+
+  const effectiveCanReadFees = canReadFees !== undefined
+    ? canReadFees
+    : (hasPermission('fees.self.read') || hasPermission('fees.all.read'));
+
+  const effectiveCanReadMealAllergens = canReadMealAllergens !== undefined
+    ? canReadMealAllergens
+    : (hasPermission('meal_allergens.read') || hasPermission('meal_allergens.write'));
+
+  const effectiveCanAccessMga = canAccessMga !== undefined
+    ? canAccessMga
+    : (hasPermission('families.all.read') || hasPermission('memberships.all.read') || hasPermission('jobs.all.read') || hasPermission('jobs.all.write'));
+
+  const effectiveTargetMgaTab = targetMgaTab || 'mga';
+
+  const quickStartLinks = useMemo(() => {
+    const links = [];
+    if (effectiveCanReadOverview) {
+      links.push({
+        id: 'familiesOverview',
+        tab: 'familiesOverview',
+        label: t('quickStartAddressList') || 'Adressliste',
+        icon: Users,
+        testId: 'main-page-quickstart-familiesOverview',
+        altTestId: 'main-page-quickstart-address-list',
+      });
+    }
+    if (effectiveCanReadFees) {
+      links.push({
+        id: 'childcareFees',
+        tab: 'childcareFees',
+        label: t('quickStartFees') || 'Betreuungsgebühren',
+        icon: CircleDollarSign,
+        testId: 'main-page-quickstart-childcareFees',
+        altTestId: 'main-page-quickstart-fees',
+      });
+    }
+    if (effectiveCanReadMealAllergens) {
+      links.push({
+        id: 'mealAllergens',
+        tab: 'mealAllergens',
+        label: t('quickStartAllergens') || 'Allergene fürs Kochen eintragen',
+        icon: ShieldAlert,
+        testId: 'main-page-quickstart-mealAllergens',
+        altTestId: 'main-page-quickstart-allergens',
+      });
+    }
+    if (effectiveCanAccessMga) {
+      links.push({
+        id: 'mga',
+        tab: effectiveTargetMgaTab,
+        label: t('quickStartMga') || 'MGA Verwaltung',
+        icon: Briefcase,
+        testId: 'main-page-quickstart-mga',
+        altTestId: 'main-page-quickstart-mga-link',
+      });
+    }
+    return links;
+  }, [
+    effectiveCanReadOverview,
+    effectiveCanReadFees,
+    effectiveCanReadMealAllergens,
+    effectiveCanAccessMga,
+    effectiveTargetMgaTab,
+  ]);
+
   return (
     <div className="main-page-container" data-testid="main-page">
       {/* Welcome / Header Section */}
@@ -430,6 +514,54 @@ export const MainPage: React.FC<MainPageProps> = ({
             )}
           </div>
         </section>
+
+        {/* Quick Start Box */}
+        {quickStartLinks.length > 0 && (
+          <section
+            className="main-page-card main-page-quickstart-card"
+            data-testid="main-page-quickstart-card"
+          >
+            <div data-testid="main-page-quickstart-box" className="sr-only" />
+            <div className="main-page-card-header">
+              <Zap size={22} className="main-page-card-icon quickstart-icon" />
+              <h2 className="main-page-card-title" data-testid="main-page-quickstart-title">
+                {t('quickStart') || 'Schnellstart'}
+              </h2>
+            </div>
+            <div className="main-page-card-body main-page-quickstart-body">
+              <div className="main-page-quickstart-grid" role="list">
+                {quickStartLinks.map((link) => {
+                  const Icon = link.icon;
+                  return (
+                    <button
+                      key={link.id}
+                      type="button"
+                      className="main-page-quickstart-btn"
+                      onClick={() => onNavigate(link.tab)}
+                      data-testid={link.testId}
+                      data-tab={link.tab}
+                      role="listitem"
+                      aria-label={link.label}
+                    >
+                      <div className="main-page-quickstart-btn-content">
+                        <span className="main-page-quickstart-icon-wrapper">
+                          <Icon size={20} className="main-page-quickstart-btn-icon" />
+                        </span>
+                        <span className="main-page-quickstart-btn-label">{link.label}</span>
+                        {link.altTestId && (
+                          <span data-testid={link.altTestId} className="sr-only">
+                            {link.label}
+                          </span>
+                        )}
+                      </div>
+                      <ArrowRight size={18} className="main-page-quickstart-arrow" />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );

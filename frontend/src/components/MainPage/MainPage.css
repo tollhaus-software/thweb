@@ -131,6 +131,96 @@
   color: #d97706;
 }
 
+.main-page-card-icon.quickstart-icon {
+  color: #f59e0b;
+}
+
+/* Quick Start Card */
+.main-page-quickstart-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.main-page-quickstart-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.main-page-quickstart-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.main-page-quickstart-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.85rem 1rem;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.main-page-quickstart-btn:hover {
+  background-color: #f8fafc;
+  border-color: #0284c7;
+  box-shadow: 0 1px 4px rgba(2, 132, 199, 0.12);
+}
+
+.main-page-quickstart-btn:focus-visible {
+  outline: 2px solid #0284c7;
+  outline-offset: 2px;
+}
+
+.main-page-quickstart-btn-content {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.main-page-quickstart-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  background-color: #f1f5f9;
+  color: #0284c7;
+  flex-shrink: 0;
+  transition: all 0.15s ease-in-out;
+}
+
+.main-page-quickstart-btn:hover .main-page-quickstart-icon-wrapper {
+  background-color: #e0f2fe;
+  color: #0369a1;
+}
+
+.main-page-quickstart-btn-label {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.main-page-quickstart-arrow {
+  color: #94a3b8;
+  flex-shrink: 0;
+  transition: transform 0.15s ease-in-out, color 0.15s ease-in-out;
+}
+
+.main-page-quickstart-btn:hover .main-page-quickstart-arrow {
+  color: #0284c7;
+  transform: translateX(3px);
+}
+
 .main-page-card-title {
   margin: 0;
   font-size: 1.25rem;

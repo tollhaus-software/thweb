@@ -328,4 +328,199 @@ test.describe('Test Case 42: Main Page (Default Homepage, Cook, Food, and Rest o
     await expect(page.getByTestId('main-page-week-expanded')).toBeVisible();
     await expect(page.locator('.main-page-week-title')).toHaveText('Kommende Woche');
   });
+
+  test('quick start box: admin user with full access sees all 4 links and can jump to each', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+    });
+
+    await page.goto('/?exp_main=1');
+    await page.waitForLoadState('networkidle');
+
+    // 1. Verify Quick Start Card and Title
+    const quickStartCard = page.getByTestId('main-page-quickstart-card');
+    await expect(quickStartCard).toBeVisible();
+
+    const quickStartTitle = page.getByTestId('main-page-quickstart-title');
+    await expect(quickStartTitle).toHaveText('Schnellstart');
+
+    // 2. Verify all 4 links are present for admin
+    const addressLink = page.getByTestId('main-page-quickstart-familiesOverview');
+    await expect(addressLink).toBeVisible();
+    await expect(addressLink).toContainText('Adressliste');
+
+    const feesLink = page.getByTestId('main-page-quickstart-childcareFees');
+    await expect(feesLink).toBeVisible();
+    await expect(feesLink).toContainText('Betreuungsgebühren');
+
+    const allergensLink = page.getByTestId('main-page-quickstart-mealAllergens');
+    await expect(allergensLink).toBeVisible();
+    await expect(allergensLink).toContainText('Allergene fürs Kochen eintragen');
+
+    const mgaLink = page.getByTestId('main-page-quickstart-mga');
+    await expect(mgaLink).toBeVisible();
+    await expect(mgaLink).toContainText('MGA Verwaltung');
+
+    // 3. Test navigation: Adressliste -> #familiesOverview
+    await addressLink.click();
+    await page.waitForLoadState('networkidle');
+    expect(page.url()).toContain('#familiesOverview');
+
+    // 4. Test navigation: Betreuungsgebühren -> #childcareFees
+    await page.goto('/?exp_main=1');
+    await page.waitForLoadState('networkidle');
+    await page.getByTestId('main-page-quickstart-childcareFees').click();
+    await page.waitForLoadState('networkidle');
+    expect(page.url()).toContain('#childcareFees');
+
+    // 5. Test navigation: Allergene fürs Kochen eintragen -> #mealAllergens
+    await page.goto('/?exp_main=1');
+    await page.waitForLoadState('networkidle');
+    await page.getByTestId('main-page-quickstart-mealAllergens').click();
+    await page.waitForLoadState('networkidle');
+    expect(page.url()).toContain('#mealAllergens');
+
+    // 6. Test navigation: MGA Verwaltung -> #mga
+    await page.goto('/?exp_main=1');
+    await page.waitForLoadState('networkidle');
+    await page.getByTestId('main-page-quickstart-mga').click();
+    await page.waitForLoadState('networkidle');
+    expect(page.url()).toContain('#mga');
+    await expect(page.locator('.category-landing-title')).toContainText('MGA');
+  });
+
+  test('quick start box permissions: parent user sees only address list, fees, and allergens (no MGA)', async ({ request, page }) => {
+    // 1. Seed a parent with identifier email
+    const parentEmail = 'parent.quickstart@tollhaus-stuttgart.de';
+    const famRes = await request.post('/api/families', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        parents: [
+          {
+            first_name: 'Julia',
+            last_name: 'Beispiel',
+            emails: [{ value: parentEmail, identifier_email: true, address_list: true }],
+            phones: [{ value: '01701234567', address_list: true }],
+          },
+        ],
+      },
+    });
+    expect(famRes.ok()).toBeTruthy();
+
+    // 2. Log in as parent
+    await page.addInitScript((email) => {
+      localStorage.setItem('token', email);
+    }, parentEmail);
+
+    await page.goto('/?exp_main=1');
+    await page.waitForLoadState('networkidle');
+
+    // 3. Quick start box is visible
+    const quickStartCard = page.getByTestId('main-page-quickstart-card');
+    await expect(quickStartCard).toBeVisible();
+
+    // 4. Address list, fees, allergens are present
+    await expect(page.getByTestId('main-page-quickstart-familiesOverview')).toBeVisible();
+    await expect(page.getByTestId('main-page-quickstart-childcareFees')).toBeVisible();
+    await expect(page.getByTestId('main-page-quickstart-mealAllergens')).toBeVisible();
+
+    // 5. MGA is NOT accessible to standard parent
+    await expect(page.getByTestId('main-page-quickstart-mga')).toHaveCount(0);
+  });
+
+  test('quick start box permissions: simulated MGA role sees address list, fees, and MGA (no allergens)', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+    });
+
+    // Start simulation with MGA role
+    await page.goto('/?exp_main=1');
+    await page.waitForLoadState('networkidle');
+
+    // Simulate MGA role via API
+    const simRes = await page.request.post('/api/simulation', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        mode: 'custom',
+        roles: ['mga'],
+      },
+    });
+    expect(simRes.ok()).toBeTruthy();
+
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+
+    // Quick start box is visible
+    const quickStartCard = page.getByTestId('main-page-quickstart-card');
+    await expect(quickStartCard).toBeVisible();
+
+    // MGA role has overview, fees, and MGA
+    await expect(page.getByTestId('main-page-quickstart-familiesOverview')).toBeVisible();
+    await expect(page.getByTestId('main-page-quickstart-childcareFees')).toBeVisible();
+    await expect(page.getByTestId('main-page-quickstart-mga')).toBeVisible();
+
+    // MGA role does NOT have meal allergens
+    await expect(page.getByTestId('main-page-quickstart-mealAllergens')).toHaveCount(0);
+  });
+
+  test('quick start box permissions: user with only meal_allergens sees only allergen entry', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+    });
+
+    await page.goto('/?exp_main=1');
+    await page.waitForLoadState('networkidle');
+
+    // Simulate custom user with only meal_allergens permissions
+    const simRes = await page.request.post('/api/simulation', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        mode: 'custom',
+        roles: [],
+        permissions: ['meal_allergens.read', 'meal_allergens.write'],
+      },
+    });
+    expect(simRes.ok()).toBeTruthy();
+
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+
+    // Quick start box is visible because 1 link is accessible
+    const quickStartCard = page.getByTestId('main-page-quickstart-card');
+    await expect(quickStartCard).toBeVisible();
+
+    // Allergen entry is visible
+    await expect(page.getByTestId('main-page-quickstart-mealAllergens')).toBeVisible();
+
+    // The other 3 links are NOT present
+    await expect(page.getByTestId('main-page-quickstart-familiesOverview')).toHaveCount(0);
+    await expect(page.getByTestId('main-page-quickstart-childcareFees')).toHaveCount(0);
+    await expect(page.getByTestId('main-page-quickstart-mga')).toHaveCount(0);
+  });
+
+  test('quick start box permissions: user with no matching permissions does not see quick start box at all', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+    });
+
+    await page.goto('/?exp_main=1');
+    await page.waitForLoadState('networkidle');
+
+    // Simulate custom user with only audit.view permission (none of the 4 quick start items)
+    const simRes = await page.request.post('/api/simulation', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        mode: 'custom',
+        roles: [],
+        permissions: ['audit.view'],
+      },
+    });
+    expect(simRes.ok()).toBeTruthy();
+
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+
+    // The whole quick start box must NOT be present
+    await expect(page.getByTestId('main-page-quickstart-card')).toHaveCount(0);
+  });
 });
