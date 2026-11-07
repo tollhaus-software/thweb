@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useRealtime } from '../../hooks/useRealtime';
 import { useIdleTimer } from '../../hooks/useIdleTimer';
 import { useFullyKioskScreensaver } from '../../hooks/useFullyKioskScreensaver';
+import { useSwipeGesture } from '../../hooks/useSwipeGesture';
 import { t, formatDashboardDate } from '../../utils/i18n';
 import { AllergenIcon } from '../MealAllergens/AllergenIcon';
 import {
@@ -373,6 +374,19 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     currentTime,
     onWake: handleScreensaverWake,
     enabled: true,
+  });
+
+  const isSwipeDisabled =
+    isEditingAllergens ||
+    showInfoPages ||
+    showAllergies ||
+    showFeedbackModal ||
+    Boolean(taskToConfirm);
+
+  useSwipeGesture(contentAreaRef, {
+    onSwipeLeft: handleNextDay,
+    onSwipeRight: handlePrevDay,
+    enabled: !isSwipeDisabled,
   });
 
   const displayDateStr = (data?.date || selectedDate || todayDateStr).split('T')[0];

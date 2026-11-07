@@ -930,4 +930,105 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await page.waitForLoadState('networkidle');
     await expect(page.locator('.kiosk-tablet-page.embedded')).toBeVisible();
   });
+
+  test('navigates between days using left and right swipe gestures, ignoring vertical scrolls and mouse clicks', async ({ request, page }) => {
+    // 1. Reset database state
+    const resetRes = await request.post('/api/test/reset');
+    expect(resetRes.ok()).toBeTruthy();
+
+    // 2. Log in as admin
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+    });
+
+    // 3. Open dashboard
+    await page.goto('/#dashboard');
+    await page.waitForLoadState('networkidle');
+
+    const contentArea = page.locator('.kiosk-content-area');
+    await expect(contentArea).toBeVisible();
+
+    const dateHeader = page.locator('.kiosk-header-date');
+    await expect(dateHeader).toBeVisible();
+    const initialDateText = await dateHeader.innerText();
+
+    // Helper to simulate touch swipe via pointer events
+    const simulatePointerSwipe = async (startX: number, startY: number, endX: number, endY: number, pointerType: string = 'touch') => {
+      await contentArea.dispatchEvent('pointerdown', {
+        clientX: startX,
+        clientY: startY,
+        pointerType,
+        pointerId: 1,
+      });
+      await contentArea.dispatchEvent('pointerup', {
+        clientX: endX,
+        clientY: endY,
+        pointerType,
+        pointerId: 1,
+      });
+    };
+
+    // 4. Verify mouse drag does NOT trigger day navigation
+    await simulatePointerSwipe(300, 200, 100, 200, 'mouse');
+    await page.waitForTimeout(300);
+    expect(await dateHeader.innerText()).toBe(initialDateText);
+
+    // 5. Verify predominantly vertical scroll does NOT trigger day navigation
+    await simulatePointerSwipe(200, 100, 210, 300, 'touch');
+    await page.waitForTimeout(300);
+    expect(await dateHeader.innerText()).toBe(initialDateText);
+
+    // 6. Swipe Left (drag finger left: x=300 to x=100) -> Navigates to Next Day
+    await simulatePointerSwipe(300, 200, 100, 200, 'touch');
+    await expect(dateHeader).not.toHaveText(initialDateText);
+    const nextDateText = await dateHeader.innerText();
+
+    // 7. Swipe Right (drag finger right: x=100 to x=300) -> Navigates to Previous Day (back to initial)
+    // Wait for cooldown window (400ms)
+    await page.waitForTimeout(450);
+    await simulatePointerSwipe(100, 200, 300, 200, 'touch');
+    await expect(dateHeader).toHaveText(initialDateText);
+
+    // 8. Verify TouchEvent (touchstart/touchend) also triggers swipe left
+    await page.waitForTimeout(450);
+    await page.evaluate(() => {
+      const el = document.querySelector('.kiosk-content-area');
+      if (!el) return;
+      const tStart = new Touch({ identifier: 0, target: el, clientX: 300, clientY: 200 });
+      el.dispatchEvent(new TouchEvent('touchstart', { touches: [tStart], changedTouches: [tStart], bubbles: true }));
+
+      const tEnd = new Touch({ identifier: 0, target: el, clientX: 100, clientY: 200 });
+      el.dispatchEvent(new TouchEvent('touchend', { touches: [], changedTouches: [tEnd], bubbles: true }));
+    });
+    await expect(dateHeader).toHaveText(nextDateText);
+
+    // Swipe right back to today using touch events
+    await page.waitForTimeout(450);
+    await page.evaluate(() => {
+      const el = document.querySelector('.kiosk-content-area');
+      if (!el) return;
+      const tStart = new Touch({ identifier: 0, target: el, clientX: 100, clientY: 200 });
+      el.dispatchEvent(new TouchEvent('touchstart', { touches: [tStart], changedTouches: [tStart], bubbles: true }));
+
+      const tEnd = new Touch({ identifier: 0, target: el, clientX: 300, clientY: 200 });
+      el.dispatchEvent(new TouchEvent('touchend', { touches: [], changedTouches: [tEnd], bubbles: true }));
+    });
+    await expect(dateHeader).toHaveText(initialDateText);
+
+    // 9. Verify swiping is disabled when an overlay / modal is open (e.g. Feedback Modal)
+    const feedbackNavBtn = page.getByTestId('kiosk-feedback-btn');
+    await expect(feedbackNavBtn).toBeVisible();
+    await feedbackNavBtn.click();
+    const feedbackModalCloseBtn = page.getByTestId('feedback-modal-close-btn');
+    await expect(feedbackModalCloseBtn).toBeVisible();
+
+    // Try swiping while modal is open
+    await simulatePointerSwipe(300, 200, 100, 200, 'touch');
+    await page.waitForTimeout(300);
+    expect(await dateHeader.innerText()).toBe(initialDateText);
+
+    // Close feedback modal
+    await feedbackModalCloseBtn.click();
+    await expect(feedbackModalCloseBtn).toHaveCount(0);
+  });
 });
