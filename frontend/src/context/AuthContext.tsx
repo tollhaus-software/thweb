@@ -14,6 +14,7 @@ export interface SimulationInfo {
 
 interface User {
   email: string;
+  first_name?: string;
   roles: string[];
   permissions: string[];
   effective_permissions: string[];

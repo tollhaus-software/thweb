@@ -10,7 +10,7 @@ test.describe('Test Case 39: Table Zoom Factor in Desktop Mode', () => {
     });
 
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto('/');
+    await page.goto('/#families');
     await expect(page.locator('[data-testid="table-zoom-button"]')).toBeVisible();
   });
 

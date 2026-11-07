@@ -137,7 +137,7 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     });
 
     // Step 4: Load application
-    await page.goto('/');
+    await page.goto('/#familiesOverview');
 
     // Verify Tab visibility:
     // - "Familien" (familiesOverview) must be visible
@@ -158,7 +158,7 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     await expect(page.getByRole('button', { name: 'Historie' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Dashboard' })).toHaveCount(0);
 
-    // Overflow menu must NOT show Dashboard link
+    // Overflow menu must NOT show Kochansicht (dashboard.use) link
     const threeDotsBtn = page.locator('button.header-overflow-btn');
     if (await threeDotsBtn.isVisible()) {
       await threeDotsBtn.click();
@@ -394,7 +394,7 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     await page.addInitScript(() => {
       localStorage.setItem('token', 'zack.becker@example.com');
     });
-    await page.goto('/');
+    await page.goto('/#familiesOverview');
 
     const overviewTab = page.locator('.sidebar-nav-item', { hasText: 'Familien' });
     await expect(overviewTab).toBeVisible();

@@ -48,7 +48,7 @@ test.describe('Test Case 16: Entity Deletion in Overflow Menu with Typed Confirm
     });
 
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto('/');
+    await page.goto('/#parents');
 
     // Navigate to Parents tab
     const parentsTab = page.getByRole('button', { name: 'Eltern(MGA)', exact: true });

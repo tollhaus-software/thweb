@@ -130,7 +130,7 @@ test.describe('Test Case 32: Mentors and "Paten von"', () => {
     });
 
     // 3. Load application
-    await page.goto('/');
+    await page.goto('/#families');
     await expect(page.getByRole('button', { name: 'Familie hinzufügen' })).toBeVisible();
   });
 

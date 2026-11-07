@@ -12,7 +12,7 @@ test.describe('Test Case 21: Custom Address List Given Name for Parents and Chil
     });
 
     // 3. Load application
-    await page.goto('/');
+    await page.goto('/#families');
     await expect(page.getByRole('button', { name: 'Familie hinzufügen' })).toBeVisible();
   });
 

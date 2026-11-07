@@ -15,7 +15,7 @@ test.describe('Test Case 6: Horizontal Tabs Scrolling on Narrow Viewports', () =
     await page.setViewportSize({ width: 600, height: 800 });
 
     // 4. Load application
-    await page.goto('/');
+    await page.goto('/#families');
     await expect(page.getByRole('button', { name: 'Familie hinzufügen' })).toBeVisible();
 
     // 5. Open responsive drawer on narrow viewport
@@ -50,7 +50,7 @@ test.describe('Test Case 6: Horizontal Tabs Scrolling on Narrow Viewports', () =
     });
 
     await page.setViewportSize({ width: 1024, height: 768 });
-    await page.goto('/');
+    await page.goto('/#families');
     await expect(page.getByRole('button', { name: 'Familie hinzufügen' })).toBeVisible();
 
     const tabBtn = page.locator('.tab-btn').first();
@@ -78,7 +78,7 @@ test.describe('Test Case 6: Horizontal Tabs Scrolling on Narrow Viewports', () =
     });
 
     await page.setViewportSize({ width: 600, height: 800 });
-    await page.goto('/');
+    await page.goto('/#families');
     await expect(page.getByRole('button', { name: 'Familie hinzufügen' })).toBeVisible();
 
     const tabBtn = page.locator('.tab-btn').first();

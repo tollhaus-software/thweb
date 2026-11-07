@@ -84,7 +84,7 @@ test.describe('Test Case 30: Job Role Assignments', () => {
     await readerPage.addInitScript(() => {
       localStorage.setItem('token', 'jobs-reader@example.com');
     });
-    await readerPage.goto('/');
+    await readerPage.goto('/#jobs');
 
     const readerJobsTabBtn = readerPage.getByRole('button', { name: 'Jobs(MGA)' });
     await expect(readerJobsTabBtn).toBeVisible();
@@ -111,7 +111,7 @@ test.describe('Test Case 30: Job Role Assignments', () => {
     await roleReaderPage.addInitScript(() => {
       localStorage.setItem('token', 'jobs-role-reader@example.com');
     });
-    await roleReaderPage.goto('/');
+    await roleReaderPage.goto('/#jobs');
 
     const roleReaderJobsBtn = roleReaderPage.getByRole('button', { name: 'Jobs(MGA)' });
     await expect(roleReaderJobsBtn).toBeVisible();
@@ -130,7 +130,7 @@ test.describe('Test Case 30: Job Role Assignments', () => {
     await page.addInitScript(() => {
       localStorage.setItem('token', 'developer@example.com');
     });
-    await page.goto('/');
+    await page.goto('/#jobs');
 
     const adminJobsTabBtn = page.getByRole('button', { name: 'Jobs(MGA)' });
     await expect(adminJobsTabBtn).toBeVisible();
@@ -236,7 +236,7 @@ test.describe('Test Case 30: Job Role Assignments', () => {
       localStorage.setItem('token', 'bernd.becker@example.com');
       localStorage.setItem('thweb_active_tab', 'families');
     });
-    await berndPage.goto('/');
+    await berndPage.goto('/#families');
 
     const addFamilyBtn = berndPage.getByRole('button', { name: 'Familie hinzufügen' });
     await expect(addFamilyBtn).toBeVisible();
@@ -269,7 +269,7 @@ test.describe('Test Case 30: Job Role Assignments', () => {
       localStorage.setItem('token', 'bernd.becker@example.com');
       localStorage.setItem('thweb_active_tab', 'families');
     });
-    await berndRevokedPage.goto('/');
+    await berndRevokedPage.goto('/#families');
     await expect(berndRevokedPage.getByRole('button', { name: 'Familie hinzufügen' })).toBeHidden();
     await berndRevokedPage.close();
   });

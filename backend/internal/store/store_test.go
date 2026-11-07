@@ -1876,6 +1876,11 @@ func TestCanonicalEmail_UsersParentsEmployees(t *testing.T) {
 		t.Fatalf("GetParentInfoByIdentifierEmail via dotless gmail failed: pID=%v, fID=%v, err=%v", pID3, fID3, err)
 	}
 
+	pFirstName, err := appStore.GetFirstNameByIdentifierEmail(ctx, "parentcanonical@gmail.com")
+	if err != nil || pFirstName != "Canonical" {
+		t.Fatalf("expected first name Canonical, got %q, err=%v", pFirstName, err)
+	}
+
 	// Verify ListIdentifyingEmails includes canonical gmail address
 	identEmails, err := appStore.ListIdentifyingEmails(ctx)
 	if err != nil {

@@ -167,6 +167,12 @@ const MAIN_ALLERGEN_MAP = new Map<string, MainAllergenDefinition>(
 
 export function getAllergenDisplayLabel(key: string): string {
   const norm = key.toLowerCase().trim();
+  if (norm === 'vegetarisch' || norm === 'vegetarian') {
+    return 'Vegetarisch';
+  }
+  if (norm === 'vegan') {
+    return 'Vegan';
+  }
   if (norm === 'gluten' || norm.startsWith('glutenhaltiges getreide')) {
     return 'Glutenhaltiges Getreide';
   }
@@ -287,7 +293,7 @@ export function isLebensmittelAllergen(name: string, knownFoodList?: string[]): 
 export interface AllergyEntryObject {
   value: string;
   name?: string;
-  category?: 'lebensmittel' | 'andere' | string;
+  category?: 'ernaehrung' | 'lebensmittel' | 'andere' | string;
   [key: string]: any;
 }
 
@@ -298,27 +304,53 @@ export function getAllergyText(item: AllergyItemValue): string {
   return item?.name || item?.value || '';
 }
 
-export function getAllergyCategory(item: AllergyItemValue): 'lebensmittel' | 'andere' | undefined {
+export function isDietPreference(nameOrItem: AllergyItemValue): boolean {
+  const text = getAllergyText(nameOrItem).toLowerCase().trim();
+  if (text === 'vegetarisch' || text === 'vegetarian' || text === 'vegan') {
+    return true;
+  }
+  if (typeof nameOrItem === 'object' && nameOrItem !== null && nameOrItem.category === 'ernaehrung') {
+    return true;
+  }
+  return false;
+}
+
+export function getDietDisplayName(item: AllergyItemValue): string {
+  const text = getAllergyText(item).toLowerCase().trim();
+  if (text === 'vegetarisch' || text === 'vegetarian') return 'Vegetarisch';
+  if (text === 'vegan') return 'Vegan';
+  return getAllergyText(item);
+}
+
+export function getAllergyCategory(item: AllergyItemValue): 'ernaehrung' | 'lebensmittel' | 'andere' | undefined {
   if (typeof item === 'object' && item !== null && item.category) {
-    return item.category as 'lebensmittel' | 'andere';
+    return item.category as 'ernaehrung' | 'lebensmittel' | 'andere';
   }
   const text = getAllergyText(item);
+  if (isDietPreference(text)) return 'ernaehrung';
   return isLebensmittelAllergen(text) ? 'lebensmittel' : undefined;
 }
 
 export function isKnownFoodAllergy(item: AllergyItemValue): boolean {
   const category = getAllergyCategory(item);
-  if (category === 'andere') return false;
+  if (category === 'andere' || category === 'ernaehrung') return false;
   const text = getAllergyText(item);
   return getAllergenIconKey(text) !== 'default';
 }
 
 export function sortAllergiesList<T extends AllergyItemValue>(items: T[]): T[] {
+  const getSortRank = (item: T): number => {
+    const cat = getAllergyCategory(item);
+    if (cat === 'ernaehrung' || isDietPreference(item)) return 0;
+    if (isKnownFoodAllergy(item)) return 1;
+    if (cat === 'lebensmittel') return 2;
+    return 3;
+  };
+
   return [...items].sort((a, b) => {
-    const aKnown = isKnownFoodAllergy(a);
-    const bKnown = isKnownFoodAllergy(b);
-    if (aKnown && !bKnown) return -1;
-    if (!aKnown && bKnown) return 1;
+    const rankA = getSortRank(a);
+    const rankB = getSortRank(b);
+    if (rankA !== rankB) return rankA - rankB;
     return 0;
   });
 }
@@ -894,11 +926,20 @@ export function findMostRecentMatchingDay(
   return matches[0];
 }
 
+export interface AllergyCountItem {
+  name: string;
+  count: number;
+  category?: 'ernaehrung' | 'lebensmittel' | 'andere' | string;
+  is_food?: boolean;
+}
+
 export interface GroupAllergySummaryItem {
   group_id: number;
   group_name: string;
   allergies: string[];
   food_allergies?: string[];
+  items?: AllergyCountItem[];
+  counts?: Record<string, number>;
 }
 
 export interface AllergiesMatchContext {
@@ -906,6 +947,8 @@ export interface AllergiesMatchContext {
   groups: GroupAllergySummaryItem[];
   employees: string[];
   food_employees?: string[];
+  employee_items?: AllergyCountItem[];
+  employee_counts?: Record<string, number>;
 }
 
 /**

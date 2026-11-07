@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pencil } from 'lucide-react';
 import { t } from '../../utils/i18n';
-import { getAllergenDisplayLabel, sortAllergiesList } from '../../utils/mealAllergens';
+import { getAllergenDisplayLabel, sortAllergiesList, isDietPreference } from '../../utils/mealAllergens';
 import { getEntryValue, isFlagActive, getPhoneTypeSymbol, getPhoneTypeLabel, type MultiValueItem } from './MultiValueListEditor';
 
 export interface MultiValueCellProps {
@@ -104,6 +104,21 @@ export const MultiValueCell: React.FC<MultiValueCellProps> = ({
                       }}
                     >
                       {phoneSymbol}
+                    </span>
+                  )}
+                  {field === 'allergies' && isDietPreference(rawVal) && (
+                    <span
+                      className="diet-type-symbol"
+                      title={String(rawVal).toLowerCase().includes('vegan') ? 'Vegan' : 'Vegetarisch'}
+                      style={{
+                        marginRight: '5px',
+                        fontSize: '0.85rem',
+                        lineHeight: 1,
+                        flexShrink: 0,
+                        userSelect: 'none',
+                      }}
+                    >
+                      {String(rawVal).toLowerCase().includes('vegan') ? '🌱' : '🥦'}
                     </span>
                   )}
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

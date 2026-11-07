@@ -282,7 +282,7 @@ test.describe('Test Case 27: Allergen & Allergy Matching (MealAllergens Tab & Al
     await expect(erdnuesseMatchWarning).toContainText('Mitarbeitende');
 
     // 6. Now navigate to Dashboard -> Allergies tab
-    const dashboardTab = page.locator('.tabs').getByRole('button', { name: 'Dashboard' });
+    const dashboardTab = page.locator('.tabs').getByRole('button', { name: 'Kochansicht' });
     await dashboardTab.click();
     await expect(dashboardTab).toHaveClass(/active/);
 

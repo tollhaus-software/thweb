@@ -13,11 +13,13 @@ import {
 import { formatDateKey } from '../../utils/mealPlan';
 import {
   isLebensmittelAllergen,
+  isDietPreference,
   getAllergenDisplayLabel,
   findMatchingComponentsForAllergy,
   abbreviateComponentName,
   createEmptyMealAllergenDay,
   type MealAllergenComponent,
+  type AllergyCountItem,
 } from '../../utils/mealAllergens';
 import {
   UtensilsCrossed,
@@ -30,6 +32,7 @@ import {
   AlertCircle,
   AlertTriangle,
   Home,
+  BookOpen,
   Pencil,
   Check,
   ArrowLeft,
@@ -66,6 +69,8 @@ interface GroupAllergiesSummary {
   group_name: string;
   allergies: string[];
   food_allergies?: string[];
+  items?: AllergyCountItem[];
+  counts?: Record<string, number>;
 }
 
 interface AllergiesSummaryData {
@@ -73,6 +78,8 @@ interface AllergiesSummaryData {
   groups: GroupAllergiesSummary[];
   employees: string[];
   food_employees?: string[];
+  employee_items?: AllergyCountItem[];
+  employee_counts?: Record<string, number>;
   meal_components?: MealAllergenComponent[];
 }
 
@@ -543,70 +550,115 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
           { group_id: 1, group_name: t('overviewGroup1'), allergies: [] },
           { group_id: 2, group_name: t('overviewGroup2'), allergies: [] },
           { group_id: 3, group_name: t('overviewGroup3'), allergies: [] },
-        ]).map((grp) => (
-          <section key={grp.group_id} className="kiosk-card kiosk-card-allergies-group">
-            <div className="kiosk-card-header">
-              <AlertCircle size={embedded ? 18 : 22} className="kiosk-card-header-icon" />
-              <span>{grp.group_name}</span>
-            </div>
-            <div className="kiosk-allergies-list">
-              {grp.allergies && grp.allergies.length > 0 ? (
-                grp.allergies.map((allergy, idx) => {
-                  const isFood =
-                    Boolean(grp.food_allergies && grp.food_allergies.includes(allergy)) ||
-                    isLebensmittelAllergen(allergy);
-                  const display = getAllergenDisplayLabel(allergy);
-                  const matchingComponents = findMatchingComponentsForAllergy(allergy, mealComponents);
-                  const hasWarning = matchingComponents.length > 0;
+        ]).map((grp) => {
+          const groupEntries =
+            grp.items && grp.items.length > 0
+              ? grp.items
+              : (grp.allergies || []).map((name) => ({
+                  name,
+                  count: grp.counts?.[name] || 1,
+                  category: isDietPreference(name)
+                    ? 'ernaehrung'
+                    : isLebensmittelAllergen(name)
+                    ? 'lebensmittel'
+                    : 'andere',
+                  is_food: isLebensmittelAllergen(name),
+                }));
 
-                  return (
-                    <div
-                      key={idx}
-                      className={`kiosk-allergy-item-wrapper ${hasWarning ? 'has-warning' : ''}`}
-                    >
-                      <span
-                        className={`kiosk-allergy-badge ${hasWarning ? 'kiosk-allergy-badge-warning' : ''}`}
-                        data-testid={`group-allergy-badge-${grp.group_id}-${idx}`}
+          return (
+            <section key={grp.group_id} className="kiosk-card kiosk-card-allergies-group">
+              <div className="kiosk-card-header">
+                <AlertCircle size={embedded ? 18 : 22} className="kiosk-card-header-icon" />
+                <span>{grp.group_name}</span>
+              </div>
+              <div className="kiosk-allergies-list">
+                {groupEntries && groupEntries.length > 0 ? (
+                  groupEntries.map((entry: AllergyCountItem, idx: number) => {
+                    const isDiet = entry.category === 'ernaehrung' || isDietPreference(entry.name);
+                    const isFood =
+                      entry.is_food ??
+                      (Boolean(grp.food_allergies && grp.food_allergies.includes(entry.name)) ||
+                        isLebensmittelAllergen(entry.name));
+                    const display = getAllergenDisplayLabel(entry.name);
+                    const count = entry.count || grp.counts?.[entry.name] || 1;
+                    const matchingComponents = isFood
+                      ? findMatchingComponentsForAllergy(entry.name, mealComponents)
+                      : [];
+                    const hasWarning = matchingComponents.length > 0;
+
+                    return (
+                      <div
+                        key={idx}
+                        className={`kiosk-allergy-item-wrapper ${hasWarning ? 'has-warning' : ''}`}
                       >
-                        {isFood && (
+                        <span
+                          className={`kiosk-allergy-badge ${isDiet ? 'kiosk-allergy-badge-diet' : ''} ${hasWarning ? 'kiosk-allergy-badge-warning' : ''}`}
+                          data-testid={`group-allergy-badge-${grp.group_id}-${idx}`}
+                        >
+                          {isDiet && (
+                            <span
+                              className="kiosk-allergy-icon kiosk-diet-icon"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                marginRight: '0.45rem',
+                                fontSize: embedded ? '1.1rem' : '1.3rem',
+                                lineHeight: 1,
+                                flexShrink: 0,
+                              }}
+                              data-testid={`group-diet-icon-${grp.group_id}-${idx}`}
+                            >
+                              {entry.name.toLowerCase() === 'vegan' ? '🌱' : '🥦'}
+                            </span>
+                          )}
+                          {isFood && (
+                            <span
+                              className="kiosk-allergy-icon"
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                marginRight: '0.45rem',
+                                flexShrink: 0,
+                              }}
+                              data-testid={`group-allergy-icon-${grp.group_id}-${idx}`}
+                            >
+                              <AllergenIcon allergenKey={entry.name} size={embedded ? 18 : 24} />
+                            </span>
+                          )}
+                          <span>{display}</span>
+                          {count > 0 && (
+                            <span
+                              className="kiosk-allergy-count"
+                              data-testid={`group-allergy-count-${grp.group_id}-${idx}`}
+                            >
+                              ({count})
+                            </span>
+                          )}
+                        </span>
+                        {hasWarning && (
                           <span
-                            className="kiosk-allergy-icon"
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              marginRight: '0.45rem',
-                              flexShrink: 0,
-                            }}
-                            data-testid={`group-allergy-icon-${grp.group_id}-${idx}`}
+                            className="kiosk-allergy-match-warning"
+                            data-testid={`group-allergy-warning-${grp.group_id}-${idx}`}
+                            title={matchingComponents.join(', ')}
                           >
-                            <AllergenIcon allergenKey={allergy} size={embedded ? 18 : 24} />
+                            <AlertTriangle size={embedded ? 14 : 18} className="kiosk-warning-icon" />
+                            <span className="kiosk-warning-text">
+                              {matchingComponents
+                                .map((c) => abbreviateComponentName(c, 16))
+                                .join(', ')}
+                            </span>
                           </span>
                         )}
-                        <span>{display}</span>
-                      </span>
-                      {hasWarning && (
-                        <span
-                          className="kiosk-allergy-match-warning"
-                          data-testid={`group-allergy-warning-${grp.group_id}-${idx}`}
-                          title={matchingComponents.join(', ')}
-                        >
-                          <AlertTriangle size={embedded ? 14 : 18} className="kiosk-warning-icon" />
-                          <span className="kiosk-warning-text">
-                            {matchingComponents
-                              .map((c) => abbreviateComponentName(c, 16))
-                              .join(', ')}
-                          </span>
-                        </span>
-                      )}
-                    </div>
-                  );
-                })
-              ) : (
-                <span className="kiosk-empty-text">{t('noAllergies')}</span>
-              )}
-            </div>
-          </section>
-        ))}
+                      </div>
+                    );
+                  })
+                ) : (
+                  <span className="kiosk-empty-text">{t('noAllergies')}</span>
+                )}
+              </div>
+            </section>
+          );
+        })}
 
         <section className="kiosk-card kiosk-card-allergies-employees">
           <div className="kiosk-card-header">
@@ -614,15 +666,33 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
             <span>{t('employeeAllergiesTitle')}</span>
           </div>
           <div className="kiosk-allergies-list">
-            {allergiesData?.employees && allergiesData.employees.length > 0 ? (
-              allergiesData.employees.map((allergy, idx) => {
+            {(allergiesData?.employee_items && allergiesData.employee_items.length > 0) ||
+            (allergiesData?.employees && allergiesData.employees.length > 0) ? (
+              (allergiesData?.employee_items && allergiesData.employee_items.length > 0
+                ? allergiesData.employee_items
+                : (allergiesData?.employees || []).map((name) => ({
+                    name,
+                    count: allergiesData?.employee_counts?.[name] || 1,
+                    category: isDietPreference(name)
+                      ? 'ernaehrung'
+                      : isLebensmittelAllergen(name)
+                      ? 'lebensmittel'
+                      : 'andere',
+                    is_food: isLebensmittelAllergen(name),
+                  }))
+              ).map((entry: AllergyCountItem, idx: number) => {
+                const isDiet = entry.category === 'ernaehrung' || isDietPreference(entry.name);
                 const isFood =
-                  Boolean(
-                    allergiesData.food_employees &&
-                      allergiesData.food_employees.includes(allergy)
-                  ) || isLebensmittelAllergen(allergy);
-                const display = getAllergenDisplayLabel(allergy);
-                const matchingComponents = findMatchingComponentsForAllergy(allergy, mealComponents);
+                  entry.is_food ??
+                  (Boolean(
+                    allergiesData?.food_employees &&
+                      allergiesData.food_employees.includes(entry.name)
+                  ) || isLebensmittelAllergen(entry.name));
+                const display = getAllergenDisplayLabel(entry.name);
+                const count = entry.count || (allergiesData as any)?.employee_counts?.[entry.name] || 1;
+                const matchingComponents = isFood
+                  ? findMatchingComponentsForAllergy(entry.name, mealComponents)
+                  : [];
                 const hasWarning = matchingComponents.length > 0;
 
                 return (
@@ -631,9 +701,25 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                     className={`kiosk-allergy-item-wrapper ${hasWarning ? 'has-warning' : ''}`}
                   >
                     <span
-                      className={`kiosk-allergy-badge kiosk-allergy-badge-employee ${hasWarning ? 'kiosk-allergy-badge-warning' : ''}`}
+                      className={`kiosk-allergy-badge kiosk-allergy-badge-employee ${isDiet ? 'kiosk-allergy-badge-diet' : ''} ${hasWarning ? 'kiosk-allergy-badge-warning' : ''}`}
                       data-testid={`employee-allergy-badge-${idx}`}
                     >
+                      {isDiet && (
+                        <span
+                          className="kiosk-allergy-icon kiosk-diet-icon"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            marginRight: '0.45rem',
+                            fontSize: embedded ? '1.1rem' : '1.3rem',
+                            lineHeight: 1,
+                            flexShrink: 0,
+                          }}
+                          data-testid={`employee-diet-icon-${idx}`}
+                        >
+                          {entry.name.toLowerCase() === 'vegan' ? '🌱' : '🥦'}
+                        </span>
+                      )}
                       {isFood && (
                         <span
                           className="kiosk-allergy-icon"
@@ -645,10 +731,18 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                           }}
                           data-testid={`employee-allergy-icon-${idx}`}
                         >
-                          <AllergenIcon allergenKey={allergy} size={embedded ? 18 : 24} />
+                          <AllergenIcon allergenKey={entry.name} size={embedded ? 18 : 24} />
                         </span>
                       )}
                       <span>{display}</span>
+                      {count > 0 && (
+                        <span
+                          className="kiosk-allergy-count"
+                          data-testid={`employee-allergy-count-${idx}`}
+                        >
+                          ({count})
+                        </span>
+                      )}
                     </span>
                     {hasWarning && (
                       <span
@@ -952,7 +1046,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
 
         {/* Navigation bar at the bottom: max width, fixed height */}
         <footer className="kiosk-bottom-nav">
-          {/* Left: Home button (house icon) + Anleitungen button + Allergien button */}
+          {/* Left: Home button (house icon) + Anleitungen (icon) + Allergien/Ernährung (icon + text) + Feedback (icon) */}
           <div className="kiosk-nav-left">
             <button
               onClick={handleHomeClick}
@@ -967,9 +1061,10 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
               onClick={handleInfoPagesClick}
               className={`kiosk-nav-btn ${showInfoPages ? 'active' : ''}`}
               title={t('infoPages')}
+              aria-label={t('infoPages')}
               data-testid="kiosk-info-pages-btn"
             >
-              <span>{t('infoPages')}</span>
+              <BookOpen size={embedded ? 18 : 22} />
             </button>
 
             {canViewAllergiesSummary && (
@@ -980,7 +1075,9 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                 }}
                 className={`kiosk-nav-btn ${showAllergies ? 'active' : ''}`}
                 title={t('allergies')}
+                aria-label={t('allergies')}
               >
+                <UtensilsCrossed size={embedded ? 16 : 20} />
                 <span>{t('allergies')}</span>
               </button>
             )}
@@ -993,10 +1090,10 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
               }}
               className={`kiosk-nav-btn ${showFeedbackModal ? 'active' : ''}`}
               title={t('feedback')}
+              aria-label={t('feedback')}
               data-testid="kiosk-feedback-btn"
             >
-              <MessageSquare size={embedded ? 16 : 20} />
-              <span>{t('feedback')}</span>
+              <MessageSquare size={embedded ? 18 : 22} />
             </button>
           </div>
 

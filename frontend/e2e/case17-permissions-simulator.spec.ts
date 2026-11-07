@@ -47,7 +47,7 @@ test.describe('Test Case 17: Role and Permissions Simulator', () => {
       localStorage.setItem('token', 'developer@example.com');
     });
 
-    await page.goto('/');
+    await page.goto('/#families');
 
     // 4. Verify initial admin view
     const adminTab = page.getByRole('button', { name: 'Admin', exact: true });
@@ -216,7 +216,7 @@ test.describe('Test Case 17: Role and Permissions Simulator', () => {
       localStorage.setItem('token', 'developer@example.com');
     });
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.goto('/');
+    await page.goto('/#families');
 
     // 4. Open simulator and simulate read-only viewer (NO families.all.write)
     await page.locator('button.header-overflow-btn').click();
@@ -315,7 +315,7 @@ test.describe('Test Case 17: Role and Permissions Simulator', () => {
       localStorage.setItem('token', 'developer@example.com');
     });
 
-    await page.goto('/');
+    await page.goto('/#families');
     const threeDotsBtn = page.locator('button.header-overflow-btn');
     await threeDotsBtn.click();
     await page.getByTestId('overflow-simulate-button').click();

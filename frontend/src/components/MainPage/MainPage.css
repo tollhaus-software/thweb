@@ -1,0 +1,410 @@
+/* Outer scroll container for Main Page */
+.main-page-tab-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto !important;
+  overflow-x: hidden;
+  width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Main Page Container & Layout - Left aligned on desktop */
+.main-page-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  width: 100%;
+  max-width: 1400px;
+  margin: 0;
+  padding: 1.75rem 2rem 3rem;
+  box-sizing: border-box;
+  text-align: left;
+}
+
+/* Header Section */
+.main-page-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 1.25rem;
+}
+
+.main-page-header-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.main-page-title {
+  margin: 0;
+  font-size: 1.85rem;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.main-page-welcome {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 500;
+  color: #475569;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Error Banner */
+.main-page-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.95rem;
+}
+
+.main-page-retry-btn {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: #b91c1c;
+  cursor: pointer;
+  padding: 0.25rem;
+  display: flex;
+  align-items: center;
+}
+
+.main-page-retry-btn:hover {
+  opacity: 0.8;
+}
+
+/* Dashboard Cards Grid - prepared for peer cards (Essen, Activities, Events) */
+.main-page-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(440px, 580px));
+  gap: 1.75rem;
+  width: 100%;
+  align-items: start;
+}
+
+/* Main Page Card */
+.main-page-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.5rem 1.75rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  box-sizing: border-box;
+}
+
+.main-page-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 0.75rem;
+}
+
+.main-page-card-icon {
+  flex-shrink: 0;
+}
+
+.main-page-card-icon.meal-icon {
+  color: #d97706;
+}
+
+.main-page-card-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.main-page-card-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.main-page-food-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  width: 100%;
+}
+
+.main-page-empty-placeholder {
+  font-size: 1rem;
+  color: #94a3b8;
+  font-style: italic;
+  padding: 0.25rem 0;
+}
+
+.main-page-meal-components-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  width: 100%;
+}
+
+.main-page-meal-component-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 1.15rem;
+  color: #334155;
+}
+
+.main-page-meal-bullet {
+  color: #d97706;
+  font-weight: bold;
+}
+
+.main-page-meal-text {
+  font-weight: 500;
+}
+
+.main-page-cook-row {
+  display: flex;
+  align-items: center;
+  margin-top: 0.35rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.main-page-cook-name {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #475569;
+  font-style: italic;
+}
+
+.main-page-loading-skeleton {
+  color: #94a3b8;
+  font-size: 0.95rem;
+}
+
+/* Week Expansion Section */
+.main-page-week-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 0.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid #f1f5f9;
+}
+
+.main-page-expand-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background-color: #f8fafc;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  padding: 0.65rem 1.15rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+  align-self: flex-start;
+}
+
+.main-page-expand-btn:hover {
+  background-color: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.main-page-week-expanded-content {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 1.15rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+}
+
+.main-page-week-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.main-page-loading-week {
+  color: #64748b;
+  font-size: 0.95rem;
+  font-style: italic;
+}
+
+.main-page-empty-week {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.95rem;
+  font-style: italic;
+}
+
+.main-page-week-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.85rem;
+}
+
+.main-page-week-day-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.75rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.main-page-week-day-header {
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 0.3rem;
+}
+
+.main-page-week-day-name {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #0f172a;
+}
+
+.main-page-week-day-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.main-page-week-components-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.main-page-week-component-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  font-size: 0.92rem;
+  color: #334155;
+  line-height: 1.35;
+}
+
+.main-page-week-bullet {
+  color: #d97706;
+  font-weight: bold;
+}
+
+.main-page-week-component-text {
+  font-weight: 500;
+}
+
+.main-page-week-empty {
+  font-size: 0.88rem;
+  color: #94a3b8;
+  font-style: italic;
+  padding: 0.15rem 0;
+}
+
+.main-page-week-cook-row {
+  display: flex;
+  align-items: center;
+  margin-top: 0.15rem;
+  padding-top: 0.4rem;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.main-page-week-cook-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #475569;
+  font-style: italic;
+}
+
+.main-page-mealplan-link-row {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 0.5rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.main-page-mealplan-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: #0284c7;
+  color: #ffffff;
+  border: 1px solid #0284c7;
+  padding: 0.5rem 0.95rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.main-page-mealplan-nav-btn:hover {
+  background-color: #0369a1;
+  border-color: #0369a1;
+}
+
+/* Mobile responsive view */
+@media (max-width: 768px) {
+  .main-page-container {
+    padding: 1rem 0.875rem 2.5rem;
+    gap: 1.25rem;
+  }
+
+  .main-page-title {
+    font-size: 1.4rem;
+  }
+
+  .main-page-welcome {
+    font-size: 1rem;
+  }
+
+  .main-page-cards-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .main-page-card {
+    padding: 1.15rem 1.25rem;
+  }
+
+  .main-page-expand-btn {
+    width: 100%;
+  }
+
+  .main-page-week-cards-grid {
+    grid-template-columns: 1fr;
+  }
+}

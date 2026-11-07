@@ -204,7 +204,7 @@ test.describe('Test Case 26: Allergies Selection, Lebensmittel vs Andere, Icons 
 
     // 7. Check Dashboard per-group aggregated allergens:
     // "When showing the per-group aggregated allergens on the dashboard, for the "lebensmittel" allergens, we would show the icons too."
-    const dashboardTab = page.locator('.tabs').getByRole('button', { name: 'Dashboard' });
+    const dashboardTab = page.locator('.tabs').getByRole('button', { name: 'Kochansicht' });
     await dashboardTab.click();
     await expect(dashboardTab).toHaveClass(/active/);
 

@@ -12,7 +12,7 @@ test.describe('Test Case 20: Phone Number Types (Mobile, Landline, Work)', () =>
     });
 
     // 3. Load application
-    await page.goto('/');
+    await page.goto('/#families');
     await expect(page.getByRole('button', { name: 'Familie hinzufügen' })).toBeVisible();
   });
 

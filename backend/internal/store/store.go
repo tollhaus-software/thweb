@@ -668,6 +668,61 @@ func (s *Store) GetEmployeeInfoByIdentifierEmail(ctx context.Context, email stri
 	return employeeID, types, nil
 }
 
+func (s *Store) GetFirstNameByIdentifierEmail(ctx context.Context, email string) (string, error) {
+	norm := models.CanonicalEmail(email)
+	if norm == "" {
+		return "", nil
+	}
+	parentQuery := `
+		SELECT p.first_name
+		FROM parents p, jsonb_array_elements(p.emails) AS elem
+		WHERE elem->>'identifier_email' = 'true'
+		  AND COALESCE(
+		      NULLIF(elem->>'canonical_value', ''),
+		      CASE
+		          WHEN lower(elem->>'value') ~ '@(gmail|googlemail)\.com$' THEN
+		              replace(split_part(lower(trim(elem->>'value')), '@', 1), '.', '') || '@gmail.com'
+		          ELSE
+		              lower(trim(elem->>'value'))
+		      END
+		  ) = $1
+		LIMIT 1
+	`
+	var firstName string
+	err := s.db.QueryRow(ctx, parentQuery, norm).Scan(&firstName)
+	if err == nil && firstName != "" {
+		return firstName, nil
+	}
+	if err != nil && err != pgx.ErrNoRows {
+		return "", err
+	}
+
+	empQuery := `
+		SELECT e.first_name
+		FROM employees e, jsonb_array_elements(e.emails) AS elem
+		WHERE elem->>'identifier_email' = 'true'
+		  AND COALESCE(
+		      NULLIF(elem->>'canonical_value', ''),
+		      CASE
+		          WHEN lower(elem->>'value') ~ '@(gmail|googlemail)\.com$' THEN
+		              replace(split_part(lower(trim(elem->>'value')), '@', 1), '.', '') || '@gmail.com'
+		          ELSE
+		              lower(trim(elem->>'value'))
+		      END
+		  ) = $1
+		LIMIT 1
+	`
+	err = s.db.QueryRow(ctx, empQuery, norm).Scan(&firstName)
+	if err == nil && firstName != "" {
+		return firstName, nil
+	}
+	if err != nil && err != pgx.ErrNoRows {
+		return "", err
+	}
+
+	return "", nil
+}
+
 func (s *Store) GetJobRolesForParent(ctx context.Context, parentID uuid.UUID) ([]string, error) {
 	query := `
 		SELECT DISTINCT jsonb_array_elements_text(j.roles)
@@ -2113,6 +2168,21 @@ func (s *Store) GetMealPlanDay(ctx context.Context, targetDate time.Time) (*mode
 		}
 	}
 
+	mealDay, errAllergen := s.GetMealAllergenDay(ctx, targetDate)
+	if errAllergen == nil && mealDay != nil {
+		if resp.WhoIsCooking == "" && strings.TrimSpace(mealDay.CookCustomName) != "" {
+			resp.WhoIsCooking = strings.TrimSpace(mealDay.CookCustomName)
+		}
+		if len(resp.MealComponents) == 0 && mealDay.HasAllergenRecord && len(mealDay.MealComponents) > 0 {
+			for _, c := range mealDay.MealComponents {
+				trimmed := strings.TrimSpace(c.Name)
+				if trimmed != "" {
+					resp.MealComponents = append(resp.MealComponents, trimmed)
+				}
+			}
+		}
+	}
+
 	return resp, nil
 }
 
@@ -2182,9 +2252,22 @@ func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*model
 
 	// 5. If meal allergens have been recorded for targetDate:
 	mealDay, err := s.GetMealAllergenDay(ctx, targetDate)
-	if err == nil && mealDay != nil && mealDay.HasAllergenRecord && len(mealDay.MealComponents) > 0 {
-		resp.HasAllergenRecord = true
-		resp.AllergenMealComponents = mealDay.MealComponents
+	if err == nil && mealDay != nil {
+		if resp.WhoIsCooking == "" && strings.TrimSpace(mealDay.CookCustomName) != "" {
+			resp.WhoIsCooking = strings.TrimSpace(mealDay.CookCustomName)
+		}
+		if len(resp.MealComponents) == 0 && mealDay.HasAllergenRecord && len(mealDay.MealComponents) > 0 {
+			for _, c := range mealDay.MealComponents {
+				trimmed := strings.TrimSpace(c.Name)
+				if trimmed != "" {
+					resp.MealComponents = append(resp.MealComponents, trimmed)
+				}
+			}
+		}
+		if mealDay.HasAllergenRecord && len(mealDay.MealComponents) > 0 {
+			resp.HasAllergenRecord = true
+			resp.AllergenMealComponents = mealDay.MealComponents
+		}
 	}
 
 	// 6. Allergene eintragen ("enter_allergens") task:

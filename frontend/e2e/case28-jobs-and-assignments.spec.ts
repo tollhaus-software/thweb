@@ -116,7 +116,7 @@ test.describe('Test Case 28: Jobs and Assignments (MGA)', () => {
     await readerPage.addInitScript(() => {
       localStorage.setItem('token', 'jobs-reader@example.com');
     });
-    await readerPage.goto('/');
+    await readerPage.goto('/#jobs');
 
     // Jobs tab button should be visible in MGA section
     const readerJobsTabBtn = readerPage.getByRole('button', { name: 'Jobs(MGA)' });

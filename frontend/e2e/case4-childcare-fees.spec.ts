@@ -12,8 +12,7 @@ test.describe('Test Case 4: Childcare Fees Tooltips & Translations', () => {
     });
 
     // 3. Load application
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Familien(MGA)' }).click();
+    await page.goto('/#families');
     await expect(page.getByRole('button', { name: 'Familie hinzufügen' })).toBeVisible();
   });
 
@@ -274,9 +273,9 @@ test.describe('Test Case 4: Childcare Fees Tooltips & Translations', () => {
       localStorage.setItem('token', 'stefan.bauer@tollhaus-stuttgart.de');
     });
     await page.goto('/');
-    if (await toggleSidebarBtn.isVisible()) {
-      await toggleSidebarBtn.click();
-    }
+    await page.waitForLoadState('networkidle');
+    await expect(toggleSidebarBtn).toBeVisible();
+    await toggleSidebarBtn.click();
     await page.getByRole('button', { name: 'Betreuungsgebühren' }).click();
     await expect(page.getByRole('heading', { name: 'Monatliche Betreuungsgebühren' })).toBeVisible();
 

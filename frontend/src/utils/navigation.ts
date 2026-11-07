@@ -16,10 +16,12 @@ import {
   ShieldAlert,
   Calendar,
   Activity,
+  Home,
 } from 'lucide-react';
 import { t } from './i18n';
 
 export type TabId =
+  | 'main'
   | 'familiesOverview'
   | 'families'
   | 'parents'
@@ -37,7 +39,7 @@ export type TabId =
   | 'kiosk'
   | 'dashboard';
 
-export type NavigationCategory = 'families' | 'mga' | 'fees' | 'pa' | 'kochen' | 'hygiene' | 'more';
+export type NavigationCategory = 'main' | 'families' | 'mga' | 'fees' | 'pa' | 'kochen' | 'hygiene' | 'more';
 
 export interface UserPermissionsContext {
   canReadOverview: boolean;
@@ -80,6 +82,27 @@ export interface NavCategory {
 }
 
 export const NAVIGATION_CATEGORIES: NavCategory[] = [
+  {
+    id: 'main',
+    labelKey: 'navMain',
+    defaultLabel: 'Hauptseite',
+    accessibleName: 'Hauptseite',
+    descriptionKey: 'catDescMain',
+    defaultDescription: 'Tagesübersicht über Kochen, Essen und wichtige Kita-Infos.',
+    icon: Home,
+    items: [
+      {
+        id: 'main',
+        labelKey: 'subtabMain',
+        defaultLabel: 'Hauptseite',
+        accessibleName: 'Hauptseite',
+        descriptionKey: 'subtabDescMain',
+        defaultDescription: 'Tagesübersicht über Kochen, Essen und wichtige Kita-Infos.',
+        icon: Home,
+        isVisible: () => true,
+      },
+    ],
+  },
   {
     id: 'families',
     labelKey: 'navFamilies',
@@ -263,10 +286,10 @@ export const NAVIGATION_CATEGORIES: NavCategory[] = [
       {
         id: 'dashboard',
         labelKey: 'dashboard',
-        defaultLabel: 'Dashboard',
-        accessibleName: 'Dashboard',
+        defaultLabel: 'Kochansicht',
+        accessibleName: 'Kochansicht',
         descriptionKey: 'subtabDescDashboard',
-        defaultDescription: 'Tagesübersicht für den Kiosk-Modus.',
+        defaultDescription: 'Tagesübersicht für Kochen und Küche.',
         icon: LayoutDashboard,
         isVisible: (ctx) => ctx.canUseDashboard,
       },
@@ -366,7 +389,7 @@ export const getFirstPermittedTabForCategory = (
   const visible = getVisibleSubTabsForCategory(catId, perms);
   if (visible.length > 0) return visible[0].id;
   // Fallbacks if no visible tab
-  return 'familiesOverview';
+  return 'main';
 };
 
 export const getCategoryLabel = (cat: NavCategory): string => {

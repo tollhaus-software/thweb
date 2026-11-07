@@ -26,6 +26,7 @@ type User struct {
 type UserWithPermissions struct {
 	ID                   uuid.UUID             `json:"id"`
 	Email                string                `json:"email"`
+	FirstName            string                `json:"first_name,omitempty"`
 	CanonicalEmail       string                `json:"canonical_email"`
 	Roles                []string              `json:"roles"`
 	Permissions          []string              `json:"permissions"`
@@ -637,10 +638,16 @@ func DecodeAllergiesPayload(rawJSON []byte) ([]string, error) {
 	return out, nil
 }
 
+// IsDietaryPreference checks if a name corresponds to a dietary preference such as vegetarian or vegan.
+func IsDietaryPreference(name string) bool {
+	norm := strings.ToLower(strings.TrimSpace(name))
+	return norm == "vegetarisch" || norm == "vegetarian" || norm == "vegan"
+}
+
 // IsKnownFoodAllergen checks if an allergen name corresponds to a known food allergen keyword or subtype.
 func IsKnownFoodAllergen(name string) bool {
 	norm := strings.ToLower(strings.TrimSpace(name))
-	if norm == "" {
+	if norm == "" || IsDietaryPreference(norm) {
 		return false
 	}
 	foodKeywords := []string{
@@ -754,6 +761,7 @@ type Child struct {
 	VaccinationChecks          []VaccinationCheck `json:"vaccination_checks,omitempty"`
 	AllergiesProtected         []byte             `json:"allergies_protected,omitempty"`
 	Allergies                  []string           `json:"allergies,omitempty"`
+	AllergiesItems             []AllergyItem      `json:"allergies_items,omitempty"`
 	AllergiesUpdated           bool               `json:"allergies_updated,omitempty"`
 	ClearAllergies             bool               `json:"-"`
 	GroupChanges               []ChildGroupChange `json:"group_changes"`

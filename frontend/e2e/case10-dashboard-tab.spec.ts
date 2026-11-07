@@ -19,12 +19,13 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     const header = page.locator('header');
     await expect(header).toBeVisible();
     await expect(header.getByRole('button', { name: 'Dashboard' })).toHaveCount(0);
+    await expect(header.getByRole('button', { name: 'Kochansicht' })).toHaveCount(0);
 
-    // 5. Verify the "Dashboard" tab exists in the tab navigation bar
-    const dashboardTab = page.locator('.tabs').getByRole('button', { name: 'Dashboard' });
+    // 5. Verify the "Kochansicht" tab exists in the tab navigation bar
+    const dashboardTab = page.locator('.tabs').getByRole('button', { name: 'Kochansicht' });
     await expect(dashboardTab).toBeVisible();
 
-    // 6. Click on the "Dashboard" tab
+    // 6. Click on the "Kochansicht" tab
     await dashboardTab.click();
 
     // 7. Verify tab is active and hash updated to #dashboard
@@ -876,7 +877,43 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     const resetRes = await request.post('/api/test/reset');
     expect(resetRes.ok()).toBeTruthy();
 
-    // 2. Create family with identifier email for a parent without dashboard.use
+    // 2. Create user with 'viewer' role (viewer does not have dashboard.use)
+    const viewerEmail = 'viewer.user@tollhaus-stuttgart.de';
+    const userRes = await request.post('/api/admin/users', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        email: viewerEmail,
+        roles: ['viewer'],
+      },
+    });
+    expect(userRes.ok()).toBeTruthy();
+
+    // 3. Log in as viewer (no dashboard.use permission)
+    await page.addInitScript((email) => {
+      localStorage.setItem('token', email);
+    }, viewerEmail);
+
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // 4. Verify Kochansicht / Dashboard link is NOT shown in sidebar navigation or tabs
+    await expect(page.getByRole('button', { name: 'Kochansicht' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Dashboard' })).toHaveCount(0);
+
+    // 5. Verify link is NOT shown in header overflow menu
+    const overflowBtn = page.locator('button.header-overflow-btn');
+    if (await overflowBtn.isVisible()) {
+      await overflowBtn.click();
+      await expect(page.getByTestId('overflow-dashboard-button')).toHaveCount(0);
+      await page.keyboard.press('Escape');
+    }
+
+    // 6. Direct navigation to /#dashboard falls back to default allowed tab and does not show dashboard
+    await page.goto('/#dashboard');
+    await page.waitForLoadState('networkidle');
+    await expect(page.locator('.kiosk-tablet-page.embedded')).toHaveCount(0);
+
+    // 7. Verify parents do NOT have dashboard.use permission
     const parentEmail = 'regular.parent@tollhaus-stuttgart.de';
     const famRes = await request.post('/api/families', {
       headers: { Authorization: 'Bearer developer@example.com' },
@@ -893,31 +930,24 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     });
     expect(famRes.ok()).toBeTruthy();
 
-    // 3. Log in as regular parent
-    await page.addInitScript((email) => {
+    const parentPage = await page.context().newPage();
+    await parentPage.addInitScript((email) => {
       localStorage.setItem('token', email);
     }, parentEmail);
+    await parentPage.goto('/');
+    await parentPage.waitForLoadState('networkidle');
 
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    // Parent does NOT see Kochansicht tab
+    await expect(parentPage.getByRole('button', { name: 'Kochansicht' })).toHaveCount(0);
+    await expect(parentPage.getByTestId('main-page-kochansicht-btn')).toHaveCount(0);
 
-    // 4. Verify Dashboard link is NOT shown in sidebar navigation or tabs
-    await expect(page.getByRole('button', { name: 'Dashboard' })).toHaveCount(0);
+    // Direct navigation by parent falls back
+    await parentPage.goto('/#dashboard');
+    await parentPage.waitForLoadState('networkidle');
+    await expect(parentPage.locator('.kiosk-tablet-page.embedded')).toHaveCount(0);
+    await parentPage.close();
 
-    // 5. Verify Dashboard link is NOT shown in header overflow menu
-    const overflowBtn = page.locator('button.header-overflow-btn');
-    if (await overflowBtn.isVisible()) {
-      await overflowBtn.click();
-      await expect(page.getByTestId('overflow-dashboard-button')).toHaveCount(0);
-      await page.keyboard.press('Escape');
-    }
-
-    // 6. Direct navigation to /#dashboard falls back to default allowed tab and does not show dashboard
-    await page.goto('/#dashboard');
-    await page.waitForLoadState('networkidle');
-    await expect(page.locator('.kiosk-tablet-page.embedded')).toHaveCount(0);
-
-    // 7. Log in as admin (developer@example.com) who has wildcard * including dashboard.use
+    // 8. Log in as admin (developer@example.com) who has wildcard * including dashboard.use
     await page.addInitScript(() => {
       localStorage.setItem('token', 'developer@example.com');
     });
@@ -925,7 +955,7 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
-    // 8. Verify Dashboard link IS accessible for user with dashboard.use
+    // Verify Kochansicht link IS accessible for user with dashboard.use
     await page.goto('/#dashboard');
     await page.waitForLoadState('networkidle');
     await expect(page.locator('.kiosk-tablet-page.embedded')).toBeVisible();

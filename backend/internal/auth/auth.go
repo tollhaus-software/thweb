@@ -340,6 +340,7 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 					activeUser := &models.UserWithPermissions{
 						ID:                   user.ID,
 						Email:                user.Email,
+						FirstName:            simUser.FirstName,
 						Roles:                simUser.Roles,
 						Permissions:          simUser.Permissions,
 						EffectivePermissions: intersected,
@@ -365,6 +366,12 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 				}
 			} else {
 				log.Printf("[AUTH WARNING] Simulation requested by %q without permissions.simulate; ignoring simulation", user.Email)
+			}
+		}
+
+		if user != nil && user.FirstName == "" && a.Store != nil {
+			if fn, err := a.Store.GetFirstNameByIdentifierEmail(r.Context(), user.Email); err == nil && fn != "" {
+				user.FirstName = fn
 			}
 		}
 
@@ -648,6 +655,11 @@ func (a *Authenticator) ResolveSimulatedUser(ctx context.Context, cfg models.Sim
 		if a.RolesConfig != nil && len(simUser.Roles) > 0 {
 			denied := a.RolesConfig.DeniedPermissionsForRoles(simUser.Roles)
 			simUser.RemovePermissions(denied)
+		}
+		if simUser != nil && simUser.FirstName == "" && a.Store != nil {
+			if fn, err := a.Store.GetFirstNameByIdentifierEmail(ctx, simUser.Email); err == nil && fn != "" {
+				simUser.FirstName = fn
+			}
 		}
 		return simUser, nil
 	}

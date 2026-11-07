@@ -12,7 +12,7 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     });
 
     // 3. Load application
-    await page.goto('/');
+    await page.goto('/#families');
     // Wait for the app to load and display main container
     await expect(page.getByRole('button', { name: 'Familie hinzufügen' })).toBeVisible();
   });
@@ -322,7 +322,8 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     await page.addInitScript(() => {
       localStorage.setItem('token', 'caregiver-e2e@example.com');
     });
-    await page.goto('/');
+    await page.goto('about:blank');
+    await page.goto('/#families');
 
     // Switch to Eltern (Parents) tab
     await page.getByRole('button', { name: 'Eltern(MGA)' }).click();
@@ -565,7 +566,7 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     });
     expect(createRes.ok()).toBeTruthy();
 
-    await page.goto('/');
+    await page.goto('/#families');
 
     // 2. Switch to Parents tab and verify parent is displayed
     await page.getByRole('button', { name: 'Eltern(MGA)' }).click();
@@ -706,7 +707,7 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
       data: { child_id: childId, change_date: '2024-01-01', target_group: 1 },
     });
 
-    await page.goto('/');
+    await page.goto('/#families');
 
     // 2. Add membership starting on the last day of this month
     const mgaTab = page.getByRole('button', { name: 'MGA', exact: true });

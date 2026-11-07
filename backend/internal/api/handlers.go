@@ -99,6 +99,9 @@ func (s *Server) HandleGetMe(w http.ResponseWriter, r *http.Request) {
 		"permissions":           user.Permissions,
 		"effective_permissions": user.EffectivePermissions,
 	}
+	if user.FirstName != "" {
+		resp["first_name"] = user.FirstName
+	}
 	if user.FamilyID != nil {
 		resp["family_id"] = user.FamilyID.String()
 	}
@@ -785,8 +788,13 @@ func (s *Server) HandleListFamilies(w http.ResponseWriter, r *http.Request) {
 					child := &families[fIdx].Children[cIdx]
 					if len(child.AllergiesProtected) > 0 {
 						if plainJSON, err := allergiesCipher.Decrypt(r.Context(), child.AllergiesProtected); err == nil && len(plainJSON) > 0 {
-							if decoded, err := models.DecodeAllergiesPayload(plainJSON); err == nil {
-								child.Allergies = decoded
+							if items, err := models.DecodeAllergiesPayloadItems(plainJSON); err == nil {
+								child.AllergiesItems = items
+								allergies := make([]string, 0, len(items))
+								for _, it := range items {
+									allergies = append(allergies, it.Name)
+								}
+								child.Allergies = allergies
 							} else {
 								log.Printf("[WARN] Failed to decode decrypted allergies for child %s: %v\n", child.ID, err)
 							}
@@ -1228,6 +1236,46 @@ func (s *Server) HandleUpdateFamilyNotes(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusOK)
 }
 
+func sanitizeAndEnforceDietaryExclusivity(items []models.AllergyItem) ([]models.AllergyItem, []string) {
+	outItems := make([]models.AllergyItem, 0, len(items))
+	outStrings := make([]string, 0, len(items))
+	var lastDietItem *models.AllergyItem
+
+	for _, it := range items {
+		name := strings.TrimSpace(it.Name)
+		if name == "" {
+			continue
+		}
+		category := strings.TrimSpace(it.Category)
+		if models.IsDietaryPreference(name) || category == "ernaehrung" {
+			category = "ernaehrung"
+			normName := strings.ToLower(name)
+			if normName == "vegetarisch" || normName == "vegetarian" {
+				name = "Vegetarisch"
+			} else if normName == "vegan" {
+				name = "Vegan"
+			}
+			lastDietItem = &models.AllergyItem{
+				Name:     name,
+				Category: category,
+			}
+			continue
+		}
+		outItems = append(outItems, models.AllergyItem{
+			Name:     name,
+			Category: category,
+		})
+		outStrings = append(outStrings, name)
+	}
+
+	if lastDietItem != nil {
+		outItems = append([]models.AllergyItem{*lastDietItem}, outItems...)
+		outStrings = append([]string{lastDietItem.Name}, outStrings...)
+	}
+
+	return outItems, outStrings
+}
+
 func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 	user := auth.GetUser(r.Context())
 	idStr := chi.URLParam(r, "id")
@@ -1321,18 +1369,8 @@ func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 	var sanitizedAllergies []string
 
 	if req.Allergies != nil {
-		sanitizedItems := make([]models.AllergyItem, 0, len(*req.Allergies))
-		sanitizedAllergies = make([]string, 0, len(*req.Allergies))
-		for _, item := range *req.Allergies {
-			name := strings.TrimSpace(item.Name)
-			if name != "" {
-				sanitizedItems = append(sanitizedItems, models.AllergyItem{
-					Name:     name,
-					Category: strings.TrimSpace(item.Category),
-				})
-				sanitizedAllergies = append(sanitizedAllergies, name)
-			}
-		}
+		sanitizedItems, sanitizedStrings := sanitizeAndEnforceDietaryExclusivity(*req.Allergies)
+		sanitizedAllergies = sanitizedStrings
 
 		var existingItems []models.AllergyItem
 		if existingChild != nil && len(existingChild.AllergiesProtected) > 0 {
@@ -2240,8 +2278,13 @@ func (s *Server) HandleListEmployees(w http.ResponseWriter, r *http.Request) {
 	for i := range employees {
 		if canViewAllergies && len(employees[i].AllergiesProtected) > 0 && allergiesCipher != nil {
 			if plainJSON, err := allergiesCipher.Decrypt(r.Context(), employees[i].AllergiesProtected); err == nil && len(plainJSON) > 0 {
-				if decoded, err := models.DecodeAllergiesPayload(plainJSON); err == nil {
-					employees[i].Allergies = decoded
+				if items, err := models.DecodeAllergiesPayloadItems(plainJSON); err == nil {
+					employees[i].AllergiesItems = items
+					allergies := make([]string, 0, len(items))
+					for _, it := range items {
+						allergies = append(allergies, it.Name)
+					}
+					employees[i].Allergies = allergies
 				} else {
 					log.Printf("[WARN] Failed to decode decrypted allergies for employee %s: %v\n", employees[i].ID, err)
 				}
@@ -2383,16 +2426,7 @@ func (s *Server) HandleUpdateEmployee(w http.ResponseWriter, r *http.Request) {
 				inputItems = append(inputItems, models.AllergyItem{Name: s})
 			}
 		}
-		sanitizedItems := make([]models.AllergyItem, 0, len(inputItems))
-		for _, it := range inputItems {
-			name := strings.TrimSpace(it.Name)
-			if name != "" {
-				sanitizedItems = append(sanitizedItems, models.AllergyItem{
-					Name:     name,
-					Category: strings.TrimSpace(it.Category),
-				})
-			}
-		}
+		sanitizedItems, _ := sanitizeAndEnforceDietaryExclusivity(inputItems)
 		allergiesChanged := !models.AllergyItemsEqual(sanitizedItems, existingItems)
 		if allergiesChanged || !hasEmployeesWrite {
 			if user == nil || !user.HasPermission("allergies.employees.write") {
@@ -2461,11 +2495,20 @@ func (s *Server) HandleUpdateEmployee(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, updated)
 }
 
+type AllergySummaryItem struct {
+	Name     string `json:"name"`
+	Count    int    `json:"count"`
+	Category string `json:"category,omitempty"` // "ernaehrung", "lebensmittel", "andere"
+	IsFood   bool   `json:"is_food"`
+}
+
 type GroupAllergiesSummary struct {
-	GroupID       int      `json:"group_id"`
-	GroupName     string   `json:"group_name"`
-	Allergies     []string `json:"allergies"`
-	FoodAllergies []string `json:"food_allergies,omitempty"`
+	GroupID       int                  `json:"group_id"`
+	GroupName     string               `json:"group_name"`
+	Allergies     []string             `json:"allergies"`
+	FoodAllergies []string             `json:"food_allergies,omitempty"`
+	Items         []AllergySummaryItem `json:"items"`
+	Counts        map[string]int       `json:"counts,omitempty"`
 }
 
 type AllergiesSummaryResponse struct {
@@ -2473,7 +2516,113 @@ type AllergiesSummaryResponse struct {
 	Groups         []GroupAllergiesSummary       `json:"groups"`
 	Employees      []string                      `json:"employees"`
 	FoodEmployees  []string                      `json:"food_employees,omitempty"`
+	EmployeeItems  []AllergySummaryItem          `json:"employee_items"`
+	EmployeeCounts map[string]int                `json:"employee_counts,omitempty"`
 	MealComponents []models.MealAllergenComponent `json:"meal_components"`
+}
+
+func buildAllergySummary(personItemLists [][]models.AllergyItem) ([]AllergySummaryItem, map[string]int, []string, []string) {
+	type entryData struct {
+		displayName string
+		category    string
+		count       int
+	}
+
+	countsMap := make(map[string]*entryData)
+
+	for _, personItems := range personItemLists {
+		seenForPerson := make(map[string]bool)
+		for _, it := range personItems {
+			name := strings.TrimSpace(it.Name)
+			if name == "" {
+				continue
+			}
+			cat := strings.TrimSpace(it.Category)
+			if models.IsDietaryPreference(name) || cat == "ernaehrung" {
+				cat = "ernaehrung"
+				normName := strings.ToLower(name)
+				if normName == "vegetarisch" || normName == "vegetarian" {
+					name = "Vegetarisch"
+				} else if normName == "vegan" {
+					name = "Vegan"
+				}
+			} else if cat == "lebensmittel" || models.IsKnownFoodAllergen(name) {
+				cat = "lebensmittel"
+			} else if cat == "" {
+				cat = "andere"
+			}
+
+			key := strings.ToLower(name)
+			if seenForPerson[key] {
+				continue
+			}
+			seenForPerson[key] = true
+
+			if existing, ok := countsMap[key]; ok {
+				existing.count++
+				if existing.category == "andere" && cat != "andere" {
+					existing.category = cat
+				}
+			} else {
+				countsMap[key] = &entryData{
+					displayName: name,
+					category:    cat,
+					count:       1,
+				}
+			}
+		}
+	}
+
+	items := make([]AllergySummaryItem, 0, len(countsMap))
+	countsResult := make(map[string]int, len(countsMap))
+	allNames := make([]string, 0, len(countsMap))
+	foodNames := make([]string, 0, len(countsMap))
+
+	for _, data := range countsMap {
+		isFood := data.category == "lebensmittel" || models.IsKnownFoodAllergen(data.displayName)
+		items = append(items, AllergySummaryItem{
+			Name:     data.displayName,
+			Count:    data.count,
+			Category: data.category,
+			IsFood:   isFood,
+		})
+		countsResult[data.displayName] = data.count
+		allNames = append(allNames, data.displayName)
+		if isFood {
+			foodNames = append(foodNames, data.displayName)
+		}
+	}
+
+	getCatPriority := func(c string) int {
+		switch c {
+		case "ernaehrung":
+			return 0
+		case "lebensmittel":
+			return 1
+		default:
+			return 2
+		}
+	}
+
+	sort.Slice(items, func(i, j int) bool {
+		pi, pj := getCatPriority(items[i].Category), getCatPriority(items[j].Category)
+		if pi != pj {
+			return pi < pj
+		}
+		if items[i].Count != items[j].Count {
+			return items[i].Count > items[j].Count
+		}
+		return strings.ToLower(items[i].Name) < strings.ToLower(items[j].Name)
+	})
+
+	sort.Slice(allNames, func(i, j int) bool {
+		return strings.ToLower(allNames[i]) < strings.ToLower(allNames[j])
+	})
+	sort.Slice(foodNames, func(i, j int) bool {
+		return strings.ToLower(foodNames[i]) < strings.ToLower(foodNames[j])
+	})
+
+	return items, countsResult, allNames, foodNames
 }
 
 func deduplicateAndSortAllergies(lists ...[]string) []string {
@@ -2539,18 +2688,12 @@ func (s *Server) HandleGetAllergiesSummary(w http.ResponseWriter, r *http.Reques
 
 	allergiesCipher := s.getAllergiesCipher()
 
-	groupLists := map[int][][]string{
+	groupItemLists := map[int][][]models.AllergyItem{
 		1: {},
 		2: {},
 		3: {},
 	}
-	groupFoodLists := map[int][][]string{
-		1: {},
-		2: {},
-		3: {},
-	}
-	var empLists [][]string
-	var empFoodLists [][]string
+	var empItemLists [][]models.AllergyItem
 
 	if allergiesCipher != nil {
 		for _, fam := range families {
@@ -2564,24 +2707,7 @@ func (s *Server) HandleGetAllergiesSummary(w http.ResponseWriter, r *http.Reques
 				}
 				if plainJSON, err := allergiesCipher.Decrypt(r.Context(), c.AllergiesProtected); err == nil && len(plainJSON) > 0 {
 					if decodedItems, err := models.DecodeAllergiesPayloadItems(plainJSON); err == nil && len(decodedItems) > 0 {
-						var allNames []string
-						var foodNames []string
-						for _, it := range decodedItems {
-							name := strings.TrimSpace(it.Name)
-							if name == "" {
-								continue
-							}
-							allNames = append(allNames, name)
-							if it.Category == "lebensmittel" || models.IsKnownFoodAllergen(name) {
-								foodNames = append(foodNames, name)
-							}
-						}
-						if len(allNames) > 0 {
-							groupLists[*currGrp] = append(groupLists[*currGrp], allNames)
-						}
-						if len(foodNames) > 0 {
-							groupFoodLists[*currGrp] = append(groupFoodLists[*currGrp], foodNames)
-						}
+						groupItemLists[*currGrp] = append(groupItemLists[*currGrp], decodedItems)
 					}
 				}
 			}
@@ -2593,24 +2719,7 @@ func (s *Server) HandleGetAllergiesSummary(w http.ResponseWriter, r *http.Reques
 			}
 			if plainJSON, err := allergiesCipher.Decrypt(r.Context(), emp.AllergiesProtected); err == nil && len(plainJSON) > 0 {
 				if decodedItems, err := models.DecodeAllergiesPayloadItems(plainJSON); err == nil && len(decodedItems) > 0 {
-					var allNames []string
-					var foodNames []string
-					for _, it := range decodedItems {
-						name := strings.TrimSpace(it.Name)
-						if name == "" {
-							continue
-						}
-						allNames = append(allNames, name)
-						if it.Category == "lebensmittel" || models.IsKnownFoodAllergen(name) {
-							foodNames = append(foodNames, name)
-						}
-					}
-					if len(allNames) > 0 {
-						empLists = append(empLists, allNames)
-					}
-					if len(foodNames) > 0 {
-						empFoodLists = append(empFoodLists, foodNames)
-					}
+					empItemLists = append(empItemLists, decodedItems)
 				}
 			}
 		}
@@ -2627,30 +2736,43 @@ func (s *Server) HandleGetAllergiesSummary(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
+	grp1Items, grp1Counts, grp1Allergies, grp1FoodAllergies := buildAllergySummary(groupItemLists[1])
+	grp2Items, grp2Counts, grp2Allergies, grp2FoodAllergies := buildAllergySummary(groupItemLists[2])
+	grp3Items, grp3Counts, grp3Allergies, grp3FoodAllergies := buildAllergySummary(groupItemLists[3])
+	empItems, empCounts, empAllergies, empFoodAllergies := buildAllergySummary(empItemLists)
+
 	resp := AllergiesSummaryResponse{
 		Date: targetDate.Format("2006-01-02"),
 		Groups: []GroupAllergiesSummary{
 			{
 				GroupID:       1,
 				GroupName:     "Kleine Gruppe",
-				Allergies:     deduplicateAndSortAllergies(groupLists[1]...),
-				FoodAllergies: deduplicateAndSortAllergies(groupFoodLists[1]...),
+				Allergies:     grp1Allergies,
+				FoodAllergies: grp1FoodAllergies,
+				Items:         grp1Items,
+				Counts:        grp1Counts,
 			},
 			{
 				GroupID:       2,
 				GroupName:     "Große Gruppe",
-				Allergies:     deduplicateAndSortAllergies(groupLists[2]...),
-				FoodAllergies: deduplicateAndSortAllergies(groupFoodLists[2]...),
+				Allergies:     grp2Allergies,
+				FoodAllergies: grp2FoodAllergies,
+				Items:         grp2Items,
+				Counts:        grp2Counts,
 			},
 			{
 				GroupID:       3,
 				GroupName:     "Hort",
-				Allergies:     deduplicateAndSortAllergies(groupLists[3]...),
-				FoodAllergies: deduplicateAndSortAllergies(groupFoodLists[3]...),
+				Allergies:     grp3Allergies,
+				FoodAllergies: grp3FoodAllergies,
+				Items:         grp3Items,
+				Counts:        grp3Counts,
 			},
 		},
-		Employees:      deduplicateAndSortAllergies(empLists...),
-		FoodEmployees:  deduplicateAndSortAllergies(empFoodLists...),
+		Employees:      empAllergies,
+		FoodEmployees:  empFoodAllergies,
+		EmployeeItems:  empItems,
+		EmployeeCounts: empCounts,
 		MealComponents: mealComponents,
 	}
 

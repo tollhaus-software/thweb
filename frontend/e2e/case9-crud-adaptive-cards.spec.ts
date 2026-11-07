@@ -65,7 +65,7 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     });
 
     await page.setViewportSize({ width: 500, height: 800 });
-    await page.goto('/');
+    await page.goto('/#parents');
 
     // -------------------------------------------------------------
     // Test Parents Tab on Mobile

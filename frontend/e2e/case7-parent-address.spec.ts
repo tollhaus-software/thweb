@@ -32,7 +32,7 @@ test.describe('Test Case 7: Parent Address Feature', () => {
     });
 
     // 3. Load application
-    await page.goto('/');
+    await page.goto('/#families');
     await expect(page.getByRole('button', { name: 'Familie hinzufügen' })).toBeVisible();
   });
 
@@ -112,7 +112,10 @@ test.describe('Test Case 7: Parent Address Feature', () => {
     await expect(markusIndInput).toBeVisible();
 
     // Change Markus's address to individual address
+    await page.waitForTimeout(100);
+    await markusIndInput.clear();
     await markusIndInput.fill('Schlossplatz 2, 70173 Stuttgart');
+    await expect(markusIndInput).toHaveValue('Schlossplatz 2, 70173 Stuttgart');
     const savePromise2 = page.waitForResponse(
       (resp) => resp.url().includes('/api/families') && resp.request().method() === 'PUT'
     );
@@ -154,7 +157,9 @@ test.describe('Test Case 7: Parent Address Feature', () => {
     await popover.getByRole('radio', { name: 'individuelle Adressen' }).click();
     await expect(popover.getByRole('radio', { name: 'individuelle Adressen' })).toBeChecked();
     await popover.getByRole('textbox', { name: 'Erika Adresse' }).fill('');
+    await expect(popover.getByRole('textbox', { name: 'Erika Adresse' })).toHaveValue('');
     await popover.getByRole('textbox', { name: 'Markus Adresse' }).fill('');
+    await expect(popover.getByRole('textbox', { name: 'Markus Adresse' })).toHaveValue('');
 
     // Switch to shared: 0 addresses left -> should be empty
     await popover.getByRole('radio', { name: 'gemeinsame Adresse' }).click();

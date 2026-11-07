@@ -11,6 +11,7 @@ import {
   getAllergenBgColor,
   getAllergyText,
   isKnownFoodAllergy,
+  isDietPreference,
   sortAllergiesList,
 } from '../../utils/mealAllergens';
 import { t } from '../../utils/i18n';
@@ -41,8 +42,8 @@ export const AllergiesListEditor: React.FC<AllergiesListEditorProps> = ({
   placeholder,
   canDeleteItem,
 }) => {
-  // Mode selection: null (choose Lebensmittel vs Andere), 'lebensmittel', or 'andere'
-  const [selectedCategory, setSelectedCategory] = useState<'lebensmittel' | 'andere' | null>(null);
+  // Mode selection: null (choose category), 'ernaehrung', 'lebensmittel', or 'andere'
+  const [selectedCategory, setSelectedCategory] = useState<'ernaehrung' | 'lebensmittel' | 'andere' | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [otherInput, setOtherInput] = useState('');
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -94,6 +95,56 @@ export const AllergiesListEditor: React.FC<AllergiesListEditorProps> = ({
       onSaveRef.current(updated);
     },
     [canDeleteItem]
+  );
+
+  const activeDiet = useMemo(() => {
+    const current = values || [];
+    const found = current.find(isDietPreference);
+    if (!found) return null;
+    const text = getAllergyText(found).toLowerCase().trim();
+    if (text === 'vegan') return 'Vegan';
+    if (text === 'vegetarisch' || text === 'vegetarian') return 'Vegetarisch';
+    return null;
+  }, [values]);
+
+  const handleSelectDiet = useCallback(
+    (dietChoice: 'Vegetarisch' | 'Vegan' | 'none') => {
+      const current = valuesRef.current || [];
+
+      if (dietChoice === 'none') {
+        const withoutDiet = current.filter((val) => !isDietPreference(val));
+        if (withoutDiet.length !== current.length) {
+          onSaveRef.current(withoutDiet);
+        }
+        setIsAdding(false);
+        setSelectedCategory(null);
+        return;
+      }
+
+      const alreadyActive = current.some(
+        (val) => isDietPreference(val) && getAllergyText(val).toLowerCase() === dietChoice.toLowerCase()
+      );
+
+      if (alreadyActive) {
+        // Re-selecting an already active diet preference does not change anything
+        setIsAdding(false);
+        setSelectedCategory(null);
+        return;
+      }
+
+      const withoutDiet = current.filter((val) => !isDietPreference(val));
+      const entryToAdd: AllergyEntryObject = {
+        name: dietChoice,
+        value: dietChoice,
+        category: 'ernaehrung',
+      };
+      const updated = sortAllergiesList([...withoutDiet, entryToAdd]);
+
+      onSaveRef.current(updated);
+      setIsAdding(false);
+      setSelectedCategory(null);
+    },
+    []
   );
 
   const isMainAllergenSelected = useCallback(
@@ -230,6 +281,7 @@ export const AllergiesListEditor: React.FC<AllergiesListEditorProps> = ({
     const list = values.map((item, originalIndex) => {
       const text = getAllergyText(item);
       const isKnownFood = isKnownFoodAllergy(item);
+      const isDiet = isDietPreference(item);
       const display = getAllergenDisplayLabel(text);
       return {
         item,
@@ -237,12 +289,18 @@ export const AllergiesListEditor: React.FC<AllergiesListEditorProps> = ({
         text,
         display,
         isKnownFood,
+        isDiet,
       };
     });
 
     return list.sort((a, b) => {
-      if (a.isKnownFood && !b.isKnownFood) return -1;
-      if (!a.isKnownFood && b.isKnownFood) return 1;
+      const rank = (e: typeof a) => {
+        if (e.isDiet) return 0;
+        if (e.isKnownFood) return 1;
+        return 2;
+      };
+      const diff = rank(a) - rank(b);
+      if (diff !== 0) return diff;
       return a.originalIndex - b.originalIndex;
     });
   }, [values]);
@@ -289,7 +347,7 @@ export const AllergiesListEditor: React.FC<AllergiesListEditorProps> = ({
             {values && values.length > 0 ? (
               <table className="allergies-current-table">
                 <tbody>
-                  {sortedEntries.map(({ originalIndex, text, display, isKnownFood }) => {
+                  {sortedEntries.map(({ originalIndex, text, display, isKnownFood, isDiet }) => {
                     if (editingIndex === originalIndex) {
                       return (
                         <tr key={originalIndex} className="allergies-current-row">
@@ -345,7 +403,25 @@ export const AllergiesListEditor: React.FC<AllergiesListEditorProps> = ({
                     return (
                       <tr key={originalIndex} className="allergies-current-row" data-testid={`allergy-current-row-${originalIndex}`}>
                         <td className="allergies-current-cell-content">
-                          {isKnownFood ? (
+                          {isDiet ? (
+                            <span
+                              className="allergy-diet-icon-wrap"
+                              style={{
+                                backgroundColor: '#ecfdf5',
+                                color: '#059669',
+                                padding: '2px 4px',
+                                borderRadius: '4px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                fontSize: '0.9rem',
+                                flexShrink: 0,
+                                border: '1px solid #a7f3d0',
+                              }}
+                              title={t('allergyTypeDiet') || 'Ernährungstyp'}
+                            >
+                              {text.toLowerCase() === 'vegan' ? '🌱' : '🥦'}
+                            </span>
+                          ) : isKnownFood ? (
                             <span
                               className="meal-allergen-icon-wrap"
                               style={{
@@ -412,7 +488,7 @@ export const AllergiesListEditor: React.FC<AllergiesListEditorProps> = ({
                 }}
                 data-testid="allergies-empty-notice"
               >
-                {placeholder || t('noAllergies') || 'Keine Allergien eingetragen'}
+                {placeholder || t('noAllergiesOrDiet') || 'Keine Allergien/Ernährungseinschränkungen eingetragen'}
               </div>
             )}
           </div>
@@ -464,7 +540,7 @@ export const AllergiesListEditor: React.FC<AllergiesListEditorProps> = ({
             </div>
           )}
 
-          {/* Mode 1: Top-Level Choice (Lebensmittel vs Andere) */}
+          {/* Mode 1: Top-Level Choice (Ernährungstyp vs Lebensmittelallergien vs Andere Allergien) */}
           {selectedCategory === null && (
             <div>
               <div
@@ -475,9 +551,22 @@ export const AllergiesListEditor: React.FC<AllergiesListEditorProps> = ({
                   marginBottom: '6px',
                 }}
               >
-                {t('allergySelectTypeTitle') || 'Art der Allergie wählen:'}
+                {t('allergySelectTypeTitle') || 'Kategorie wählen:'}
               </div>
               <div className="allergies-choice-cards">
+                <button
+                  type="button"
+                  className="allergies-choice-card"
+                  onClick={() => setSelectedCategory('ernaehrung')}
+                  data-testid="allergy-choice-ernaehrung"
+                >
+                  <span className="allergies-choice-icon">🥦</span>
+                  <span className="allergies-choice-title">{t('allergyTypeDiet') || 'Ernährungstyp'}</span>
+                  <span className="allergies-choice-desc">
+                    {t('allergyTypeDietDesc') || 'Vegetarisch, Vegan'}
+                  </span>
+                </button>
+
                 <button
                   type="button"
                   className="allergies-choice-card"
@@ -485,9 +574,9 @@ export const AllergiesListEditor: React.FC<AllergiesListEditorProps> = ({
                   data-testid="allergy-choice-lebensmittel"
                 >
                   <span className="allergies-choice-icon">🍽️</span>
-                  <span className="allergies-choice-title">{t('allergyTypeFood') || 'Lebensmittel'}</span>
+                  <span className="allergies-choice-title">{t('allergyTypeFood') || 'Lebensmittelallergien'}</span>
                   <span className="allergies-choice-desc">
-                    {t('allergyTypeFoodDesc') || 'Hauptallergene (Gluten, Laktose, Nüsse etc.) & Speise-Allergien'}
+                    {t('allergyTypeFoodDesc') || 'Hauptallergene (Gluten, Laktose etc.) & Speise-Allergien'}
                   </span>
                 </button>
 
@@ -498,10 +587,61 @@ export const AllergiesListEditor: React.FC<AllergiesListEditorProps> = ({
                   data-testid="allergy-choice-andere"
                 >
                   <span className="allergies-choice-icon">🏷️</span>
-                  <span className="allergies-choice-title">{t('allergyTypeOther') || 'Andere'}</span>
+                  <span className="allergies-choice-title">{t('allergyTypeOther') || 'Andere Allergien'}</span>
                   <span className="allergies-choice-desc">
                     {t('allergyTypeOtherDesc') || 'Pollen, Insektengift, Tierhaare, Medikamente etc.'}
                   </span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Mode 2: Ernährungstyp */}
+          {selectedCategory === 'ernaehrung' && (
+            <div data-testid="allergies-panel-ernaehrung">
+              <div className="allergies-diet-options">
+                <button
+                  type="button"
+                  className={`allergies-diet-card ${activeDiet === null ? 'selected' : ''}`}
+                  onClick={() => handleSelectDiet('none')}
+                  data-testid="diet-option-none"
+                >
+                  <span className="allergies-diet-icon">🍽️</span>
+                  <div className="allergies-diet-info">
+                    <span className="allergies-diet-title">{t('dietNone') || 'Keine Besonderheit'}</span>
+                    <span className="allergies-diet-desc">
+                      {t('dietNoneDesc') || 'Keine vegetarische oder vegane Einschränkung'}
+                    </span>
+                  </div>
+                  {activeDiet === null && <Check size={18} className="allergies-diet-check" />}
+                </button>
+
+                <button
+                  type="button"
+                  className={`allergies-diet-card ${activeDiet === 'Vegetarisch' ? 'selected' : ''}`}
+                  onClick={() => handleSelectDiet('Vegetarisch')}
+                  data-testid="diet-option-vegetarisch"
+                >
+                  <span className="allergies-diet-icon">🥦</span>
+                  <div className="allergies-diet-info">
+                    <span className="allergies-diet-title">{t('dietVegetarian') || 'Vegetarisch'}</span>
+                    <span className="allergies-diet-desc">{t('dietVegetarianDesc') || 'Kein Fleisch oder Fisch'}</span>
+                  </div>
+                  {activeDiet === 'Vegetarisch' && <Check size={18} className="allergies-diet-check" />}
+                </button>
+
+                <button
+                  type="button"
+                  className={`allergies-diet-card ${activeDiet === 'Vegan' ? 'selected' : ''}`}
+                  onClick={() => handleSelectDiet('Vegan')}
+                  data-testid="diet-option-vegan"
+                >
+                  <span className="allergies-diet-icon">🌱</span>
+                  <div className="allergies-diet-info">
+                    <span className="allergies-diet-title">{t('dietVegan') || 'Vegan'}</span>
+                    <span className="allergies-diet-desc">{t('dietVeganDesc') || 'Keine tierischen Produkte'}</span>
+                  </div>
+                  {activeDiet === 'Vegan' && <Check size={18} className="allergies-diet-check" />}
                 </button>
               </div>
             </div>

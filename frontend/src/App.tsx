@@ -11,7 +11,7 @@ import { Pencil, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, Arro
 import { useGoogleLogin } from '@react-oauth/google';
 import { MultiValueListEditor, type MultiValueFlagConfig, type MultiValueEntry, type MultiValueItem, getEntryValue, isFlagActive, PHONE_TYPES, getPhoneTypeSymbol, getPhoneTypeLabel } from './components/Table/MultiValueListEditor';
 import { AllergiesListEditor } from './components/Allergies/AllergiesListEditor';
-import { isLebensmittelAllergen } from './utils/mealAllergens';
+import { isLebensmittelAllergen, isDietPreference } from './utils/mealAllergens';
 import { MultiValueCell } from './components/Table/MultiValueCell';
 import { FamilyNotesEditor, FamilyNotesCell, type NotesTarget } from './components/Table/FamilyNotesEditor';
 import { AddressEditor } from './components/Table/AddressEditor';
@@ -23,6 +23,7 @@ import { VaccinationStatusPopover, VaccinationStatusCell, type VaccinationCheck 
 import { HygieneEventsPopover, HygieneCell, type ParentWithHygiene } from './components/Table/HygieneEventsPopover';
 import { ChildcareFeesCalculator } from './components/ChildcareFeesCalculator';
 import { KioskDashboard } from './components/Dashboard/KioskDashboard';
+import { MainPage } from './components/MainPage/MainPage';
 import { MealPlanTab } from './components/MealPlan/MealPlanTab';
 import { MealPlanPrintView } from './components/MealPlan/MealPlanPrintView';
 import { MealAllergensTab } from './components/MealAllergens/MealAllergensTab';
@@ -2594,6 +2595,25 @@ const Dashboard: React.FC = () => {
   const [overviewFamilies, setOverviewFamilies] = React.useState<OverviewFamily[]>([]);
   const [overviewGroupBy, setOverviewGroupBy] = React.useState<'family' | 'group' | 'job'>('group');
 
+  const currentAuthUserFirstName = React.useMemo(() => {
+    if (user?.first_name) return user.first_name;
+    if (!user?.email) return '';
+    const normEmail = user.email.trim().toLowerCase();
+    for (const f of families) {
+      for (const p of f.parents || []) {
+        if (p.emails?.some((e: any) => (e.canonical_value || e.value || '').trim().toLowerCase() === normEmail)) {
+          if (p.first_name) return p.first_name;
+        }
+      }
+    }
+    for (const emp of employees) {
+      if (emp.emails?.some((e: any) => (e.canonical_value || e.value || '').trim().toLowerCase() === normEmail)) {
+        if (emp.first_name) return emp.first_name;
+      }
+    }
+    return '';
+  }, [user?.first_name, user?.email, families, employees]);
+
   const [familySortOrder, setFamilySortOrder] = React.useState<FamilySortOrder>(() => {
     try {
       const saved = localStorage.getItem('thweb_family_sort_order');
@@ -2662,7 +2682,7 @@ const Dashboard: React.FC = () => {
 
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [activeTab, setActiveTab] = React.useState<
-    'familiesOverview' | 'families' | 'parents' | 'children' | 'members' | 'jobs' | 'employees' | 'childcareFees' | 'hygieneBelehrung' | 'mealPlan' | 'mealAllergens' | 'audit' | 'admin' | 'activity' | 'kiosk' | 'dashboard' | string
+    'main' | 'familiesOverview' | 'families' | 'parents' | 'children' | 'members' | 'jobs' | 'employees' | 'childcareFees' | 'hygieneBelehrung' | 'mealPlan' | 'mealAllergens' | 'audit' | 'admin' | 'activity' | 'kiosk' | 'dashboard' | string
   >(() => {
     const rawHash = window.location.hash.replace('#', '');
     const hash = rawHash.split('?')[0];
@@ -2683,6 +2703,12 @@ const Dashboard: React.FC = () => {
       canProvisionKiosk,
       canUseDashboard,
     };
+    if (pathname === '/dashboard' && canUseDashboard) {
+      return 'dashboard';
+    }
+    if (!hash || hash === 'main' || hash === 'home') {
+      return 'main';
+    }
     if (
       (hash === 'familiesOverview' && canReadOverview) ||
       (hash === 'families' && canReadFamiliesAll) ||
@@ -2700,51 +2726,11 @@ const Dashboard: React.FC = () => {
       (hash === 'activity' && canViewActivity) ||
       (hash === 'kiosk' && canProvisionKiosk) ||
       categoryHasLandingPage(hash, initialPerms) ||
-      ((hash === 'dashboard' || pathname === '/dashboard') && canUseDashboard)
+      (hash === 'dashboard' && canUseDashboard)
     ) {
-      return (pathname === '/dashboard' ? 'dashboard' : hash) as any;
+      return hash as any;
     }
-    const saved = localStorage.getItem('thweb_active_tab');
-    if (
-      (saved === 'familiesOverview' && canReadOverview) ||
-      (saved === 'families' && canReadFamiliesAll) ||
-      (saved === 'parents' && canReadFamiliesAll) ||
-      (saved === 'children' && canReadFamiliesAll) ||
-      (saved === 'members' && canReadMembers) ||
-      (saved === 'jobs' && canReadJobs) ||
-      (saved === 'employees' && canReadEmployees) ||
-      (saved === 'childcareFees' && canReadFees) ||
-      (saved === 'hygieneBelehrung' && (canReadFamiliesAll || hasPermission('hygiene.all.write'))) ||
-      (saved === 'mealPlan' && canViewMealPlan) ||
-      (saved === 'mealAllergens' && canReadMealAllergens) ||
-      (saved === 'audit' && canReadAudit) ||
-      (saved === 'admin' && canManageUsers) ||
-      (saved === 'activity' && canViewActivity) ||
-      (saved === 'kiosk' && canProvisionKiosk) ||
-      (saved && categoryHasLandingPage(saved, initialPerms)) ||
-      (saved === 'dashboard' && canUseDashboard)
-    ) {
-      return saved as any;
-    }
-    if (canReadFamiliesAll) {
-      return 'families';
-    }
-    if (canReadOverview) {
-      return 'familiesOverview';
-    }
-    if (canReadFees) {
-      return 'childcareFees';
-    }
-    if (canReadMembers) {
-      return 'members';
-    }
-    if (canReadJobs) {
-      return 'jobs';
-    }
-    if (canReadEmployees) {
-      return 'employees';
-    }
-    return 'familiesOverview';
+    return 'main';
   });
 
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState<boolean>(() => {
@@ -3914,6 +3900,9 @@ const Dashboard: React.FC = () => {
       const fromTab = searchParams.get('fromTab') as 'families' | 'familiesOverview' | 'parents' | 'children' | 'members' | null;
 
       if (
+        !hash ||
+        hash === 'main' ||
+        hash === 'home' ||
         (hash === 'familiesOverview' && canReadOverview) ||
         (hash === 'parents' && canReadFamiliesAll) ||
         (hash === 'children' && canReadFamiliesAll) ||
@@ -4743,9 +4732,15 @@ const Dashboard: React.FC = () => {
       return activeParentForMultiValue[activeMultiValueField] || [];
     }
     if (activeChildForMultiValue && activeMultiValueField === 'allergies') {
+      if ((activeChildForMultiValue as any).allergies_items && (activeChildForMultiValue as any).allergies_items.length > 0) {
+        return (activeChildForMultiValue as any).allergies_items;
+      }
       return activeChildForMultiValue.allergies || [];
     }
     if (activeEmployeeForMultiValue && activeMultiValueField) {
+      if (activeMultiValueField === 'allergies' && (activeEmployeeForMultiValue as any).allergies_items && (activeEmployeeForMultiValue as any).allergies_items.length > 0) {
+        return (activeEmployeeForMultiValue as any).allergies_items;
+      }
       return activeEmployeeForMultiValue[activeMultiValueField] || [];
     }
     return [];
@@ -4907,18 +4902,27 @@ const Dashboard: React.FC = () => {
           if (typeof v === 'string') {
             const trimmed = v.trim();
             if (!trimmed) return null;
+            const category = isDietPreference(trimmed)
+              ? 'ernaehrung'
+              : isLebensmittelAllergen(trimmed)
+              ? 'lebensmittel'
+              : undefined;
             return {
               name: trimmed,
               value: trimmed,
-              category: isLebensmittelAllergen(trimmed) ? 'lebensmittel' : undefined,
+              category,
             };
           }
           const text = ((v as any).name || (v as any).value || '').trim();
           if (!text) return null;
+          const explicitCategory = (v as any).category;
+          const category =
+            explicitCategory ||
+            (isDietPreference(text) ? 'ernaehrung' : isLebensmittelAllergen(text) ? 'lebensmittel' : undefined);
           return {
             name: text,
             value: text,
-            category: (v as any).category || (isLebensmittelAllergen(text) ? 'lebensmittel' : undefined),
+            category,
           };
         })
         .filter(Boolean);
@@ -6542,7 +6546,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                 id={child.id}
                 field="allergies"
                 values={child.allergies || []}
-                placeholder={canWriteChildAllergies ? t('addAllergy') : t('noAllergies')}
+                placeholder={canWriteChildAllergies ? t('addAllergy') : t('noAllergiesOrDiet')}
                 isActive={isPopActive}
                 onOpenManage={(field, anchor) => openManageChildMultiValue(child, field, anchor)}
                 canEdit={canWriteChildAllergies}
@@ -7838,7 +7842,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                 id={emp.id}
                 field="allergies"
                 values={emp.allergies || []}
-                placeholder={canWriteEmployeeAllergies ? t('addAllergy') : t('noAllergies')}
+                placeholder={canWriteEmployeeAllergies ? t('addAllergy') : t('noAllergiesOrDiet')}
                 isActive={isPopActive}
                 onOpenManage={(field, anchor) => openManageEmployeeMultiValue(emp, field, anchor)}
                 canEdit={canWriteEmployeeAllergies}
@@ -7973,7 +7977,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                     alt={appTitle}
                     title={appTitle}
                     className="app-header-logo desktop-only"
-                    onClick={() => handleTabClick('familiesOverview')}
+                    onClick={() => handleTabClick('main')}
                     style={{ cursor: 'pointer' }}
                   />
                   <img
@@ -7981,13 +7985,13 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                     alt={appTitle}
                     title={appTitle}
                     className="app-header-favicon mobile-only"
-                    onClick={() => handleTabClick('familiesOverview')}
+                    onClick={() => handleTabClick('main')}
                     style={{ cursor: 'pointer' }}
                   />
                 </>
               ) : (
                 <h1
-                  onClick={() => handleTabClick('familiesOverview')}
+                  onClick={() => handleTabClick('main')}
                   style={{ cursor: 'pointer' }}
                 >
                   {displayTitle}
@@ -8136,7 +8140,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
           </div>
         )}
 
-        {!isLandingActive && activeTab !== 'childcareFees' && activeTab !== 'audit' && activeTab !== 'admin' && activeTab !== 'kiosk' && activeTab !== 'dashboard' && activeTab !== 'mealPlan' && activeTab !== 'mealAllergens' && (
+        {!isLandingActive && activeTab !== 'main' && activeTab !== 'childcareFees' && activeTab !== 'audit' && activeTab !== 'admin' && activeTab !== 'kiosk' && activeTab !== 'dashboard' && activeTab !== 'mealPlan' && activeTab !== 'mealAllergens' && (
           <div className="controls-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <div
               className={`controls-left ${activeTab === 'familiesOverview' ? 'overview-controls-left' : ''}`}
@@ -8554,7 +8558,16 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
           </div>
         )}
 
-        {activeTab === 'familiesOverview' ? (
+        {activeTab === 'main' ? (
+          <div className="tab-scroll-content main-page-tab-scroll" data-testid="main-page-scroll-container">
+            <MainPage
+              onNavigate={handleTabClick}
+              canViewMealPlan={canViewMealPlan}
+              canUseDashboard={canUseDashboard}
+              userName={currentAuthUserFirstName}
+            />
+          </div>
+        ) : activeTab === 'familiesOverview' ? (
           <DataTable
             className="overview-table"
             data={overviewFamiliesTabData}

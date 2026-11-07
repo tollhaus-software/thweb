@@ -184,7 +184,7 @@ test.describe('Test Case 12: Family Sorting across MGA Tabs', () => {
       localStorage.setItem('token', 'developer@example.com');
     });
 
-    await page.goto('/');
+    await page.goto('/#families');
     await page.evaluate(() => {
       localStorage.removeItem('thweb_family_sort_order');
     });

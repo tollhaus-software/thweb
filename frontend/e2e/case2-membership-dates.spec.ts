@@ -12,7 +12,7 @@ test.describe('Test Case 2: Inferred Default Start Date from Oldest Group Change
     });
 
     // 3. Load application
-    await page.goto('/');
+    await page.goto('/#families');
     await expect(page.getByRole('button', { name: 'Familie hinzufügen' })).toBeVisible();
   });
 

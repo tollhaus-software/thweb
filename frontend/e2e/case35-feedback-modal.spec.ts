@@ -22,7 +22,7 @@ test.describe('Test Case 35: Dashboard Feedback Modal', () => {
     // 5. Verify the "Feedback" button in bottom nav
     const feedbackBtn = embeddedPage.locator('[data-testid="kiosk-feedback-btn"]');
     await expect(feedbackBtn).toBeVisible();
-    await expect(feedbackBtn).toContainText('Feedback');
+    await expect(feedbackBtn).toHaveAttribute('title', 'Feedback');
 
     // 6. Click the Feedback button
     await feedbackBtn.click();

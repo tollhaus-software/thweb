@@ -25,7 +25,7 @@ test.describe('Test Case 38: Dashboard infoPages Grid and Video Guides', () => {
     // 5. Verify the "Anleitungen" button (infoPages key) exists in the bottom nav
     const infoPagesBtn = embeddedPage.locator('[data-testid="kiosk-info-pages-btn"]');
     await expect(infoPagesBtn).toBeVisible();
-    await expect(infoPagesBtn).toContainText('Anleitungen');
+    await expect(infoPagesBtn).toHaveAttribute('title', 'Anleitungen');
 
     // 6. Click "Anleitungen" button to open info pages grid
     await infoPagesBtn.click();

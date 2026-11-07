@@ -135,7 +135,7 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		r.With(auth.RequirePermission("fees.self.read")).Post("/api/fees/calculate", server.HandleCalculateFees)
 
 		// Weekly Meal Plan (Kochplan)
-		r.With(auth.RequirePermission("mealplan.view")).Get("/api/mealplan", server.HandleGetMealPlanDay)
+		r.With(auth.RequireAnyPermission("mealplan.view", "dashboard.use")).Get("/api/mealplan", server.HandleGetMealPlanDay)
 
 		// Dashboard / Daily Brief & Allergies Summary
 		r.With(auth.RequirePermission("dashboard.use")).Get("/api/dashboard/daily-brief", server.HandleGetDailyBrief)
