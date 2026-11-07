@@ -23,14 +23,17 @@ cd frontend && npm run build
 *Requirement*: Must exit with code 0 without type or build errors.
 
 ### 1.3 Playwright E2E Tests
-E2E test files are located in `frontend/e2e/` (e.g., `case1-*.spec.ts` through `case23-*.spec.ts`).
+E2E test files are located in `frontend/e2e/` (e.g., `case1-*.spec.ts` through `case42-*.spec.ts`).
 You must ensure that relevant (and full) E2E test suites pass:
 ```bash
-# Run specific E2E test file(s)
+# Run specific E2E test file(s) against local running stack
 cd frontend && npx playwright test e2e/<test-name>.spec.ts
 
-# Run the complete test suite
+# Run the complete test suite against local running stack
 cd frontend && npx playwright test
+
+# Or run in parallel using isolated stacks (recommended for full suite runs)
+./scripts/run-e2e-isolated.sh
 ```
 *Requirement*: All executed tests must pass.
 
@@ -71,12 +74,45 @@ When the Docker Compose stack is already running:
    cd frontend && npx playwright test
    ```
 
-### 3.2 Running in Isolated Environment
-To run tests in a standalone isolated Docker stack:
+### 3.2 Running in Isolated Environment (Parallel Test Execution)
+The repository provides `scripts/run-e2e-isolated.sh` to run Playwright tests in parallel across isolated Docker stacks without interfering with the local development stack:
+
 ```bash
+# Run from repository root:
 ./scripts/run-e2e-isolated.sh
+
+# Or from the frontend directory:
+npm run test:e2e:isolated
 ```
-This script provisions an isolated Docker stack on port 8088, runs Playwright, and cleans up afterwards.
+
+#### How Parallel Execution Works:
+- **Dedicated Worker Stacks**: The script automatically generates a standalone Docker Compose stack running $N$ parallel workers (`E2E_WORKERS`, default is `4`).
+- **Full Database & Service Isolation**: Each worker ($i = 0 \dots N-1$) runs its own backend (`backend-$i`), frontend (`frontend-$i`), and OAuth2 proxy (`oauth2-proxy-$i`), connecting to its own isolated PostgreSQL database (`thweb_$i`). This prevents test cross-talk, data races, and flakiness.
+- **Dynamic Port Allocation**: Proxies bind to consecutive host ports starting at `E2E_BASE_PORT` (default `8088`, so ports `8088`, `8089`, `8090`, `8091`).
+- **Readiness Wait & Automatic Cleanup**: The script waits for all worker health checks to succeed before triggering Playwright, and registers an exit trap (`trap cleanup EXIT`) to cleanly shut down the stack (`docker compose down -v`) and remove generated compose configs on completion, failure, or cancellation.
+
+#### Customizing Parallelism and Ports:
+You can configure parallel worker count and base port using environment variables:
+- `E2E_WORKERS`: Number of parallel workers/stacks (default: `4`, databases `thweb_0` to `thweb_15` are pre-provisioned).
+- `E2E_BASE_PORT`: Base port for the workers (default: `8088`).
+
+```bash
+# Example: Run 8 workers in parallel on base port 9000
+E2E_WORKERS=8 E2E_BASE_PORT=9000 ./scripts/run-e2e-isolated.sh
+```
+
+#### Passing Arguments to Playwright:
+All arguments passed to `run-e2e-isolated.sh` are forwarded directly to `npx playwright test`:
+```bash
+# Run a single spec file in the isolated parallel environment:
+./scripts/run-e2e-isolated.sh e2e/case1-memberships.spec.ts
+
+# Filter tests by grep pattern:
+./scripts/run-e2e-isolated.sh -g "allergies"
+
+# Pass any standard Playwright flags:
+./scripts/run-e2e-isolated.sh --headed --trace on
+```
 
 ---
 
