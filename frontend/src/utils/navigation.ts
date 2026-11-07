@@ -56,6 +56,7 @@ export interface UserPermissionsContext {
   canViewActivity: boolean;
   canProvisionKiosk: boolean;
   canUseDashboard: boolean;
+  canViewMainPage?: boolean;
 }
 
 export interface NavSubItem {
@@ -99,7 +100,7 @@ export const NAVIGATION_CATEGORIES: NavCategory[] = [
         descriptionKey: 'subtabDescMain',
         defaultDescription: 'Tagesübersicht über Kochen, Essen und wichtige Kita-Infos.',
         icon: Home,
-        isVisible: () => true,
+        isVisible: (ctx) => Boolean(ctx.canViewMainPage),
       },
     ],
   },
@@ -389,7 +390,7 @@ export const getFirstPermittedTabForCategory = (
   const visible = getVisibleSubTabsForCategory(catId, perms);
   if (visible.length > 0) return visible[0].id;
   // Fallbacks if no visible tab
-  return 'main';
+  return perms.canViewMainPage ? 'main' : 'familiesOverview';
 };
 
 export const getCategoryLabel = (cat: NavCategory): string => {

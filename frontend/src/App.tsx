@@ -24,6 +24,7 @@ import { HygieneEventsPopover, HygieneCell, type ParentWithHygiene } from './com
 import { ChildcareFeesCalculator } from './components/ChildcareFeesCalculator';
 import { KioskDashboard } from './components/Dashboard/KioskDashboard';
 import { MainPage } from './components/MainPage/MainPage';
+import { isExperimentActive } from './utils/experiments';
 import { MealPlanTab } from './components/MealPlan/MealPlanTab';
 import { MealPlanPrintView } from './components/MealPlan/MealPlanPrintView';
 import { MealAllergensTab } from './components/MealAllergens/MealAllergensTab';
@@ -2648,6 +2649,10 @@ const Dashboard: React.FC = () => {
   const [sortPopoverOpen, setSortPopoverOpen] = React.useState(false);
   const sortButtonRef = React.useRef<HTMLButtonElement>(null);
 
+  const isMainPageActive = React.useMemo(() => {
+    return isExperimentActive('main_page', { user });
+  }, [user]);
+
   const navPerms: UserPermissionsContext = React.useMemo(() => ({
     canReadOverview,
     canReadFamiliesAll,
@@ -2663,6 +2668,7 @@ const Dashboard: React.FC = () => {
     canViewActivity,
     canProvisionKiosk,
     canUseDashboard,
+    canViewMainPage: isMainPageActive,
   }), [
     canReadOverview,
     canReadFamiliesAll,
@@ -2678,6 +2684,7 @@ const Dashboard: React.FC = () => {
     canViewActivity,
     canProvisionKiosk,
     canUseDashboard,
+    isMainPageActive,
   ]);
 
   const [globalFilter, setGlobalFilter] = React.useState('');
@@ -2687,6 +2694,7 @@ const Dashboard: React.FC = () => {
     const rawHash = window.location.hash.replace('#', '');
     const hash = rawHash.split('?')[0];
     const pathname = window.location.pathname.replace(/\/+$/, '');
+    const isMainPageActiveInitial = isExperimentActive('main_page', { user });
     const initialPerms: UserPermissionsContext = {
       canReadOverview,
       canReadFamiliesAll,
@@ -2702,14 +2710,16 @@ const Dashboard: React.FC = () => {
       canViewActivity,
       canProvisionKiosk,
       canUseDashboard,
+      canViewMainPage: isMainPageActiveInitial,
     };
     if (pathname === '/dashboard' && canUseDashboard) {
       return 'dashboard';
     }
-    if (!hash || hash === 'main' || hash === 'home') {
+    if (isMainPageActiveInitial && (!hash || hash === 'main' || hash === 'home')) {
       return 'main';
     }
     if (
+      (hash === 'main' && isMainPageActiveInitial) ||
       (hash === 'familiesOverview' && canReadOverview) ||
       (hash === 'families' && canReadFamiliesAll) ||
       (hash === 'parents' && canReadFamiliesAll) ||
@@ -2730,7 +2740,72 @@ const Dashboard: React.FC = () => {
     ) {
       return hash as any;
     }
-    return 'main';
+    const saved = localStorage.getItem('thweb_active_tab');
+    if (
+      (saved === 'main' && isMainPageActiveInitial) ||
+      (saved === 'familiesOverview' && canReadOverview) ||
+      (saved === 'families' && canReadFamiliesAll) ||
+      (saved === 'parents' && canReadFamiliesAll) ||
+      (saved === 'children' && canReadFamiliesAll) ||
+      (saved === 'members' && canReadMembers) ||
+      (saved === 'jobs' && canReadJobs) ||
+      (saved === 'employees' && canReadEmployees) ||
+      (saved === 'childcareFees' && canReadFees) ||
+      (saved === 'hygieneBelehrung' && (canReadFamiliesAll || hasPermission('hygiene.all.write'))) ||
+      (saved === 'mealPlan' && canViewMealPlan) ||
+      (saved === 'mealAllergens' && canReadMealAllergens) ||
+      (saved === 'audit' && canReadAudit) ||
+      (saved === 'admin' && canManageUsers) ||
+      (saved === 'activity' && canViewActivity) ||
+      (saved === 'kiosk' && canProvisionKiosk) ||
+      (saved && categoryHasLandingPage(saved, initialPerms)) ||
+      (saved === 'dashboard' && canUseDashboard)
+    ) {
+      return saved as any;
+    }
+    if (isMainPageActiveInitial) {
+      return 'main';
+    }
+    if (canReadFamiliesAll) {
+      return 'families';
+    }
+    if (canReadOverview) {
+      return 'familiesOverview';
+    }
+    if (canReadFees) {
+      return 'childcareFees';
+    }
+    if (canReadMembers) {
+      return 'members';
+    }
+    if (canReadJobs) {
+      return 'jobs';
+    }
+    if (canReadEmployees) {
+      return 'employees';
+    }
+    if (canViewMealPlan) {
+      return 'mealPlan';
+    }
+    if (canReadMealAllergens) {
+      return 'mealAllergens';
+    }
+    if (canReadAudit) {
+      return 'audit';
+    }
+    if (canManageUsers) {
+      return 'admin';
+    }
+    if (canViewActivity) {
+      return 'activity';
+    }
+    if (canProvisionKiosk) {
+      return 'kiosk';
+    }
+    if (canUseDashboard) {
+      return 'dashboard';
+    }
+    return isMainPageActiveInitial ? 'main' : 'familiesOverview';
   });
 
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState<boolean>(() => {
@@ -2740,7 +2815,15 @@ const Dashboard: React.FC = () => {
 
   React.useEffect(() => {
     let fallback: typeof activeTab | null = null;
-    if (activeTab === 'families' && !canReadFamiliesAll) {
+    if (activeTab === 'main' && !isMainPageActive) {
+      if (canReadOverview) {
+        fallback = 'familiesOverview';
+      } else if (canReadFamiliesAll) {
+        fallback = 'families';
+      } else if (canReadFees) {
+        fallback = 'childcareFees';
+      }
+    } else if (activeTab === 'families' && !canReadFamiliesAll) {
       if (canReadOverview) {
         fallback = 'familiesOverview';
       } else if (canReadFees) {
@@ -2810,7 +2893,7 @@ const Dashboard: React.FC = () => {
       localStorage.setItem('thweb_active_tab', fallback);
       window.location.hash = fallback;
     }
-  }, [activeTab, canReadFamiliesAll, canReadOverview, canReadFees, canReadMembers, canReadJobs, canReadEmployees, canViewMealPlan, canReadMealAllergens, hasPermission, navPerms]);
+  }, [activeTab, canReadFamiliesAll, canReadOverview, canReadFees, canReadMembers, canReadJobs, canReadEmployees, canViewMealPlan, canReadMealAllergens, hasPermission, navPerms, isMainPageActive]);
 
   // Navigation & Highlighting state (Patterns 2 & 3)
   const [highlightTarget, setHighlightTarget] = React.useState<{ id: string; key: number } | null>(null);
@@ -3900,9 +3983,8 @@ const Dashboard: React.FC = () => {
       const fromTab = searchParams.get('fromTab') as 'families' | 'familiesOverview' | 'parents' | 'children' | 'members' | null;
 
       if (
-        !hash ||
-        hash === 'main' ||
-        hash === 'home' ||
+        (isMainPageActive && (!hash || hash === 'main' || hash === 'home')) ||
+        (!hash && (canReadOverview || canReadFamiliesAll)) ||
         (hash === 'familiesOverview' && canReadOverview) ||
         (hash === 'parents' && canReadFamiliesAll) ||
         (hash === 'children' && canReadFamiliesAll) ||
@@ -3921,8 +4003,11 @@ const Dashboard: React.FC = () => {
         categoryHasLandingPage(hash, navPerms) ||
         (hash === 'dashboard' && canUseDashboard)
       ) {
-        setActiveTab(hash as any);
-        localStorage.setItem('thweb_active_tab', hash);
+        const targetTab = (!hash || hash === 'home')
+          ? (isMainPageActive ? 'main' : (canReadOverview ? 'familiesOverview' : 'families'))
+          : hash;
+        setActiveTab(targetTab as any);
+        localStorage.setItem('thweb_active_tab', targetTab);
 
         if (highlight) {
           setHighlightTarget({ id: highlight, key: Date.now() });
@@ -3952,6 +4037,11 @@ const Dashboard: React.FC = () => {
         setActiveTab(fallback as any);
         localStorage.setItem('thweb_active_tab', fallback);
         window.location.hash = fallback;
+      } else if ((hash === 'main' || hash === 'home') && !isMainPageActive) {
+        const fallback = canReadOverview ? 'familiesOverview' : canReadFamiliesAll ? 'families' : 'childcareFees';
+        setActiveTab(fallback as any);
+        localStorage.setItem('thweb_active_tab', fallback);
+        window.location.hash = fallback;
       } else if (hash === 'audit' || hash === 'admin' || hash === 'activity' || hash === 'kiosk' || hash === 'mealPlan' || hash === 'mealAllergens' || hash === 'dashboard') {
         const fallback = canReadFamiliesAll ? 'families' : canReadOverview ? 'familiesOverview' : 'childcareFees';
         setActiveTab(fallback as any);
@@ -3974,7 +4064,7 @@ const Dashboard: React.FC = () => {
       handleHashChange();
     }
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [canReadAudit, canManageUsers, canViewActivity, canProvisionKiosk, canUseDashboard, canReadOverview, canReadFamiliesAll, canReadFees, canReadMembers, canReadJobs, canReadEmployees, canViewMealPlan, canReadMealAllergens, hasPermission, navPerms]);
+  }, [canReadAudit, canManageUsers, canViewActivity, canProvisionKiosk, canUseDashboard, canReadOverview, canReadFamiliesAll, canReadFees, canReadMembers, canReadJobs, canReadEmployees, canViewMealPlan, canReadMealAllergens, hasPermission, navPerms, isMainPageActive]);
 
   useRealtime(React.useCallback((message: any) => {
     if (
@@ -7953,6 +8043,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
         canViewActivity={canViewActivity}
         canProvisionKiosk={canProvisionKiosk}
         canUseDashboard={canUseDashboard}
+        canViewMainPage={isMainPageActive}
         appTitle={appTitle}
         appLogoUrl={appLogoUrl}
       />
@@ -7977,7 +8068,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                     alt={appTitle}
                     title={appTitle}
                     className="app-header-logo desktop-only"
-                    onClick={() => handleTabClick('main')}
+                    onClick={() => handleTabClick(isMainPageActive ? 'main' : (canReadOverview ? 'familiesOverview' : 'families'))}
                     style={{ cursor: 'pointer' }}
                   />
                   <img
@@ -7985,13 +8076,13 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                     alt={appTitle}
                     title={appTitle}
                     className="app-header-favicon mobile-only"
-                    onClick={() => handleTabClick('main')}
+                    onClick={() => handleTabClick(isMainPageActive ? 'main' : (canReadOverview ? 'familiesOverview' : 'families'))}
                     style={{ cursor: 'pointer' }}
                   />
                 </>
               ) : (
                 <h1
-                  onClick={() => handleTabClick('main')}
+                  onClick={() => handleTabClick(isMainPageActive ? 'main' : (canReadOverview ? 'familiesOverview' : 'families'))}
                   style={{ cursor: 'pointer' }}
                 >
                   {displayTitle}

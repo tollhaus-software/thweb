@@ -41,6 +41,7 @@ export interface SidebarProps {
   canViewActivity?: boolean;
   canProvisionKiosk?: boolean;
   canUseDashboard?: boolean;
+  canViewMainPage?: boolean;
   appTitle?: string;
   appLogoUrl?: string;
 }
@@ -66,6 +67,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   canViewActivity = false,
   canProvisionKiosk = false,
   canUseDashboard = false,
+  canViewMainPage = false,
   appTitle = 'TH Portal',
   appLogoUrl,
 }) => {
@@ -86,6 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     canViewActivity: canViewActivity || canManageUsers,
     canProvisionKiosk,
     canUseDashboard,
+    canViewMainPage,
   };
 
   const visibleCategories = getVisibleNavigationCategories(perms);
