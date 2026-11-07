@@ -63,6 +63,16 @@ func httpErrorLog(w http.ResponseWriter, r *http.Request, msg string, code int, 
 	http.Error(w, msg, code)
 }
 
+func getActorEmail(r *http.Request) string {
+	if u := auth.GetActualUser(r.Context()); u != nil {
+		return u.Email
+	}
+	if u := auth.GetUser(r.Context()); u != nil {
+		return u.Email
+	}
+	return ""
+}
+
 func parseFlexibleDate(dateStr string) (time.Time, error) {
 	if dateStr == "" {
 		return time.Time{}, errors.New("empty date string")
@@ -932,7 +942,7 @@ func (s *Server) HandleCreateFamily(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	family, err := s.Store.CreateFamilyWithParents(r.Context(), user.ID, parents)
+	family, err := s.Store.CreateFamilyWithParents(r.Context(), user.ID, parents, getActorEmail(r))
 	if err != nil {
 		httpErrorLog(w, r, "Failed to create family with parents", http.StatusInternalServerError, err)
 		return
@@ -1108,7 +1118,7 @@ func (s *Server) HandleUpdateFamilyParents(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	if err := s.Store.UpdateFamilyParents(r.Context(), user.ID, familyID, req.Parents); err != nil {
+	if err := s.Store.UpdateFamilyParents(r.Context(), user.ID, familyID, req.Parents, getActorEmail(r)); err != nil {
 		httpErrorLog(w, r, "Failed to update family parents", http.StatusInternalServerError, err)
 		return
 	}
@@ -1130,7 +1140,7 @@ func (s *Server) HandleDeleteFamily(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.Store.DeleteFamily(r.Context(), user.ID, familyID); err != nil {
+	if err := s.Store.DeleteFamily(r.Context(), user.ID, familyID, getActorEmail(r)); err != nil {
 		httpErrorLog(w, r, "Failed to delete family", http.StatusInternalServerError, err)
 		return
 	}
@@ -1162,7 +1172,7 @@ func (s *Server) HandleUpdateFamilyMentor(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := s.Store.UpdateFamilyMentor(r.Context(), user.ID, familyID, req.MentorFamilyID, req.MentorParentIDs); err != nil {
+	if err := s.Store.UpdateFamilyMentor(r.Context(), user.ID, familyID, req.MentorFamilyID, req.MentorParentIDs, getActorEmail(r)); err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			httpErrorLog(w, r, err.Error(), http.StatusNotFound, err)
 			return
@@ -1201,7 +1211,7 @@ func (s *Server) HandleUpdateFamilyNotes(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err := s.Store.UpdateFamilyNotes(r.Context(), user.ID, familyID, req.Notes); err != nil {
+	if err := s.Store.UpdateFamilyNotes(r.Context(), user.ID, familyID, req.Notes, getActorEmail(r)); err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			httpErrorLog(w, r, err.Error(), http.StatusNotFound, err)
 			return
@@ -1443,7 +1453,7 @@ func (s *Server) HandleUpdateChild(w http.ResponseWriter, r *http.Request) {
 		Familiencards:              familiencards,
 	}
 
-	if err := s.Store.UpdateChild(r.Context(), user.ID, childID, child); err != nil {
+	if err := s.Store.UpdateChild(r.Context(), user.ID, childID, child, getActorEmail(r)); err != nil {
 		httpErrorLog(w, r, "Failed to update child in database", http.StatusInternalServerError, err)
 		return
 	}
@@ -1465,7 +1475,7 @@ func (s *Server) HandleDeleteChild(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.Store.DeleteChild(r.Context(), user.ID, childID); err != nil {
+	if err := s.Store.DeleteChild(r.Context(), user.ID, childID, getActorEmail(r)); err != nil {
 		httpErrorLog(w, r, "Failed to delete child", http.StatusInternalServerError, err)
 		return
 	}
@@ -1522,7 +1532,7 @@ func (s *Server) HandleCreateChildGroupChange(w http.ResponseWriter, r *http.Req
 		TargetGroup: req.TargetGroup,
 	}
 
-	created, err := s.Store.CreateChildGroupChange(r.Context(), user.ID, gc)
+	created, err := s.Store.CreateChildGroupChange(r.Context(), user.ID, gc, getActorEmail(r))
 	if err != nil {
 		httpErrorLog(w, r, "Failed to create child group change", http.StatusInternalServerError, err)
 		return
@@ -1545,7 +1555,7 @@ func (s *Server) HandleDeleteChildGroupChange(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if err := s.Store.DeleteChildGroupChange(r.Context(), user.ID, changeID); err != nil {
+	if err := s.Store.DeleteChildGroupChange(r.Context(), user.ID, changeID, getActorEmail(r)); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) || strings.Contains(err.Error(), "no rows in result set") || strings.Contains(err.Error(), "not found") {
 			httpErrorLog(w, r, "Child group change not found", http.StatusNotFound, err)
 			return
@@ -1586,7 +1596,7 @@ func (s *Server) HandleUpdateChildGroupChange(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	updated, err := s.Store.UpdateChildGroupChange(r.Context(), user.ID, changeID, changeDate, req.TargetGroup)
+	updated, err := s.Store.UpdateChildGroupChange(r.Context(), user.ID, changeID, changeDate, req.TargetGroup, getActorEmail(r))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) || strings.Contains(err.Error(), "no rows in result set") || strings.Contains(err.Error(), "not found") {
 			httpErrorLog(w, r, "Child group change not found", http.StatusNotFound, err)
@@ -1613,7 +1623,7 @@ func (s *Server) HandleDeleteParent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.Store.DeleteParent(r.Context(), user.ID, parentID); err != nil {
+	if err := s.Store.DeleteParent(r.Context(), user.ID, parentID, getActorEmail(r)); err != nil {
 		httpErrorLog(w, r, "Failed to delete parent", http.StatusInternalServerError, err)
 		return
 	}
@@ -1669,7 +1679,7 @@ func (s *Server) HandleCreateHygieneEvent(w http.ResponseWriter, r *http.Request
 		Documentation: req.Documentation,
 	}
 
-	created, err := s.Store.CreateHygieneEvent(r.Context(), user.ID, event)
+	created, err := s.Store.CreateHygieneEvent(r.Context(), user.ID, event, getActorEmail(r))
 	if err != nil {
 		httpErrorLog(w, r, "Failed to create hygiene event", http.StatusInternalServerError, err)
 		return
@@ -1687,7 +1697,7 @@ func (s *Server) HandleDeleteHygieneEvent(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := s.Store.DeleteHygieneEvent(r.Context(), user.ID, eventID); err != nil {
+	if err := s.Store.DeleteHygieneEvent(r.Context(), user.ID, eventID, getActorEmail(r)); err != nil {
 		httpErrorLog(w, r, "Failed to delete hygiene event", http.StatusInternalServerError, err)
 		return
 	}
@@ -1725,7 +1735,7 @@ func (s *Server) HandleUpdateHygieneEvent(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	updated, err := s.Store.UpdateHygieneEvent(r.Context(), user.ID, eventID, eventDate, req.EventType, req.Documentation)
+	updated, err := s.Store.UpdateHygieneEvent(r.Context(), user.ID, eventID, eventDate, req.EventType, req.Documentation, getActorEmail(r))
 	if err != nil {
 		httpErrorLog(w, r, "Failed to update hygiene event", http.StatusInternalServerError, err)
 		return
@@ -1803,7 +1813,7 @@ func (s *Server) HandleCreateTHMembership(w http.ResponseWriter, r *http.Request
 		MembershipType: req.MembershipType,
 	}
 
-	created, err := s.Store.CreateTHMembership(r.Context(), user.ID, membership)
+	created, err := s.Store.CreateTHMembership(r.Context(), user.ID, membership, getActorEmail(r))
 	if err != nil {
 		if strings.Contains(err.Error(), "overlap") || strings.Contains(err.Error(), "greater than") {
 			httpErrorLog(w, r, err.Error(), http.StatusBadRequest, err)
@@ -1825,7 +1835,7 @@ func (s *Server) HandleDeleteTHMembership(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := s.Store.DeleteTHMembership(r.Context(), user.ID, membershipID); err != nil {
+	if err := s.Store.DeleteTHMembership(r.Context(), user.ID, membershipID, getActorEmail(r)); err != nil {
 		httpErrorLog(w, r, "Failed to delete TH membership", http.StatusInternalServerError, err)
 		return
 	}
@@ -1872,7 +1882,7 @@ func (s *Server) HandleUpdateTHMembership(w http.ResponseWriter, r *http.Request
 		endDate = &t
 	}
 
-	updated, err := s.Store.UpdateTHMembership(r.Context(), user.ID, membershipID, startDate, endDate, req.MembershipType)
+	updated, err := s.Store.UpdateTHMembership(r.Context(), user.ID, membershipID, startDate, endDate, req.MembershipType, getActorEmail(r))
 	if err != nil {
 		if strings.Contains(err.Error(), "overlap") || strings.Contains(err.Error(), "greater than") {
 			httpErrorLog(w, r, err.Error(), http.StatusBadRequest, err)
@@ -2281,7 +2291,7 @@ func (s *Server) HandleCreateEmployee(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	created, err := s.Store.CreateEmployee(r.Context(), user.ID, emp)
+	created, err := s.Store.CreateEmployee(r.Context(), user.ID, emp, getActorEmail(r))
 	if err != nil {
 		httpErrorLog(w, r, err.Error(), http.StatusBadRequest, err)
 		return
@@ -2423,7 +2433,7 @@ func (s *Server) HandleUpdateEmployee(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := s.Store.UpdateEmployee(r.Context(), user.ID, emp)
+	updated, err := s.Store.UpdateEmployee(r.Context(), user.ID, emp, getActorEmail(r))
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			httpErrorLog(w, r, err.Error(), http.StatusNotFound, err)
@@ -2656,7 +2666,7 @@ func (s *Server) HandleDeleteEmployee(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.Store.DeleteEmployee(r.Context(), user.ID, empID); err != nil {
+	if err := s.Store.DeleteEmployee(r.Context(), user.ID, empID, getActorEmail(r)); err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			httpErrorLog(w, r, err.Error(), http.StatusNotFound, err)
 			return
@@ -3047,7 +3057,7 @@ func (s *Server) HandleCreateJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created, err := s.Store.CreateJob(r.Context(), user.ID, job)
+	created, err := s.Store.CreateJob(r.Context(), user.ID, job, getActorEmail(r))
 	if err != nil {
 		httpErrorLog(w, r, "Failed to create job", http.StatusInternalServerError, err)
 		return
@@ -3120,7 +3130,7 @@ func (s *Server) HandleUpdateJob(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	updated, err := s.Store.UpdateJob(r.Context(), user.ID, job)
+	updated, err := s.Store.UpdateJob(r.Context(), user.ID, job, getActorEmail(r))
 	if err != nil {
 		httpErrorLog(w, r, "Failed to update job", http.StatusInternalServerError, err)
 		return
@@ -3145,7 +3155,7 @@ func (s *Server) HandleDeleteJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = s.Store.DeleteJob(r.Context(), user.ID, id)
+	err = s.Store.DeleteJob(r.Context(), user.ID, id, getActorEmail(r))
 	if err != nil {
 		if strings.Contains(err.Error(), "active associations") {
 			w.Header().Set("Content-Type", "application/json")
@@ -3187,7 +3197,7 @@ func (s *Server) HandleSetParentJobs(w http.ResponseWriter, r *http.Request) {
 		req.JobIDs = []uuid.UUID{}
 	}
 
-	err = s.Store.SetParentJobs(r.Context(), user.ID, parentID, req.JobIDs)
+	err = s.Store.SetParentJobs(r.Context(), user.ID, parentID, req.JobIDs, getActorEmail(r))
 	if err != nil {
 		httpErrorLog(w, r, "Failed to set parent jobs", http.StatusInternalServerError, err)
 		return
@@ -3228,7 +3238,7 @@ func (s *Server) HandleSetEmployeeJobs(w http.ResponseWriter, r *http.Request) {
 		req.JobIDs = []uuid.UUID{}
 	}
 
-	err = s.Store.SetEmployeeJobs(r.Context(), user.ID, employeeID, req.JobIDs)
+	err = s.Store.SetEmployeeJobs(r.Context(), user.ID, employeeID, req.JobIDs, getActorEmail(r))
 	if err != nil {
 		httpErrorLog(w, r, "Failed to set employee jobs", http.StatusInternalServerError, err)
 		return
@@ -3282,7 +3292,7 @@ func (s *Server) HandleSetJobAssignees(w http.ResponseWriter, r *http.Request) {
 		req.EmployeeIDs = []uuid.UUID{}
 	}
 
-	err = s.Store.SetJobAssignees(r.Context(), user.ID, jobID, req.ParentIDs, req.EmployeeIDs)
+	err = s.Store.SetJobAssignees(r.Context(), user.ID, jobID, req.ParentIDs, req.EmployeeIDs, getActorEmail(r))
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			httpErrorLog(w, r, "Job not found", http.StatusNotFound, err)
@@ -3346,7 +3356,7 @@ func (s *Server) HandleSetJobRoles(w http.ResponseWriter, r *http.Request) {
 		req.Roles = []string{}
 	}
 
-	updated, err := s.Store.SetJobRoles(r.Context(), user.ID, jobID, req.Roles)
+	updated, err := s.Store.SetJobRoles(r.Context(), user.ID, jobID, req.Roles, getActorEmail(r))
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			httpErrorLog(w, r, "Job not found", http.StatusNotFound, err)

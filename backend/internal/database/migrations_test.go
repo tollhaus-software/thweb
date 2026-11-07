@@ -227,6 +227,20 @@ func TestApplySchemaMigrations(t *testing.T) {
 		t.Fatalf("expected meal_allergens_history table to exist: %v", err)
 	}
 
+	// Verify audit_log.changed_by_email column exists
+	var changedByEmailCol string
+	err = testDB.QueryRow(`
+		SELECT column_name
+		FROM information_schema.columns
+		WHERE table_name = 'audit_log' AND column_name = 'changed_by_email';
+	`).Scan(&changedByEmailCol)
+	if err != nil {
+		t.Fatalf("expected changed_by_email column in audit_log: %v", err)
+	}
+	if changedByEmailCol != "changed_by_email" {
+		t.Errorf("expected column_name 'changed_by_email', got %q", changedByEmailCol)
+	}
+
 	// Verify cooks column exists in meal_allergens
 	var cooksCol string
 	err = testDB.QueryRow(`

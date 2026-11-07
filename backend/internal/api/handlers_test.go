@@ -3395,6 +3395,132 @@ func TestHandleFeedback(t *testing.T) {
 	_, _ = pool.Exec(ctx, "DELETE FROM feedback WHERE description LIKE 'Test feedback%'")
 }
 
+func TestAuditLog_IdentifierEmailParent_RecordedAndDisplayed(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	appStore := store.NewStore(pool)
+	authn := auth.NewAuthenticator("mock", true, appStore)
+	hub := NewHub()
+	router := SetupRouter(appStore, authn, hub, nil)
+
+	parentEmail := "lara.medart@tollhaus-stuttgart.de"
+	adminEmail := "superadmin@example.com"
+	adminID := uuid.New()
+
+	// Ensure admin user is in users table with audit.view & *
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email, permissions) VALUES ($1, $2, $2, '[\"*\"]'::jsonb) ON CONFLICT (id) DO NOTHING", adminID, adminEmail)
+	// Ensure parent is NOT in users table!
+	_, _ = pool.Exec(ctx, "DELETE FROM users WHERE email = $1", parentEmail)
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", adminID)
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE email = $1", parentEmail)
+	}()
+
+	// 1. Create a job that grants jobs.all.write
+	job, err := appStore.CreateJob(ctx, adminID, models.Job{
+		Name:  "Vorstand IT",
+		Roles: []string{"admin"}, // Admin role grants all permissions including jobs.all.write
+	}, adminEmail)
+	if err != nil {
+		t.Fatalf("failed to create job: %v", err)
+	}
+	defer func() {
+		_ = appStore.DeleteJob(ctx, adminID, job.ID, adminEmail)
+	}()
+
+	// 2. Create family & parent with identifier email
+	parent := models.Parent{
+		FirstName: "Lara",
+		LastName:  "Medart",
+		Address:   "Stuttgart West",
+		Emails: models.MultiValueList{
+			{Value: parentEmail, IdentifierEmail: true},
+		},
+	}
+	fam, err := appStore.CreateFamilyWithParents(ctx, adminID, []models.Parent{parent}, adminEmail)
+	if err != nil {
+		t.Fatalf("failed to create family: %v", err)
+	}
+	parentID := fam.Parents[0].ID
+	defer func() {
+		_ = appStore.DeleteFamily(ctx, adminID, fam.ID, adminEmail)
+	}()
+
+	// 3. Assign the parent to the job (granting job-associated permissions)
+	if err := appStore.SetParentJobs(ctx, adminID, parentID, []uuid.UUID{job.ID}, adminEmail); err != nil {
+		t.Fatalf("failed to assign parent to job: %v", err)
+	}
+
+	// 4. Create another job for Lara to modify
+	targetJob, err := appStore.CreateJob(ctx, adminID, models.Job{
+		Name: "Gartenpflege",
+	}, adminEmail)
+	if err != nil {
+		t.Fatalf("failed to create target job: %v", err)
+	}
+	defer func() {
+		_ = appStore.DeleteJob(ctx, adminID, targetJob.ID, adminEmail)
+	}()
+
+	// 5. Lara (authenticated via X-Forwarded-Email as identifier-email parent) modifies the target job
+	updatePayload := map[string]interface{}{
+		"name":        "Gartenpflege Frühling",
+		"description": "Geändert von Lara",
+	}
+	bodyBytes, _ := json.Marshal(updatePayload)
+	reqUpdate := httptest.NewRequest("PUT", "/api/jobs/"+targetJob.ID.String(), bytes.NewReader(bodyBytes))
+	reqUpdate.Header.Set("X-Forwarded-Email", parentEmail)
+	recUpdate := httptest.NewRecorder()
+	router.ServeHTTP(recUpdate, reqUpdate)
+
+	if recUpdate.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for Lara updating job, got %d (%s)", recUpdate.Code, recUpdate.Body.String())
+	}
+
+	// 6. Admin queries audit logs via GET /api/audit-logs
+	reqAudit := httptest.NewRequest("GET", "/api/audit-logs?limit=50", nil)
+	reqAudit.Header.Set("X-Forwarded-Email", adminEmail)
+	recAudit := httptest.NewRecorder()
+	router.ServeHTTP(recAudit, reqAudit)
+
+	if recAudit.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for GET /api/audit-logs, got %d (%s)", recAudit.Code, recAudit.Body.String())
+	}
+
+	var logs []models.AuditLog
+	if err := json.Unmarshal(recAudit.Body.Bytes(), &logs); err != nil {
+		t.Fatalf("failed to unmarshal audit logs: %v", err)
+	}
+
+	var foundJobUpdate *models.AuditLog
+	for i := range logs {
+		if logs[i].EntityID == targetJob.ID && logs[i].Operation == "UPDATE" {
+			foundJobUpdate = &logs[i]
+			break
+		}
+	}
+
+	if foundJobUpdate == nil {
+		t.Fatalf("expected to find audit log for target job update, but none was found in %d logs", len(logs))
+	}
+
+	// VERIFY: changed_by is nil (because Lara has no users row), but changed_by_email is Lara's email!
+	if foundJobUpdate.ChangedBy != nil {
+		t.Errorf("expected changed_by to be nil for parent without users row, got %v", foundJobUpdate.ChangedBy)
+	}
+	if foundJobUpdate.ChangedByEmail != parentEmail {
+		t.Errorf("CRITICAL BUG: expected changed_by_email to be %q, got %q (would display as '-' on UI)", parentEmail, foundJobUpdate.ChangedByEmail)
+	}
+}
+
+
 
 
 

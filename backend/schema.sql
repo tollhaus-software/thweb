@@ -98,6 +98,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
     before_snapshot JSONB,
     after_snapshot JSONB,
     changed_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    changed_by_email TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

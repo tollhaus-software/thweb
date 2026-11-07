@@ -1934,6 +1934,132 @@ func TestCanonicalEmail_UsersParentsEmployees(t *testing.T) {
 	}
 }
 
+func TestAuditLog_ChangedByEmail_IdentifierEmailParent(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	if envURL := os.Getenv("DATABASE_URL"); envURL != "" {
+		dbURL = envURL
+	}
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := NewStore(pool)
+
+	parentEmail := "lara.medart@tollhaus-stuttgart.de"
+
+	// 1. Create a family & parent with userID = uuid.Nil, but userEmail provided (as would happen with identifier-email parent)
+	parent := models.Parent{
+		FirstName: "Lara",
+		LastName:  "Medart",
+		Address:   "Teststraße 123",
+		Emails: models.MultiValueList{
+			{Value: parentEmail, IdentifierEmail: true},
+		},
+	}
+	family, err := appStore.CreateFamilyWithParents(ctx, uuid.Nil, []models.Parent{parent}, parentEmail)
+	if err != nil {
+		t.Fatalf("CreateFamilyWithParents failed: %v", err)
+	}
+	defer func() {
+		_ = appStore.DeleteFamily(ctx, uuid.Nil, family.ID, parentEmail)
+	}()
+
+	createdParentID := family.Parents[0].ID
+
+	// 2. Check history on parent: ChangedBy should be nil, ChangedByEmail should be parentEmail
+	history, err := appStore.GetHistory(ctx, createdParentID)
+	if err != nil {
+		t.Fatalf("GetHistory failed: %v", err)
+	}
+	if len(history) == 0 {
+		t.Fatalf("expected at least 1 history record for parent, got 0")
+	}
+	found := false
+	for _, l := range history {
+		if l.Operation == "INSERT" {
+			found = true
+			if l.ChangedBy != nil {
+				t.Errorf("expected ChangedBy to be nil for identifier email parent, got %v", l.ChangedBy)
+			}
+			if l.ChangedByEmail != parentEmail {
+				t.Errorf("expected ChangedByEmail %q, got %q", parentEmail, l.ChangedByEmail)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("INSERT audit record not found in history")
+	}
+
+	// 3. Query audit logs with search query matching parent email
+	adminUser := &models.UserWithPermissions{
+		EffectivePermissions: []string{"*"},
+	}
+	queriedLogs, _, err := appStore.QueryAuditLogsForUser(ctx, adminUser, models.AuditLogFilter{
+		Search: "lara.medart",
+	})
+	if err != nil {
+		t.Fatalf("QueryAuditLogsForUser failed: %v", err)
+	}
+	if len(queriedLogs) == 0 {
+		t.Fatalf("expected to find audit logs searching by %q, got none", "lara.medart")
+	}
+	matched := false
+	for _, l := range queriedLogs {
+		if l.ChangedByEmail == parentEmail {
+			matched = true
+			break
+		}
+	}
+	if !matched {
+		t.Errorf("expected queried logs to include record with ChangedByEmail %q", parentEmail)
+	}
+
+	// 4. Test that for an explicit user, deleting the user from `users` table does NOT erase their email in audit log
+	explicitUserID := uuid.New()
+	explicitEmail := "temporary-admin@example.com"
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, $2, $2)", explicitUserID, explicitEmail)
+	if err != nil {
+		t.Fatalf("failed to insert temporary user: %v", err)
+	}
+
+	job, err := appStore.CreateJob(ctx, explicitUserID, models.Job{
+		Name: "Temporary Job For Audit Test",
+	}, explicitEmail)
+	if err != nil {
+		t.Fatalf("CreateJob failed: %v", err)
+	}
+	defer func() {
+		_ = appStore.DeleteJob(ctx, uuid.Nil, job.ID, explicitEmail)
+	}()
+
+	// Delete user from users table
+	_, err = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", explicitUserID)
+	if err != nil {
+		t.Fatalf("failed to delete user: %v", err)
+	}
+
+	// Fetch history for the job: ChangedBy is now nil (due to ON DELETE SET NULL), but ChangedByEmail must still be preserved!
+	jobHistory, err := appStore.GetHistory(ctx, job.ID)
+	if err != nil {
+		t.Fatalf("GetHistory for job failed: %v", err)
+	}
+	if len(jobHistory) == 0 {
+		t.Fatalf("expected job history entry, got 0")
+	}
+	if jobHistory[0].ChangedByEmail != explicitEmail {
+		t.Errorf("expected ChangedByEmail %q to be preserved even after user was deleted from users table, got %q", explicitEmail, jobHistory[0].ChangedByEmail)
+	}
+}
+
+
 
 
 

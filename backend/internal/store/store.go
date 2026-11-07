@@ -55,7 +55,7 @@ func (s *Store) WithTx(ctx context.Context, fn func(pgx.Tx) error) error {
 	return tx.Commit(ctx)
 }
 
-func (s *Store) CreateFamilyWithParents(ctx context.Context, userID uuid.UUID, parents []models.Parent) (*models.Family, error) {
+func (s *Store) CreateFamilyWithParents(ctx context.Context, userID uuid.UUID, parents []models.Parent, userEmail ...string) (*models.Family, error) {
 	family := &models.Family{
 		ID:         uuid.New(),
 		Parents:    parents,
@@ -88,14 +88,14 @@ func (s *Store) CreateFamilyWithParents(ctx context.Context, userID uuid.UUID, p
 				return err
 			}
 
-			if err := s.recordAudit(ctx, tx, transactionID, &family.ID, "parent", p.ID, "INSERT", nil, p, userID); err != nil {
+			if err := s.recordAudit(ctx, tx, transactionID, &family.ID, "parent", p.ID, "INSERT", nil, p, userID, userEmail...); err != nil {
 				return err
 			}
 			createdParents = append(createdParents, p)
 		}
 
 		family.Parents = createdParents
-		if err := s.recordAudit(ctx, tx, transactionID, &family.ID, "family", family.ID, "INSERT", nil, family, userID); err != nil {
+		if err := s.recordAudit(ctx, tx, transactionID, &family.ID, "family", family.ID, "INSERT", nil, family, userID, userEmail...); err != nil {
 			return err
 		}
 
@@ -269,7 +269,7 @@ func cleanForAudit(v interface{}) interface{} {
 	}
 }
 
-func (s *Store) recordAudit(ctx context.Context, tx pgx.Tx, tid uuid.UUID, fid *uuid.UUID, etype string, eid uuid.UUID, op string, before interface{}, after interface{}, userID uuid.UUID) error {
+func (s *Store) recordAudit(ctx context.Context, tx pgx.Tx, tid uuid.UUID, fid *uuid.UUID, etype string, eid uuid.UUID, op string, before interface{}, after interface{}, userID uuid.UUID, userEmail ...string) error {
 	var beforePayload, afterPayload []byte
 	var err error
 
@@ -295,9 +295,14 @@ func (s *Store) recordAudit(ctx context.Context, tx pgx.Tx, tid uuid.UUID, fid *
 		changedBy = &userID
 	}
 
+	var changedByEmail string
+	if len(userEmail) > 0 {
+		changedByEmail = strings.TrimSpace(userEmail[0])
+	}
+
 	_, err = tx.Exec(ctx,
-		"INSERT INTO audit_log (transaction_id, family_id, entity_type, entity_id, operation, before_snapshot, after_snapshot, changed_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-		tid, fid, etype, eid, op, beforePayload, afterPayload, changedBy)
+		"INSERT INTO audit_log (transaction_id, family_id, entity_type, entity_id, operation, before_snapshot, after_snapshot, changed_by, changed_by_email) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+		tid, fid, etype, eid, op, beforePayload, afterPayload, changedBy, changedByEmail)
 	return err
 }
 
@@ -423,7 +428,7 @@ func (s *Store) ListFamilies(ctx context.Context) ([]models.Family, error) {
 
 func (s *Store) GetHistory(ctx context.Context, entityID uuid.UUID) ([]models.AuditLog, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT a.id, a.transaction_id, a.family_id, a.entity_type, a.entity_id, a.operation, a.before_snapshot, a.after_snapshot, a.changed_by, COALESCE(u.email, ''), a.created_at
+		SELECT a.id, a.transaction_id, a.family_id, a.entity_type, a.entity_id, a.operation, a.before_snapshot, a.after_snapshot, a.changed_by, COALESCE(NULLIF(a.changed_by_email, ''), u.email, ''), a.created_at
 		FROM audit_log a
 		LEFT JOIN users u ON a.changed_by = u.id
 		WHERE a.entity_id = $1
@@ -762,7 +767,7 @@ func (s *Store) ListEmployeeIdentifyingEmails(ctx context.Context) (map[string][
 	return identEmails, rows.Err()
 }
 
-func (s *Store) UpdateFamilyParents(ctx context.Context, userID uuid.UUID, familyID uuid.UUID, parents []models.Parent) error {
+func (s *Store) UpdateFamilyParents(ctx context.Context, userID uuid.UUID, familyID uuid.UUID, parents []models.Parent, userEmail ...string) error {
 	transactionID := uuid.New()
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
 		res, err := tx.Exec(ctx, "INSERT INTO families (id) VALUES ($1) ON CONFLICT (id) DO NOTHING", familyID)
@@ -771,7 +776,7 @@ func (s *Store) UpdateFamilyParents(ctx context.Context, userID uuid.UUID, famil
 		}
 		if res.RowsAffected() > 0 {
 			fam := models.Family{ID: familyID}
-			if err := s.recordAudit(ctx, tx, transactionID, &familyID, "family", familyID, "INSERT", nil, fam, userID); err != nil {
+			if err := s.recordAudit(ctx, tx, transactionID, &familyID, "family", familyID, "INSERT", nil, fam, userID, userEmail...); err != nil {
 				return err
 			}
 		}
@@ -806,12 +811,12 @@ func (s *Store) UpdateFamilyParents(ctx context.Context, userID uuid.UUID, famil
 				if err != nil {
 					return err
 				}
-				if err := s.recordAudit(ctx, tx, transactionID, &familyID, "parent", p.ID, "INSERT", nil, p, userID); err != nil {
+				if err := s.recordAudit(ctx, tx, transactionID, &familyID, "parent", p.ID, "INSERT", nil, p, userID, userEmail...); err != nil {
 					return err
 				}
 			} else {
 				if parentNonVaccinationChanged(oldParent, p) {
-					if err := s.recordAudit(ctx, tx, transactionID, &familyID, "parent", p.ID, "UPDATE", oldParent, p, userID); err != nil {
+					if err := s.recordAudit(ctx, tx, transactionID, &familyID, "parent", p.ID, "UPDATE", oldParent, p, userID, userEmail...); err != nil {
 						return err
 					}
 				}
@@ -840,7 +845,7 @@ func (s *Store) GetChildByID(ctx context.Context, childID uuid.UUID) (*models.Ch
 	return &c, nil
 }
 
-func (s *Store) UpdateChild(ctx context.Context, userID uuid.UUID, childID uuid.UUID, child models.Child) error {
+func (s *Store) UpdateChild(ctx context.Context, userID uuid.UUID, childID uuid.UUID, child models.Child, userEmail ...string) error {
 	transactionID := uuid.New()
 
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
@@ -850,7 +855,7 @@ func (s *Store) UpdateChild(ctx context.Context, userID uuid.UUID, childID uuid.
 		}
 		if res.RowsAffected() > 0 {
 			fam := models.Family{ID: child.FamilyID}
-			if err := s.recordAudit(ctx, tx, transactionID, &child.FamilyID, "family", child.FamilyID, "INSERT", nil, fam, userID); err != nil {
+			if err := s.recordAudit(ctx, tx, transactionID, &child.FamilyID, "family", child.FamilyID, "INSERT", nil, fam, userID, userEmail...); err != nil {
 				return err
 			}
 		}
@@ -901,21 +906,21 @@ func (s *Store) UpdateChild(ctx context.Context, userID uuid.UUID, childID uuid.
 				if err != nil {
 					return err
 				}
-				if err := s.recordAudit(ctx, tx, transactionID, &child.FamilyID, "child_group_change", gc.ID, "INSERT", nil, gc, userID); err != nil {
+				if err := s.recordAudit(ctx, tx, transactionID, &child.FamilyID, "child_group_change", gc.ID, "INSERT", nil, gc, userID, userEmail...); err != nil {
 					return err
 				}
 			}
-			return s.recordAudit(ctx, tx, transactionID, &child.FamilyID, "child", child.ID, "INSERT", nil, child, userID)
+			return s.recordAudit(ctx, tx, transactionID, &child.FamilyID, "child", child.ID, "INSERT", nil, child, userID, userEmail...)
 		} else {
 			if childNonVaccinationChanged(oldChild, child) || child.AllergiesUpdated {
-				return s.recordAudit(ctx, tx, transactionID, &child.FamilyID, "child", childID, "UPDATE", oldChild, child, userID)
+				return s.recordAudit(ctx, tx, transactionID, &child.FamilyID, "child", childID, "UPDATE", oldChild, child, userID, userEmail...)
 			}
 			return nil
 		}
 	})
 }
 
-func (s *Store) DeleteFamily(ctx context.Context, userID uuid.UUID, familyID uuid.UUID) error {
+func (s *Store) DeleteFamily(ctx context.Context, userID uuid.UUID, familyID uuid.UUID, userEmail ...string) error {
 	transactionID := uuid.New()
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
 		var family models.Family
@@ -923,7 +928,7 @@ func (s *Store) DeleteFamily(ctx context.Context, userID uuid.UUID, familyID uui
 		parents, _ := s.GetParentsByFamilyID(ctx, familyID)
 		family.Parents = parents
 
-		if err := s.recordAudit(ctx, tx, transactionID, &familyID, "family", familyID, "DELETE", family, nil, userID); err != nil {
+		if err := s.recordAudit(ctx, tx, transactionID, &familyID, "family", familyID, "DELETE", family, nil, userID, userEmail...); err != nil {
 			return err
 		}
 		_, err := tx.Exec(ctx, "DELETE FROM families WHERE id = $1", familyID)
@@ -931,7 +936,7 @@ func (s *Store) DeleteFamily(ctx context.Context, userID uuid.UUID, familyID uui
 	})
 }
 
-func (s *Store) UpdateFamilyMentor(ctx context.Context, userID uuid.UUID, familyID uuid.UUID, mentorFamilyID *uuid.UUID, mentorParentIDs []uuid.UUID) error {
+func (s *Store) UpdateFamilyMentor(ctx context.Context, userID uuid.UUID, familyID uuid.UUID, mentorFamilyID *uuid.UUID, mentorParentIDs []uuid.UUID, userEmail ...string) error {
 	if mentorFamilyID != nil && *mentorFamilyID == familyID {
 		return fmt.Errorf("family cannot be its own mentor")
 	}
@@ -1010,11 +1015,11 @@ func (s *Store) UpdateFamilyMentor(ctx context.Context, userID uuid.UUID, family
 		newFamily.MentorParentIDs = mentorParentIDs
 
 		transactionID := uuid.New()
-		return s.recordAudit(ctx, tx, transactionID, &familyID, "family", familyID, "UPDATE", oldFamily, newFamily, userID)
+		return s.recordAudit(ctx, tx, transactionID, &familyID, "family", familyID, "UPDATE", oldFamily, newFamily, userID, userEmail...)
 	})
 }
 
-func (s *Store) UpdateFamilyNotes(ctx context.Context, userID uuid.UUID, familyID uuid.UUID, notes string) error {
+func (s *Store) UpdateFamilyNotes(ctx context.Context, userID uuid.UUID, familyID uuid.UUID, notes string, userEmail ...string) error {
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
 		var oldFamily models.Family
 		var oldMentorFamilyID *uuid.UUID
@@ -1044,11 +1049,11 @@ func (s *Store) UpdateFamilyNotes(ctx context.Context, userID uuid.UUID, familyI
 		newFamily.Notes = notes
 
 		transactionID := uuid.New()
-		return s.recordAudit(ctx, tx, transactionID, &familyID, "family", familyID, "UPDATE", oldFamily, newFamily, userID)
+		return s.recordAudit(ctx, tx, transactionID, &familyID, "family", familyID, "UPDATE", oldFamily, newFamily, userID, userEmail...)
 	})
 }
 
-func (s *Store) DeleteChild(ctx context.Context, userID uuid.UUID, childID uuid.UUID) error {
+func (s *Store) DeleteChild(ctx context.Context, userID uuid.UUID, childID uuid.UUID, userEmail ...string) error {
 	transactionID := uuid.New()
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
 		var oldChild models.Child
@@ -1059,7 +1064,7 @@ func (s *Store) DeleteChild(ctx context.Context, userID uuid.UUID, childID uuid.
 			return err
 		}
 
-		if err := s.recordAudit(ctx, tx, transactionID, &oldChild.FamilyID, "child", childID, "DELETE", oldChild, nil, userID); err != nil {
+		if err := s.recordAudit(ctx, tx, transactionID, &oldChild.FamilyID, "child", childID, "DELETE", oldChild, nil, userID, userEmail...); err != nil {
 			return err
 		}
 		_, err = tx.Exec(ctx, "DELETE FROM children WHERE id = $1", childID)
@@ -1081,7 +1086,7 @@ func (s *Store) DeleteChild(ctx context.Context, userID uuid.UUID, childID uuid.
 		if parentCount == 0 && childCount == 0 {
 			var f models.Family
 			f.ID = oldChild.FamilyID
-			if err := s.recordAudit(ctx, tx, transactionID, &oldChild.FamilyID, "family", oldChild.FamilyID, "DELETE", f, nil, userID); err != nil {
+			if err := s.recordAudit(ctx, tx, transactionID, &oldChild.FamilyID, "family", oldChild.FamilyID, "DELETE", f, nil, userID, userEmail...); err != nil {
 				return err
 			}
 			_, err = tx.Exec(ctx, "DELETE FROM families WHERE id = $1", oldChild.FamilyID)
@@ -1091,7 +1096,7 @@ func (s *Store) DeleteChild(ctx context.Context, userID uuid.UUID, childID uuid.
 	})
 }
 
-func (s *Store) DeleteParent(ctx context.Context, userID uuid.UUID, parentID uuid.UUID) error {
+func (s *Store) DeleteParent(ctx context.Context, userID uuid.UUID, parentID uuid.UUID, userEmail ...string) error {
 	transactionID := uuid.New()
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
 		var oldParent models.Parent
@@ -1103,7 +1108,7 @@ func (s *Store) DeleteParent(ctx context.Context, userID uuid.UUID, parentID uui
 		}
 		oldParent.Phones = sanitizePhones(oldParent.Phones)
 
-		if err := s.recordAudit(ctx, tx, transactionID, &oldParent.FamilyID, "parent", parentID, "DELETE", oldParent, nil, userID); err != nil {
+		if err := s.recordAudit(ctx, tx, transactionID, &oldParent.FamilyID, "parent", parentID, "DELETE", oldParent, nil, userID, userEmail...); err != nil {
 			return err
 		}
 		_, err = tx.Exec(ctx, "DELETE FROM parents WHERE id = $1", parentID)
@@ -1126,7 +1131,7 @@ func (s *Store) DeleteParent(ctx context.Context, userID uuid.UUID, parentID uui
 		if parentCount == 0 && childCount == 0 {
 			var f models.Family
 			f.ID = oldParent.FamilyID
-			if err := s.recordAudit(ctx, tx, transactionID, &oldParent.FamilyID, "family", oldParent.FamilyID, "DELETE", f, nil, userID); err != nil {
+			if err := s.recordAudit(ctx, tx, transactionID, &oldParent.FamilyID, "family", oldParent.FamilyID, "DELETE", f, nil, userID, userEmail...); err != nil {
 				return err
 			}
 			_, err = tx.Exec(ctx, "DELETE FROM families WHERE id = $1", oldParent.FamilyID)
@@ -1136,7 +1141,7 @@ func (s *Store) DeleteParent(ctx context.Context, userID uuid.UUID, parentID uui
 	})
 }
 
-func (s *Store) CreateHygieneEvent(ctx context.Context, userID uuid.UUID, event models.HygieneBelehrungEvent) (models.HygieneBelehrungEvent, error) {
+func (s *Store) CreateHygieneEvent(ctx context.Context, userID uuid.UUID, event models.HygieneBelehrungEvent, userEmail ...string) (models.HygieneBelehrungEvent, error) {
 	transactionID := uuid.New()
 	if event.ID == uuid.Nil {
 		event.ID = uuid.New()
@@ -1157,7 +1162,7 @@ func (s *Store) CreateHygieneEvent(ctx context.Context, userID uuid.UUID, event 
 			return err
 		}
 
-		return s.recordAudit(ctx, tx, transactionID, &familyID, "hygiene_event", event.ID, "INSERT", nil, event, userID)
+		return s.recordAudit(ctx, tx, transactionID, &familyID, "hygiene_event", event.ID, "INSERT", nil, event, userID, userEmail...)
 	})
 
 	if err != nil {
@@ -1166,7 +1171,7 @@ func (s *Store) CreateHygieneEvent(ctx context.Context, userID uuid.UUID, event 
 	return event, nil
 }
 
-func (s *Store) DeleteHygieneEvent(ctx context.Context, userID uuid.UUID, eventID uuid.UUID) error {
+func (s *Store) DeleteHygieneEvent(ctx context.Context, userID uuid.UUID, eventID uuid.UUID, userEmail ...string) error {
 	transactionID := uuid.New()
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
 		var parentID uuid.UUID
@@ -1192,7 +1197,7 @@ func (s *Store) DeleteHygieneEvent(ctx context.Context, userID uuid.UUID, eventI
 			Documentation: documentation,
 		}
 
-		if err := s.recordAudit(ctx, tx, transactionID, &familyID, "hygiene_event", eventID, "DELETE", oldEvent, nil, userID); err != nil {
+		if err := s.recordAudit(ctx, tx, transactionID, &familyID, "hygiene_event", eventID, "DELETE", oldEvent, nil, userID, userEmail...); err != nil {
 			return err
 		}
 
@@ -1201,7 +1206,7 @@ func (s *Store) DeleteHygieneEvent(ctx context.Context, userID uuid.UUID, eventI
 	})
 }
 
-func (s *Store) UpdateHygieneEvent(ctx context.Context, userID uuid.UUID, eventID uuid.UUID, eventDate time.Time, eventType string, documentation string) (models.HygieneBelehrungEvent, error) {
+func (s *Store) UpdateHygieneEvent(ctx context.Context, userID uuid.UUID, eventID uuid.UUID, eventDate time.Time, eventType string, documentation string, userEmail ...string) (models.HygieneBelehrungEvent, error) {
 	transactionID := uuid.New()
 	var updated models.HygieneBelehrungEvent
 	err := s.WithTx(ctx, func(tx pgx.Tx) error {
@@ -1236,7 +1241,7 @@ func (s *Store) UpdateHygieneEvent(ctx context.Context, userID uuid.UUID, eventI
 		if oldEvent.EventType != updated.EventType ||
 			oldEvent.Documentation != updated.Documentation ||
 			oldEvent.EventDate.Format("2006-01-02") != updated.EventDate.Format("2006-01-02") {
-			return s.recordAudit(ctx, tx, transactionID, &familyID, "hygiene_event", eventID, "UPDATE", oldEvent, updated, userID)
+			return s.recordAudit(ctx, tx, transactionID, &familyID, "hygiene_event", eventID, "UPDATE", oldEvent, updated, userID, userEmail...)
 		}
 		return nil
 	})
@@ -1247,7 +1252,7 @@ func (s *Store) UpdateHygieneEvent(ctx context.Context, userID uuid.UUID, eventI
 	return updated, nil
 }
 
-func (s *Store) CreateTHMembership(ctx context.Context, userID uuid.UUID, m models.THMembership) (models.THMembership, error) {
+func (s *Store) CreateTHMembership(ctx context.Context, userID uuid.UUID, m models.THMembership, userEmail ...string) (models.THMembership, error) {
 	if m.EndDate != nil && m.EndDate.Format("2006-01-02") <= m.StartDate.Format("2006-01-02") {
 		return models.THMembership{}, fmt.Errorf("end date must be greater than start date")
 	}
@@ -1288,12 +1293,12 @@ func (s *Store) CreateTHMembership(ctx context.Context, userID uuid.UUID, m mode
 			return err
 		}
 
-		return s.recordAudit(ctx, tx, transactionID, &familyID, "th_membership", created.ID, "INSERT", nil, created, userID)
+		return s.recordAudit(ctx, tx, transactionID, &familyID, "th_membership", created.ID, "INSERT", nil, created, userID, userEmail...)
 	})
 	return created, err
 }
 
-func (s *Store) DeleteTHMembership(ctx context.Context, userID uuid.UUID, membershipID uuid.UUID) error {
+func (s *Store) DeleteTHMembership(ctx context.Context, userID uuid.UUID, membershipID uuid.UUID, userEmail ...string) error {
 	transactionID := uuid.New()
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
 		var parentID uuid.UUID
@@ -1319,7 +1324,7 @@ func (s *Store) DeleteTHMembership(ctx context.Context, userID uuid.UUID, member
 			MembershipType: membershipType,
 		}
 
-		if err := s.recordAudit(ctx, tx, transactionID, &familyID, "th_membership", membershipID, "DELETE", oldMembership, nil, userID); err != nil {
+		if err := s.recordAudit(ctx, tx, transactionID, &familyID, "th_membership", membershipID, "DELETE", oldMembership, nil, userID, userEmail...); err != nil {
 			return err
 		}
 
@@ -1328,7 +1333,7 @@ func (s *Store) DeleteTHMembership(ctx context.Context, userID uuid.UUID, member
 	})
 }
 
-func (s *Store) UpdateTHMembership(ctx context.Context, userID uuid.UUID, membershipID uuid.UUID, startDate time.Time, endDate *time.Time, membershipType string) (models.THMembership, error) {
+func (s *Store) UpdateTHMembership(ctx context.Context, userID uuid.UUID, membershipID uuid.UUID, startDate time.Time, endDate *time.Time, membershipType string, userEmail ...string) (models.THMembership, error) {
 	if endDate != nil && endDate.Format("2006-01-02") <= startDate.Format("2006-01-02") {
 		return models.THMembership{}, fmt.Errorf("end date must be greater than start date")
 	}
@@ -1399,7 +1404,7 @@ func (s *Store) UpdateTHMembership(ctx context.Context, userID uuid.UUID, member
 		if oldMembership.MembershipType != updated.MembershipType ||
 			oldMembership.StartDate.Format("2006-01-02") != updated.StartDate.Format("2006-01-02") ||
 			oldEndStr != newEndStr {
-			return s.recordAudit(ctx, tx, transactionID, &familyID, "th_membership", membershipID, "UPDATE", oldMembership, updated, userID)
+			return s.recordAudit(ctx, tx, transactionID, &familyID, "th_membership", membershipID, "UPDATE", oldMembership, updated, userID, userEmail...)
 		}
 		return nil
 	})
@@ -1522,7 +1527,7 @@ func (s *Store) ListMembers(ctx context.Context) ([]models.MemberRow, error) {
 	return members, rows.Err()
 }
 
-func (s *Store) CreateChildGroupChange(ctx context.Context, userID uuid.UUID, gc models.ChildGroupChange) (models.ChildGroupChange, error) {
+func (s *Store) CreateChildGroupChange(ctx context.Context, userID uuid.UUID, gc models.ChildGroupChange, userEmail ...string) (models.ChildGroupChange, error) {
 	transactionID := uuid.New()
 	var created models.ChildGroupChange
 	err := s.WithTx(ctx, func(tx pgx.Tx) error {
@@ -1548,12 +1553,12 @@ func (s *Store) CreateChildGroupChange(ctx context.Context, userID uuid.UUID, gc
 			return err
 		}
 
-		return s.recordAudit(ctx, tx, transactionID, &familyID, "child_group_change", created.ID, "INSERT", nil, created, userID)
+		return s.recordAudit(ctx, tx, transactionID, &familyID, "child_group_change", created.ID, "INSERT", nil, created, userID, userEmail...)
 	})
 	return created, err
 }
 
-func (s *Store) DeleteChildGroupChange(ctx context.Context, userID uuid.UUID, changeID uuid.UUID) error {
+func (s *Store) DeleteChildGroupChange(ctx context.Context, userID uuid.UUID, changeID uuid.UUID, userEmail ...string) error {
 	transactionID := uuid.New()
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
 		var childID uuid.UUID
@@ -1577,7 +1582,7 @@ func (s *Store) DeleteChildGroupChange(ctx context.Context, userID uuid.UUID, ch
 			TargetGroup: targetGroup,
 		}
 
-		if err := s.recordAudit(ctx, tx, transactionID, &familyID, "child_group_change", changeID, "DELETE", oldChange, nil, userID); err != nil {
+		if err := s.recordAudit(ctx, tx, transactionID, &familyID, "child_group_change", changeID, "DELETE", oldChange, nil, userID, userEmail...); err != nil {
 			return err
 		}
 
@@ -1586,7 +1591,7 @@ func (s *Store) DeleteChildGroupChange(ctx context.Context, userID uuid.UUID, ch
 	})
 }
 
-func (s *Store) UpdateChildGroupChange(ctx context.Context, userID uuid.UUID, changeID uuid.UUID, changeDate time.Time, targetGroup int) (models.ChildGroupChange, error) {
+func (s *Store) UpdateChildGroupChange(ctx context.Context, userID uuid.UUID, changeID uuid.UUID, changeDate time.Time, targetGroup int, userEmail ...string) (models.ChildGroupChange, error) {
 	transactionID := uuid.New()
 	var updated models.ChildGroupChange
 	err := s.WithTx(ctx, func(tx pgx.Tx) error {
@@ -1624,7 +1629,7 @@ func (s *Store) UpdateChildGroupChange(ctx context.Context, userID uuid.UUID, ch
 		}
 
 		if oldChange.TargetGroup != updated.TargetGroup || oldChange.ChangeDate.Format("2006-01-02") != updated.ChangeDate.Format("2006-01-02") {
-			return s.recordAudit(ctx, tx, transactionID, &familyID, "child_group_change", changeID, "UPDATE", oldChange, updated, userID)
+			return s.recordAudit(ctx, tx, transactionID, &familyID, "child_group_change", changeID, "UPDATE", oldChange, updated, userID, userEmail...)
 		}
 		return nil
 	})
@@ -1633,7 +1638,7 @@ func (s *Store) UpdateChildGroupChange(ctx context.Context, userID uuid.UUID, ch
 
 func (s *Store) ListAuditLogs(ctx context.Context) ([]models.AuditLog, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT a.id, a.transaction_id, a.family_id, a.entity_type, a.entity_id, a.operation, a.before_snapshot, a.after_snapshot, a.changed_by, COALESCE(u.email, ''), a.created_at
+		SELECT a.id, a.transaction_id, a.family_id, a.entity_type, a.entity_id, a.operation, a.before_snapshot, a.after_snapshot, a.changed_by, COALESCE(NULLIF(a.changed_by_email, ''), u.email, ''), a.created_at
 		FROM audit_log a
 		LEFT JOIN users u ON a.changed_by = u.id
 		ORDER BY a.created_at DESC
@@ -1705,14 +1710,14 @@ func (s *Store) QueryAuditLogsForUser(ctx context.Context, user *models.UserWith
 	if searchTrimmed != "" {
 		pattern := "%" + escapeLike(searchTrimmed) + "%"
 		whereClauses = append(whereClauses, fmt.Sprintf(
-			"(COALESCE(u.email, '') ILIKE $%d OR COALESCE(a.before_snapshot::text, '') ILIKE $%d OR COALESCE(a.after_snapshot::text, '') ILIKE $%d)",
+			"(COALESCE(NULLIF(a.changed_by_email, ''), u.email, '') ILIKE $%d OR COALESCE(a.before_snapshot::text, '') ILIKE $%d OR COALESCE(a.after_snapshot::text, '') ILIKE $%d)",
 			len(args)+1, len(args)+1, len(args)+1,
 		))
 		args = append(args, pattern)
 	}
 
 	query := `
-		SELECT a.id, a.transaction_id, a.family_id, a.entity_type, a.entity_id, a.operation, a.before_snapshot, a.after_snapshot, a.changed_by, COALESCE(u.email, ''), a.created_at
+		SELECT a.id, a.transaction_id, a.family_id, a.entity_type, a.entity_id, a.operation, a.before_snapshot, a.after_snapshot, a.changed_by, COALESCE(NULLIF(a.changed_by_email, ''), u.email, ''), a.created_at
 		FROM audit_log a
 		LEFT JOIN users u ON a.changed_by = u.id
 	`
@@ -2431,7 +2436,7 @@ func (s *Store) GetEmployeeByID(ctx context.Context, id uuid.UUID) (*models.Empl
 	return &emp, nil
 }
 
-func (s *Store) CreateEmployee(ctx context.Context, userID uuid.UUID, emp models.Employee) (models.Employee, error) {
+func (s *Store) CreateEmployee(ctx context.Context, userID uuid.UUID, emp models.Employee, userEmail ...string) (models.Employee, error) {
 	emp.FirstName = strings.TrimSpace(emp.FirstName)
 	emp.LastName = strings.TrimSpace(emp.LastName)
 	emp.EmployeeType = strings.TrimSpace(emp.EmployeeType)
@@ -2487,13 +2492,13 @@ func (s *Store) CreateEmployee(ctx context.Context, userID uuid.UUID, emp models
 		created.Phones = sanitizePhones(created.Phones)
 		created.AllergiesUpdated = emp.AllergiesUpdated
 
-		return s.recordAudit(ctx, tx, transactionID, nil, "employee", created.ID, "INSERT", nil, created, userID)
+		return s.recordAudit(ctx, tx, transactionID, nil, "employee", created.ID, "INSERT", nil, created, userID, userEmail...)
 	})
 
 	return created, err
 }
 
-func (s *Store) UpdateEmployee(ctx context.Context, userID uuid.UUID, emp models.Employee) (models.Employee, error) {
+func (s *Store) UpdateEmployee(ctx context.Context, userID uuid.UUID, emp models.Employee, userEmail ...string) (models.Employee, error) {
 	emp.FirstName = strings.TrimSpace(emp.FirstName)
 	emp.LastName = strings.TrimSpace(emp.LastName)
 	emp.EmployeeType = strings.TrimSpace(emp.EmployeeType)
@@ -2572,13 +2577,13 @@ func (s *Store) UpdateEmployee(ctx context.Context, userID uuid.UUID, emp models
 		updated.Phones = sanitizePhones(updated.Phones)
 		updated.AllergiesUpdated = emp.AllergiesUpdated
 
-		return s.recordAudit(ctx, tx, transactionID, nil, "employee", updated.ID, "UPDATE", oldEmp, updated, userID)
+		return s.recordAudit(ctx, tx, transactionID, nil, "employee", updated.ID, "UPDATE", oldEmp, updated, userID, userEmail...)
 	})
 
 	return updated, err
 }
 
-func (s *Store) DeleteEmployee(ctx context.Context, userID uuid.UUID, empID uuid.UUID) error {
+func (s *Store) DeleteEmployee(ctx context.Context, userID uuid.UUID, empID uuid.UUID, userEmail ...string) error {
 	transactionID := uuid.New()
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
 		oldEmp, err := s.GetEmployeeByID(ctx, empID)
@@ -2597,7 +2602,7 @@ func (s *Store) DeleteEmployee(ctx context.Context, userID uuid.UUID, empID uuid
 			return fmt.Errorf("employee not found")
 		}
 
-		return s.recordAudit(ctx, tx, transactionID, nil, "employee", empID, "DELETE", oldEmp, nil, userID)
+		return s.recordAudit(ctx, tx, transactionID, nil, "employee", empID, "DELETE", oldEmp, nil, userID, userEmail...)
 	})
 }
 
@@ -3776,7 +3781,7 @@ func (s *Store) GetJobByID(ctx context.Context, id uuid.UUID) (*models.JobWithAs
 	return &j, nil
 }
 
-func (s *Store) CreateJob(ctx context.Context, userID uuid.UUID, job models.Job) (models.Job, error) {
+func (s *Store) CreateJob(ctx context.Context, userID uuid.UUID, job models.Job, userEmail ...string) (models.Job, error) {
 	job.Name = strings.TrimSpace(job.Name)
 	job.Description = strings.TrimSpace(job.Description)
 	job.ContactEmail = strings.TrimSpace(job.ContactEmail)
@@ -3824,7 +3829,7 @@ func (s *Store) CreateJob(ctx context.Context, userID uuid.UUID, job models.Job)
 		if created.Roles == nil {
 			created.Roles = []string{}
 		}
-		return s.recordAudit(ctx, tx, transactionID, nil, "job", created.ID, "INSERT", nil, created, userID)
+		return s.recordAudit(ctx, tx, transactionID, nil, "job", created.ID, "INSERT", nil, created, userID, userEmail...)
 	})
 	if err != nil {
 		return models.Job{}, err
@@ -3832,7 +3837,7 @@ func (s *Store) CreateJob(ctx context.Context, userID uuid.UUID, job models.Job)
 	return created, nil
 }
 
-func (s *Store) UpdateJob(ctx context.Context, userID uuid.UUID, job models.Job) (models.Job, error) {
+func (s *Store) UpdateJob(ctx context.Context, userID uuid.UUID, job models.Job, userEmail ...string) (models.Job, error) {
 	job.Name = strings.TrimSpace(job.Name)
 	job.Description = strings.TrimSpace(job.Description)
 	job.ContactEmail = strings.TrimSpace(job.ContactEmail)
@@ -3891,7 +3896,7 @@ func (s *Store) UpdateJob(ctx context.Context, userID uuid.UUID, job models.Job)
 		if updated.Roles == nil {
 			updated.Roles = []string{}
 		}
-		return s.recordAudit(ctx, tx, transactionID, nil, "job", updated.ID, "UPDATE", oldJob.Job, updated, userID)
+		return s.recordAudit(ctx, tx, transactionID, nil, "job", updated.ID, "UPDATE", oldJob.Job, updated, userID, userEmail...)
 	})
 	if err != nil {
 		return models.Job{}, err
@@ -3899,7 +3904,7 @@ func (s *Store) UpdateJob(ctx context.Context, userID uuid.UUID, job models.Job)
 	return updated, nil
 }
 
-func (s *Store) SetJobRoles(ctx context.Context, userID uuid.UUID, jobID uuid.UUID, roles []string) (*models.JobWithAssignees, error) {
+func (s *Store) SetJobRoles(ctx context.Context, userID uuid.UUID, jobID uuid.UUID, roles []string, userEmail ...string) (*models.JobWithAssignees, error) {
 	if roles == nil {
 		roles = []string{}
 	}
@@ -3945,7 +3950,7 @@ func (s *Store) SetJobRoles(ctx context.Context, userID uuid.UUID, jobID uuid.UU
 			updatedJob.Roles = []string{}
 		}
 
-		return s.recordAudit(ctx, tx, transactionID, nil, "job", jobID, "UPDATE", oldJob.Job, updatedJob, userID)
+		return s.recordAudit(ctx, tx, transactionID, nil, "job", jobID, "UPDATE", oldJob.Job, updatedJob, userID, userEmail...)
 	})
 	if err != nil {
 		return nil, err
@@ -3954,7 +3959,7 @@ func (s *Store) SetJobRoles(ctx context.Context, userID uuid.UUID, jobID uuid.UU
 	return s.GetJobByID(ctx, jobID)
 }
 
-func (s *Store) DeleteJob(ctx context.Context, userID uuid.UUID, jobID uuid.UUID) error {
+func (s *Store) DeleteJob(ctx context.Context, userID uuid.UUID, jobID uuid.UUID, userEmail ...string) error {
 	transactionID := uuid.New()
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
 		oldJob, err := s.GetJobByID(ctx, jobID)
@@ -3980,11 +3985,11 @@ func (s *Store) DeleteJob(ctx context.Context, userID uuid.UUID, jobID uuid.UUID
 		if _, err := tx.Exec(ctx, "DELETE FROM jobs WHERE id = $1", jobID); err != nil {
 			return err
 		}
-		return s.recordAudit(ctx, tx, transactionID, nil, "job", jobID, "DELETE", oldJob.Job, nil, userID)
+		return s.recordAudit(ctx, tx, transactionID, nil, "job", jobID, "DELETE", oldJob.Job, nil, userID, userEmail...)
 	})
 }
 
-func (s *Store) SetParentJobs(ctx context.Context, userID uuid.UUID, parentID uuid.UUID, jobIDs []uuid.UUID) error {
+func (s *Store) SetParentJobs(ctx context.Context, userID uuid.UUID, parentID uuid.UUID, jobIDs []uuid.UUID, userEmail ...string) error {
 	transactionID := uuid.New()
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
 		var familyID uuid.UUID
@@ -4004,11 +4009,11 @@ func (s *Store) SetParentJobs(ctx context.Context, userID uuid.UUID, parentID uu
 				return err
 			}
 		}
-		return s.recordAudit(ctx, tx, transactionID, &familyID, "parent", parentID, "UPDATE", nil, map[string]interface{}{"assigned_job_ids": jobIDs}, userID)
+		return s.recordAudit(ctx, tx, transactionID, &familyID, "parent", parentID, "UPDATE", nil, map[string]interface{}{"assigned_job_ids": jobIDs}, userID, userEmail...)
 	})
 }
 
-func (s *Store) SetEmployeeJobs(ctx context.Context, userID uuid.UUID, employeeID uuid.UUID, jobIDs []uuid.UUID) error {
+func (s *Store) SetEmployeeJobs(ctx context.Context, userID uuid.UUID, employeeID uuid.UUID, jobIDs []uuid.UUID, userEmail ...string) error {
 	transactionID := uuid.New()
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
 		var exists bool
@@ -4025,7 +4030,7 @@ func (s *Store) SetEmployeeJobs(ctx context.Context, userID uuid.UUID, employeeI
 				return err
 			}
 		}
-		return s.recordAudit(ctx, tx, transactionID, nil, "employee", employeeID, "UPDATE", nil, map[string]interface{}{"assigned_job_ids": jobIDs}, userID)
+		return s.recordAudit(ctx, tx, transactionID, nil, "employee", employeeID, "UPDATE", nil, map[string]interface{}{"assigned_job_ids": jobIDs}, userID, userEmail...)
 	})
 }
 
@@ -4094,7 +4099,7 @@ func (s *Store) ListJobPeopleOptions(ctx context.Context) (JobPeopleOptions, err
 	return options, nil
 }
 
-func (s *Store) SetJobAssignees(ctx context.Context, userID uuid.UUID, jobID uuid.UUID, parentIDs []uuid.UUID, employeeIDs []uuid.UUID) error {
+func (s *Store) SetJobAssignees(ctx context.Context, userID uuid.UUID, jobID uuid.UUID, parentIDs []uuid.UUID, employeeIDs []uuid.UUID, userEmail ...string) error {
 	transactionID := uuid.New()
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
 		var jobName string
@@ -4302,7 +4307,7 @@ func (s *Store) SetJobAssignees(ctx context.Context, userID uuid.UUID, jobID uui
 			"removed":      removed,
 		}
 
-		return s.recordAudit(ctx, tx, transactionID, nil, "job", jobID, "UPDATE_ASSIGNEES", beforeSnapshot, afterSnapshot, userID)
+		return s.recordAudit(ctx, tx, transactionID, nil, "job", jobID, "UPDATE_ASSIGNEES", beforeSnapshot, afterSnapshot, userID, userEmail...)
 	})
 }
 
