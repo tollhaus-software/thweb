@@ -86,8 +86,8 @@ export const NAVIGATION_CATEGORIES: NavCategory[] = [
   {
     id: 'main',
     labelKey: 'navMain',
-    defaultLabel: 'Hauptseite',
-    accessibleName: 'Hauptseite',
+    defaultLabel: 'Start',
+    accessibleName: 'Start',
     descriptionKey: 'catDescMain',
     defaultDescription: 'Tagesübersicht über Kochen, Essen und wichtige Kita-Infos.',
     icon: Home,
@@ -95,8 +95,8 @@ export const NAVIGATION_CATEGORIES: NavCategory[] = [
       {
         id: 'main',
         labelKey: 'subtabMain',
-        defaultLabel: 'Hauptseite',
-        accessibleName: 'Hauptseite',
+        defaultLabel: 'Start',
+        accessibleName: 'Start',
         descriptionKey: 'subtabDescMain',
         defaultDescription: 'Tagesübersicht über Kochen, Essen und wichtige Kita-Infos.',
         icon: Home,

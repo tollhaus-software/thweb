@@ -37,7 +37,7 @@ export const EXPERIMENTS: Record<ExperimentId, ExperimentDefinition> = {
     id: 'main_page',
     name: 'Main Page',
     description: 'Daily overview of cooking, food/allergens, and kitas-related information',
-    defaultEnabled: false,
+    defaultEnabled: true,
     paramAliases: ['exp_main', 'main_page', 'main'],
   },
 };

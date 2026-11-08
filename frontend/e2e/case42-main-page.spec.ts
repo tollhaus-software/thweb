@@ -6,26 +6,18 @@ test.describe('Test Case 42: Main Page (Default Homepage, Cook, Food, and Rest o
     expect(resetRes.ok()).toBeTruthy();
   });
 
-  test('experiment toggle: root URL / does not show main page without query param; /?exp_main=1 enables it', async ({ page }) => {
+  test('experiment toggle: root URL / shows main page by default; /?exp_main=0 opts out', async ({ page }) => {
     await page.addInitScript(() => {
       localStorage.setItem('token', 'developer@example.com');
     });
 
-    // 1. Visit root URL / without experiment flag
+    // 1. Default: main page and "Start" tab are visible
     await page.goto('/');
     await page.waitForLoadState('networkidle');
+    await expect(page.getByTestId('main-page')).toBeVisible();
+    await expect(page.locator('.tabs').getByRole('button', { name: 'Start' })).toBeVisible();
 
-    // Main page and "Hauptseite" tab should NOT be visible
-    await expect(page.getByTestId('main-page')).toHaveCount(0);
-    await expect(page.locator('.tabs').getByRole('button', { name: 'Hauptseite' })).toHaveCount(0);
-
-    // 2. Direct navigation to /#main without flag falls back to familiesOverview
-    await page.goto('/#main');
-    await page.waitForLoadState('networkidle');
-    await expect(page.getByTestId('main-page')).toHaveCount(0);
-    expect(page.url()).not.toContain('#main');
-
-    // 3. Explicitly opt out with ?exp_main=0
+    // 2. Explicitly opt out with ?exp_main=0
     await page.goto('/?exp_main=0#main');
     await page.waitForLoadState('networkidle');
     await expect(page.getByTestId('main-page')).toHaveCount(0);
@@ -34,7 +26,7 @@ test.describe('Test Case 42: Main Page (Default Homepage, Cook, Food, and Rest o
     await page.goto('/?exp_main=1');
     await page.waitForLoadState('networkidle');
     await expect(page.getByTestId('main-page')).toBeVisible();
-    await expect(page.locator('.tabs').getByRole('button', { name: 'Hauptseite' })).toBeVisible();
+    await expect(page.locator('.tabs').getByRole('button', { name: 'Start' })).toBeVisible();
 
     // 5. Query param alias ?experiment=main_page also enables it
     await page.goto('/?experiment=main_page');
@@ -90,8 +82,8 @@ test.describe('Test Case 42: Main Page (Default Homepage, Cook, Food, and Rest o
     const mainPage = page.getByTestId('main-page');
     await expect(mainPage).toBeVisible();
 
-    // Verify sidebar shows "Hauptseite" active
-    const mainTab = page.locator('.tabs').getByRole('button', { name: 'Hauptseite' });
+    // Verify sidebar shows "Start" active
+    const mainTab = page.locator('.tabs').getByRole('button', { name: 'Start' });
     await expect(mainTab).toBeVisible();
     await expect(mainTab).toHaveClass(/active/);
 
