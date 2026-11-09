@@ -76,6 +76,7 @@ roles:
       - fees.self.read
       - families.self.selfservice
       - memberships.self.read
+      - mealplan.view
       - allergies.summary.read
       - meal_allergens.read
       - meal_allergens.write

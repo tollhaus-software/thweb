@@ -1499,39 +1499,6 @@ func (s *Store) SaveHygieneInstructionDocument(ctx context.Context, doc models.H
 	return &savedInfo, nil
 }
 
-// EnsureMockParentForDeveloper ensures a mock family and parent record exist for developer@example.com.
-func (s *Store) EnsureMockParentForDeveloper(ctx context.Context) (*uuid.UUID, error) {
-	pID, _, err := s.GetParentInfoByIdentifierEmail(ctx, "developer@example.com")
-	if err == nil && pID != nil {
-		return pID, nil
-	}
-
-	devFamilyID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-	devParentID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
-
-	_, err = s.db.Exec(ctx, `
-		INSERT INTO families (id)
-		VALUES ($1)
-		ON CONFLICT (id) DO NOTHING
-	`, devFamilyID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to ensure dev mock family: %w", err)
-	}
-
-	emailsJSON := `[{"value": "developer@example.com", "canonical_value": "developer@example.com", "identifier_email": true}]`
-	_, err = s.db.Exec(ctx, `
-		INSERT INTO parents (id, family_id, first_name, last_name, emails)
-		VALUES ($1, $2, '', 'Developer', $3::jsonb)
-		ON CONFLICT (id) DO UPDATE SET
-			emails = EXCLUDED.emails
-	`, devParentID, devFamilyID, emailsJSON)
-	if err != nil {
-		return nil, fmt.Errorf("failed to ensure dev mock parent: %w", err)
-	}
-
-	return &devParentID, nil
-}
-
 func (s *Store) GetParentHygieneStatus(ctx context.Context, parentID uuid.UUID) (*models.HygieneUserStatusResponse, error) {
 	activeDoc, err := s.GetActiveHygieneInstructionDocumentInfo(ctx)
 	if err != nil {

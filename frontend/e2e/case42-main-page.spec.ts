@@ -181,7 +181,7 @@ test.describe('Test Case 42: Main Page (Default Homepage, Cook, Food, and Rest o
     await expect(page.getByTestId('main-page')).toBeVisible();
   });
 
-  test('parents default access: opens main page with first name greeting, no Kochansicht link, and no mealplan link if without permission', async ({ request, page }) => {
+  test('parents default access: opens main page with first name greeting, no Kochansicht link, and mealplan link visible', async ({ request, page }) => {
     // 1. Create a parent with identifier email (parent_default role)
     const parentEmail = 'eltern.kontakt@tollhaus-stuttgart.de';
     const famRes = await request.post('/api/families', {
@@ -225,9 +225,9 @@ test.describe('Test Case 42: Main Page (Default Homepage, Cook, Food, and Rest o
     await expandBtn.click();
     await expect(page.getByTestId('main-page-week-expanded')).toBeVisible();
 
-    // 8. Parent (parent_default) does NOT have mealplan.view permission -> link to meal plan is NOT visible
+    // 8. Parent (parent_default) has mealplan.view permission -> link to meal plan is visible
     const mealPlanLink = page.getByTestId('main-page-mealplan-link');
-    await expect(mealPlanLink).toHaveCount(0);
+    await expect(mealPlanLink).toBeVisible();
   });
 
   test('weekend handling: on Saturday/Sunday, shows "Essen am Montag" and upcoming week', async ({ request, page }) => {

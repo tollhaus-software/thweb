@@ -371,6 +371,10 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     tomorrowObj.setUTCDate(tomorrowObj.getUTCDate() + 1);
     const tomorrowStr = tomorrowObj.toISOString().split('T')[0];
 
+    const yesterdayObj = new Date(todayDateObj);
+    yesterdayObj.setUTCDate(yesterdayObj.getUTCDate() - 1);
+    const yesterdayStr = yesterdayObj.toISOString().split('T')[0];
+
     // Seed yellow bag for tomorrow so today has task "yellow_bin_put_out" ("Gelbe Tonne rausstellen")
     const seedYellowRes = await request.post('/api/test/yellow-bag', {
       headers: authHeaders,
@@ -378,10 +382,17 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     });
     expect(seedYellowRes.ok()).toBeTruthy();
 
-    // Seed meal plan with cook for today and tomorrow
+    // Seed meal plan with cook for yesterday, today, and tomorrow
     const seedPlanRes = await request.post('/api/test/meal-plan', {
       headers: authHeaders,
       data: [
+        {
+          date: yesterdayStr,
+          cook_name: 'Koch Gestern',
+          food_component_1: 'Gulasch',
+          food_component_2: '',
+          food_component_3: '',
+        },
         {
           date: todayStr,
           cook_name: 'Küchenchef Anton',

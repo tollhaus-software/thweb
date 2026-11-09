@@ -32,14 +32,6 @@ func (s *Server) resolveParentIDForUser(ctx context.Context, user *models.UserWi
 		return parentID, nil
 	}
 
-	if s.Authenticator != nil && s.Authenticator.AllowMockAuth && user.Email == "developer@example.com" {
-		devParentID, err := s.Store.EnsureMockParentForDeveloper(ctx)
-		if err != nil {
-			return nil, err
-		}
-		return devParentID, nil
-	}
-
 	return nil, nil
 }
 

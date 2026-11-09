@@ -43,8 +43,8 @@ func TestLoadDefault(t *testing.T) {
 	if len(identRoles) == 0 || identRoles[0] != "parent_default" {
 		t.Errorf("expected parent_identifier_email trigger to return parent_default role, got %v", identRoles)
 	}
-	if len(identPerms) != 7 {
-		t.Errorf("expected 7 permissions for parent_identifier_email trigger, got %d (%v)", len(identPerms), identPerms)
+	if len(identPerms) != 8 {
+		t.Errorf("expected 8 permissions for parent_identifier_email trigger, got %d (%v)", len(identPerms), identPerms)
 	}
 
 	pilotRole := cfg.GetRole("hygiene_pilot")
