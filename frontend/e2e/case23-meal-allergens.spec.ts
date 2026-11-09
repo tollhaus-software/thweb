@@ -369,7 +369,12 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     // 5. Switch to Mobile viewport (390x844 <= 768px) -> verify week selector and 5 vertically stacked boxes
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page.getByTestId('meal-allergens-week-selector')).toBeVisible();
+    await expect(selectorControls).toHaveCSS('position', 'sticky');
     await expect(page.locator('[data-testid^="meal-allergens-day-box-"]')).toHaveCount(5);
+    // Verify week selector stays visible on mobile while scrolling through the week's days
+    const lastDayBox = page.locator('[data-testid^="meal-allergens-day-box-"]').last();
+    await lastDayBox.scrollIntoViewIfNeeded();
+    await expect(page.getByTestId('meal-allergens-week-selector')).toBeVisible();
     if (now.getDay() >= 1 && now.getDay() <= 5) {
       const mobileTodayBox = page.getByTestId(`meal-allergens-day-box-${todayKey}`);
       await expect(mobileTodayBox).toBeVisible();
