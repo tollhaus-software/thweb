@@ -20,6 +20,7 @@ import {
   getMonthForDateIn5WeekGrid,
   getDayBgVariant,
   getAllergenShortLabel,
+  getDistinctAllergens,
   doesDayMatchSearch,
   findMostRecentMatchingDay,
 } from '../../utils/mealAllergens';
@@ -293,14 +294,15 @@ export const MealAllergensCalendarView: React.FC<MealAllergensCalendarViewProps>
           const isOutsideMonth = !isMobile && dateObj.getMonth() !== selectedYearMonth.month;
           const isToday = dateKey === todayKey;
 
-          const cookName = dayData.cook_display_name || dayData.plan_cook_name || '';
-          const displayComponents =
-            dayData.has_allergen_record && dayData.meal_components.length > 0
-              ? dayData.meal_components
-              : (dayData.plan_meal_components || []).map((name) => ({
-                  name,
-                  allergens: [] as string[],
-                }));
+          const cookName = dayData.plan_cook_name || dayData.cook_display_name || '';
+          const kochplanComponents =
+            dayData.plan_meal_components && dayData.plan_meal_components.length > 0
+              ? dayData.plan_meal_components
+              : (dayData.meal_components || []).map((c) => c.name).filter((n) => n && n.trim() !== '');
+
+          const distinctAllergens = getDistinctAllergens(
+            dayData.has_allergen_record ? dayData.meal_components : []
+          );
 
           return (
             <button
@@ -343,22 +345,33 @@ export const MealAllergensCalendarView: React.FC<MealAllergensCalendarViewProps>
                 </span>
               </div>
 
-              {displayComponents.length > 0 ? (
+              {kochplanComponents.length > 0 ? (
                 <ul className="meal-allergen-day-components" data-testid={`${testIdPrefix}-day-components-${dateKey}`}>
-                  {displayComponents.map((comp, idx) => (
-                    <li key={`${comp.name}-${idx}`} className="meal-allergen-day-component-item">
-                      <span>{comp.name?.trim() || t('unnamedComponent')}</span>
-                      {comp.allergens &&
-                        comp.allergens.map((allergen) => (
-                          <span key={allergen} className="meal-allergen-mini-badge">
-                            {getAllergenShortLabel(allergen)}
-                          </span>
-                        ))}
+                  {kochplanComponents.map((name, idx) => (
+                    <li key={`${name}-${idx}`} className="meal-allergen-day-component-item">
+                      <span>{name?.trim() || t('unnamedComponent')}</span>
                     </li>
                   ))}
                 </ul>
               ) : (
                 <div className="meal-allergen-empty-text">{t('noMealsPlanned')}</div>
+              )}
+
+              {distinctAllergens.length > 0 && (
+                <div
+                  className="meal-allergen-day-allergens-row"
+                  data-testid={`${testIdPrefix}-day-allergens-${dateKey}`}
+                >
+                  {distinctAllergens.map((allergen) => (
+                    <span
+                      key={allergen}
+                      className="meal-allergen-mini-badge"
+                      data-testid={`${testIdPrefix}-mini-badge-${dateKey}-${allergen}`}
+                    >
+                      {getAllergenShortLabel(allergen)}
+                    </span>
+                  ))}
+                </div>
               )}
             </button>
           );

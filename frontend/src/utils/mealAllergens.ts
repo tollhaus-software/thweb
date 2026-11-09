@@ -201,6 +201,31 @@ export function getAllergenShortLabel(key: string): string {
   return getAllergenDisplayLabel(key);
 }
 
+/**
+ * Extracts and deduplicates distinct allergens across meal components for a day,
+ * ordered canonically by MAIN_ALLERGENS followed by alphabetical for custom ones.
+ */
+export function getDistinctAllergens(components: MealAllergenComponent[] = []): string[] {
+  const seen = new Set<string>();
+  for (const c of components) {
+    for (const a of c.allergens || []) {
+      const trimmed = (a || '').trim();
+      if (trimmed) {
+        seen.add(trimmed);
+      }
+    }
+  }
+  const orderMap = new Map<string, number>(
+    MAIN_ALLERGENS.map((m, idx) => [m.key.toLowerCase(), idx])
+  );
+  return Array.from(seen).sort((a, b) => {
+    const idxA = orderMap.has(a.toLowerCase()) ? orderMap.get(a.toLowerCase())! : 999;
+    const idxB = orderMap.has(b.toLowerCase()) ? orderMap.get(b.toLowerCase())! : 999;
+    if (idxA !== idxB) return idxA - idxB;
+    return a.localeCompare(b);
+  });
+}
+
 export function getAllergenIconKey(name: string): string {
   const norm = (name || '').toLowerCase().trim();
   if (!norm) return 'default';

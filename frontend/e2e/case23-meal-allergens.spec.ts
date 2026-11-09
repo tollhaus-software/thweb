@@ -12,6 +12,7 @@ import {
   createEmptyMealAllergenDay,
   formatCooksDisplayName,
   sortCookOptions,
+  getDistinctAllergens,
   type MealAllergenDay,
   type CookOption,
 } from '../src/utils/mealAllergens';
@@ -177,6 +178,13 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
       'Zoe Becker',
       'Markus Elternkoch',
     ]);
+
+    // 8. getDistinctAllergens extracts deduplicated allergens in canonical order
+    const distinct = getDistinctAllergens([
+      { name: 'Pasta', allergens: ['laktose', 'gluten'] },
+      { name: 'Salat', allergens: ['senf', 'gluten'] },
+    ]);
+    expect(distinct).toEqual(['gluten', 'laktose', 'senf']);
   });
 
   test('desktop (5x5 month view) and mobile (5-day week view) layouts, multi-cook popover editor, component popover editor, and copy allergens', async ({
@@ -722,6 +730,9 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     await expect(jumpedBox).toBeVisible();
     await expect(jumpedBox).toHaveAttribute('data-search-match', 'true');
     await expect(jumpedBox).toHaveAttribute('data-search-active-match', 'true');
+    await expect(jumpedBox.locator(`[data-testid="copy-picker-day-allergens-${pastMealDate}"]`)).toBeVisible();
+    await expect(jumpedBox.locator(`[data-testid="copy-picker-mini-badge-${pastMealDate}-gluten"]`)).toBeVisible();
+    await expect(jumpedBox.locator(`[data-testid="copy-picker-mini-badge-${pastMealDate}-sellerie"]`)).toBeVisible();
 
     // Click the first suggestion (past3Date: Spaghetti Napoli [gluten], Gurkensalat [senf])
     await suggestionItems.first().click();

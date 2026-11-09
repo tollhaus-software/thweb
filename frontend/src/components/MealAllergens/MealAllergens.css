@@ -332,6 +332,16 @@
   font-weight: 600;
 }
 
+.meal-allergen-day-allergens-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.2rem;
+  padding-top: 0.25rem;
+  border-top: 1px dashed var(--border);
+}
+
 .meal-allergen-empty-text {
   font-size: 0.78rem;
   color: var(--text-muted);
