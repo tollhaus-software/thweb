@@ -36,6 +36,8 @@ export interface SidebarProps {
   canViewMealPlan: boolean;
   canReadMealAllergens: boolean;
   hasHygieneWrite: boolean;
+  canManageHygiene?: boolean;
+  canAccessPersonalHygiene?: boolean;
   canReadAudit?: boolean;
   canManageUsers?: boolean;
   canViewActivity?: boolean;
@@ -62,6 +64,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   canViewMealPlan,
   canReadMealAllergens,
   hasHygieneWrite,
+  canManageHygiene = false,
+  canAccessPersonalHygiene = false,
   canReadAudit = false,
   canManageUsers = false,
   canViewActivity = false,
@@ -83,6 +87,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     canViewMealPlan,
     canReadMealAllergens,
     hasHygieneWrite,
+    canManageHygiene,
+    canAccessPersonalHygiene,
     canReadAudit,
     canManageUsers,
     canViewActivity: canViewActivity || canManageUsers,

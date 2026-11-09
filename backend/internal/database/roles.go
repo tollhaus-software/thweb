@@ -85,6 +85,16 @@ func SeedMockUsers(ctx context.Context, pool *pgxpool.Pool, cfg *roles.Config) e
 		}
 	}
 
+	// Ensure mock family and parent for developer@example.com for parent-flow testing
+	devFamilyID := "00000000-0000-0000-0000-000000000001"
+	devParentID := "00000000-0000-0000-0000-000000000002"
+	_, _ = pool.Exec(ctx, `INSERT INTO families (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`, devFamilyID)
+	_, _ = pool.Exec(ctx, `
+		INSERT INTO parents (id, family_id, first_name, last_name, emails)
+		VALUES ($1, $2, '', 'Developer', '[{"value": "developer@example.com", "canonical_value": "developer@example.com", "identifier_email": true}]'::jsonb)
+		ON CONFLICT (id) DO UPDATE SET emails = EXCLUDED.emails
+	`, devParentID, devFamilyID)
+
 	// 2. caregiver@example.com (if caregiver role exists)
 	if cfg.GetRole("caregiver") != nil {
 		_, err = pool.Exec(ctx, `INSERT INTO users (email, canonical_email) VALUES ('caregiver@example.com', 'caregiver@example.com') ON CONFLICT (email) DO NOTHING`)

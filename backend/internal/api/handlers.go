@@ -105,6 +105,9 @@ func (s *Server) HandleGetMe(w http.ResponseWriter, r *http.Request) {
 	if user.FamilyID != nil {
 		resp["family_id"] = user.FamilyID.String()
 	}
+	if user.ParentID != nil {
+		resp["parent_id"] = user.ParentID.String()
+	}
 	if user.Simulation != nil {
 		resp["simulation"] = user.Simulation
 	}
@@ -1685,6 +1688,7 @@ func (s *Server) HandleCreateHygieneEvent(w http.ResponseWriter, r *http.Request
 		EventDate     string     `json:"event_date"`
 		EventType     string     `json:"event_type"`
 		Documentation string     `json:"documentation"`
+		DocumentID    *uuid.UUID `json:"document_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httpErrorLog(w, r, "Invalid request body JSON", http.StatusBadRequest, err)
@@ -1715,6 +1719,7 @@ func (s *Server) HandleCreateHygieneEvent(w http.ResponseWriter, r *http.Request
 		EventDate:     eventDate,
 		EventType:     req.EventType,
 		Documentation: req.Documentation,
+		DocumentID:    req.DocumentID,
 	}
 
 	created, err := s.Store.CreateHygieneEvent(r.Context(), user.ID, event, getActorEmail(r))

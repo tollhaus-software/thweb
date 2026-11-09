@@ -1,0 +1,383 @@
+.hygiene-cert-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.hygiene-cert-modal-container {
+  background: var(--bg-surface, #ffffff);
+  color: var(--text, #1e293b);
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--border, #e2e8f0);
+  width: 100%;
+  max-width: 860px;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: hygiene-modal-pop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes hygiene-modal-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.hygiene-cert-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 1.25rem;
+  border-bottom: 1px solid var(--border, #e2e8f0);
+  background: var(--bg-subtle, #f8fafc);
+}
+
+.hygiene-cert-modal-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.hygiene-cert-modal-icon {
+  color: var(--primary, #2563eb);
+}
+
+.hygiene-cert-modal-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-h, #0f172a);
+}
+
+.hygiene-cert-modal-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #64748b);
+  cursor: pointer;
+  padding: 0.35rem;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.hygiene-cert-modal-close-btn:hover {
+  background: var(--border, #e2e8f0);
+  color: var(--text-h, #0f172a);
+}
+
+.hygiene-cert-modal-body {
+  padding: 1.25rem 1.5rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.hygiene-cert-doc-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-subtle, #f1f5f9);
+  border-radius: 6px;
+  font-size: 0.875rem;
+  /* Keep zoom / new tab / download visible while scrolling the document */
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  border: 1px solid var(--border, #e2e8f0);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.hygiene-cert-doc-title {
+  font-weight: 600;
+  color: var(--text-h, #0f172a);
+}
+
+.hygiene-cert-doc-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.hygiene-cert-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--primary, #2563eb);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 0.85rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  transition: background-color 0.15s;
+}
+
+.hygiene-cert-link-btn:hover {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.hygiene-cert-iframe-wrap {
+  width: 100%;
+  height: 480px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #525659;
+}
+
+.hygiene-cert-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.hygiene-cert-checkbox-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: 8px;
+  border: 2px solid var(--primary, #2563eb);
+  background: var(--accent-bg, rgba(37, 99, 235, 0.04));
+  cursor: pointer;
+  user-select: none;
+}
+
+.hygiene-cert-checkbox-input {
+  margin-top: 0.2rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  cursor: pointer;
+  accent-color: var(--primary, #2563eb);
+}
+
+.hygiene-cert-checkbox-label {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-h, #0f172a);
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.hygiene-cert-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border, #e2e8f0);
+  background: var(--bg-subtle, #f8fafc);
+}
+
+.hygiene-cert-cancel-btn {
+  padding: 0.6rem 1.2rem;
+  background: var(--bg-surface, #ffffff);
+  border: 1px solid var(--border, #cbd5e1);
+  color: var(--text, #334155);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.hygiene-cert-cancel-btn:hover {
+  background: var(--bg-subtle, #f1f5f9);
+}
+
+.hygiene-cert-submit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.35rem;
+  background: var(--primary, #2563eb);
+  border: 1px solid transparent;
+  color: #ffffff;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.hygiene-cert-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hygiene-cert-submit-btn:not(:disabled):hover {
+  background: var(--primary-hover, #1d4ed8);
+}
+
+.hygiene-cert-success-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.25rem;
+  background: var(--success-bg, #ecfdf5);
+  color: var(--success-text, #065f46);
+  border: 1px solid var(--success-border, #a7f3d0);
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.hygiene-cert-checkbox-card.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  border-style: dashed;
+}
+
+.hygiene-cert-checkbox-card.disabled .hygiene-cert-checkbox-input,
+.hygiene-cert-checkbox-card.disabled .hygiene-cert-checkbox-label {
+  cursor: not-allowed;
+}
+
+/* Sticky "scroll down" hint pinned to the bottom of the scrolling dialog body */
+.hygiene-cert-scroll-hint {
+  position: sticky;
+  bottom: 0.25rem;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 999px;
+  background: var(--primary, #2563eb);
+  color: var(--primary-contrast, #ffffff);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  animation: hygiene-scroll-bounce 1.4s ease-in-out infinite;
+}
+
+@keyframes hygiene-scroll-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.hygiene-cert-label-short {
+  display: none;
+}
+
+.hygiene-cert-zoom-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border: 1px solid var(--border, #cbd5e1);
+  border-radius: 6px;
+  background: var(--bg-surface, #ffffff);
+  padding: 0.1rem 0.25rem;
+}
+
+.hygiene-cert-zoom-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--primary, #2563eb);
+  cursor: pointer;
+  padding: 0.3rem;
+  border-radius: 4px;
+}
+
+.hygiene-cert-zoom-btn:disabled {
+  color: var(--text-muted, #94a3b8);
+  cursor: not-allowed;
+}
+
+.hygiene-cert-zoom-btn:not(:disabled):hover {
+  background: var(--bg-hover, #e2e8f0);
+}
+
+.hygiene-cert-zoom-value {
+  min-width: 3rem;
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text, #334155);
+}
+
+/* Mobile: use (almost) the full screen so the PDF is as wide as possible */
+@media (max-width: 768px) {
+  .hygiene-cert-modal-overlay {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .hygiene-cert-modal-container {
+    max-width: none;
+    max-height: none;
+    height: 100%;
+    border-radius: 0;
+    border: none;
+  }
+
+  .hygiene-cert-modal-header {
+    padding: 0.5rem 0.75rem;
+  }
+
+  .hygiene-cert-modal-title {
+    font-size: 1.05rem;
+  }
+
+  .hygiene-cert-modal-body {
+    padding: 0.5rem;
+    gap: 0.5rem;
+  }
+
+  .hygiene-cert-modal-footer {
+    padding: 0.75rem 1rem;
+  }
+
+  .hygiene-cert-doc-toolbar {
+    padding: 0.4rem 0.5rem;
+  }
+
+  .hygiene-cert-doc-actions {
+    flex-wrap: nowrap;
+    width: 100%;
+    justify-content: space-between;
+    gap: 0.35rem;
+  }
+
+  .hygiene-cert-zoom-value {
+    min-width: 2.5rem;
+  }
+
+  .hygiene-cert-doc-toolbar .hygiene-cert-link-btn {
+    border: 1px solid var(--primary, #2563eb);
+    padding: 0.3rem 0.45rem;
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+
+  .hygiene-cert-label-full {
+    display: none;
+  }
+
+  .hygiene-cert-label-short {
+    display: inline;
+  }
+}

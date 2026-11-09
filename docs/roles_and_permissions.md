@@ -45,6 +45,19 @@ roles:
       - fees.self.read
       - audit.view
 
+  - id: hygieneamt
+    name: Hygieneamt
+    description: Hygiene and infection protection management
+    permissions:
+      - hygiene.infektionsschutz.management
+      - families.all.read
+
+  - id: hygiene_pilot
+    name: Hygiene Pilot (PoC)
+    description: Pilot access to § 43 IfSG personal hygiene self-certification
+    permissions:
+      - hygiene.infektionsschutz.self
+
   - id: kiosk
     name: Kiosk
     description: Read-only dashboard access for mTLS hardware kiosk terminals
@@ -63,6 +76,9 @@ roles:
       - fees.self.read
       - families.self.selfservice
       - memberships.self.read
+      - allergies.summary.read
+      - meal_allergens.read
+      - meal_allergens.write
 
   - id: caregiver_default
     name: Caregiver (default)

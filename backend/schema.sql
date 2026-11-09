@@ -125,6 +125,30 @@ CREATE TRIGGER update_parents_updated_at BEFORE UPDATE ON parents FOR EACH ROW E
 DROP TRIGGER IF EXISTS update_children_updated_at ON children;
 CREATE TRIGGER update_children_updated_at BEFORE UPDATE ON children FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
+-- Hygiene instruction documents table
+CREATE TABLE IF NOT EXISTS hygiene_instruction_documents (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    filename TEXT NOT NULL,
+    mime_type TEXT NOT NULL DEFAULT 'application/pdf',
+    file_size BIGINT NOT NULL,
+    file_data BYTEA NOT NULL,
+    title TEXT NOT NULL DEFAULT '',
+    source_type TEXT NOT NULL DEFAULT 'upload',
+    source_url TEXT NOT NULL DEFAULT '',
+    uploaded_by TEXT NOT NULL DEFAULT '',
+    effective_from TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    deleted_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_hygiene_instruction_active ON hygiene_instruction_documents (is_active) WHERE is_active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_hygiene_instruction_documents_deleted_at ON hygiene_instruction_documents (deleted_at);
+
+DROP TRIGGER IF EXISTS update_hygiene_instruction_documents_updated_at ON hygiene_instruction_documents;
+CREATE TRIGGER update_hygiene_instruction_documents_updated_at BEFORE UPDATE ON hygiene_instruction_documents FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+
 -- Hygiene instruction events table
 CREATE TABLE IF NOT EXISTS hygiene_belehrung_events (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -132,6 +156,7 @@ CREATE TABLE IF NOT EXISTS hygiene_belehrung_events (
     event_date DATE NOT NULL,
     event_type TEXT NOT NULL CHECK (event_type IN ('initial', 'recertify')),
     documentation TEXT NOT NULL DEFAULT '',
+    document_id UUID REFERENCES hygiene_instruction_documents(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

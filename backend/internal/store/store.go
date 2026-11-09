@@ -328,10 +328,15 @@ func (s *Store) ListFamilies(ctx context.Context) ([]models.Family, error) {
 							   'event_date', e.event_date::timestamptz,
 							   'event_type', e.event_type,
 							   'documentation', e.documentation,
+							   'document_id', e.document_id,
+							   'document_title', COALESCE(d.title, d.filename, ''),
+							   'document_deleted', (d.id IS NOT NULL AND d.deleted_at IS NOT NULL),
 							   'created_at', e.created_at,
 							   'updated_at', e.updated_at
 						   ) ORDER BY e.event_date DESC)
-						   FROM hygiene_belehrung_events e WHERE e.parent_id = p.id
+						   FROM hygiene_belehrung_events e 
+						   LEFT JOIN hygiene_instruction_documents d ON d.id = e.document_id
+						   WHERE e.parent_id = p.id
 					   ), '[]'),
 					   'memberships', COALESCE((
 						   SELECT json_agg(json_build_object(
@@ -1211,8 +1216,8 @@ func (s *Store) CreateHygieneEvent(ctx context.Context, userID uuid.UUID, event 
 		}
 
 		_, err = tx.Exec(ctx,
-			"INSERT INTO hygiene_belehrung_events (id, parent_id, event_date, event_type, documentation) VALUES ($1, $2, $3, $4, $5)",
-			event.ID, event.ParentID, event.EventDate, event.EventType, event.Documentation)
+			"INSERT INTO hygiene_belehrung_events (id, parent_id, event_date, event_type, documentation, document_id) VALUES ($1, $2, $3, $4, $5, $6)",
+			event.ID, event.ParentID, event.EventDate, event.EventType, event.Documentation, event.DocumentID)
 		if err != nil {
 			return err
 		}
@@ -1233,7 +1238,8 @@ func (s *Store) DeleteHygieneEvent(ctx context.Context, userID uuid.UUID, eventI
 		var eventDate time.Time
 		var eventType string
 		var documentation string
-		err := tx.QueryRow(ctx, "SELECT parent_id, event_date, event_type, documentation FROM hygiene_belehrung_events WHERE id = $1", eventID).Scan(&parentID, &eventDate, &eventType, &documentation)
+		var docID *uuid.UUID
+		err := tx.QueryRow(ctx, "SELECT parent_id, event_date, event_type, documentation, document_id FROM hygiene_belehrung_events WHERE id = $1", eventID).Scan(&parentID, &eventDate, &eventType, &documentation, &docID)
 		if err != nil {
 			return err
 		}
@@ -1250,6 +1256,7 @@ func (s *Store) DeleteHygieneEvent(ctx context.Context, userID uuid.UUID, eventI
 			EventDate:     eventDate,
 			EventType:     eventType,
 			Documentation: documentation,
+			DocumentID:    docID,
 		}
 
 		if err := s.recordAudit(ctx, tx, transactionID, &familyID, "hygiene_event", eventID, "DELETE", oldEvent, nil, userID, userEmail...); err != nil {
@@ -1266,8 +1273,8 @@ func (s *Store) UpdateHygieneEvent(ctx context.Context, userID uuid.UUID, eventI
 	var updated models.HygieneBelehrungEvent
 	err := s.WithTx(ctx, func(tx pgx.Tx) error {
 		var oldEvent models.HygieneBelehrungEvent
-		err := tx.QueryRow(ctx, "SELECT id, parent_id, event_date, event_type, documentation FROM hygiene_belehrung_events WHERE id = $1", eventID).
-			Scan(&oldEvent.ID, &oldEvent.ParentID, &oldEvent.EventDate, &oldEvent.EventType, &oldEvent.Documentation)
+		err := tx.QueryRow(ctx, "SELECT id, parent_id, event_date, event_type, documentation, document_id FROM hygiene_belehrung_events WHERE id = $1", eventID).
+			Scan(&oldEvent.ID, &oldEvent.ParentID, &oldEvent.EventDate, &oldEvent.EventType, &oldEvent.Documentation, &oldEvent.DocumentID)
 		if err != nil {
 			return err
 		}
@@ -1284,6 +1291,7 @@ func (s *Store) UpdateHygieneEvent(ctx context.Context, userID uuid.UUID, eventI
 			EventDate:     eventDate,
 			EventType:     eventType,
 			Documentation: documentation,
+			DocumentID:    oldEvent.DocumentID,
 		}
 
 		_, err = tx.Exec(ctx,
@@ -1305,6 +1313,307 @@ func (s *Store) UpdateHygieneEvent(ctx context.Context, userID uuid.UUID, eventI
 		return models.HygieneBelehrungEvent{}, err
 	}
 	return updated, nil
+}
+
+func (s *Store) GetActiveHygieneInstructionDocument(ctx context.Context) (*models.HygieneInstructionDocument, error) {
+	query := `
+		SELECT id, filename, mime_type, file_size, file_data, title, source_type, source_url, uploaded_by, effective_from, is_active, created_at, updated_at
+		FROM hygiene_instruction_documents
+		WHERE is_active = TRUE AND deleted_at IS NULL
+		ORDER BY created_at DESC
+		LIMIT 1
+	`
+	var doc models.HygieneInstructionDocument
+	err := s.db.QueryRow(ctx, query).Scan(
+		&doc.ID, &doc.Filename, &doc.MimeType, &doc.FileSize, &doc.FileData, &doc.Title, &doc.SourceType, &doc.SourceURL, &doc.UploadedBy,
+		&doc.EffectiveFrom, &doc.IsActive, &doc.CreatedAt, &doc.UpdatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &doc, nil
+}
+
+func (s *Store) GetHygieneInstructionDocumentByID(ctx context.Context, id uuid.UUID) (*models.HygieneInstructionDocument, error) {
+	query := `
+		SELECT id, filename, mime_type, file_size, file_data, title, source_type, source_url, uploaded_by, effective_from, is_active, created_at, updated_at
+		FROM hygiene_instruction_documents
+		WHERE id = $1
+	`
+	var doc models.HygieneInstructionDocument
+	err := s.db.QueryRow(ctx, query, id).Scan(
+		&doc.ID, &doc.Filename, &doc.MimeType, &doc.FileSize, &doc.FileData, &doc.Title, &doc.SourceType, &doc.SourceURL, &doc.UploadedBy,
+		&doc.EffectiveFrom, &doc.IsActive, &doc.CreatedAt, &doc.UpdatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &doc, nil
+}
+
+func (s *Store) GetActiveHygieneInstructionDocumentInfo(ctx context.Context) (*models.HygieneInstructionDocumentInfo, error) {
+	query := `
+		SELECT id, filename, mime_type, file_size, title, source_type, source_url, uploaded_by, effective_from, is_active, created_at
+		FROM hygiene_instruction_documents
+		WHERE is_active = TRUE AND deleted_at IS NULL
+		ORDER BY created_at DESC
+		LIMIT 1
+	`
+	var info models.HygieneInstructionDocumentInfo
+	err := s.db.QueryRow(ctx, query).Scan(
+		&info.ID, &info.Filename, &info.MimeType, &info.FileSize, &info.Title, &info.SourceType, &info.SourceURL, &info.UploadedBy,
+		&info.EffectiveFrom, &info.IsActive, &info.CreatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &info, nil
+}
+
+func (s *Store) GetAllHygieneInstructionDocuments(ctx context.Context) ([]models.HygieneInstructionDocumentInfo, error) {
+	query := `
+		SELECT id, filename, mime_type, file_size, title, source_type, source_url, uploaded_by, effective_from, is_active, created_at, deleted_at
+		FROM hygiene_instruction_documents
+		WHERE deleted_at IS NULL
+		ORDER BY created_at DESC
+	`
+	rows, err := s.db.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var docs []models.HygieneInstructionDocumentInfo
+	for rows.Next() {
+		var info models.HygieneInstructionDocumentInfo
+		if err := rows.Scan(
+			&info.ID, &info.Filename, &info.MimeType, &info.FileSize, &info.Title, &info.SourceType, &info.SourceURL, &info.UploadedBy,
+			&info.EffectiveFrom, &info.IsActive, &info.CreatedAt, &info.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		docs = append(docs, info)
+	}
+	// The newest non-deleted document is the active one
+	for i := range docs {
+		docs[i].IsActive = (i == 0)
+	}
+	return docs, rows.Err()
+}
+
+func (s *Store) SoftDeleteHygieneInstructionDocument(ctx context.Context, id uuid.UUID, changedBy uuid.UUID, changedByEmail string) error {
+	return s.WithTx(ctx, func(tx pgx.Tx) error {
+		var before models.HygieneInstructionDocumentInfo
+		err := tx.QueryRow(ctx, `
+			SELECT id, filename, mime_type, file_size, title, source_type, source_url, uploaded_by, effective_from, is_active, created_at
+			FROM hygiene_instruction_documents
+			WHERE id = $1 AND deleted_at IS NULL
+		`, id).Scan(
+			&before.ID, &before.Filename, &before.MimeType, &before.FileSize, &before.Title, &before.SourceType, &before.SourceURL, &before.UploadedBy,
+			&before.EffectiveFrom, &before.IsActive, &before.CreatedAt,
+		)
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				return fmt.Errorf("instruction document not found or already deleted")
+			}
+			return err
+		}
+
+		_, err = tx.Exec(ctx, `
+			UPDATE hygiene_instruction_documents
+			SET deleted_at = NOW(), is_active = FALSE, updated_at = NOW()
+			WHERE id = $1
+		`, id)
+		if err != nil {
+			return err
+		}
+
+		// Ensure the newest remaining non-deleted document has is_active = true
+		_, err = tx.Exec(ctx, `
+			UPDATE hygiene_instruction_documents
+			SET is_active = TRUE, updated_at = NOW()
+			WHERE id = (
+				SELECT id FROM hygiene_instruction_documents
+				WHERE deleted_at IS NULL
+				ORDER BY created_at DESC
+				LIMIT 1
+			)
+		`)
+		if err != nil {
+			return err
+		}
+
+		transactionID := uuid.New()
+		return s.recordAudit(ctx, tx, transactionID, nil, "hygiene_instruction_document", id, "DELETE", before, nil, changedBy, changedByEmail)
+	})
+}
+
+func (s *Store) SaveHygieneInstructionDocument(ctx context.Context, doc models.HygieneInstructionDocument, actorEmail string) (*models.HygieneInstructionDocumentInfo, error) {
+	if doc.ID == uuid.Nil {
+		doc.ID = uuid.New()
+	}
+	if doc.EffectiveFrom.IsZero() {
+		doc.EffectiveFrom = time.Now().UTC()
+	}
+
+	var savedInfo models.HygieneInstructionDocumentInfo
+	err := s.WithTx(ctx, func(tx pgx.Tx) error {
+		// Set all previous documents to inactive
+		_, err := tx.Exec(ctx, "UPDATE hygiene_instruction_documents SET is_active = FALSE, updated_at = NOW() WHERE is_active = TRUE")
+		if err != nil {
+			return err
+		}
+
+		// Insert new active document
+		insertQuery := `
+			INSERT INTO hygiene_instruction_documents (
+				id, filename, mime_type, file_size, file_data, title, source_type, source_url, uploaded_by, effective_from, is_active
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE)
+			RETURNING id, filename, mime_type, file_size, title, source_type, source_url, uploaded_by, effective_from, is_active, created_at
+		`
+		err = tx.QueryRow(ctx, insertQuery,
+			doc.ID, doc.Filename, doc.MimeType, doc.FileSize, doc.FileData, doc.Title, doc.SourceType, doc.SourceURL, actorEmail, doc.EffectiveFrom,
+		).Scan(
+			&savedInfo.ID, &savedInfo.Filename, &savedInfo.MimeType, &savedInfo.FileSize, &savedInfo.Title, &savedInfo.SourceType, &savedInfo.SourceURL, &savedInfo.UploadedBy,
+			&savedInfo.EffectiveFrom, &savedInfo.IsActive, &savedInfo.CreatedAt,
+		)
+		if err != nil {
+			return err
+		}
+
+		transactionID := uuid.New()
+		return s.recordAudit(ctx, tx, transactionID, nil, "hygiene_instruction_document", doc.ID, "INSERT", nil, savedInfo, uuid.Nil, actorEmail)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &savedInfo, nil
+}
+
+// EnsureMockParentForDeveloper ensures a mock family and parent record exist for developer@example.com.
+func (s *Store) EnsureMockParentForDeveloper(ctx context.Context) (*uuid.UUID, error) {
+	pID, _, err := s.GetParentInfoByIdentifierEmail(ctx, "developer@example.com")
+	if err == nil && pID != nil {
+		return pID, nil
+	}
+
+	devFamilyID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	devParentID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+
+	_, err = s.db.Exec(ctx, `
+		INSERT INTO families (id)
+		VALUES ($1)
+		ON CONFLICT (id) DO NOTHING
+	`, devFamilyID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to ensure dev mock family: %w", err)
+	}
+
+	emailsJSON := `[{"value": "developer@example.com", "canonical_value": "developer@example.com", "identifier_email": true}]`
+	_, err = s.db.Exec(ctx, `
+		INSERT INTO parents (id, family_id, first_name, last_name, emails)
+		VALUES ($1, $2, '', 'Developer', $3::jsonb)
+		ON CONFLICT (id) DO UPDATE SET
+			emails = EXCLUDED.emails
+	`, devParentID, devFamilyID, emailsJSON)
+	if err != nil {
+		return nil, fmt.Errorf("failed to ensure dev mock parent: %w", err)
+	}
+
+	return &devParentID, nil
+}
+
+func (s *Store) GetParentHygieneStatus(ctx context.Context, parentID uuid.UUID) (*models.HygieneUserStatusResponse, error) {
+	activeDoc, err := s.GetActiveHygieneInstructionDocumentInfo(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := &models.HygieneUserStatusResponse{
+		IsParent:          true,
+		ParentID:          &parentID,
+		DocumentAvailable: activeDoc != nil,
+		DocumentInfo:      activeDoc,
+	}
+
+	// Name shown in the self-certification statement
+	var firstName, lastName string
+	if err := s.db.QueryRow(ctx, `SELECT first_name, last_name FROM parents WHERE id = $1`, parentID).Scan(&firstName, &lastName); err == nil {
+		resp.DisplayName = strings.TrimSpace(firstName + " " + lastName)
+	} else if err != pgx.ErrNoRows {
+		return nil, err
+	}
+
+	// Fetch parent's most recent hygiene event (certification or re-certification)
+	var lastEventDate time.Time
+	var lastEventType string
+	var lastDocID *uuid.UUID
+	eventQuery := `
+		SELECT event_date, event_type, document_id
+		FROM hygiene_belehrung_events
+		WHERE parent_id = $1
+		ORDER BY event_date DESC, created_at DESC
+		LIMIT 1
+	`
+	rowErr := s.db.QueryRow(ctx, eventQuery, parentID).Scan(&lastEventDate, &lastEventType, &lastDocID)
+	if rowErr != nil && rowErr != pgx.ErrNoRows {
+		return nil, rowErr
+	}
+
+	// Reference date for the 12-month cycle:
+	// - latest (re-)certification date, if any
+	// - otherwise the family start date: the earliest group start date of all children of the family
+	var baseDate time.Time
+	if rowErr == pgx.ErrNoRows {
+		var familyStart *time.Time
+		familyStartQuery := `
+			SELECT MIN(gc.change_date)
+			FROM parents p
+			JOIN children c ON c.family_id = p.family_id
+			JOIN children_group_changes gc ON gc.child = c.id AND gc.target_group > 0
+			WHERE p.id = $1
+		`
+		if err := s.db.QueryRow(ctx, familyStartQuery, parentID).Scan(&familyStart); err != nil {
+			return nil, err
+		}
+		if familyStart == nil {
+			// Neither certification nor group start known: no due date can be derived
+			return resp, nil
+		}
+		baseDate = *familyStart
+	} else {
+		dateStr := lastEventDate.Format("2006-01-02")
+		resp.LastInstructionDate = &dateStr
+		resp.LastInstructionType = &lastEventType
+		resp.LastDocumentID = lastDocID
+		baseDate = lastEventDate
+	}
+
+	// Due date: at the latest 12 months after the reference date
+	dueDateStr := baseDate.AddDate(0, 12, 0).Format("2006-01-02")
+	resp.NextDueDate = &dueDateStr
+
+	if activeDoc == nil {
+		return resp, nil
+	}
+
+	// Reminder / task begins 1 month before the due date (i.e. after 11 months)
+	reminderDate := baseDate.AddDate(0, 11, 0)
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	if !today.Before(reminderDate) {
+		resp.NeedsInstruction = true
+	}
+
+	return resp, nil
 }
 
 func (s *Store) CreateTHMembership(ctx context.Context, userID uuid.UUID, m models.THMembership, userEmail ...string) (models.THMembership, error) {
@@ -2767,6 +3076,7 @@ func (s *Store) ResetTestData(ctx context.Context) error {
 			data_encryption_keys,
 			employees,
 			th_memberships, 
+			hygiene_instruction_documents,
 			hygiene_belehrung_events, 
 			children_group_changes, 
 			children, 

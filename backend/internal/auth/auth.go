@@ -255,6 +255,7 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 						Permissions:          identPerms,
 						EffectivePermissions: effectivePerms,
 						FamilyID:             familyID,
+						ParentID:             parentID,
 					}
 				} else {
 					log.Printf("[AUTH ERROR] Failed to fetch user %q from database: %v", email, err)
@@ -265,6 +266,7 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 				parentID, familyID, pErr := a.Store.GetParentInfoByIdentifierEmail(r.Context(), email)
 				if pErr == nil && familyID != nil {
 					user.FamilyID = familyID
+					user.ParentID = parentID
 				}
 				empID, empTypes, _ := a.Store.GetEmployeeInfoByIdentifierEmail(r.Context(), email)
 				triggers := a.TriggersForIdentifierEmail(familyID, empTypes)
@@ -345,6 +347,7 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 						Permissions:          simUser.Permissions,
 						EffectivePermissions: intersected,
 						FamilyID:             simUser.FamilyID,
+						ParentID:             simUser.ParentID,
 						LastLogin:            user.LastLogin,
 						CreatedAt:            user.CreatedAt,
 						UpdatedAt:            user.UpdatedAt,
@@ -613,10 +616,14 @@ func (a *Authenticator) ResolveSimulatedUser(ctx context.Context, cfg models.Sim
 					Permissions:          identPerms,
 					EffectivePermissions: effectivePerms,
 					FamilyID:             familyID,
+					ParentID:             parentID,
 				}
 			} else if len(triggers) > 0 || len(jobRoles) > 0 {
 				if familyID != nil {
 					simUser.FamilyID = familyID
+				}
+				if parentID != nil {
+					simUser.ParentID = parentID
 				}
 				identRoles, implicitPerms := a.RolesAndPermissionsForTriggers(triggers)
 				for _, ir := range append(identRoles, jobRoles...) {

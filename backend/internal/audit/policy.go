@@ -151,7 +151,15 @@ var AuditRegistry = map[string]EntityPolicy{
 	},
 	"hygiene_event": {
 		CanUserView: func(user *models.UserWithPermissions, familyID *uuid.UUID) bool {
-			return user.HasPermission("families.all.read") || user.HasPermission("hygiene.all.write")
+			return user.HasPermission("families.all.read") || user.HasPermission("hygiene.all.write") || user.HasPermission("hygiene.infektionsschutz.management")
+		},
+		SanitizeSnapshot: func(user *models.UserWithPermissions, snapshot map[string]interface{}) map[string]interface{} {
+			return snapshot
+		},
+	},
+	"hygiene_instruction_document": {
+		CanUserView: func(user *models.UserWithPermissions, familyID *uuid.UUID) bool {
+			return user.HasPermission("hygiene.infektionsschutz.management")
 		},
 		SanitizeSnapshot: func(user *models.UserWithPermissions, snapshot map[string]interface{}) map[string]interface{} {
 			return snapshot
@@ -208,8 +216,11 @@ func AllowedEntityTypesForUser(user *models.UserWithPermissions) []string {
 	if user.HasPermission("families.all.read") || user.HasPermission("children.all.write") || user.HasPermission("allergies.children.read") || user.HasPermission("allergies.children.write") || (user.FamilyID != nil && user.HasPermission("families.self.selfservice")) {
 		allowed = append(allowed, "child", "child_group_change")
 	}
-	if user.HasPermission("families.all.read") || user.HasPermission("hygiene.all.write") {
+	if user.HasPermission("families.all.read") || user.HasPermission("hygiene.all.write") || user.HasPermission("hygiene.infektionsschutz.management") {
 		allowed = append(allowed, "hygiene_event")
+	}
+	if user.HasPermission("hygiene.infektionsschutz.management") {
+		allowed = append(allowed, "hygiene_instruction_document")
 	}
 	if user.HasPermission("families.all.read") || user.HasPermission("memberships.all.read") || user.HasPermission("memberships.all.write") || user.HasPermission("fees.all.read") || (user.FamilyID != nil && user.HasPermission("memberships.self.read")) {
 		allowed = append(allowed, "th_membership")

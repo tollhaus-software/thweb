@@ -112,11 +112,21 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		r.With(auth.RequirePermission("children.all.write")).Put("/api/children_group_changes/{id}", server.HandleUpdateChildGroupChange)
 		r.With(auth.RequirePermission("children.all.write")).Delete("/api/children_group_changes/{id}", server.HandleDeleteChildGroupChange)
 
-		// Hygiene Belehrung
-		r.With(auth.RequirePermission("hygiene.all.write")).Post("/api/hygiene-events", server.HandleCreateHygieneEvent)
-		r.With(auth.RequirePermission("hygiene.all.write")).Post("/api/parents/{id}/hygiene-events", server.HandleCreateHygieneEvent)
-		r.With(auth.RequirePermission("hygiene.all.write")).Put("/api/hygiene-events/{id}", server.HandleUpdateHygieneEvent)
-		r.With(auth.RequirePermission("hygiene.all.write")).Delete("/api/hygiene-events/{id}", server.HandleDeleteHygieneEvent)
+		// Hygieneamt & Hygiene Belehrung
+		r.With(auth.RequirePermission("hygiene.infektionsschutz.self")).Get("/api/hygiene/my-status", server.HandleGetMyHygieneStatus)
+		r.With(auth.RequirePermission("hygiene.infektionsschutz.self")).Post("/api/hygiene/certify", server.HandleCertifyHygieneInstruction)
+		r.With(auth.RequireAnyPermission("hygiene.infektionsschutz.self", "hygiene.infektionsschutz.management", "hygiene.all.read", "hygiene.all.write")).Get("/api/hygiene/instruction-document", server.HandleGetActiveHygieneDocument)
+		r.With(auth.RequireAnyPermission("hygiene.infektionsschutz.self", "hygiene.infektionsschutz.management", "hygiene.all.read", "hygiene.all.write")).Get("/api/hygiene/instruction-document/{id}", server.HandleGetHygieneDocumentByID)
+		r.With(auth.RequireAnyPermission("hygiene.infektionsschutz.self", "hygiene.infektionsschutz.management", "hygiene.all.read", "hygiene.all.write")).Get("/api/hygiene/instruction-document/info", server.HandleGetActiveHygieneDocumentInfo)
+
+		r.With(auth.RequireAnyPermission("hygiene.infektionsschutz.management", "hygiene.all.write")).Post("/api/hygiene/instruction-document", server.HandleUploadHygieneDocument)
+		r.With(auth.RequireAnyPermission("hygiene.infektionsschutz.management", "hygiene.all.write")).Get("/api/hygiene/instruction-documents", server.HandleListHygieneDocuments)
+		r.With(auth.RequireAnyPermission("hygiene.infektionsschutz.management", "hygiene.all.write")).Delete("/api/hygiene/instruction-document/{id}", server.HandleDeleteHygieneDocument)
+
+		r.With(auth.RequireAnyPermission("hygiene.infektionsschutz.management", "hygiene.all.write")).Post("/api/hygiene-events", server.HandleCreateHygieneEvent)
+		r.With(auth.RequireAnyPermission("hygiene.infektionsschutz.management", "hygiene.all.write")).Post("/api/parents/{id}/hygiene-events", server.HandleCreateHygieneEvent)
+		r.With(auth.RequireAnyPermission("hygiene.infektionsschutz.management", "hygiene.all.write")).Put("/api/hygiene-events/{id}", server.HandleUpdateHygieneEvent)
+		r.With(auth.RequireAnyPermission("hygiene.infektionsschutz.management", "hygiene.all.write")).Delete("/api/hygiene-events/{id}", server.HandleDeleteHygieneEvent)
 
 		// TH Membership
 		r.With(auth.RequirePermission("memberships.all.read")).Get("/api/members", server.HandleListMembers)

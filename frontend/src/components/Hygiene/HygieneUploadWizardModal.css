@@ -1,0 +1,160 @@
+.hygiene-wizard-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  padding: 1.25rem;
+  backdrop-filter: blur(2px);
+}
+
+.hygiene-wizard-container {
+  background: var(--bg-surface, #ffffff);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 780px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+  animation: hygieneWizardIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes hygieneWizardIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.hygiene-wizard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.15rem 1.5rem;
+  border-bottom: 1px solid var(--border, #e2e8f0);
+  background-color: var(--bg-subtle, #f8fafc);
+}
+
+.hygiene-wizard-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.hygiene-wizard-title {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-h, #0f172a);
+}
+
+.hygiene-wizard-step-indicator {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary, #64748b);
+  background: var(--border, #e2e8f0);
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.hygiene-wizard-close-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary, #64748b);
+  cursor: pointer;
+  padding: 0.35rem;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hygiene-wizard-close-btn:hover {
+  background-color: var(--border, #e2e8f0);
+  color: var(--text-h, #0f172a);
+}
+
+.hygiene-wizard-body {
+  padding: 1.5rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  flex: 1;
+}
+
+.hygiene-wizard-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  border: 2px dashed var(--border, #cbd5e1);
+  border-radius: 10px;
+  padding: 2.25rem 1.5rem;
+  background: var(--bg-subtle, #f8fafc);
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s ease-in-out;
+}
+
+.hygiene-wizard-dropzone:hover {
+  border-color: var(--primary, #2563eb);
+  background: var(--bg-subtle, #f1f5f9);
+}
+
+.hygiene-wizard-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border, #e2e8f0);
+  background-color: var(--bg-subtle, #f8fafc);
+}
+
+.hygiene-wizard-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.55rem 1.15rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.hygiene-wizard-btn.primary {
+  background-color: var(--primary, #2563eb);
+  color: #ffffff;
+  border: none;
+}
+
+.hygiene-wizard-btn.primary:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.hygiene-wizard-btn.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hygiene-wizard-btn.secondary {
+  background-color: var(--bg-surface, #ffffff);
+  color: var(--text-secondary, #475569);
+  border: 1px solid var(--border, #cbd5e1);
+}
+
+.hygiene-wizard-btn.secondary:hover {
+  background-color: var(--bg-hover, #f1f5f9);
+  color: var(--text-h, #0f172a);
+}

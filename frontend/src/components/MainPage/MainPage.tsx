@@ -13,7 +13,10 @@ import {
   CircleDollarSign,
   ShieldAlert,
   Briefcase,
+  FileText,
 } from 'lucide-react';
+import { HygieneCertificationModal } from '../Hygiene/HygieneCertificationModal';
+import { getHygieneMessage } from '../../utils/hygieneMessage';
 import { t } from '../../utils/i18n';
 import {
   formatDateKey,
@@ -62,6 +65,32 @@ export const MainPage: React.FC<MainPageProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [weekLoading, setWeekLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [hygieneStatus, setHygieneStatus] = useState<any>(null);
+  const [certModalOpen, setCertModalOpen] = useState(false);
+
+  const hygieneMessage = getHygieneMessage(hygieneStatus);
+  const canAccessHygieneSelf = hasPermission('hygiene.infektionsschutz.self');
+
+  const fetchHygieneStatus = useCallback(async () => {
+    if (!canAccessHygieneSelf) return;
+    try {
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const res = await fetch('/api/hygiene/my-status', { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setHygieneStatus(data);
+      }
+    } catch (err) {
+      console.error('Error fetching hygiene status:', err);
+    }
+  }, [canAccessHygieneSelf, token]);
+
+  useEffect(() => {
+    void fetchHygieneStatus();
+  }, [fetchHygieneStatus]);
 
   // Determine today date string (in local time)
   const todayDateStr = useMemo(() => todayDate || formatDateKey(new Date()), [todayDate]);
@@ -390,6 +419,55 @@ export const MainPage: React.FC<MainPageProps> = ({
 
       {/* Grid of dashboard cards - prepared for multiple boxes */}
       <div className="main-page-cards-grid">
+        {/* Hygiene Task Box */}
+        {hygieneStatus?.needs_instruction && hygieneStatus?.document_available && (
+          <section
+            className="main-page-card main-page-hygiene-task-card"
+            data-testid="main-page-hygiene-task-card"
+            style={{
+              borderColor: 'var(--primary, #2563eb)',
+              borderWidth: '2px',
+              borderStyle: 'solid',
+              background: 'var(--accent-bg, rgba(37, 99, 235, 0.04))',
+            }}
+          >
+            <div className="main-page-card-header">
+              <ShieldAlert size={22} className="main-page-card-icon" style={{ color: 'var(--primary, #2563eb)' }} />
+              <h2 className="main-page-card-title" data-testid="main-page-hygiene-task-title" style={{ color: 'var(--primary, #2563eb)' }}>
+                {t('hygieneTaskTitle')}
+              </h2>
+            </div>
+            <div className="main-page-card-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <p style={{ margin: 0, fontSize: '0.95rem', lineHeight: '1.5', color: 'var(--text)' }} data-testid="main-page-hygiene-task-desc" data-kind={hygieneMessage?.kind}>
+                {hygieneMessage?.text}
+              </p>
+              <div>
+                <button
+                  type="button"
+                  className="personal-hygiene-certify-btn"
+                  onClick={() => setCertModalOpen(true)}
+                  data-testid="main-page-hygiene-task-start-btn"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    padding: '0.65rem 1.25rem',
+                    background: 'var(--primary, #2563eb)',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <FileText size={16} />
+                  <span>{t('hygieneTaskStartBtn')}</span>
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* Main Box: Essen heute / Essen am Montag */}
         <section className="main-page-card main-page-food-card" data-testid="main-page-food-card">
           <div className="main-page-card-header">
@@ -563,6 +641,16 @@ export const MainPage: React.FC<MainPageProps> = ({
           </section>
         )}
       </div>
+
+      {/* Certification Modal */}
+      <HygieneCertificationModal
+        isOpen={certModalOpen}
+        onClose={() => setCertModalOpen(false)}
+        onSuccess={() => void fetchHygieneStatus()}
+        documentTitle={hygieneStatus?.document_info?.title}
+        documentFilename={hygieneStatus?.document_info?.filename}
+        userName={hygieneStatus?.display_name}
+      />
     </div>
   );
 };

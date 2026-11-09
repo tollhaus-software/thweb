@@ -17,6 +17,7 @@ import {
   Calendar,
   Activity,
   Home,
+  FileText,
 } from 'lucide-react';
 import { t } from './i18n';
 
@@ -31,6 +32,8 @@ export type TabId =
   | 'employees'
   | 'childcareFees'
   | 'hygieneBelehrung'
+  | 'hygieneDocument'
+  | 'kochenHygiene'
   | 'mealPlan'
   | 'mealAllergens'
   | 'audit'
@@ -51,6 +54,8 @@ export interface UserPermissionsContext {
   canViewMealPlan: boolean;
   canReadMealAllergens: boolean;
   hasHygieneWrite: boolean;
+  canManageHygiene?: boolean;
+  canAccessPersonalHygiene?: boolean;
   canReadAudit: boolean;
   canManageUsers: boolean;
   canViewActivity: boolean;
@@ -253,25 +258,45 @@ export const NAVIGATION_CATEGORIES: NavCategory[] = [
         icon: Calendar,
         isVisible: (ctx) => ctx.canViewMealPlan,
       },
+      {
+        id: 'kochenHygiene',
+        labelKey: 'subtabKochenHygiene',
+        defaultLabel: 'Hygiene',
+        accessibleName: 'Kochen/Hygiene',
+        descriptionKey: 'subtabDescKochenHygiene',
+        defaultDescription: 'Persönlicher Status zur Hygienebelehrung (§ 43 IfSG) und Leitfaden.',
+        icon: Sparkles,
+        isVisible: (ctx) => Boolean(ctx.canAccessPersonalHygiene),
+      },
     ],
   },
   {
     id: 'hygiene',
-    labelKey: 'navHygiene',
-    defaultLabel: 'Hygiene',
-    descriptionKey: 'catDescHygiene',
-    defaultDescription: 'Infektionsschutz- und Hygienebelehrungen.',
+    labelKey: 'navHygieneamt',
+    defaultLabel: 'Hygieneamt',
+    descriptionKey: 'catDescHygieneamt',
+    defaultDescription: 'Infektionsschutz und Nachverfolgung der Belehrungen.',
     icon: Sparkles,
     items: [
       {
         id: 'hygieneBelehrung',
-        labelKey: 'navHygiene',
-        defaultLabel: 'Hygiene',
-        accessibleName: 'Hygiene',
-        descriptionKey: 'subtabDescHygiene',
-        defaultDescription: 'Nachverfolgung von Infektionsschutz- und Hygienebelehrungen.',
+        labelKey: 'subtabHygieneBelehrungen',
+        defaultLabel: 'Belehrungen',
+        accessibleName: 'Hygieneamt/Belehrungen',
+        descriptionKey: 'subtabDescHygieneBelehrungen',
+        defaultDescription: 'Übersicht aller Belehrungen und Auffrischungen.',
         icon: Sparkles,
-        isVisible: (ctx) => ctx.canReadFamiliesAll || ctx.hasHygieneWrite,
+        isVisible: (ctx) => Boolean(ctx.canManageHygiene || ctx.hasHygieneWrite),
+      },
+      {
+        id: 'hygieneDocument',
+        labelKey: 'subtabHygieneDocument',
+        defaultLabel: 'Belehrungsdokument',
+        accessibleName: 'Hygieneamt/Belehrungsdokument',
+        descriptionKey: 'subtabDescHygieneDocument',
+        defaultDescription: 'Konfiguration des Dokuments zur Hygiene-Folgebelehrung.',
+        icon: FileText,
+        isVisible: (ctx) => Boolean(ctx.canManageHygiene),
       },
     ],
   },

@@ -28,6 +28,8 @@ import { isExperimentActive } from './utils/experiments';
 import { MealPlanTab } from './components/MealPlan/MealPlanTab';
 import { MealPlanPrintView } from './components/MealPlan/MealPlanPrintView';
 import { MealAllergensTab } from './components/MealAllergens/MealAllergensTab';
+import { PersonalHygieneTab } from './components/Hygiene/PersonalHygieneTab';
+import { HygieneDocumentTab } from './components/Hygiene/HygieneDocumentTab';
 import { KioskProvisioning } from './components/Admin/KioskProvisioning';
 import { FeedbackAndActivityView } from './components/Admin/FeedbackAndActivityView';
 import { PermissionsSimulatorModal } from './components/Admin/PermissionsSimulatorModal';
@@ -1969,6 +1971,8 @@ const ALL_AVAILABLE_PERMISSIONS = [
   'fees.all.read',
   'fees.self.read',
   'hygiene.all.write',
+  'hygiene.infektionsschutz.management',
+  'hygiene.infektionsschutz.self',
   'memberships.all.write',
   'memberships.all.read',
   'memberships.self.read',
@@ -2571,7 +2575,9 @@ const Dashboard: React.FC = () => {
   const canWriteParents = hasPermission('families.all.write');
   const canWriteFamilies = canWriteParents;
   const canWriteChildren = hasPermission('children.all.write');
-  const canWriteHygiene = hasPermission('hygiene.all.write');
+  const canManageHygiene = hasPermission('hygiene.infektionsschutz.management') || hasPermission('*') || hasPermission('hygiene.all.write');
+  const canAccessPersonalHygiene = hasPermission('hygiene.infektionsschutz.self') || hasPermission('*');
+  const canWriteHygiene = hasPermission('hygiene.all.write') || canManageHygiene;
   const canViewMealPlan = hasPermission('mealplan.view');
   const canReadMealAllergens = hasPermission('meal_allergens.read') || hasPermission('meal_allergens.write');
   const canReadMembers = hasPermission('memberships.all.read');
@@ -2662,7 +2668,9 @@ const Dashboard: React.FC = () => {
     canReadEmployees,
     canViewMealPlan,
     canReadMealAllergens,
-    hasHygieneWrite: hasPermission('hygiene.all.write'),
+    hasHygieneWrite: canWriteHygiene,
+    canManageHygiene,
+    canAccessPersonalHygiene,
     canReadAudit,
     canManageUsers: canManageUsers || hasPermission('*'),
     canViewActivity,
@@ -2678,6 +2686,9 @@ const Dashboard: React.FC = () => {
     canReadEmployees,
     canViewMealPlan,
     canReadMealAllergens,
+    canWriteHygiene,
+    canManageHygiene,
+    canAccessPersonalHygiene,
     hasPermission,
     canReadAudit,
     canManageUsers,
@@ -2689,7 +2700,7 @@ const Dashboard: React.FC = () => {
 
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [activeTab, setActiveTab] = React.useState<
-    'main' | 'familiesOverview' | 'families' | 'parents' | 'children' | 'members' | 'jobs' | 'employees' | 'childcareFees' | 'hygieneBelehrung' | 'mealPlan' | 'mealAllergens' | 'audit' | 'admin' | 'activity' | 'kiosk' | 'dashboard' | string
+    'main' | 'familiesOverview' | 'families' | 'parents' | 'children' | 'members' | 'jobs' | 'employees' | 'childcareFees' | 'hygieneBelehrung' | 'hygieneDocument' | 'kochenHygiene' | 'mealPlan' | 'mealAllergens' | 'audit' | 'admin' | 'activity' | 'kiosk' | 'dashboard' | string
   >(() => {
     const rawHash = window.location.hash.replace('#', '');
     const hash = rawHash.split('?')[0];
@@ -2704,7 +2715,9 @@ const Dashboard: React.FC = () => {
       canReadEmployees,
       canViewMealPlan,
       canReadMealAllergens,
-      hasHygieneWrite: hasPermission('hygiene.all.write'),
+      hasHygieneWrite: canWriteHygiene,
+      canManageHygiene,
+      canAccessPersonalHygiene,
       canReadAudit,
       canManageUsers: canManageUsers || hasPermission('*'),
       canViewActivity,
@@ -2728,7 +2741,9 @@ const Dashboard: React.FC = () => {
       (hash === 'jobs' && canReadJobs) ||
       (hash === 'employees' && canReadEmployees) ||
       (hash === 'childcareFees' && canReadFees) ||
-      (hash === 'hygieneBelehrung' && (canReadFamiliesAll || hasPermission('hygiene.all.write'))) ||
+      (hash === 'hygieneBelehrung' && (canManageHygiene || hasPermission('hygiene.all.write'))) ||
+      (hash === 'hygieneDocument' && canManageHygiene) ||
+      (hash === 'kochenHygiene' && canAccessPersonalHygiene) ||
       (hash === 'mealPlan' && canViewMealPlan) ||
       (hash === 'mealAllergens' && canReadMealAllergens) ||
       (hash === 'audit' && canReadAudit) ||
@@ -2751,7 +2766,9 @@ const Dashboard: React.FC = () => {
       (saved === 'jobs' && canReadJobs) ||
       (saved === 'employees' && canReadEmployees) ||
       (saved === 'childcareFees' && canReadFees) ||
-      (saved === 'hygieneBelehrung' && (canReadFamiliesAll || hasPermission('hygiene.all.write'))) ||
+      (saved === 'hygieneBelehrung' && (canManageHygiene || hasPermission('hygiene.all.write'))) ||
+      (saved === 'hygieneDocument' && canManageHygiene) ||
+      (saved === 'kochenHygiene' && canAccessPersonalHygiene) ||
       (saved === 'mealPlan' && canViewMealPlan) ||
       (saved === 'mealAllergens' && canReadMealAllergens) ||
       (saved === 'audit' && canReadAudit) ||
@@ -2875,7 +2892,7 @@ const Dashboard: React.FC = () => {
       } else if (canReadFamiliesAll) {
         fallback = 'families';
       }
-    } else if (activeTab === 'hygieneBelehrung' && !canReadFamiliesAll && !hasPermission('hygiene.all.write')) {
+    } else if (activeTab === 'hygieneBelehrung' && !canManageHygiene && !hasPermission('hygiene.all.write')) {
       if (canReadOverview) {
         fallback = 'familiesOverview';
       } else if (canReadFees) {
@@ -2883,17 +2900,23 @@ const Dashboard: React.FC = () => {
       } else if (canReadFamiliesAll) {
         fallback = 'families';
       }
+    } else if (activeTab === 'hygieneDocument' && !canManageHygiene) {
+      fallback = getFirstPermittedTabForCategory('hygiene', navPerms) || 'familiesOverview';
+    } else if (activeTab === 'kochenHygiene' && !canAccessPersonalHygiene) {
+      fallback = getFirstPermittedTabForCategory('kochen', navPerms) || 'familiesOverview';
     } else if (activeTab === 'mga' && !categoryHasLandingPage('mga', navPerms)) {
       fallback = getFirstPermittedTabForCategory('mga', navPerms);
     } else if (activeTab === 'kochen' && !categoryHasLandingPage('kochen', navPerms)) {
       fallback = getFirstPermittedTabForCategory('kochen', navPerms);
+    } else if (activeTab === 'hygiene' && !categoryHasLandingPage('hygiene', navPerms)) {
+      fallback = getFirstPermittedTabForCategory('hygiene', navPerms);
     }
     if (fallback && fallback !== activeTab) {
       setActiveTab(fallback);
       localStorage.setItem('thweb_active_tab', fallback);
       window.location.hash = fallback;
     }
-  }, [activeTab, canReadFamiliesAll, canReadOverview, canReadFees, canReadMembers, canReadJobs, canReadEmployees, canViewMealPlan, canReadMealAllergens, hasPermission, navPerms, isMainPageActive]);
+  }, [activeTab, canReadFamiliesAll, canReadOverview, canReadFees, canReadMembers, canReadJobs, canReadEmployees, canViewMealPlan, canReadMealAllergens, canManageHygiene, canAccessPersonalHygiene, hasPermission, navPerms, isMainPageActive]);
 
   // Navigation & Highlighting state (Patterns 2 & 3)
   const [highlightTarget, setHighlightTarget] = React.useState<{ id: string; key: number } | null>(null);
@@ -3993,7 +4016,9 @@ const Dashboard: React.FC = () => {
         (hash === 'jobs' && canReadJobs) ||
         (hash === 'employees' && canReadEmployees) ||
         (hash === 'childcareFees' && canReadFees) ||
-        (hash === 'hygieneBelehrung' && (canReadFamiliesAll || hasPermission('hygiene.all.write'))) ||
+        (hash === 'hygieneBelehrung' && (canManageHygiene || hasPermission('hygiene.all.write'))) ||
+        (hash === 'hygieneDocument' && canManageHygiene) ||
+        (hash === 'kochenHygiene' && canAccessPersonalHygiene) ||
         (hash === 'mealPlan' && canViewMealPlan) ||
         (hash === 'mealAllergens' && canReadMealAllergens) ||
         (hash === 'audit' && canReadAudit) ||
@@ -8037,7 +8062,9 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
         canReadEmployees={canReadEmployees}
         canViewMealPlan={canViewMealPlan}
         canReadMealAllergens={canReadMealAllergens}
-        hasHygieneWrite={hasPermission('hygiene.all.write')}
+        hasHygieneWrite={canWriteHygiene}
+        canManageHygiene={canManageHygiene}
+        canAccessPersonalHygiene={canAccessPersonalHygiene}
         canReadAudit={canReadAudit}
         canManageUsers={canManageUsers || hasPermission('*')}
         canViewActivity={canViewActivity}
@@ -8231,7 +8258,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
           </div>
         )}
 
-        {!isLandingActive && activeTab !== 'main' && activeTab !== 'childcareFees' && activeTab !== 'audit' && activeTab !== 'admin' && activeTab !== 'kiosk' && activeTab !== 'dashboard' && activeTab !== 'mealPlan' && activeTab !== 'mealAllergens' && (
+        {!isLandingActive && activeTab !== 'main' && activeTab !== 'childcareFees' && activeTab !== 'audit' && activeTab !== 'admin' && activeTab !== 'kiosk' && activeTab !== 'dashboard' && activeTab !== 'mealPlan' && activeTab !== 'mealAllergens' && activeTab !== 'hygieneDocument' && activeTab !== 'kochenHygiene' && (
           <div className="controls-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <div
               className={`controls-left ${activeTab === 'familiesOverview' ? 'overview-controls-left' : ''}`}
@@ -8850,6 +8877,10 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
               <MealPlanTab />
             ) : activeTab === 'mealAllergens' && canReadMealAllergens ? (
               <MealAllergensTab />
+            ) : activeTab === 'kochenHygiene' && canAccessPersonalHygiene ? (
+              <PersonalHygieneTab onRefreshParentData={fetchFamilies} />
+            ) : activeTab === 'hygieneDocument' && canManageHygiene ? (
+              <HygieneDocumentTab />
             ) : activeTab === 'dashboard' && canUseDashboard ? (
               <KioskDashboard embedded={true} />
             ) : activeTab === 'childcareFees' && canReadFees ? (

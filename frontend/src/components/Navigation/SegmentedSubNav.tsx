@@ -44,7 +44,8 @@ export const SegmentedSubNav: React.FC<SegmentedSubNavProps> = ({
   if (
     effectiveCategory !== 'mga' &&
     effectiveCategory !== 'kochen' &&
-    effectiveCategory !== 'pa'
+    effectiveCategory !== 'pa' &&
+    effectiveCategory !== 'hygiene'
   ) {
     return null;
   }

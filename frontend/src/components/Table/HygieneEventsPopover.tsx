@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Trash, Check, X, Calendar, Pencil } from 'lucide-react';
+import { Plus, Trash, Check, X, Calendar, Pencil, FileText, FileX } from 'lucide-react';
 import { t, CURRENT_LOCALE, formatDisplayDate, parseInputDate } from '../../utils/i18n';
 import { CellPopover } from './CellPopover';
 import { CalendarDropdown } from '../CalendarDropdown';
@@ -14,6 +14,9 @@ export interface HygieneEvent {
   event_date: string;
   event_type: 'initial' | 'recertify';
   documentation: string;
+  document_id?: string;
+  document_title?: string;
+  document_deleted?: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -116,6 +119,53 @@ export const HygieneCell: React.FC<HygieneCellProps> = ({
           <span style={{ color: '#94a3b8', fontStyle: 'italic', fontSize: '0.85rem' }}>
             -
           </span>
+        )}
+        {event?.document_id && (
+          event.document_deleted ? (
+            <span
+              title={t('hygieneDocumentDeleted') || 'Das damals zertifizierte Belehrungsdokument wurde gelöscht.'}
+              aria-label={t('hygieneDocumentDeleted') || 'Dokument gelöscht'}
+              data-testid={`hygiene-pdf-deleted-${parent.id}`}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '2px',
+                color: 'var(--text-secondary, #64748b)',
+                marginLeft: '4px',
+                padding: '1px 4px',
+                borderRadius: '3px',
+                background: 'var(--bg-subtle, #f1f5f9)',
+                border: '1px solid var(--border, #e2e8f0)',
+                fontSize: '0.72rem',
+                fontWeight: 500,
+              }}
+            >
+              <FileX size={12} />
+              <span>{t('hygieneDocDeletedShort') || 'gelöscht'}</span>
+            </span>
+          ) : (
+            <a
+              href={`/api/hygiene/instruction-document/${encodeURIComponent(event.document_id)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              title={t('hygieneViewPdf')}
+              aria-label={t('hygieneViewPdf')}
+              data-testid={`hygiene-pdf-link-${parent.id}`}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--primary)',
+                marginLeft: '4px',
+                padding: '2px',
+                borderRadius: '3px',
+                background: 'var(--bg-subtle, rgba(0,0,0,0.04))',
+              }}
+            >
+              <FileText size={13} />
+            </a>
+          )
         )}
       </div>
       {!readOnly && (
@@ -371,25 +421,76 @@ export const HygieneEventsPopover: React.FC<HygieneEventsPopoverProps> = ({
                     }}
                     title={ev.documentation || undefined}
                   >
-                    {readOnly || !onUpdateEvent ? (
-                      <span>{ev.documentation || '-'}</span>
-                    ) : (
-                      <EasyEditComponent
-                        type={EasyEditTypes.TEXT}
-                        value={ev.documentation || ''}
-                        placeholder="-"
-                        onSave={(val: string) => {
-                          handleSaveDocumentation(ev, val);
-                        }}
-                        editButtonLabel={<Pencil size={13} />}
-                        instructions={t('documentation')}
-                        displayComponent={<span>{ev.documentation || '-'}</span>}
-                        viewAttributes={{}}
-                        inputAttributes={{}}
-                        onCancel={() => {}}
-                        onValidate={() => true}
-                      />
-                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {ev.document_id && (
+                        ev.document_deleted ? (
+                          <span
+                            title={t('hygieneDocumentDeleted') || 'Dokument wurde gelöscht'}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                              padding: '1px 5px',
+                              borderRadius: '3px',
+                              background: 'var(--bg-subtle, #f1f5f9)',
+                              border: '1px solid var(--border, #e2e8f0)',
+                              color: 'var(--text-secondary, #64748b)',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              flexShrink: 0,
+                            }}
+                          >
+                            <FileX size={12} />
+                            <span>PDF ({t('hygieneDocDeletedShort') || 'gelöscht'})</span>
+                          </span>
+                        ) : (
+                          <a
+                            href={`/api/hygiene/instruction-document/${encodeURIComponent(ev.document_id)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                              padding: '1px 5px',
+                              borderRadius: '3px',
+                              background: 'var(--bg-subtle, #f1f5f9)',
+                              color: 'var(--primary, #2563eb)',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              textDecoration: 'none',
+                              flexShrink: 0,
+                            }}
+                            title={t('hygieneViewPdf')}
+                          >
+                            <FileText size={12} />
+                            <span>PDF</span>
+                          </a>
+                        )
+                      )}
+                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                        {readOnly || !onUpdateEvent ? (
+                          <span>{ev.documentation || '-'}</span>
+                        ) : (
+                          <EasyEditComponent
+                            type={EasyEditTypes.TEXT}
+                            value={ev.documentation || ''}
+                            placeholder="-"
+                            onSave={(val: string) => {
+                              handleSaveDocumentation(ev, val);
+                            }}
+                            editButtonLabel={<Pencil size={13} />}
+                            instructions={t('documentation')}
+                            displayComponent={<span>{ev.documentation || '-'}</span>}
+                            viewAttributes={{}}
+                            inputAttributes={{}}
+                            onCancel={() => {}}
+                            onValidate={() => true}
+                          />
+                        )}
+                      </div>
+                    </div>
                   </td>
 
                   {/* Actions */}

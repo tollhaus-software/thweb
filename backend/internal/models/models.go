@@ -32,6 +32,7 @@ type UserWithPermissions struct {
 	Permissions          []string              `json:"permissions"`
 	EffectivePermissions []string              `json:"effective_permissions"`
 	FamilyID             *uuid.UUID            `json:"family_id,omitempty"`
+	ParentID             *uuid.UUID            `json:"parent_id,omitempty"`
 	LastLogin            *time.Time            `json:"last_login,omitempty"`
 	CreatedAt            time.Time             `json:"created_at"`
 	UpdatedAt            time.Time             `json:"updated_at"`
@@ -74,6 +75,9 @@ func (s *UserWithPermissions) HasPermission(perm string) bool {
 			return true
 		}
 		if perm == "job.role_assignment.read" && (p == "job.role_assignment.write" || p == "*") {
+			return true
+		}
+		if (perm == "hygiene.all.read" || perm == "hygiene.all.write") && (p == "hygiene.infektionsschutz.management" || p == "*") {
 			return true
 		}
 	}
@@ -239,6 +243,8 @@ var AllKnownPermissions = []string{
 	"fees.self.read",
 	"hygiene.all.read",
 	"hygiene.all.write",
+	"hygiene.infektionsschutz.management",
+	"hygiene.infektionsschutz.self",
 	"memberships.all.write",
 	"memberships.all.read",
 	"memberships.self.read",
@@ -486,13 +492,61 @@ type Parent struct {
 }
 
 type HygieneBelehrungEvent struct {
-	ID            uuid.UUID `json:"id"`
-	ParentID      uuid.UUID `json:"parent_id"`
-	EventDate     time.Time `json:"event_date"`
-	EventType     string    `json:"event_type"` // "initial", "recertify"
-	Documentation string    `json:"documentation"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ID              uuid.UUID  `json:"id"`
+	ParentID        uuid.UUID  `json:"parent_id"`
+	EventDate       time.Time  `json:"event_date"`
+	EventType       string     `json:"event_type"` // "initial", "recertify"
+	Documentation   string     `json:"documentation"`
+	DocumentID      *uuid.UUID `json:"document_id,omitempty"`
+	DocumentTitle   string     `json:"document_title,omitempty"`
+	DocumentDeleted bool       `json:"document_deleted,omitempty"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+}
+
+type HygieneInstructionDocument struct {
+	ID                               uuid.UUID  `json:"id"`
+	Filename                         string     `json:"filename"`
+	MimeType                         string     `json:"mime_type"`
+	FileSize                         int64      `json:"file_size"`
+	FileData                         []byte     `json:"-"`
+	Title                            string     `json:"title"`
+	SourceType                       string     `json:"source_type"` // "upload", "google_drive"
+	SourceURL                        string     `json:"source_url,omitempty"`
+	UploadedBy                       string     `json:"uploaded_by"`
+	EffectiveFrom                    time.Time  `json:"effective_from"`
+	IsActive                         bool       `json:"is_active"`
+	DeletedAt                        *time.Time `json:"deleted_at,omitempty"`
+	CreatedAt                        time.Time  `json:"created_at"`
+	UpdatedAt                        time.Time  `json:"updated_at"`
+}
+
+type HygieneInstructionDocumentInfo struct {
+	ID                               uuid.UUID  `json:"id"`
+	Filename                         string     `json:"filename"`
+	MimeType                         string     `json:"mime_type"`
+	FileSize                         int64      `json:"file_size"`
+	Title                            string     `json:"title"`
+	SourceType                       string     `json:"source_type"`
+	SourceURL                        string     `json:"source_url,omitempty"`
+	UploadedBy                       string     `json:"uploaded_by"`
+	EffectiveFrom                    time.Time  `json:"effective_from"`
+	IsActive                         bool       `json:"is_active"`
+	DeletedAt                        *time.Time `json:"deleted_at,omitempty"`
+	CreatedAt                        time.Time  `json:"created_at"`
+}
+
+type HygieneUserStatusResponse struct {
+	IsParent                         bool                            `json:"is_parent"`
+	ParentID                         *uuid.UUID                      `json:"parent_id,omitempty"`
+	NeedsInstruction                 bool                            `json:"needs_instruction"`
+	DisplayName                      string                          `json:"display_name,omitempty"`
+	LastInstructionDate              *string                         `json:"last_instruction_date,omitempty"`
+	LastInstructionType              *string                         `json:"last_instruction_type,omitempty"`
+	LastDocumentID                   *uuid.UUID                      `json:"last_document_id,omitempty"`
+	NextDueDate                      *string                         `json:"next_due_date,omitempty"`
+	DocumentAvailable                bool                            `json:"document_available"`
+	DocumentInfo                     *HygieneInstructionDocumentInfo `json:"document_info,omitempty"`
 }
 
 type VaccinationCheck struct {

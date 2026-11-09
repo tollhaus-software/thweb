@@ -47,6 +47,14 @@ func TestLoadDefault(t *testing.T) {
 		t.Errorf("expected 7 permissions for parent_identifier_email trigger, got %d (%v)", len(identPerms), identPerms)
 	}
 
+	pilotRole := cfg.GetRole("hygiene_pilot")
+	if pilotRole == nil {
+		t.Fatalf("expected hygiene_pilot role to exist")
+	}
+	if len(pilotRole.Permissions) != 1 || pilotRole.Permissions[0] != "hygiene.infektionsschutz.self" {
+		t.Errorf("expected hygiene_pilot to have hygiene.infektionsschutz.self, got %v", pilotRole.Permissions)
+	}
+
 	caregiverRoles, caregiverPerms := cfg.RolesForTrigger(AutoGrantCaregiverIdentifierEmail)
 	if len(caregiverRoles) == 0 || caregiverRoles[0] != "caregiver_default" {
 		t.Errorf("expected caregiver_identifier_email trigger to return caregiver_default role, got %v", caregiverRoles)
