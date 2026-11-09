@@ -2,12 +2,15 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"net/mail"
 	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/pavolmarko/thweb-backend/internal/models"
 )
 
@@ -156,4 +159,108 @@ func (s *Server) HandleGetActivityStats(w http.ResponseWriter, r *http.Request) 
 	}
 	jsonResponse(w, stats)
 }
+
+func (s *Server) HandleListEmailOutbox(w http.ResponseWriter, r *http.Request) {
+	statusFilter := strings.TrimSpace(r.URL.Query().Get("status"))
+	if statusFilter != "" && statusFilter != "all" && statusFilter != "pending" && statusFilter != "sending" && statusFilter != "sent" && statusFilter != "failed" {
+		http.Error(w, "Invalid status filter", http.StatusBadRequest)
+		return
+	}
+	limit := 200
+	if lStr := r.URL.Query().Get("limit"); lStr != "" {
+		if l, err := strconv.Atoi(lStr); err == nil && l > 0 && l <= 500 {
+			limit = l
+		}
+	}
+	items, err := s.Store.ListEmailOutbox(r.Context(), statusFilter, limit)
+	if err != nil {
+		httpErrorLog(w, r, "failed to list email outbox", http.StatusInternalServerError, err)
+		return
+	}
+	jsonResponse(w, items)
+}
+
+func (s *Server) HandleEnqueueTestEmail(w http.ResponseWriter, r *http.Request) {
+	var req models.EnqueueTestEmailRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON payload", http.StatusBadRequest)
+		return
+	}
+
+	toAddr := strings.TrimSpace(req.ToAddr)
+	if toAddr == "" {
+		http.Error(w, "Recipient email address (to_addr) is required", http.StatusBadRequest)
+		return
+	}
+	if strings.ContainsAny(toAddr, "\r\n") {
+		http.Error(w, "Invalid recipient email address", http.StatusBadRequest)
+		return
+	}
+	parsedAddr, err := mail.ParseAddress(toAddr)
+	if err != nil || parsedAddr.Address == "" {
+		http.Error(w, "Invalid recipient email address", http.StatusBadRequest)
+		return
+	}
+
+	subject := strings.TrimSpace(req.Subject)
+	if subject == "" {
+		subject = "Tollhaus Portal Test-E-Mail"
+	}
+	if strings.ContainsAny(subject, "\r\n") {
+		http.Error(w, "Subject must not contain newline characters", http.StatusBadRequest)
+		return
+	}
+
+	body := strings.TrimSpace(req.Body)
+	if body == "" {
+		body = "Dies ist eine Test-E-Mail vom Tollhaus Portal."
+	}
+
+	createdBy := getActorEmail(r)
+	item, err := s.Store.EnqueueEmail(r.Context(), parsedAddr.Address, subject, body, "test", createdBy)
+	if err != nil {
+		httpErrorLog(w, r, "failed to enqueue test email", http.StatusInternalServerError, err)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	jsonResponse(w, item)
+}
+
+func (s *Server) HandleRetryEmailOutbox(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		http.Error(w, "Invalid email outbox ID", http.StatusBadRequest)
+		return
+	}
+	item, err := s.Store.RetryEmailOutboxItem(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			http.Error(w, "Email outbox item not found", http.StatusNotFound)
+			return
+		}
+		httpErrorLog(w, r, "failed to retry email outbox item", http.StatusInternalServerError, err)
+		return
+	}
+	jsonResponse(w, item)
+}
+
+func (s *Server) HandleDeleteEmailOutbox(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		http.Error(w, "Invalid email outbox ID", http.StatusBadRequest)
+		return
+	}
+	if err := s.Store.DeleteEmailOutboxItem(r.Context(), id); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			http.Error(w, "Email outbox item not found", http.StatusNotFound)
+			return
+		}
+		httpErrorLog(w, r, "failed to delete email outbox item", http.StatusInternalServerError, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 

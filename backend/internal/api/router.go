@@ -90,6 +90,12 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		// Admin - User Activity & Feature Usage
 		r.With(auth.RequireAnyPermission("users.all.manage", "activity.view")).Get("/api/admin/activity", server.HandleGetActivityStats)
 
+		// Admin - Email Outbox Queue
+		r.With(auth.RequireAnyPermission("users.all.manage", "activity.view")).Get("/api/admin/emails", server.HandleListEmailOutbox)
+		r.With(auth.RequireAnyPermission("users.all.manage", "activity.view")).Post("/api/admin/emails/test", server.HandleEnqueueTestEmail)
+		r.With(auth.RequireAnyPermission("users.all.manage", "activity.view")).Post("/api/admin/emails/{id}/retry", server.HandleRetryEmailOutbox)
+		r.With(auth.RequireAnyPermission("users.all.manage", "activity.view")).Delete("/api/admin/emails/{id}", server.HandleDeleteEmailOutbox)
+
 		// Admin - Kiosk Client Certificate Provisioning
 		r.With(auth.RequirePermission("provision.kiosk.cert")).Get("/api/admin/kiosk-certs/status", server.HandleGetKioskCertStatus)
 		r.With(auth.RequirePermission("provision.kiosk.cert")).Post("/api/admin/kiosk-certs", server.HandleIssueKioskCert)

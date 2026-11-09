@@ -44,6 +44,27 @@ var (
 			Help: "Unix timestamp of the last successful user_activity retention purge.",
 		},
 	)
+
+	EmailOutboxOldestPendingAgeSeconds = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "thweb_email_outbox_oldest_pending_age_seconds",
+			Help: "Age in seconds of the oldest pending row in email_outbox (0 if none).",
+		},
+	)
+
+	EmailOutboxPendingRows = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "thweb_email_outbox_pending_rows",
+			Help: "Current number of rows with status='pending' in email_outbox.",
+		},
+	)
+
+	EmailOutboxFailedRows = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "thweb_email_outbox_failed_rows",
+			Help: "Current number of rows with status='failed' in email_outbox.",
+		},
+	)
 )
 
 // AllowedClientFeatures defines the bounded allow-list of feature names accepted by POST /api/activity.

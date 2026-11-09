@@ -3520,6 +3520,120 @@ func TestAuditLog_IdentifierEmailParent_RecordedAndDisplayed(t *testing.T) {
 	}
 }
 
+func TestEmailOutboxHandlers(t *testing.T) {
+	ctx := context.Background()
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to database: %v", err)
+	}
+	defer pool.Close()
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping database: %v", err)
+	}
+
+	appStore := store.NewStore(pool)
+	authenticator := auth.NewAuthenticator("mock", true, appStore)
+	router := SetupRouter(appStore, authenticator, nil, nil)
+
+	adminEmail := "admin-email-test@example.com"
+	_, err = appStore.CreateUser(ctx, adminEmail, []string{"admin"}, []string{"*"})
+	if err != nil {
+		t.Fatalf("failed to create admin user: %v", err)
+	}
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE email = $1", adminEmail)
+		_, _ = pool.Exec(ctx, "DELETE FROM email_outbox WHERE created_by = $1", adminEmail)
+	}()
+
+	// 1. Enqueue test email with invalid address -> 400
+	badBody, _ := json.Marshal(models.EnqueueTestEmailRequest{
+		ToAddr: "not-an-email",
+	})
+	reqBad := httptest.NewRequest("POST", "/api/admin/emails/test", bytes.NewReader(badBody))
+	reqBad.Header.Set("X-Forwarded-Email", adminEmail)
+	recBad := httptest.NewRecorder()
+	router.ServeHTTP(recBad, reqBad)
+	if recBad.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid email, got %d (%s)", recBad.Code, recBad.Body.String())
+	}
+
+	// 2. Enqueue valid test email -> 201
+	goodBody, _ := json.Marshal(models.EnqueueTestEmailRequest{
+		ToAddr:  "recipient@tollhaus-stuttgart.de",
+		Subject: "Test mit Umlauten äöüß",
+		Body:    "Hallo aus dem Test!",
+	})
+	reqEnq := httptest.NewRequest("POST", "/api/admin/emails/test", bytes.NewReader(goodBody))
+	reqEnq.Header.Set("X-Forwarded-Email", adminEmail)
+	recEnq := httptest.NewRecorder()
+	router.ServeHTTP(recEnq, reqEnq)
+	if recEnq.Code != http.StatusCreated {
+		t.Fatalf("expected 201 Created, got %d (%s)", recEnq.Code, recEnq.Body.String())
+	}
+
+	var created models.EmailOutboxItem
+	if err := json.Unmarshal(recEnq.Body.Bytes(), &created); err != nil {
+		t.Fatalf("failed to unmarshal created item: %v", err)
+	}
+	if created.ToAddr != "recipient@tollhaus-stuttgart.de" || created.Status != "pending" || created.Kind != "test" {
+		t.Errorf("unexpected created item: %+v", created)
+	}
+
+	// 3. List email outbox -> 200
+	reqList := httptest.NewRequest("GET", "/api/admin/emails?status=pending", nil)
+	reqList.Header.Set("X-Forwarded-Email", adminEmail)
+	recList := httptest.NewRecorder()
+	router.ServeHTTP(recList, reqList)
+	if recList.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for GET /api/admin/emails, got %d (%s)", recList.Code, recList.Body.String())
+	}
+	var items []models.EmailOutboxItem
+	if err := json.Unmarshal(recList.Body.Bytes(), &items); err != nil {
+		t.Fatalf("failed to unmarshal list: %v", err)
+	}
+	found := false
+	for _, it := range items {
+		if it.ID == created.ID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected to find created email %s in pending list", created.ID)
+	}
+
+	// 4. Mark as failed in DB, then retry via POST /api/admin/emails/{id}/retry -> 200
+	_, err = pool.Exec(ctx, "UPDATE email_outbox SET status = 'failed', attempts = 5, last_error = 'boom' WHERE id = $1", created.ID)
+	if err != nil {
+		t.Fatalf("failed to mark email as failed: %v", err)
+	}
+	reqRetry := httptest.NewRequest("POST", "/api/admin/emails/"+created.ID.String()+"/retry", nil)
+	reqRetry.Header.Set("X-Forwarded-Email", adminEmail)
+	recRetry := httptest.NewRecorder()
+	router.ServeHTTP(recRetry, reqRetry)
+	if recRetry.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for retry, got %d (%s)", recRetry.Code, recRetry.Body.String())
+	}
+	var retried models.EmailOutboxItem
+	if err := json.Unmarshal(recRetry.Body.Bytes(), &retried); err != nil {
+		t.Fatalf("failed to unmarshal retried item: %v", err)
+	}
+	if retried.Status != "pending" || retried.Attempts != 0 || retried.LastError != "" {
+		t.Errorf("expected retried item to be reset to pending/0 attempts, got: %+v", retried)
+	}
+
+	// 5. Delete via DELETE /api/admin/emails/{id} -> 204
+	reqDel := httptest.NewRequest("DELETE", "/api/admin/emails/"+created.ID.String(), nil)
+	reqDel.Header.Set("X-Forwarded-Email", adminEmail)
+	recDel := httptest.NewRecorder()
+	router.ServeHTTP(recDel, reqDel)
+	if recDel.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 NoContent for delete, got %d (%s)", recDel.Code, recDel.Body.String())
+	}
+}
+
+
 
 
 

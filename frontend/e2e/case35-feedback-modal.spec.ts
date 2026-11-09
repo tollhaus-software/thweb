@@ -185,7 +185,10 @@ test.describe('Test Case 35: Dashboard Feedback Modal', () => {
     await expect(modal).not.toBeVisible();
   });
 
-  test('admin sections: Admin/Benutzer has users and roles tabs, and Admin/Feedback und Aktivität has feedback and activity tabs', async ({ page }) => {
+  test('admin sections: Admin/Benutzer has users and roles tabs, and Admin/Feedback und Aktivität has feedback, activity, and email outbox tabs', async ({ request, page }) => {
+    const resetRes = await request.post('/api/test/reset');
+    expect(resetRes.ok()).toBeTruthy();
+
     await page.addInitScript(() => {
       localStorage.setItem('token', 'developer@example.com');
     });
@@ -197,11 +200,13 @@ test.describe('Test Case 35: Dashboard Feedback Modal', () => {
     const feedbackActivityContainer = page.locator('[data-testid="feedback-and-activity-container"]');
     await expect(feedbackActivityContainer).toBeVisible();
 
-    // Verify two sub-tabs: 1. Feedback, 2. Aktivität & Feature-Nutzung
+    // Verify three sub-tabs: 1. Feedback, 2. Aktivität & Feature-Nutzung, 3. E-Mail-Ausgang
     const subtabFeedback = page.locator('[data-testid="subtab-feedback"]');
     const subtabActivity = page.locator('[data-testid="subtab-activity"]');
+    const subtabEmails = page.locator('[data-testid="subtab-emails"]');
     await expect(subtabFeedback).toBeVisible();
     await expect(subtabActivity).toBeVisible();
+    await expect(subtabEmails).toBeVisible();
 
     // Feedback tab is selected by default
     await expect(subtabFeedback).toHaveAttribute('aria-selected', 'true');
@@ -223,6 +228,34 @@ test.describe('Test Case 35: Dashboard Feedback Modal', () => {
     if (filterBox && containerBox) {
       expect(filterBox.x + filterBox.width).toBeLessThanOrEqual(containerBox.x + containerBox.width + 1);
     }
+
+    // Switch to E-Mail-Ausgang subtab and test enqueue + delete
+    await subtabEmails.click();
+    await expect(subtabEmails).toHaveAttribute('aria-selected', 'true');
+    const emailDashboard = page.locator('[data-testid="email-outbox-dashboard"]');
+    await expect(emailDashboard).toBeVisible();
+    await expect(emailDashboard.locator('[data-testid="email-empty-state"]')).toBeVisible();
+
+    // Enqueue a test email via the UI form
+    await emailDashboard.locator('[data-testid="email-send-test-toggle-btn"]').click();
+    const testForm = emailDashboard.locator('[data-testid="email-test-form"]');
+    await expect(testForm).toBeVisible();
+    await testForm.locator('[data-testid="email-test-to-input"]').fill('test-recipient@tollhaus-stuttgart.de');
+    await testForm.locator('[data-testid="email-test-subject-input"]').fill('E2E Testbetreff mit ÄÖÜß');
+    await testForm.locator('[data-testid="email-test-body-input"]').fill('Hallo aus dem E2E-Test!');
+    await testForm.locator('[data-testid="email-test-submit-btn"]').click();
+
+    // Verify the enqueued email appears in the outbox table
+    const outboxTable = emailDashboard.locator('[data-testid="email-outbox-table"]');
+    await expect(outboxTable).toBeVisible();
+    await expect(outboxTable).toContainText('test-recipient@tollhaus-stuttgart.de');
+    await expect(outboxTable).toContainText('E2E Testbetreff mit ÄÖÜß');
+    await expect(outboxTable).toContainText('Ausstehend');
+
+    // Delete/dismiss the enqueued test email
+    const deleteBtn = outboxTable.locator('[data-testid^="email-dismiss-btn-"]').first();
+    await deleteBtn.click();
+    await expect(emailDashboard.locator('[data-testid="email-empty-state"]')).toBeVisible();
 
     // 2. Visit Admin/Benutzer (#admin)
     await page.goto('/#admin');

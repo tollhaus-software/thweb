@@ -29,6 +29,14 @@ func ApplySchemaMigrations(ctx context.Context, dbURL string) {
 	}
 
 	log.Printf("[MIGRATION] Applying database schema migrations using Goose...")
+	conn, lockErr := db.Conn(ctx)
+	if lockErr == nil {
+		_, _ = conn.ExecContext(ctx, "SELECT pg_advisory_lock(74928371)")
+		defer func() {
+			_, _ = conn.ExecContext(context.Background(), "SELECT pg_advisory_unlock(74928371)")
+			_ = conn.Close()
+		}()
+	}
 	if err := goose.UpContext(ctx, db, "migrations"); err != nil {
 		log.Printf("[MIGRATION ERROR] Schema migration failed: %v", err)
 		return

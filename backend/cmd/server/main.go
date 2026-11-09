@@ -155,7 +155,19 @@ func main() {
 	}
 	if metricsAddr != "off" && metricsAddr != "disabled" {
 		metricsMux := http.NewServeMux()
-		metricsMux.Handle("/metrics", promhttp.Handler())
+		promHandler := promhttp.Handler()
+		metricsMux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+			if appStore != nil {
+				mCtx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+				if stats, err := appStore.GetEmailOutboxStats(mCtx); err == nil && stats != nil {
+					metrics.EmailOutboxOldestPendingAgeSeconds.Set(stats.OldestPendingAgeSeconds)
+					metrics.EmailOutboxPendingRows.Set(float64(stats.PendingCount))
+					metrics.EmailOutboxFailedRows.Set(float64(stats.FailedCount))
+				}
+				cancel()
+			}
+			promHandler.ServeHTTP(w, r)
+		})
 		metricsMux.HandleFunc("/internal/activity", activityRecorder.HandleInternalActivity)
 		go func() {
 			log.Printf("Internal metrics & activity server listening on %s\n", metricsAddr)

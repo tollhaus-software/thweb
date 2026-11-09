@@ -1400,6 +1400,33 @@ type CreateFeedbackRequest struct {
 	ContactName  string `json:"contact_name,omitempty"`
 }
 
+type EmailOutboxItem struct {
+	ID                uuid.UUID  `json:"id"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+	ToAddr            string     `json:"to_addr"`
+	Subject           string     `json:"subject"`
+	Body              string     `json:"body"`
+	Kind              string     `json:"kind"`
+	CreatedBy         string     `json:"created_by"`
+	Status            string     `json:"status"`
+	Attempts          int        `json:"attempts"`
+	MaxAttempts       int        `json:"max_attempts"`
+	NextAttemptAt     time.Time  `json:"next_attempt_at"`
+	LastError         string     `json:"last_error"`
+	SentAt            *time.Time `json:"sent_at,omitempty"`
+	ProviderMessageID string     `json:"provider_message_id,omitempty"`
+	LockedAt          *time.Time `json:"locked_at,omitempty"`
+	LockedBy          string     `json:"locked_by,omitempty"`
+}
+
+type EnqueueTestEmailRequest struct {
+	ToAddr  string `json:"to_addr"`
+	Subject string `json:"subject,omitempty"`
+	Body    string `json:"body,omitempty"`
+}
+
+
 
 
 

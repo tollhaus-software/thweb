@@ -252,6 +252,17 @@ func TestApplySchemaMigrations(t *testing.T) {
 		t.Fatalf("expected cooks column in meal_allergens: %v", err)
 	}
 
+	// Verify email_outbox table exists
+	var emailOutboxTable string
+	err = testDB.QueryRow(`
+		SELECT table_name
+		FROM information_schema.tables
+		WHERE table_schema = 'public' AND table_name = 'email_outbox';
+	`).Scan(&emailOutboxTable)
+	if err != nil {
+		t.Fatalf("expected email_outbox table to exist: %v", err)
+	}
+
 
 	// Verify migration 00004: test phone number type defaulting to "mobile"
 	// Roll back to migration 3, insert untyped phones, then migrate up to 4

@@ -3065,6 +3065,8 @@ func (s *Store) CreateActiveDEK(ctx context.Context, rec crypto.DEKRecord) (*cry
 func (s *Store) ResetTestData(ctx context.Context) error {
 	_, err := s.db.Exec(ctx, `
 		TRUNCATE TABLE 
+			email_outbox,
+			feedback,
 			completed_tasks,
 			yellow_bag_days,
 			employee_jobs,
@@ -4765,6 +4767,183 @@ func (s *Store) ListFeedback(ctx context.Context, limit int) ([]models.Feedback,
 	}
 	return list, nil
 }
+
+func scanEmailOutboxRow(scanner interface {
+	Scan(dest ...any) error
+}) (*models.EmailOutboxItem, error) {
+	var item models.EmailOutboxItem
+	err := scanner.Scan(
+		&item.ID,
+		&item.CreatedAt,
+		&item.UpdatedAt,
+		&item.ToAddr,
+		&item.Subject,
+		&item.Body,
+		&item.Kind,
+		&item.CreatedBy,
+		&item.Status,
+		&item.Attempts,
+		&item.MaxAttempts,
+		&item.NextAttemptAt,
+		&item.LastError,
+		&item.SentAt,
+		&item.ProviderMessageID,
+		&item.LockedAt,
+		&item.LockedBy,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+const emailOutboxSelectCols = `id, created_at, updated_at, to_addr, subject, body, kind, created_by, status, attempts, max_attempts, next_attempt_at, last_error, sent_at, provider_message_id, locked_at, locked_by`
+
+func (s *Store) EnqueueEmail(ctx context.Context, toAddr, subject, body, kind, createdBy string) (*models.EmailOutboxItem, error) {
+	if strings.TrimSpace(kind) == "" {
+		kind = "notification"
+	}
+	row := s.db.QueryRow(ctx, `
+		INSERT INTO email_outbox (to_addr, subject, body, kind, created_by, status, attempts, max_attempts, next_attempt_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, 'pending', 0, 5, NOW(), NOW(), NOW())
+		RETURNING `+emailOutboxSelectCols,
+		strings.TrimSpace(toAddr), subject, body, kind, strings.TrimSpace(createdBy),
+	)
+	item, err := scanEmailOutboxRow(row)
+	if err != nil {
+		return nil, fmt.Errorf("failed to enqueue email: %w", err)
+	}
+	return item, nil
+}
+
+func (s *Store) EnqueueEmailTx(ctx context.Context, tx pgx.Tx, toAddr, subject, body, kind, createdBy string) (*models.EmailOutboxItem, error) {
+	if strings.TrimSpace(kind) == "" {
+		kind = "notification"
+	}
+	row := tx.QueryRow(ctx, `
+		INSERT INTO email_outbox (to_addr, subject, body, kind, created_by, status, attempts, max_attempts, next_attempt_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, 'pending', 0, 5, NOW(), NOW(), NOW())
+		RETURNING `+emailOutboxSelectCols,
+		strings.TrimSpace(toAddr), subject, body, kind, strings.TrimSpace(createdBy),
+	)
+	item, err := scanEmailOutboxRow(row)
+	if err != nil {
+		return nil, fmt.Errorf("failed to enqueue email in tx: %w", err)
+	}
+	return item, nil
+}
+
+func (s *Store) ListEmailOutbox(ctx context.Context, statusFilter string, limit int) ([]models.EmailOutboxItem, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 200
+	}
+	statusFilter = strings.TrimSpace(statusFilter)
+
+	var (
+		rows pgx.Rows
+		err  error
+	)
+	if statusFilter != "" && statusFilter != "all" {
+		rows, err = s.db.Query(ctx, `
+			SELECT `+emailOutboxSelectCols+`
+			FROM email_outbox
+			WHERE status = $1
+			ORDER BY created_at DESC
+			LIMIT $2
+		`, statusFilter, limit)
+	} else {
+		rows, err = s.db.Query(ctx, `
+			SELECT `+emailOutboxSelectCols+`
+			FROM email_outbox
+			ORDER BY created_at DESC
+			LIMIT $1
+		`, limit)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to list email outbox: %w", err)
+	}
+	defer rows.Close()
+
+	items := make([]models.EmailOutboxItem, 0)
+	for rows.Next() {
+		item, err := scanEmailOutboxRow(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan email outbox item: %w", err)
+		}
+		items = append(items, *item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows error listing email outbox: %w", err)
+	}
+	return items, nil
+}
+
+func (s *Store) DeleteEmailOutboxItem(ctx context.Context, id uuid.UUID) error {
+	tag, err := s.db.Exec(ctx, `DELETE FROM email_outbox WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete email outbox item: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
+}
+
+func (s *Store) RetryEmailOutboxItem(ctx context.Context, id uuid.UUID) (*models.EmailOutboxItem, error) {
+	row := s.db.QueryRow(ctx, `
+		UPDATE email_outbox
+		SET status = 'pending',
+		    attempts = 0,
+		    next_attempt_at = NOW(),
+		    last_error = '',
+		    locked_at = NULL,
+		    locked_by = '',
+		    updated_at = NOW()
+		WHERE id = $1
+		RETURNING `+emailOutboxSelectCols,
+		id,
+	)
+	item, err := scanEmailOutboxRow(row)
+	if err != nil {
+		return nil, err
+	}
+	return item, nil
+}
+
+type EmailOutboxStats struct {
+	OldestPendingAgeSeconds float64 `json:"oldest_pending_age_seconds"`
+	PendingCount            int64   `json:"pending_count"`
+	SendingCount            int64   `json:"sending_count"`
+	SentCount               int64   `json:"sent_count"`
+	FailedCount             int64   `json:"failed_count"`
+}
+
+func (s *Store) GetEmailOutboxStats(ctx context.Context) (*EmailOutboxStats, error) {
+	var stats EmailOutboxStats
+	err := s.db.QueryRow(ctx, `
+		SELECT
+			COALESCE(EXTRACT(EPOCH FROM (NOW() - MIN(created_at) FILTER (WHERE status = 'pending'))), 0)::float8 AS oldest_pending_age_seconds,
+			COUNT(*) FILTER (WHERE status = 'pending') AS pending_count,
+			COUNT(*) FILTER (WHERE status = 'sending') AS sending_count,
+			COUNT(*) FILTER (WHERE status = 'sent') AS sent_count,
+			COUNT(*) FILTER (WHERE status = 'failed') AS failed_count
+		FROM email_outbox
+	`).Scan(
+		&stats.OldestPendingAgeSeconds,
+		&stats.PendingCount,
+		&stats.SendingCount,
+		&stats.SentCount,
+		&stats.FailedCount,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get email outbox stats: %w", err)
+	}
+	if stats.OldestPendingAgeSeconds < 0 {
+		stats.OldestPendingAgeSeconds = 0
+	}
+	return &stats, nil
+}
+
 
 
 
