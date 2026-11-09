@@ -424,16 +424,24 @@ export const MainPage: React.FC<MainPageProps> = ({
           <section
             className="main-page-card main-page-hygiene-task-card"
             data-testid="main-page-hygiene-task-card"
-            style={{
-              borderColor: 'var(--primary, #2563eb)',
-              borderWidth: '2px',
-              borderStyle: 'solid',
-              background: 'var(--accent-bg, rgba(37, 99, 235, 0.04))',
-            }}
           >
             <div className="main-page-card-header">
-              <ShieldAlert size={22} className="main-page-card-icon" style={{ color: 'var(--primary, #2563eb)' }} />
-              <h2 className="main-page-card-title" data-testid="main-page-hygiene-task-title" style={{ color: 'var(--primary, #2563eb)' }}>
+              {hygieneMessage?.kind === 'upcoming' ? (
+                <AlertCircle
+                  size={22}
+                  className="main-page-card-icon hygiene-icon"
+                  data-testid="main-page-hygiene-task-icon"
+                  style={{ color: 'var(--primary, #2563eb)' }}
+                />
+              ) : (
+                <ShieldAlert
+                  size={22}
+                  className="main-page-card-icon hygiene-icon"
+                  data-testid="main-page-hygiene-task-icon"
+                  style={{ color: 'var(--primary, #2563eb)' }}
+                />
+              )}
+              <h2 className="main-page-card-title hygiene-task-title" data-testid="main-page-hygiene-task-title" style={{ color: 'var(--primary, #2563eb)' }}>
                 {t('hygieneTaskTitle')}
               </h2>
             </div>
@@ -453,7 +461,7 @@ export const MainPage: React.FC<MainPageProps> = ({
                     gap: '0.5rem',
                     padding: '0.65rem 1.25rem',
                     background: 'var(--primary, #2563eb)',
-                    color: '#ffffff',
+                    color: 'var(--primary-contrast, #ffffff)',
                     border: 'none',
                     borderRadius: '6px',
                     fontWeight: 600,

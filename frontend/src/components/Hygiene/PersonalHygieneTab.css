@@ -83,7 +83,7 @@
   gap: 0.5rem;
   padding: 0.6rem 1.25rem;
   background: var(--primary, #2563eb);
-  color: #ffffff;
+  color: var(--primary-contrast, #ffffff);
   border: none;
   border-radius: 6px;
   font-size: 0.9rem;

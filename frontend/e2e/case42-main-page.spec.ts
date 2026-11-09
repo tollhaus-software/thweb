@@ -515,4 +515,75 @@ test.describe('Test Case 42: Main Page (Default Homepage, Cook, Food, and Rest o
     // The whole quick start box must NOT be present
     await expect(page.getByTestId('main-page-quickstart-card')).toHaveCount(0);
   });
+
+  test('dark mode theme styling: cards have dark surfaces and titles/welcome text have high contrast', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+    });
+
+    await page.goto('/?exp_main=1');
+    await page.waitForLoadState('networkidle');
+
+    const mainPage = page.getByTestId('main-page');
+    await expect(mainPage).toBeVisible();
+
+    const pageTitle = page.getByTestId('main-page-title');
+    const welcomeGreeting = page.getByTestId('main-page-welcome');
+    const foodCard = page.getByTestId('main-page-food-card');
+    const quickStartCard = page.getByTestId('main-page-quickstart-card');
+
+    // 1. Verify light mode colors
+    const lightTitleColor = await pageTitle.evaluate((el) => window.getComputedStyle(el).color);
+    const lightWelcomeColor = await welcomeGreeting.evaluate((el) => window.getComputedStyle(el).color);
+    const lightCardBg = await foodCard.evaluate((el) => window.getComputedStyle(el).backgroundColor);
+
+    expect(lightTitleColor).toBe('rgb(15, 23, 42)'); // #0f172a
+    expect(lightWelcomeColor).toBe('rgb(71, 85, 105)'); // #475569
+    expect(lightCardBg).toBe('rgb(255, 255, 255)'); // #ffffff
+
+    // 2. Switch to dark mode
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+
+    // 3. Verify dark mode header contrast
+    const darkTitleColor = await pageTitle.evaluate((el) => window.getComputedStyle(el).color);
+    const darkWelcomeColor = await welcomeGreeting.evaluate((el) => window.getComputedStyle(el).color);
+
+    expect(darkTitleColor).toBe('rgb(241, 243, 244)'); // #f1f3f4 (--text-h)
+    expect(darkWelcomeColor).toBe('rgb(154, 160, 166)'); // #9aa0a6 (--text-secondary)
+
+    // 4. Verify dark mode card surfaces are dark (not white)
+    const darkFoodCardBg = await foodCard.evaluate((el) => window.getComputedStyle(el).backgroundColor);
+    const darkQuickStartCardBg = await quickStartCard.evaluate((el) => window.getComputedStyle(el).backgroundColor);
+
+    expect(darkFoodCardBg).toBe('rgb(41, 42, 45)'); // #292a2d (--bg-surface)
+    expect(darkQuickStartCardBg).toBe('rgb(41, 42, 45)'); // #292a2d (--bg-surface)
+
+    // Quickstart buttons have dark background
+    const firstQuickStartBtn = quickStartCard.locator('.main-page-quickstart-btn').first();
+    const darkBtnBg = await firstQuickStartBtn.evaluate((el) => window.getComputedStyle(el).backgroundColor);
+    expect(darkBtnBg).toBe('rgb(41, 42, 45)'); // #292a2d (--bg-surface)
+
+    // Quickstart button label has high contrast
+    const darkBtnLabelColor = await firstQuickStartBtn.locator('.main-page-quickstart-btn-label').evaluate((el) => window.getComputedStyle(el).color);
+    expect(darkBtnLabelColor).toBe('rgb(232, 234, 237)'); // #e8eaed (--text)
+
+    // 5. Expand week section and verify expanded week container and day cards have dark surfaces
+    const expandBtn = page.getByTestId('main-page-expand-week-btn');
+    await expandBtn.click();
+
+    const weekExpanded = page.getByTestId('main-page-week-expanded');
+    await expect(weekExpanded).toBeVisible();
+
+    const darkExpandedBg = await weekExpanded.evaluate((el) => window.getComputedStyle(el).backgroundColor);
+    expect(darkExpandedBg).toBe('rgb(53, 54, 58)'); // #35363a (--bg-subtle)
+
+    const firstWeekDayCard = weekExpanded.locator('.main-page-week-day-card').first();
+    if (await firstWeekDayCard.count() > 0) {
+      const darkDayCardBg = await firstWeekDayCard.evaluate((el) => window.getComputedStyle(el).backgroundColor);
+      expect(darkDayCardBg).toBe('rgb(41, 42, 45)'); // #292a2d (--bg-surface)
+
+      const darkDayNameColor = await firstWeekDayCard.locator('.main-page-week-day-name').evaluate((el) => window.getComputedStyle(el).color);
+      expect(darkDayNameColor).toBe('rgb(241, 243, 244)'); // #f1f3f4 (--text-h)
+    }
+  });
 });

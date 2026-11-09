@@ -40,11 +40,10 @@ export const getHygieneMessage = (status: HygieneMessageStatus | null | undefine
   if (days < 0) {
     return { kind: 'overdue', text: t('hygieneMsgOverdue').replace('{days}', formatDays(-days)) };
   }
-  const daysText = days === 0 ? t('hygieneDaysToday') : formatDays(days);
   return {
     kind: 'upcoming',
     text: t('hygieneMsgUpcoming')
       .replace('{date}', formatDisplayDate(status.next_due_date))
-      .replace('{days}', daysText),
+      .replace('{days}', formatDays(days)),
   };
 };

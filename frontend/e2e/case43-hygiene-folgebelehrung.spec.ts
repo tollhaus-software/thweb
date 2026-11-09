@@ -143,10 +143,18 @@ test.describe('Test Case 43: Hygienebelehrung (§ 43 IfSG) - Personal View, Mana
     const hygieneTask = parentPage.getByTestId('main-page-hygiene-task-card');
     await expect(hygieneTask).toBeVisible();
     await expect(hygieneTask).toContainText('Hygiene-Folgebelehrung');
-    // Never certified before: due date = family start + 12 months, shown with a day count
+    // Never certified before: due date = family start + 12 months, shown with upcoming message
     await expect(parentPage.getByTestId('main-page-hygiene-task-desc')).toHaveText(
-      /^Hygiene-Folgebelehrung bis \d{2}\.\d{2}\.\d{4} durchführen \(\d+ Tage\)\.$/,
+      /^Hygiene-Folgebelehrung innerhalb der nächsten \d+ Tage durchführen \(bis \d{2}\.\d{2}\.\d{4}\)$/,
     );
+
+    // Verify card background matches other cards (white surface in light mode)
+    const cardBg = await hygieneTask.evaluate((el) => window.getComputedStyle(el).backgroundColor);
+    expect(cardBg).toBe('rgb(255, 255, 255)');
+
+    // Verify SVG icon in upcoming phase is the dashboard task icon (AlertCircle / circle-alert)
+    await expect(hygieneTask.getByTestId('main-page-hygiene-task-icon')).toBeVisible();
+    await expect(hygieneTask.locator('svg.lucide-circle-alert')).toBeVisible();
 
     // Click "Jetzt durchführen" to open the modal
     await parentPage.getByTestId('main-page-hygiene-task-start-btn').click();
