@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { reauthManager, type ReauthState } from '../../utils/reauthManager';
 import { t } from '../../utils/i18n';
-import { Lock, AlertCircle } from 'lucide-react';
+import { Lock, AlertCircle, AlertTriangle, WifiOff, MessageSquare } from 'lucide-react';
 
 export const ReauthModal: React.FC = () => {
   const { user, login } = useAuth();
@@ -34,6 +34,189 @@ export const ReauthModal: React.FC = () => {
     }
   };
 
+  // 1. Connection error / No network view
+  if (state.dialogType === 'no_network') {
+    return (
+      <div className="modal-overlay" style={{ zIndex: 9999 }}>
+        <div
+          className="modal-container"
+          style={{
+            maxWidth: '480px',
+            padding: '28px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '40px',
+                height: '40px',
+                borderRadius: '50%',
+                backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                color: '#ef4444',
+              }}
+            >
+              <WifiOff size={22} />
+            </div>
+            <h2 style={{ margin: 0, fontSize: '1.35rem' }}>{t('connectionErrorTitle')}</h2>
+          </div>
+
+          <p style={{ color: 'var(--text-secondary)', lineHeight: 1.5, margin: '0 0 16px' }}>
+            {t('connectionErrorMessage')}
+          </p>
+
+          {state.errorMessage === 'still_offline' && (
+            <div
+              style={{
+                padding: '10px 14px',
+                marginBottom: '16px',
+                borderRadius: '6px',
+                backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                color: '#f87171',
+                fontSize: '0.875rem',
+              }}
+            >
+              {t('connectionStillFailing')}
+            </div>
+          )}
+
+          {isBusy && (
+            <div
+              style={{
+                padding: '14px',
+                marginBottom: '16px',
+                borderRadius: '6px',
+                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid var(--border)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                color: 'var(--text-h)',
+                fontSize: '0.92rem',
+              }}
+            >
+              <div
+                style={{
+                  width: '18px',
+                  height: '18px',
+                  border: '2px solid rgba(255,255,255,0.2)',
+                  borderTopColor: '#38bdf8',
+                  borderRadius: '50%',
+                  animation: 'spin 0.8s linear infinite',
+                }}
+              />
+              <span>{t('reauthWaiting')}</span>
+            </div>
+          )}
+
+          <div className="modal-actions" style={{ marginTop: '20px', display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              className="cancel-btn"
+              onClick={() => reauthManager.handleCancel()}
+              disabled={isBusy}
+            >
+              {t('close')}
+            </button>
+            <button
+              type="button"
+              className="submit-btn"
+              onClick={() => void reauthManager.handleRetry()}
+              disabled={isBusy}
+            >
+              {t('retryConnection')}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Internal server error view
+  if (state.dialogType === 'internal_error') {
+    return (
+      <div className="modal-overlay" style={{ zIndex: 9999 }}>
+        <div
+          className="modal-container"
+          style={{
+            maxWidth: '520px',
+            padding: '28px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '40px',
+                height: '40px',
+                borderRadius: '50%',
+                backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                color: '#fbbf24',
+              }}
+            >
+              <AlertTriangle size={22} />
+            </div>
+            <h2 style={{ margin: 0, fontSize: '1.35rem' }}>{t('internalErrorTitle')}</h2>
+          </div>
+
+          <p style={{ color: 'var(--text-secondary)', lineHeight: 1.5, margin: '0 0 16px' }}>
+            {t('internalErrorMessage')}
+          </p>
+
+          {state.failedUrl && (
+            <div
+              style={{
+                padding: '10px 14px',
+                marginBottom: '16px',
+                borderRadius: '6px',
+                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid var(--border)',
+                color: 'var(--text-secondary)',
+                fontSize: '0.85rem',
+                wordBreak: 'break-all',
+                fontFamily: 'monospace',
+              }}
+            >
+              <div><strong>Endpoint:</strong> {state.failedUrl}</div>
+              {state.errorDetail && (
+                <div style={{ marginTop: '4px', opacity: 0.85 }}>
+                  {state.errorDetail}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="modal-actions" style={{ marginTop: '20px', display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              className="cancel-btn"
+              onClick={() => reauthManager.handleClose()}
+            >
+              {t('close')}
+            </button>
+            <button
+              type="button"
+              className="submit-btn"
+              onClick={() => reauthManager.handleReportFeedback()}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+            >
+              <MessageSquare size={16} />
+              {t('reportFeedbackBtn')}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. Session expired / Re-auth view (default)
   return (
     <div className="modal-overlay" style={{ zIndex: 9999 }}>
       <div

@@ -11,6 +11,8 @@ export interface FeedbackModalProps {
   onClose: () => void;
   embedded?: boolean;
   token?: string | null;
+  initialType?: FeedbackType;
+  initialDescription?: string;
 }
 
 export const FeedbackModal: React.FC<FeedbackModalProps> = ({
@@ -18,10 +20,12 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
   onClose,
   embedded = false,
   token = null,
+  initialType,
+  initialDescription,
 }) => {
   const { user } = useAuth();
-  const [feedbackType, setFeedbackType] = useState<FeedbackType>('Verbesserungsvorschlag');
-  const [description, setDescription] = useState<string>('');
+  const [feedbackType, setFeedbackType] = useState<FeedbackType>(initialType || 'Verbesserungsvorschlag');
+  const [description, setDescription] = useState<string>(initialDescription || '');
   const [contactName, setContactName] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
@@ -32,8 +36,8 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
   // Reset form when modal opens
   useEffect(() => {
     if (isOpen) {
-      setFeedbackType('Verbesserungsvorschlag');
-      setDescription('');
+      setFeedbackType(initialType || 'Verbesserungsvorschlag');
+      setDescription(initialDescription || '');
 
       // Pre-fill "Bei Rückfragen" with email if current user is not a kiosk
       const isKiosk = isKioskMode() || user?.roles?.includes('kiosk') || user?.email?.startsWith('kiosk@');
@@ -51,7 +55,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
       }, 100);
       return () => clearTimeout(timer);
     }
-  }, [isOpen, user, token]);
+  }, [isOpen, user, token, initialType, initialDescription]);
 
   // Handle ESC key to close
   useEffect(() => {

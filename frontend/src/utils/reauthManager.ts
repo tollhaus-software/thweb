@@ -1,10 +1,14 @@
 export type ReauthStatus = 'idle' | 'opening_popup' | 'popup_active' | 'success' | 'error';
+export type DiagnosticDialogType = 'reauth' | 'no_network' | 'internal_error';
 
 export interface ReauthState {
   isOpen: boolean;
+  dialogType: DiagnosticDialogType;
   status: ReauthStatus;
   errorMessage: string | null;
   popupBlocked: boolean;
+  failedUrl?: string;
+  errorDetail?: string;
 }
 
 interface QueuedRequest {
@@ -16,6 +20,7 @@ interface QueuedRequest {
 class ReauthManager {
   private state: ReauthState = {
     isOpen: false,
+    dialogType: 'reauth',
     status: 'idle',
     errorMessage: null,
     popupBlocked: false,
@@ -29,6 +34,10 @@ class ReauthManager {
   private getIsAuthenticated: () => boolean = () => false;
   private getAuthToken: () => string | null = () => null;
   private refreshUserFn: (() => Promise<void>) | null = null;
+  private activeDiagnosticPromise: Promise<{
+    unauthOk: boolean;
+    authProbe: 'ok' | 'auth_failed' | 'server_error' | 'network_failed';
+  }> | null = null;
 
   public subscribe(listener: (state: ReauthState) => void): () => void {
     this.listeners.add(listener);
@@ -62,13 +71,173 @@ class ReauthManager {
   }
 
   public promptReauth(errorMsg?: string) {
-    if (!this.state.isOpen) {
+    if (!this.state.isOpen || this.state.dialogType !== 'reauth') {
       this.updateState({
         isOpen: true,
+        dialogType: 'reauth',
         status: 'idle',
         errorMessage: errorMsg || null,
         popupBlocked: false,
+        failedUrl: undefined,
+        errorDetail: undefined,
       });
+    }
+  }
+
+  public promptNetworkError(errorMsg?: string) {
+    this.updateState({
+      isOpen: true,
+      dialogType: 'no_network',
+      status: 'idle',
+      errorMessage: errorMsg || null,
+      popupBlocked: false,
+      failedUrl: undefined,
+      errorDetail: undefined,
+    });
+  }
+
+  public promptInternalError(url: string, errorDetail?: string) {
+    this.updateState({
+      isOpen: true,
+      dialogType: 'internal_error',
+      status: 'idle',
+      errorMessage: null,
+      popupBlocked: false,
+      failedUrl: url,
+      errorDetail,
+    });
+  }
+
+  public handleReportFeedback() {
+    const failedUrl = this.state.failedUrl;
+    const errorDetail = this.state.errorDetail;
+    this.updateState({
+      isOpen: false,
+      dialogType: 'reauth',
+      status: 'idle',
+      errorMessage: null,
+      popupBlocked: false,
+      failedUrl: undefined,
+      errorDetail: undefined,
+    });
+    if (typeof window !== 'undefined') {
+      const description = failedUrl
+        ? `Interner Serverfehler beim Aufruf von ${failedUrl}.\n\nDetails: ${errorDetail || 'Keine Antwort erhalten (net::ERR_EMPTY_RESPONSE oder Server-Abbruch).'}`
+        : 'Interner Serverfehler aufgetreten.';
+      window.dispatchEvent(
+        new CustomEvent('thweb:open-feedback', {
+          detail: {
+            type: 'Fehlermeldung',
+            description,
+          },
+        })
+      );
+    }
+  }
+
+  public handleClose() {
+    this.updateState({
+      isOpen: false,
+      dialogType: 'reauth',
+      status: 'idle',
+      errorMessage: null,
+      popupBlocked: false,
+      failedUrl: undefined,
+      errorDetail: undefined,
+    });
+  }
+
+  public async handleRetry() {
+    this.updateState({ status: 'opening_popup', errorMessage: null });
+    const { unauthOk, authProbe } = await this.runDiagnostics(window.fetch);
+    if (!unauthOk) {
+      this.updateState({ status: 'idle', errorMessage: 'still_offline' });
+      return;
+    }
+    if (authProbe === 'auth_failed') {
+      this.updateState({
+        dialogType: 'reauth',
+        status: 'idle',
+        errorMessage: null,
+      });
+      return;
+    }
+    await this.handleSuccess();
+  }
+
+  public async runDiagnostics(originalFetch: typeof window.fetch): Promise<{
+    unauthOk: boolean;
+    authProbe: 'ok' | 'auth_failed' | 'server_error' | 'network_failed';
+  }> {
+    if (this.activeDiagnosticPromise) {
+      return this.activeDiagnosticPromise;
+    }
+
+    this.activeDiagnosticPromise = (async () => {
+      try {
+        const unauthPromise = this.runUnauthProbe(originalFetch);
+        const authPromise = this.runAuthProbe(originalFetch);
+        const [unauthOk, authProbe] = await Promise.all([unauthPromise, authPromise]);
+        return { unauthOk, authProbe };
+      } finally {
+        this.activeDiagnosticPromise = null;
+      }
+    })();
+
+    return this.activeDiagnosticPromise;
+  }
+
+  private async runUnauthProbe(originalFetch: typeof window.fetch): Promise<boolean> {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return false;
+    }
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 4000);
+      const res = await originalFetch(`/favicon.svg?_ping=${Date.now()}`, {
+        method: 'GET',
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      return res.ok || (res.status > 0 && res.status < 500);
+    } catch {
+      return false;
+    }
+  }
+
+  private async runAuthProbe(
+    originalFetch: typeof window.fetch
+  ): Promise<'ok' | 'auth_failed' | 'server_error' | 'network_failed'> {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 4000);
+      const headers: Record<string, string> = {
+        'X-Skip-Reauth': 'true',
+      };
+      const token = this.getAuthToken();
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const res = await originalFetch(`/api/me?_probe=${Date.now()}`, {
+        method: 'GET',
+        headers,
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (res.ok) {
+        return 'ok';
+      }
+      if (res.status === 401 || (res.status === 403 && (res.headers.get('content-type') || '').includes('text/html'))) {
+        return 'auth_failed';
+      }
+      if (res.status >= 500) {
+        return 'server_error';
+      }
+      return 'auth_failed';
+    } catch {
+      return 'auth_failed';
     }
   }
 
@@ -254,9 +423,12 @@ class ReauthManager {
     // Close the re-auth dialog
     this.updateState({
       isOpen: false,
+      dialogType: 'reauth',
       status: 'idle',
       errorMessage: null,
       popupBlocked: false,
+      failedUrl: undefined,
+      errorDetail: undefined,
     });
   }
 
@@ -277,9 +449,12 @@ class ReauthManager {
 
     this.updateState({
       isOpen: false,
+      dialogType: 'reauth',
       status: 'idle',
       errorMessage: null,
       popupBlocked: false,
+      failedUrl: undefined,
+      errorDetail: undefined,
     });
 
     if (logoutFn) {
@@ -406,10 +581,29 @@ class ReauthManager {
           throw err;
         }
 
-        // Network or CORS error on an API call while logged in indicates oauth2-proxy redirect to Google OAuth
+        // Network or CORS error on an API call while logged in indicates possible network loss, session expiration, or internal error
         if (isApiCall && !skipReauth && this.getIsAuthenticated()) {
-          console.warn('[AUTH] Network error on API call while authenticated, queueing for re-auth:', url, err);
-          return this.enqueueRequest(input, sanitizedInit, originalFetch);
+          console.warn('[AUTH] Network error on API call while authenticated, running reachability & auth diagnostics:', url, err);
+
+          const { unauthOk, authProbe } = await this.runDiagnostics(originalFetch);
+
+          if (!unauthOk) {
+            // Case 1: unauth probe fails -> no network (or server down)
+            console.warn('[AUTH] Diagnostic: Unauthenticated probe failed -> no network.');
+            this.promptNetworkError();
+            return this.enqueueRequest(input, sanitizedInit, originalFetch);
+          } else if (authProbe === 'auth_failed') {
+            // Case 2: unauth probe succeeds, but auth probe fails -> re-login needed
+            console.warn('[AUTH] Diagnostic: Unauthenticated probe succeeded, but auth probe failed -> re-login needed.');
+            this.promptReauth();
+            return this.enqueueRequest(input, sanitizedInit, originalFetch);
+          } else {
+            // Case 3: both succeed (or server error) -> internal error, ask to report feedback
+            console.error('[AUTH] Diagnostic: Unauth and auth probes succeeded -> internal error on request:', url, err);
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            this.promptInternalError(url, errorMsg);
+            throw err;
+          }
         }
         throw err;
       }
@@ -420,6 +614,7 @@ class ReauthManager {
 
       if ((response.status === 401 || isHtmlForbidden) && isApiCall && !skipReauth && this.getIsAuthenticated()) {
         console.warn(`[AUTH] Received ${response.status} (HTML: ${isHtmlForbidden}) on API call while authenticated, queueing for re-auth:`, url);
+        this.promptReauth();
         return this.enqueueRequest(input, sanitizedInit, originalFetch);
       }
 
@@ -437,7 +632,9 @@ class ReauthManager {
       return Promise.reject(new DOMException('The user aborted a request.', 'AbortError'));
     }
 
-    this.promptReauth();
+    if (!this.state.isOpen) {
+      this.promptReauth();
+    }
 
     return new Promise<Response>((resolve, reject) => {
       let abortListener: (() => void) | null = null;

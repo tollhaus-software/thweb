@@ -34,7 +34,7 @@ import { KioskProvisioning } from './components/Admin/KioskProvisioning';
 import { FeedbackAndActivityView } from './components/Admin/FeedbackAndActivityView';
 import { PermissionsSimulatorModal } from './components/Admin/PermissionsSimulatorModal';
 import { SimulatedRolesPermissionsModal } from './components/Admin/SimulatedRolesPermissionsModal';
-import { FeedbackModal } from './components/Dashboard/FeedbackModal';
+import { FeedbackModal, type FeedbackType } from './components/Dashboard/FeedbackModal';
 import { getAppConfig } from './config/appConfig';
 import { HeaderOverflowMenu } from './components/Header/HeaderOverflowMenu';
 import { Sidebar } from './components/Navigation/Sidebar';
@@ -2536,6 +2536,22 @@ const Dashboard: React.FC = () => {
   const [simulatorModalOpen, setSimulatorModalOpen] = React.useState(false);
   const [viewRolesModalOpen, setViewRolesModalOpen] = React.useState(false);
   const [feedbackModalOpen, setFeedbackModalOpen] = React.useState(false);
+  const [feedbackInitialData, setFeedbackInitialData] = React.useState<{
+    type?: FeedbackType;
+    description?: string;
+  }>({});
+
+  React.useEffect(() => {
+    const handleOpenFeedback = (e: Event) => {
+      const customEvent = e as CustomEvent<{ type?: FeedbackType; description?: string }>;
+      setFeedbackInitialData(customEvent.detail || {});
+      setFeedbackModalOpen(true);
+    };
+    window.addEventListener('thweb:open-feedback', handleOpenFeedback);
+    return () => {
+      window.removeEventListener('thweb:open-feedback', handleOpenFeedback);
+    };
+  }, []);
   const appConfig = getAppConfig();
   const appTitle = appConfig.title || t('title');
   const appLogoUrl = appConfig.logoUrl;
@@ -9402,11 +9418,16 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
           effectivePermissions={user?.effective_permissions}
         />
 
-        {/* Feedback Modal from Header Overflow Menu */}
+        {/* Feedback Modal from Header Overflow Menu or Diagnostic Prompts */}
         <FeedbackModal
           isOpen={feedbackModalOpen}
-          onClose={() => setFeedbackModalOpen(false)}
+          onClose={() => {
+            setFeedbackModalOpen(false);
+            setFeedbackInitialData({});
+          }}
           token={token}
+          initialType={feedbackInitialData.type}
+          initialDescription={feedbackInitialData.description}
         />
       </div>
     </div>
