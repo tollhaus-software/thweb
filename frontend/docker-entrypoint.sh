@@ -38,6 +38,38 @@ elif [ -f "/etc/thweb/favicon.png" ]; then
   APP_FAVICON_URL="/favicon.png"
 fi
 
+# Detect and copy environment-specific PWA icons if present
+if [ -n "${APP_FAVICON_FILE}" ]; then
+  FAV_DIR=$(dirname "${APP_FAVICON_FILE}")
+  FAV_BASE=$(basename "${APP_FAVICON_FILE}")
+  FAV_PREFIX="${FAV_BASE%.*}"
+  ENV_NAME=$(printf '%s' "${FAV_BASE}" | sed -e 's/^thweb_favicon_//' -e 's/\.png$//')
+
+  if [ -f "${FAV_DIR}/thweb_appicon_${ENV_NAME}_192.png" ]; then
+    cp "${FAV_DIR}/thweb_appicon_${ENV_NAME}_192.png" /usr/share/nginx/html/pwa-192x192.png
+  elif [ -f "${FAV_DIR}/${FAV_PREFIX}_192.png" ]; then
+    cp "${FAV_DIR}/${FAV_PREFIX}_192.png" /usr/share/nginx/html/pwa-192x192.png
+  fi
+
+  if [ -f "${FAV_DIR}/thweb_appicon_${ENV_NAME}_512.png" ]; then
+    cp "${FAV_DIR}/thweb_appicon_${ENV_NAME}_512.png" /usr/share/nginx/html/pwa-512x512.png
+  elif [ -f "${FAV_DIR}/${FAV_PREFIX}_512.png" ]; then
+    cp "${FAV_DIR}/${FAV_PREFIX}_512.png" /usr/share/nginx/html/pwa-512x512.png
+  fi
+
+  if [ -f "${FAV_DIR}/thweb_appicon_${ENV_NAME}_maskable_512.png" ]; then
+    cp "${FAV_DIR}/thweb_appicon_${ENV_NAME}_maskable_512.png" /usr/share/nginx/html/pwa-maskable-512x512.png
+  elif [ -f "${FAV_DIR}/${FAV_PREFIX}_maskable_512.png" ]; then
+    cp "${FAV_DIR}/${FAV_PREFIX}_maskable_512.png" /usr/share/nginx/html/pwa-maskable-512x512.png
+  fi
+
+  if [ -f "${FAV_DIR}/thweb_appicon_${ENV_NAME}_180.png" ]; then
+    cp "${FAV_DIR}/thweb_appicon_${ENV_NAME}_180.png" /usr/share/nginx/html/apple-touch-icon.png
+  elif [ -f "${FAV_DIR}/${FAV_PREFIX}_180.png" ]; then
+    cp "${FAV_DIR}/${FAV_PREFIX}_180.png" /usr/share/nginx/html/apple-touch-icon.png
+  fi
+fi
+
 # Detect and copy injected privacy policy files
 if [ -d "/etc/thweb/privacy" ]; then
   cp -f /etc/thweb/privacy/* /usr/share/nginx/html/ 2>/dev/null || true
@@ -55,6 +87,29 @@ fi
 if [ -n "${APP_TITLE}" ]; then
   ESCAPED_TITLE=$(printf '%s\n' "${APP_TITLE}" | sed -e 's/[\\/&]/\\&/g')
   sed -i "s/<title>.*<\/title>/<title>${ESCAPED_TITLE}<\/title>/g" /usr/share/nginx/html/index.html
+fi
+
+# Determine PWA app name based on explicit variable or environment detection
+PWA_APP_NAME="${APP_PWA_NAME}"
+if [ -z "${PWA_APP_NAME}" ]; then
+  if echo "${DOMAIN_NAME}" | grep -q "dev" || echo "${APP_FAVICON_FILE}" | grep -q "dev"; then
+    PWA_APP_NAME="Tollhaus App dev"
+  elif echo "${DOMAIN_NAME}" | grep -q "next" || echo "${APP_FAVICON_FILE}" | grep -q "prodnext" || echo "${APP_FAVICON_FILE}" | grep -q "next"; then
+    PWA_APP_NAME="Tollhaus App prod-next"
+  else
+    PWA_APP_NAME="Tollhaus App"
+  fi
+fi
+
+if [ -f "/usr/share/nginx/html/manifest.webmanifest" ]; then
+  ESCAPED_PWA_NAME=$(printf '%s\n' "${PWA_APP_NAME}" | sed -e 's/[\\/&]/\\&/g')
+  sed -i "s/\"name\":\"[^\"]*\"/\"name\":\"${ESCAPED_PWA_NAME}\"/g" /usr/share/nginx/html/manifest.webmanifest
+  sed -i "s/\"short_name\":\"[^\"]*\"/\"short_name\":\"${ESCAPED_PWA_NAME}\"/g" /usr/share/nginx/html/manifest.webmanifest
+fi
+
+if [ -f "/usr/share/nginx/html/index.html" ]; then
+  ESCAPED_PWA_NAME=$(printf '%s\n' "${PWA_APP_NAME}" | sed -e 's/[\\/&]/\\&/g')
+  sed -i "s|<meta name=\"apple-mobile-web-app-title\" content=\"[^\"]*\"|<meta name=\"apple-mobile-web-app-title\" content=\"${ESCAPED_PWA_NAME}\"|g" /usr/share/nginx/html/index.html
 fi
 
 # Update index.html favicon link if APP_FAVICON_URL is set

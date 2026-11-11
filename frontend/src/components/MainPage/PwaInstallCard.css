@@ -1,0 +1,131 @@
+.main-page-pwa-card {
+  border-color: var(--primary, #2563eb);
+  background: var(--bg-surface, #ffffff);
+}
+
+.main-page-pwa-card .pwa-card-icon {
+  color: var(--primary, #2563eb);
+}
+
+.main-page-pwa-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.main-page-pwa-desc {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--text, #1e293b);
+}
+
+/* iOS Steps */
+.main-page-pwa-ios-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  background: var(--bg-subtle, #f8fafc);
+  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--border, #e2e8f0);
+  font-size: 0.9rem;
+}
+
+.main-page-pwa-ios-step {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.main-page-pwa-step-badge {
+  background-color: var(--primary, #2563eb);
+  color: #ffffff;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.main-page-pwa-inline-icon {
+  display: inline-flex;
+  vertical-align: middle;
+  margin: 0 0.2rem;
+  color: var(--primary, #2563eb);
+}
+
+/* Android / Desktop Install Button */
+.main-page-pwa-android-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.main-page-pwa-install-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.25rem;
+  background: var(--primary, #2563eb);
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease-in-out;
+  width: fit-content;
+}
+
+.main-page-pwa-install-btn:hover {
+  background: var(--primary-hover, #1d4ed8);
+}
+
+.main-page-pwa-android-tip {
+  font-size: 0.9rem;
+  background: var(--bg-subtle, #f8fafc);
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--border, #e2e8f0);
+  color: var(--text-secondary, #475569);
+  line-height: 1.45;
+}
+
+/* Footer: Dismiss Link */
+.main-page-pwa-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 0.25rem;
+}
+
+.main-page-pwa-dismiss-btn {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted, #94a3b8);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 0.15s ease-in-out;
+}
+
+.main-page-pwa-dismiss-btn:hover {
+  color: var(--text, #1e293b);
+}
+
+:root[data-theme="dark"] .main-page-pwa-card {
+  border-color: var(--primary, #3b82f6);
+}
+
+:root[data-theme="dark"] .main-page-pwa-ios-steps,
+:root[data-theme="dark"] .main-page-pwa-android-tip {
+  background: var(--bg-subtle, #1e293b);
+  border-color: var(--border, #334155);
+}

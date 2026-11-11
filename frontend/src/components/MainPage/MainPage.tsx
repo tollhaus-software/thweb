@@ -16,6 +16,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { HygieneCertificationModal } from '../Hygiene/HygieneCertificationModal';
+import { PwaInstallCard } from './PwaInstallCard';
 import { getHygieneMessage } from '../../utils/hygieneMessage';
 import { t } from '../../utils/i18n';
 import {
@@ -600,6 +601,9 @@ export const MainPage: React.FC<MainPageProps> = ({
             )}
           </div>
         </section>
+
+        {/* PWA App Installation Box */}
+        <PwaInstallCard />
 
         {/* Quick Start Box */}
         {quickStartLinks.length > 0 && (
