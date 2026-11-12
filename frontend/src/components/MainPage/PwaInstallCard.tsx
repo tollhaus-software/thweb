@@ -15,6 +15,7 @@ export const PwaInstallCard: React.FC = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState<boolean>(false);
   const [isIos, setIsIos] = useState<boolean>(false);
+  const [isMobile, setIsMobile] = useState<boolean>(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -29,12 +30,20 @@ export const PwaInstallCard: React.FC = () => {
       (window.navigator as unknown as { standalone?: boolean }).standalone === true;
     setIsStandalone(standalone);
 
-    // Detect iOS
+    // Detect mobile platform (iOS / Android)
     const ua = window.navigator.userAgent.toLowerCase();
-    const ios = /iphone|ipad|ipod/.test(ua) && !(window as unknown as { MSStream?: unknown }).MSStream;
-    setIsIos(ios);
+    const ios =
+      (/iphone|ipad|ipod/.test(ua) && !(window as unknown as { MSStream?: unknown }).MSStream) ||
+      (ua.includes('mac') && window.navigator.maxTouchPoints > 1);
+    const android = /android/.test(ua);
+    const isMobileUaData =
+      (window.navigator as unknown as { userAgentData?: { mobile?: boolean } })?.userAgentData?.mobile === true;
+    const mobile = ios || android || isMobileUaData;
 
-    // Capture Android/Desktop beforeinstallprompt event
+    setIsIos(ios);
+    setIsMobile(mobile);
+
+    // Capture Android beforeinstallprompt event
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
@@ -73,8 +82,8 @@ export const PwaInstallCard: React.FC = () => {
     }
   };
 
-  // Do not show if already in standalone app, already installed, or dismissed
-  if (isStandalone || isDismissed || isInstalled) {
+  // Do not show if not on a mobile device, already in standalone app, already installed, or dismissed
+  if (!isMobile || isStandalone || isDismissed || isInstalled) {
     return null;
   }
 
@@ -123,7 +132,7 @@ export const PwaInstallCard: React.FC = () => {
             </div>
           </div>
         ) : (
-          /* Android / Desktop Installation Action */
+          /* Android Installation Action */
           <div className="main-page-pwa-android-section">
             {deferredPrompt ? (
               <button
