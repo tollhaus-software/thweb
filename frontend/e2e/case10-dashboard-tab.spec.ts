@@ -178,13 +178,16 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await expect(comp2.locator('.kiosk-allergen-comp-name')).toHaveText('Apfelschnitze');
     await expect(comp2.locator('.kiosk-allergen-pill-none')).toHaveText('Keine Allergien');
 
-    // 7. Verify day with NO allergens does NOT show the allergens section (and no edit icon when not today)
+    // 7. Verify next day allows editing allergens from dashboard (edit icon visible, but no allergens listed yet)
     const nextDayBtn = embeddedPage.locator('.kiosk-header-nav-btn.right');
     await nextDayBtn.click();
     await page.waitForTimeout(400);
 
-    // On the next day (which has no allergens added), the allergens section should not be visible
-    await expect(mealCard.locator('[data-testid="kiosk-meal-allergens-section"]')).toHaveCount(0);
+    // On the next day (which has no allergens added yet), the edit button is visible so allergens can be edited
+    const nextDayAllergensSection = mealCard.locator('[data-testid="kiosk-meal-allergens-section"]');
+    await expect(nextDayAllergensSection).toBeVisible();
+    await expect(nextDayAllergensSection.locator('[data-testid="kiosk-edit-meal-allergens-btn"]')).toBeVisible();
+    await expect(nextDayAllergensSection.locator('[data-testid="kiosk-meal-allergens-list"]')).toHaveCount(0);
   });
 
   test('displays allergy matching warnings on dashboard and allows editing today meal components & allergens with history tracking', async ({
@@ -573,30 +576,41 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await expect(editor).toHaveCount(0);
     await expect(allergenTaskAfter).toHaveAttribute('data-completed', 'true');
 
-    // 7. Verify future date restriction: only allow editing allergens for current day or past days!
+    // 7. Verify future dates ALLOW editing allergens from dashboard, but restrict "Finalisieren" to today!
     const nextDayBtn = embeddedPage.locator('.kiosk-header-nav-btn.right');
     await nextDayBtn.click();
     await page.waitForTimeout(300);
 
     // On tomorrow (future date):
-    // - Card 3 pencil edit button is not visible
+    // - Card 3 pencil edit button IS visible
     const tomorrowEditPencil = embeddedPage.locator('[data-testid="kiosk-edit-meal-allergens-btn"]');
-    await expect(tomorrowEditPencil).toHaveCount(0);
+    await expect(tomorrowEditPencil).toBeVisible();
 
-    // - Card 4 allergen task button is disabled on future date
+    // - Card 4 allergen task button IS enabled on future date
     const futureAllergenTask = todosCard.locator('[data-testid="kiosk-todo-item-enter_allergens"]');
     await expect(futureAllergenTask).toBeVisible();
     await expect(futureAllergenTask.locator('[data-testid="task-checkbox-enter_allergens"]')).toHaveCount(0);
 
     const futureOpenBtn = futureAllergenTask.locator('[data-testid="open-allergens-editor-btn"]');
     await expect(futureOpenBtn).toBeVisible();
-    await expect(futureOpenBtn).toBeDisabled();
+    await expect(futureOpenBtn).toBeEnabled();
 
-    // Clicking it on the future date does NOT open editor
-    await futureAllergenTask.click();
-    await expect(embeddedPage.locator('[data-testid="meal-allergens-editor"]')).toHaveCount(0);
+    // Clicking it on the future date OPENS editor
+    await futureOpenBtn.click();
+    const tomorrowEditor = embeddedPage.locator('[data-testid="meal-allergens-editor"]');
+    await expect(tomorrowEditor).toBeVisible();
+    await expect(tomorrowEditor).toHaveAttribute('data-loaded', 'true');
 
-    // 8. Verify past days ALLOW editing allergens from the dashboard!
+    // Finalize button is disabled for tomorrow (restricted to today in dashboard)
+    const tomorrowFinalizeBtn = tomorrowEditor.locator('[data-testid="finalize-allergens-btn"]');
+    await expect(tomorrowFinalizeBtn).toBeVisible();
+    await expect(tomorrowFinalizeBtn).toBeDisabled();
+    await expect(tomorrowEditor.locator('[data-testid="checklist-item-today"]')).toBeVisible();
+
+    await page.getByTestId('allergens-editor-back-btn').click();
+    await expect(tomorrowEditor).toHaveCount(0);
+
+    // 8. Verify past days ALLOW editing allergens from the dashboard (with Finalisieren also restricted to today)!
     // Navigate from tomorrow back to today, then to yesterday
     const prevDayBtn2 = embeddedPage.locator('.kiosk-header-nav-btn.left');
     await prevDayBtn2.click(); // back to today
@@ -620,6 +634,13 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     const yesterdayEditor = embeddedPage.locator('[data-testid="meal-allergens-editor"]');
     await expect(yesterdayEditor).toBeVisible();
     await expect(yesterdayEditor).toHaveAttribute('data-loaded', 'true');
+
+    // Finalize is also disabled on past day in the dashboard
+    const yesterdayFinalizeBtn = yesterdayEditor.locator('[data-testid="finalize-allergens-btn"]');
+    await expect(yesterdayFinalizeBtn).toBeVisible();
+    await expect(yesterdayFinalizeBtn).toBeDisabled();
+    await expect(yesterdayEditor.locator('[data-testid="checklist-item-today"]')).toBeVisible();
+
     await page.getByTestId('allergens-editor-back-btn').click();
     await expect(yesterdayEditor).toHaveCount(0);
   });

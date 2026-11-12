@@ -527,6 +527,15 @@
   transform: translateY(-1px);
 }
 
+.meal-allergens-checklist-item:not(button) {
+  cursor: default;
+}
+
+.meal-allergens-checklist-item:not(button):hover {
+  filter: none;
+  transform: none;
+}
+
 .checklist-icon-pending {
   color: #b45309;
   flex-shrink: 0;

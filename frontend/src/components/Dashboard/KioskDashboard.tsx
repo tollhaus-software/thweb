@@ -398,8 +398,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
 
   const displayDateStr = (data?.date || selectedDate || todayDateStr).split('T')[0];
   const isToday = selectedDate === null || displayDateStr === todayDateStr;
-  const isCurrentOrPastDay = displayDateStr <= todayDateStr;
-  const canEditAllergensOnDashboard = canEditMealAllergens && isCurrentOrPastDay;
+  const canEditAllergensOnDashboard = canEditMealAllergens;
   const formattedDate = formatDashboardDate(displayDateStr);
   const hours = String(currentTime.getHours()).padStart(2, '0');
   const minutes = String(currentTime.getMinutes()).padStart(2, '0');
@@ -408,10 +407,6 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
   const openMealAllergensEditor = (e?: React.MouseEvent) => {
     if (e) {
       e.stopPropagation();
-    }
-    if (!isCurrentOrPastDay) {
-      alert(t('allergensOnlyCurrentOrPast'));
-      return;
     }
     setShowAllergies(false);
     setTaskToConfirm(null);
@@ -501,12 +496,8 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     if (e) {
       e.stopPropagation();
     }
-    // Rule: Whole "Allergene eintragen" TODO item opens the allergens editor for current/past days
+    // Rule: Whole "Allergene eintragen" TODO item opens the allergens editor
     if (taskKey === 'enter_allergens' || taskKey === 'allergene_eintragen') {
-      if (!isCurrentOrPastDay) {
-        alert(t('allergensOnlyCurrentOrPast'));
-        return;
-      }
       openMealAllergensEditor(e);
       return;
     }
@@ -963,7 +954,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                       const isAllergens = task === 'enter_allergens' || task === 'allergene_eintragen';
                       const isCheckable = isToday && !isAllergens;
                       const showCheckbox = isDone || isCheckable;
-                      const isInteractive = isAllergens ? isCurrentOrPastDay : isToday;
+                      const isInteractive = isAllergens ? true : isToday;
 
                       let icon = <AlertCircle size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
                       const label = getTaskLabel(task);
@@ -1021,10 +1012,9 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                           {isAllergens && (
                             <button
                               type="button"
-                              className={`kiosk-todo-open-allergens-btn ${!isCurrentOrPastDay ? 'disabled' : ''}`}
+                              className="kiosk-todo-open-allergens-btn"
                               data-testid="open-allergens-editor-btn"
-                              disabled={!isCurrentOrPastDay}
-                              title={!isCurrentOrPastDay ? t('allergensOnlyCurrentOrPast') : t('openComponentsAndAllergens')}
+                              title={t('openComponentsAndAllergens')}
                               onClick={(e) => openMealAllergensEditor(e)}
                             >
                               {t('openComponentsAndAllergens')}

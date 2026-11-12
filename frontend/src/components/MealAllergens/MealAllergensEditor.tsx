@@ -3,7 +3,7 @@ import { ArrowLeft, Copy, Pencil, Plus, X, Utensils, Check, CircleDot, AlertTria
 import { useAuth } from '../../context/AuthContext';
 import { useRealtime, type RealtimeMessage } from '../../hooks/useRealtime';
 import { t, formatDisplayDate } from '../../utils/i18n';
-import { parseDateKey, formatDayHeader } from '../../utils/mealPlan';
+import { parseDateKey, formatDayHeader, formatDateKey } from '../../utils/mealPlan';
 import {
   type MealAllergenDay,
   type MealAllergenComponent,
@@ -686,12 +686,22 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
     persistChanges(next);
   }, [pendingCopySource, persistChanges]);
 
+  const isDayToday = day.date.split('T')[0] === formatDateKey(new Date());
+  const isFinalizeAllowedForDay = !isDashboard || isDayToday;
   const isCookSelected = selectedCooks.length > 0 || Boolean(cookCustomName.trim());
   const hasComponents = mealComponents.length > 0;
-  const canFinalize = status !== 'finalized' && hasComponents && isCookSelected;
+  const canFinalize =
+    status !== 'finalized' &&
+    hasComponents &&
+    isCookSelected &&
+    isFinalizeAllowedForDay;
 
   const handleFinalizeClick = useCallback(async () => {
     if (!canWrite || !canFinalize) return;
+    if (!isFinalizeAllowedForDay) {
+      alert(t('finalizeOnlyToday'));
+      return;
+    }
     if (!window.confirm(t('finalizeConfirm') || 'Allergene finalisieren?')) {
       return;
     }
@@ -747,6 +757,7 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
   }, [
     canWrite,
     canFinalize,
+    isFinalizeAllowedForDay,
     token,
     day.date,
     day.documentation,
@@ -1076,13 +1087,14 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
             className="meal-allergens-finalize-btn"
             onClick={handleFinalizeClick}
             disabled={!canFinalize}
+            title={!isFinalizeAllowedForDay ? t('finalizeOnlyToday') : undefined}
             data-testid="finalize-allergens-btn"
           >
             <Check size={16} />
             <span>{t('finalizeBtn')}</span>
           </button>
 
-          {status !== 'finalized' && (!isCookSelected || !hasComponents) && (
+          {status !== 'finalized' && (!isCookSelected || !hasComponents || !isFinalizeAllowedForDay) && (
             <div className="meal-allergens-completion-checklist" data-testid="editor-completion-checklist">
               <div className="meal-allergens-checklist-items">
                 {!isCookSelected && (
@@ -1111,6 +1123,18 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
                     <CircleDot size={14} className="checklist-icon-pending" />
                     <span>{t('componentsRequirementPending')}</span>
                   </button>
+                )}
+
+                {!isFinalizeAllowedForDay && (
+                  <div
+                    className="meal-allergens-checklist-item pending"
+                    title={t('finalizeOnlyToday')}
+                    data-testid="checklist-item-today"
+                    data-satisfied={false}
+                  >
+                    <CircleDot size={14} className="checklist-icon-pending" />
+                    <span>{t('finalizeOnlyToday')}</span>
+                  </div>
                 )}
               </div>
             </div>
