@@ -57,8 +57,9 @@ test.describe('Test Case 4: Childcare Fees Tooltips & Translations', () => {
     await popover.locator('button:has(svg.lucide-check)').click();
     await page.keyboard.press('Escape');
 
-    // Step 3: Switch to Betreuungsgebühren tab
+    // Step 3: Switch to Betreuungsgebühren tab and select (alle)
     await page.getByRole('button', { name: 'Betreuungsgebühren' }).click();
+    await page.getByRole('button', { name: 'Betreuungsgebühren (alle)' }).click();
     await expect(page.getByRole('heading', { name: 'Monatliche Gebühren pro Familie' })).toBeVisible();
 
     // 1. Verify translation for fee changes section
@@ -215,6 +216,7 @@ test.describe('Test Case 4: Childcare Fees Tooltips & Translations', () => {
       await toggleSidebarBtn.click();
     }
     await page.getByRole('button', { name: 'Betreuungsgebühren' }).click();
+    await page.getByRole('button', { name: 'Betreuungsgebühren (alle)' }).click();
     await expect(page.getByRole('heading', { name: 'Monatliche Gebühren pro Familie' })).toBeVisible();
     await expect(page.locator('.fees-month-range-row')).toContainText('Von');
     await expect(page.locator('.fees-month-range-row')).toContainText('Bis');
@@ -317,6 +319,7 @@ test.describe('Test Case 4: Childcare Fees Tooltips & Translations', () => {
 
     await page.goto('/');
     await page.getByRole('button', { name: 'Betreuungsgebühren' }).click();
+    await page.getByRole('button', { name: 'Betreuungsgebühren (alle)' }).click();
     await expect(page.getByRole('heading', { name: 'Monatliche Gebühren pro Familie' })).toBeVisible();
 
     const table = page.locator('table.data-table').first();
@@ -373,6 +376,124 @@ test.describe('Test Case 4: Childcare Fees Tooltips & Translations', () => {
     await filterSelectBtn.click();
     await expect(expandBtn).toContainText('(1 Familie ausgewählt)');
     expect(await table.locator('tbody tr td.sticky-col').allTextContents()).toEqual(['Aalberg']);
+  });
+
+  test('verifies separation between personal fees (Meine Gebühren) and all fees (Betreuungsgebühren (alle)) for privileged parent', async ({ request, page }) => {
+    const authHeaders = { Authorization: 'Bearer developer@example.com' };
+
+    // 1. Create two families: Bauer (with identifier email) and Fischer
+    const createBauerRes = await request.post('/api/families', {
+      headers: authHeaders,
+      data: {
+        parents: [
+          {
+            first_name: 'Stefan',
+            last_name: 'Bauer',
+            emails: [
+              {
+                value: 'board.bauer@tollhaus-stuttgart.de',
+                identifier_email: true,
+                address_list: true,
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(createBauerRes.ok()).toBeTruthy();
+    const bauerFam = await createBauerRes.json();
+
+    const createFischerRes = await request.post('/api/families', {
+      headers: authHeaders,
+      data: {
+        parents: [{ first_name: 'Julia', last_name: 'Fischer' }],
+      },
+    });
+    expect(createFischerRes.ok()).toBeTruthy();
+
+    // 2. Add child to Bauer family with Gruppe 1 enrolment
+    const childId = crypto.randomUUID();
+    const createChildRes = await request.post(`/api/families/${bauerFam.id}/children`, {
+      headers: authHeaders,
+      data: {
+        id: childId,
+        family_id: bauerFam.id,
+        first_name: 'Tim',
+        last_name: 'Bauer',
+        birth_date: '2021-02-15',
+      },
+    });
+    expect(createChildRes.ok()).toBeTruthy();
+
+    await request.post(`/api/children/${childId}/group_changes`, {
+      headers: authHeaders,
+      data: {
+        effective_date: '2025-01-01',
+        type: 'INITIAL_ENROLLMENT',
+        target_group: 1,
+      },
+    });
+
+    // 3. Provision user with fees.all.read and families access
+    const userRes = await request.post('/api/admin/users', {
+      headers: authHeaders,
+      data: {
+        email: 'board.bauer@tollhaus-stuttgart.de',
+        roles: [],
+        permissions: ['fees.all.read', 'families.all.read', 'families.all.restrictedread'],
+      },
+    });
+    expect(userRes.ok()).toBeTruthy();
+
+    // 4. Open fresh page as board.bauer who has both a family and fees.all.read
+    const parentPage = await page.context().newPage();
+    await parentPage.addInitScript(() => {
+      localStorage.setItem('token', 'board.bauer@tollhaus-stuttgart.de');
+    });
+
+    // 5. Navigate to #childcareFees ("Meine Gebühren")
+    await parentPage.goto('/#childcareFees');
+    await parentPage.waitForLoadState('networkidle');
+
+    // Both subtabs "Meine Gebühren" and "Betreuungsgebühren (alle)" must be available
+    const personalSubTab = parentPage.getByRole('button', { name: 'Meine Gebühren' });
+    const allSubTab = parentPage.getByRole('button', { name: 'Betreuungsgebühren (alle)' });
+    await expect(personalSubTab).toBeVisible();
+    await expect(allSubTab).toBeVisible();
+
+    // In personal fees view:
+    // - Header must be "Monatliche Betreuungsgebühren"
+    await expect(parentPage.getByRole('heading', { name: 'Monatliche Betreuungsgebühren' })).toBeVisible();
+
+    // - Family selection accordion must NOT be visible
+    await expect(parentPage.getByRole('button', { name: /Familien auswählen/i })).toHaveCount(0);
+
+    // - Only Bauer family is displayed in table
+    const table = parentPage.locator('table.data-table').first();
+    await expect(table).toBeVisible();
+    const renderedFamilies = await table.locator('tbody tr td.sticky-col').allTextContents();
+    expect(renderedFamilies).toEqual(['Bauer']);
+    expect(renderedFamilies).not.toContain('Fischer');
+
+    // 6. Switch to "Betreuungsgebühren (alle)"
+    await allSubTab.click();
+    await parentPage.waitForLoadState('networkidle');
+    await expect(parentPage).toHaveURL(/.*#childcareFeesAll/);
+
+    // In all fees view:
+    // - Header must be "Monatliche Gebühren pro Familie"
+    await expect(parentPage.getByRole('heading', { name: 'Monatliche Gebühren pro Familie' })).toBeVisible();
+
+    // - Family selection accordion must be visible
+    const expandAccordionBtn = parentPage.getByRole('button', { name: /Familien auswählen/i });
+    await expect(expandAccordionBtn).toBeVisible();
+
+    // - Both Bauer and Fischer families are displayed
+    const allTable = parentPage.locator('table.data-table').first();
+    await expect(allTable).toBeVisible();
+    const allRenderedFamilies = await allTable.locator('tbody tr td.sticky-col').allTextContents();
+    expect(allRenderedFamilies).toContain('Bauer');
+    expect(allRenderedFamilies).toContain('Fischer');
   });
 });
 

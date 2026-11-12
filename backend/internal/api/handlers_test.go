@@ -855,7 +855,28 @@ func TestHandleCalculateFees_RestrictedUser(t *testing.T) {
 		t.Errorf("restricted user result must NOT contain familyID2 (%s), got: %s", familyID2.String(), bodyStr)
 	}
 
-	// 2. User without fees permissions -> 403 Forbidden
+	// 2. User with fees.all.read filtering by family_ids
+	userAll := &models.UserWithPermissions{
+		Email:                "all@example.com",
+		EffectivePermissions: []string{"families.all.read", "fees.all.read"},
+	}
+	calcBodyFiltered := fmt.Sprintf(`{"start_month":"2025-01","end_month":"2025-01","family_ids":["%s"]}`, familyID2.String())
+	reqFiltered := httptest.NewRequest("POST", "/api/fees/calculate", strings.NewReader(calcBodyFiltered))
+	reqFiltered = reqFiltered.WithContext(context.WithValue(reqFiltered.Context(), auth.UserContextKey, userAll))
+	recFiltered := httptest.NewRecorder()
+	s.HandleCalculateFees(recFiltered, reqFiltered)
+	if recFiltered.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d (%s)", recFiltered.Code, recFiltered.Body.String())
+	}
+	bodyFilteredStr := recFiltered.Body.String()
+	if !strings.Contains(bodyFilteredStr, familyID2.String()) {
+		t.Errorf("expected filtered result to contain familyID2 (%s), got: %s", familyID2.String(), bodyFilteredStr)
+	}
+	if strings.Contains(bodyFilteredStr, familyID1.String()) {
+		t.Errorf("expected filtered result to NOT contain familyID1 (%s), got: %s", familyID1.String(), bodyFilteredStr)
+	}
+
+	// 3. User without fees permissions -> 403 Forbidden
 	userNoFees := &models.UserWithPermissions{
 		Email:                "nofees@example.com",
 		EffectivePermissions: []string{"families.all.restrictedread"},

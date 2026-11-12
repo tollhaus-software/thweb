@@ -2588,6 +2588,7 @@ const Dashboard: React.FC = () => {
   const canReadOverview = hasPermission('families.all.restrictedread');
   const canReadFamiliesAll = hasPermission('families.all.read');
   const canReadFees = hasPermission('fees.all.read') || hasPermission('fees.self.read');
+  const canReadFeesAll = hasPermission('fees.all.read');
   const canWriteParents = hasPermission('families.all.write');
   const canWriteFamilies = canWriteParents;
   const canWriteChildren = hasPermission('children.all.write');
@@ -2679,6 +2680,8 @@ const Dashboard: React.FC = () => {
     canReadOverview,
     canReadFamiliesAll,
     canReadFees,
+    canReadFeesAll,
+    hasFamily: Boolean(user?.family_id),
     canReadMembers,
     canReadJobs,
     canReadEmployees,
@@ -2697,6 +2700,8 @@ const Dashboard: React.FC = () => {
     canReadOverview,
     canReadFamiliesAll,
     canReadFees,
+    canReadFeesAll,
+    user?.family_id,
     canReadMembers,
     canReadJobs,
     canReadEmployees,
@@ -2716,7 +2721,7 @@ const Dashboard: React.FC = () => {
 
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [activeTab, setActiveTab] = React.useState<
-    'main' | 'familiesOverview' | 'families' | 'parents' | 'children' | 'members' | 'jobs' | 'employees' | 'childcareFees' | 'hygieneBelehrung' | 'hygieneDocument' | 'kochenHygiene' | 'mealPlan' | 'mealAllergens' | 'audit' | 'admin' | 'activity' | 'kiosk' | 'dashboard' | string
+    'main' | 'familiesOverview' | 'families' | 'parents' | 'children' | 'members' | 'jobs' | 'employees' | 'childcareFees' | 'childcareFeesAll' | 'hygieneBelehrung' | 'hygieneDocument' | 'kochenHygiene' | 'mealPlan' | 'mealAllergens' | 'audit' | 'admin' | 'activity' | 'kiosk' | 'dashboard' | string
   >(() => {
     const rawHash = window.location.hash.replace('#', '');
     const hash = rawHash.split('?')[0];
@@ -2726,6 +2731,8 @@ const Dashboard: React.FC = () => {
       canReadOverview,
       canReadFamiliesAll,
       canReadFees,
+      canReadFeesAll,
+      hasFamily: Boolean(user?.family_id),
       canReadMembers,
       canReadJobs,
       canReadEmployees,
@@ -2757,6 +2764,7 @@ const Dashboard: React.FC = () => {
       (hash === 'jobs' && canReadJobs) ||
       (hash === 'employees' && canReadEmployees) ||
       (hash === 'childcareFees' && canReadFees) ||
+      (hash === 'childcareFeesAll' && canReadFeesAll) ||
       (hash === 'hygieneBelehrung' && (canManageHygiene || hasPermission('hygiene.all.write'))) ||
       (hash === 'hygieneDocument' && canManageHygiene) ||
       (hash === 'kochenHygiene' && canAccessPersonalHygiene) ||
@@ -2782,6 +2790,7 @@ const Dashboard: React.FC = () => {
       (saved === 'jobs' && canReadJobs) ||
       (saved === 'employees' && canReadEmployees) ||
       (saved === 'childcareFees' && canReadFees) ||
+      (saved === 'childcareFeesAll' && canReadFeesAll) ||
       (saved === 'hygieneBelehrung' && (canManageHygiene || hasPermission('hygiene.all.write'))) ||
       (saved === 'hygieneDocument' && canManageHygiene) ||
       (saved === 'kochenHygiene' && canAccessPersonalHygiene) ||
@@ -2926,13 +2935,15 @@ const Dashboard: React.FC = () => {
       fallback = getFirstPermittedTabForCategory('kochen', navPerms);
     } else if (activeTab === 'hygiene' && !categoryHasLandingPage('hygiene', navPerms)) {
       fallback = getFirstPermittedTabForCategory('hygiene', navPerms);
+    } else if (activeTab === 'childcareFeesAll' && !canReadFeesAll) {
+      fallback = canReadFees ? 'childcareFees' : (canReadOverview ? 'familiesOverview' : 'families');
     }
     if (fallback && fallback !== activeTab) {
       setActiveTab(fallback);
       localStorage.setItem('thweb_active_tab', fallback);
       window.location.hash = fallback;
     }
-  }, [activeTab, canReadFamiliesAll, canReadOverview, canReadFees, canReadMembers, canReadJobs, canReadEmployees, canViewMealPlan, canReadMealAllergens, canManageHygiene, canAccessPersonalHygiene, hasPermission, navPerms, isMainPageActive]);
+  }, [activeTab, canReadFamiliesAll, canReadOverview, canReadFees, canReadFeesAll, canReadMembers, canReadJobs, canReadEmployees, canViewMealPlan, canReadMealAllergens, canManageHygiene, canAccessPersonalHygiene, hasPermission, navPerms, isMainPageActive]);
 
   // Navigation & Highlighting state (Patterns 2 & 3)
   const [highlightTarget, setHighlightTarget] = React.useState<{ id: string; key: number } | null>(null);
@@ -3933,6 +3944,7 @@ const Dashboard: React.FC = () => {
         }
         break;
       case 'childcareFees':
+      case 'childcareFeesAll':
         if (canReadFamiliesAll) {
           fetchFamilies();
         } else if (canReadOverview) {
@@ -4032,6 +4044,7 @@ const Dashboard: React.FC = () => {
         (hash === 'jobs' && canReadJobs) ||
         (hash === 'employees' && canReadEmployees) ||
         (hash === 'childcareFees' && canReadFees) ||
+        (hash === 'childcareFeesAll' && canReadFeesAll) ||
         (hash === 'hygieneBelehrung' && (canManageHygiene || hasPermission('hygiene.all.write'))) ||
         (hash === 'hygieneDocument' && canManageHygiene) ||
         (hash === 'kochenHygiene' && canAccessPersonalHygiene) ||
@@ -4124,7 +4137,7 @@ const Dashboard: React.FC = () => {
         if (canReadFamiliesAll) fetchFamilies();
       } else if (activeTab === 'members') {
         if (canReadMembers) fetchMembers();
-      } else if (activeTab === 'childcareFees') {
+      } else if (activeTab === 'childcareFees' || activeTab === 'childcareFeesAll') {
         if (canReadFamiliesAll) fetchFamilies();
         else if (canReadOverview) fetchOverviewFamilies();
       } else if (activeTab === 'audit') {
@@ -8274,7 +8287,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
           </div>
         )}
 
-        {!isLandingActive && activeTab !== 'main' && activeTab !== 'childcareFees' && activeTab !== 'audit' && activeTab !== 'admin' && activeTab !== 'kiosk' && activeTab !== 'dashboard' && activeTab !== 'mealPlan' && activeTab !== 'mealAllergens' && activeTab !== 'hygieneDocument' && activeTab !== 'kochenHygiene' && (
+        {!isLandingActive && activeTab !== 'main' && activeTab !== 'childcareFees' && activeTab !== 'childcareFeesAll' && activeTab !== 'audit' && activeTab !== 'admin' && activeTab !== 'kiosk' && activeTab !== 'dashboard' && activeTab !== 'mealPlan' && activeTab !== 'mealAllergens' && activeTab !== 'hygieneDocument' && activeTab !== 'kochenHygiene' && (
           <div className="controls-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <div
               className={`controls-left ${activeTab === 'familiesOverview' ? 'overview-controls-left' : ''}`}
@@ -8901,8 +8914,17 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
               <KioskDashboard embedded={true} />
             ) : activeTab === 'childcareFees' && canReadFees ? (
               <ChildcareFeesCalculator
+                key="personal"
                 token={token}
                 families={families.length > 0 ? families : (overviewFamilies as any)}
+                mode="personal"
+              />
+            ) : activeTab === 'childcareFeesAll' && canReadFeesAll ? (
+              <ChildcareFeesCalculator
+                key="all"
+                token={token}
+                families={families.length > 0 ? families : (overviewFamilies as any)}
+                mode="all"
               />
             ) : null}
           </div>

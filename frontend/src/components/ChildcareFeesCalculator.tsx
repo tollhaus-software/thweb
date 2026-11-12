@@ -23,6 +23,7 @@ interface Family {
 interface ChildcareFeesCalculatorProps {
   token: string | null;
   families: Family[];
+  mode?: 'personal' | 'all';
 }
 
 interface MonthlyFee {
@@ -311,9 +312,12 @@ const FeeTooltip: React.FC<{ description: string; change?: FeeChangeResult }> = 
 export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = ({
   token,
   families,
+  mode = 'all',
 }) => {
-  const { hasPermission } = useAuth();
-  const canSelectFamilies = hasPermission('fees.all.read');
+  const { user, hasPermission } = useAuth();
+  const canReadFeesAll = hasPermission('fees.all.read');
+  const isPersonalMode = mode === 'personal';
+  const canSelectFamilies = !isPersonalMode && canReadFeesAll;
   const isMobile = useIsMobile();
   const currentYear = new Date().getFullYear();
 
@@ -352,9 +356,12 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
   }, [currentYear]);
 
   // Selected families state
-  const [selectedFamilyIds, setSelectedFamilyIds] = useState<string[]>(() =>
-    families.map((f) => f.id)
-  );
+  const [selectedFamilyIds, setSelectedFamilyIds] = useState<string[]>(() => {
+    if (isPersonalMode) {
+      return user?.family_id ? [user.family_id] : [];
+    }
+    return families.map((f) => f.id);
+  });
   const [mobileSelectedFamilyId, setMobileSelectedFamilyId] = useState<string>('');
   const [familySearch, setFamilySearch] = useState('');
   const [isFamiliesExpanded, setIsFamiliesExpanded] = useState<boolean>(false);
@@ -368,10 +375,14 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
 
   useEffect(() => {
     if (families && families.length > 0 && !hasInitializedRef.current) {
-      setSelectedFamilyIds(families.map((f) => f.id));
+      if (isPersonalMode) {
+        setSelectedFamilyIds(user?.family_id ? [user.family_id] : []);
+      } else {
+        setSelectedFamilyIds(families.map((f) => f.id));
+      }
       hasInitializedRef.current = true;
     }
-  }, [families]);
+  }, [families, isPersonalMode, user?.family_id]);
 
   // Helper to format family names
   const getFamilyName = useCallback((f: Family) => {
@@ -591,6 +602,12 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
   };
 
   useEffect(() => {
+    if (isPersonalMode && !user?.family_id) {
+      setResults(null);
+      setLoading(false);
+      return;
+    }
+
     if (validationError || (canSelectFamilies && effectiveSelectedFamilyIds.length === 0)) {
       prevSelectedFamilyIdsRef.current = effectiveSelectedFamilyIds;
       return;
@@ -638,7 +655,9 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
       body: JSON.stringify({
         start_month: startMonthStr,
         end_month: endMonthStr,
-        ...(canSelectFamilies ? { family_ids: effectiveSelectedFamilyIds } : {}),
+        ...(isPersonalMode
+          ? (user?.family_id ? { family_ids: [user.family_id] } : {})
+          : (canSelectFamilies ? { family_ids: effectiveSelectedFamilyIds } : {})),
       }),
       signal: controller.signal,
     })
@@ -671,7 +690,7 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
       isSubscribed = false;
       controller.abort();
     };
-  }, [token, validationError, startYear, startMonth, endYear, endMonth, effectiveSelectedFamilyIds, canSelectFamilies]);
+  }, [token, validationError, startYear, startMonth, endYear, endMonth, effectiveSelectedFamilyIds, canSelectFamilies, isPersonalMode, user?.family_id]);
 
   const monthsColumns = useMemo(() => {
     if (!results) return [];
@@ -1107,6 +1126,46 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
           </div>
         )}
       </div>
+
+      {isPersonalMode && !user?.family_id && (
+        <div
+          className="card"
+          style={{
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border)',
+            borderRadius: '8px',
+            padding: '2.5rem 1.5rem',
+            textAlign: 'center',
+            boxShadow: 'var(--shadow)',
+            marginTop: '1.5rem',
+          }}
+        >
+          <h4 style={{ margin: '0 0 0.5rem 0', color: 'var(--text-h)', fontSize: '1.1rem', fontWeight: 600 }}>
+            {t('noOwnFamilyAssignedTitle')}
+          </h4>
+          <p style={{ margin: '0 auto', maxWidth: '500px', color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: '1.5' }}>
+            {t('noOwnFamilyAssignedDesc')}
+          </p>
+          {canReadFeesAll && (
+            <div style={{ marginTop: '1.25rem' }}>
+              <a
+                href="#childcareFeesAll"
+                className="btn btn-primary"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  textDecoration: 'none',
+                  fontSize: '0.875rem',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '6px',
+                }}
+              >
+                {t('goToAllFees')}
+              </a>
+            </div>
+          )}
+        </div>
+      )}
 
       {results && !validationError && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', opacity: loading ? 0.6 : 1, transition: 'opacity 0.2s' }}>

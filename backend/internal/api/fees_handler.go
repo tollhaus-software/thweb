@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/pavolmarko/thweb-backend/internal/auth"
 	"github.com/pavolmarko/thweb-backend/internal/fees"
 )
@@ -59,9 +60,18 @@ func (s *Server) HandleCalculateFees(w http.ResponseWriter, r *http.Request) {
 	familyResults := make([]fees.FeeCalculationResult, 0)
 	allChanges := make([]fees.FeeChangeResult, 0)
 
+	requestedFamilies := make(map[uuid.UUID]bool)
+	for _, fid := range req.FamilyIDs {
+		requestedFamilies[fid] = true
+	}
+
 	for _, fam := range familiesList {
 		if !hasFeesAll {
 			if user.FamilyID == nil || fam.ID != *user.FamilyID {
+				continue
+			}
+		} else if len(requestedFamilies) > 0 {
+			if !requestedFamilies[fam.ID] {
 				continue
 			}
 		}

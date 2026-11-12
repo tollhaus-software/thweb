@@ -31,6 +31,7 @@ export type TabId =
   | 'jobs'
   | 'employees'
   | 'childcareFees'
+  | 'childcareFeesAll'
   | 'hygieneBelehrung'
   | 'hygieneDocument'
   | 'kochenHygiene'
@@ -48,6 +49,8 @@ export interface UserPermissionsContext {
   canReadOverview: boolean;
   canReadFamiliesAll: boolean;
   canReadFees: boolean;
+  canReadFeesAll?: boolean;
+  hasFamily?: boolean;
   canReadMembers: boolean;
   canReadJobs: boolean;
   canReadEmployees: boolean;
@@ -200,13 +203,23 @@ export const NAVIGATION_CATEGORIES: NavCategory[] = [
     items: [
       {
         id: 'childcareFees',
-        labelKey: 'navFees',
-        defaultLabel: 'Gebühren',
-        accessibleName: 'Betreuungsgebühren',
-        descriptionKey: 'subtabDescFees',
-        defaultDescription: 'Berechnung und Übersicht monatlicher Betreuungsgebühren.',
+        labelKey: 'subtabChildcareFeesPersonal',
+        defaultLabel: 'Meine Gebühren',
+        accessibleName: 'Meine Gebühren',
+        descriptionKey: 'subtabDescChildcareFeesPersonal',
+        defaultDescription: 'Berechnung und Übersicht der eigenen monatlichen Betreuungsgebühren.',
         icon: CircleDollarSign,
         isVisible: (ctx) => ctx.canReadFees,
+      },
+      {
+        id: 'childcareFeesAll',
+        labelKey: 'subtabChildcareFeesAll',
+        defaultLabel: 'Betreuungsgebühren (alle)',
+        accessibleName: 'Betreuungsgebühren (alle)',
+        descriptionKey: 'subtabDescChildcareFeesAll',
+        defaultDescription: 'Berechnung und Übersicht aller monatlichen Betreuungsgebühren.',
+        icon: CircleDollarSign,
+        isVisible: (ctx) => Boolean(ctx.canReadFeesAll),
       },
     ],
   },
@@ -404,6 +417,8 @@ export const categoryHasLandingPage = (
   catId: NavigationCategory | string,
   perms: UserPermissionsContext
 ): boolean => {
+  // fees category lands directly on the fees page and uses segmented sub-navigation for subtabs
+  if (catId === 'fees') return false;
   const visible = getVisibleSubTabsForCategory(catId, perms);
   return visible.length > 1;
 };
@@ -412,6 +427,14 @@ export const getFirstPermittedTabForCategory = (
   catId: NavigationCategory | string,
   perms: UserPermissionsContext
 ): TabId => {
+  if (catId === 'fees') {
+    if (perms.canReadFeesAll && perms.hasFamily === false) {
+      return 'childcareFeesAll';
+    }
+    if (perms.canReadFees) {
+      return 'childcareFees';
+    }
+  }
   const visible = getVisibleSubTabsForCategory(catId, perms);
   if (visible.length > 0) return visible[0].id;
   // Fallbacks if no visible tab

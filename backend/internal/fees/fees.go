@@ -11,8 +11,9 @@ import (
 )
 
 type FeeCalculationRequest struct {
-	StartMonth string `json:"start_month"` // e.g. "2025-01"
-	EndMonth   string `json:"end_month"`   // e.g. "2025-12"
+	StartMonth string      `json:"start_month"` // e.g. "2025-01"
+	EndMonth   string      `json:"end_month"`   // e.g. "2025-12"
+	FamilyIDs  []uuid.UUID `json:"family_ids,omitempty"`
 }
 
 type FeeCalculationResult struct {
