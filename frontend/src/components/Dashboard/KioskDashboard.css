@@ -583,18 +583,6 @@
   flex-shrink: 0;
 }
 
-/* Task: Kaffeemaschine reinigen (Coffee machine) */
-.kiosk-todo-coffee {
-  background-color: #ffedd5;
-  border: 2px solid #fed7aa;
-  color: #0f172a;
-}
-
-.kiosk-todo-coffee .kiosk-todo-icon {
-  color: #ea580c;
-  flex-shrink: 0;
-}
-
 /* Task: Kühlschrank reinigen (Clean refrigerator) */
 .kiosk-todo-refrigerator {
   background-color: #e0f2fe;
@@ -1404,11 +1392,6 @@
   border-color: rgba(234, 179, 8, 0.4);
   color: #fef08a;
 }
-:root[data-theme='dark'] .kiosk-todo-coffee {
-  background-color: rgba(249, 115, 22, 0.15);
-  border-color: rgba(249, 115, 22, 0.4);
-  color: #fed7aa;
-}
 :root[data-theme='dark'] .kiosk-todo-refrigerator {
   background-color: rgba(14, 165, 233, 0.15);
   border-color: rgba(14, 165, 233, 0.4);
@@ -1488,11 +1471,6 @@
     background-color: rgba(234, 179, 8, 0.15);
     border-color: rgba(234, 179, 8, 0.4);
     color: #fef08a;
-  }
-  :root:not([data-theme='light']) .kiosk-todo-coffee {
-    background-color: rgba(249, 115, 22, 0.15);
-    border-color: rgba(249, 115, 22, 0.4);
-    color: #fed7aa;
   }
   :root:not([data-theme='light']) .kiosk-todo-refrigerator {
     background-color: rgba(14, 165, 233, 0.15);

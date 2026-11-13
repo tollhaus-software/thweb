@@ -2521,9 +2521,9 @@ func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*model
 	}
 
 	// 4. If the date is a friday:
-	// add "clean_coffe_machine" ("Kaffeemaschine reinigen") and "clean_refrigerator" ("Kühlschrank reinigen")
+	// add "clean_refrigerator" ("Kühlschrank reinigen")
 	if targetDate.Weekday() == time.Friday {
-		resp.TasksAndInfo = append(resp.TasksAndInfo, "clean_coffe_machine", "clean_refrigerator")
+		resp.TasksAndInfo = append(resp.TasksAndInfo, "clean_refrigerator")
 	}
 
 	// 5. If meal allergens have been recorded for targetDate:

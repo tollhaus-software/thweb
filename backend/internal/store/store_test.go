@@ -59,7 +59,7 @@ func TestGetDailyBrief(t *testing.T) {
 	// Set 2099-10-09 as a yellow bag day.
 	// Therefore:
 	// - On 2099-10-08 (Thursday): 2099-10-08 + 1 day = 2099-10-09 -> "yellow_bin_put_out"
-	// - On 2099-10-09 (Friday): 2099-10-09 is present -> "yellow_bin_retrieve" AND it's Friday -> "clean_coffe_machine"
+	// - On 2099-10-09 (Friday): 2099-10-09 is present -> "yellow_bin_retrieve" AND it's Friday -> "clean_refrigerator"
 	now := time.Now()
 	_, err = pool.Exec(ctx, `
 		INSERT INTO yellow_bag_days (date, fetched_at)
@@ -129,7 +129,7 @@ func TestGetDailyBrief(t *testing.T) {
 		t.Errorf("unexpected allergen meal component: %+v", briefFriday.AllergenMealComponents[0])
 	}
 
-	// Tasks for Friday: yellow_bin_retrieve, clean_coffe_machine, and clean_refrigerator
+	// Tasks for Friday: yellow_bin_retrieve and clean_refrigerator
 	hasRetrieve := false
 	hasCoffee := false
 	hasRefrigerator := false
@@ -147,8 +147,8 @@ func TestGetDailyBrief(t *testing.T) {
 	if !hasRetrieve {
 		t.Errorf("expected 'yellow_bin_retrieve' in tasks, got: %+v", briefFriday.TasksAndInfo)
 	}
-	if !hasCoffee {
-		t.Errorf("expected 'clean_coffe_machine' in tasks, got: %+v", briefFriday.TasksAndInfo)
+	if hasCoffee {
+		t.Errorf("unexpected 'clean_coffe_machine' in tasks, got: %+v", briefFriday.TasksAndInfo)
 	}
 	if !hasRefrigerator {
 		t.Errorf("expected 'clean_refrigerator' in tasks, got: %+v", briefFriday.TasksAndInfo)

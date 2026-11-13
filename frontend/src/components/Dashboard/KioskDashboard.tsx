@@ -24,7 +24,6 @@ import {
 import {
   UtensilsCrossed,
   Soup,
-  Coffee,
   Refrigerator,
   Trash2,
   ChevronLeft,
@@ -458,8 +457,6 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
       return t('yellowBinRetrieve');
     } else if (taskKey === 'yellow_bin_put_out') {
       return t('yellowBinPutOut');
-    } else if (taskKey === 'clean_coffe_machine' || taskKey === 'clean_coffee_machine') {
-      return t('cleanCoffeeMachine');
     } else if (taskKey === 'clean_refrigerator') {
       return t('cleanRefrigerator');
     } else if (taskKey === 'enter_allergens' || taskKey === 'allergene_eintragen') {
@@ -963,9 +960,6 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                       if (task === 'yellow_bin_retrieve' || task === 'yellow_bin_put_out') {
                         icon = <Trash2 size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
                         colorClass = 'kiosk-todo-yellow';
-                      } else if (task === 'clean_coffe_machine' || task === 'clean_coffee_machine') {
-                        icon = <Coffee size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
-                        colorClass = 'kiosk-todo-coffee';
                       } else if (task === 'clean_refrigerator') {
                         icon = <Refrigerator size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
                         colorClass = 'kiosk-todo-refrigerator';
