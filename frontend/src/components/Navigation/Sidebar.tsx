@@ -33,6 +33,7 @@ export interface SidebarProps {
   canReadMembers: boolean;
   canReadJobs?: boolean;
   canReadEmployees: boolean;
+  canReadVolunteerAbsences?: boolean;
   canViewMealPlan: boolean;
   canReadMealAllergens: boolean;
   hasHygieneWrite: boolean;
@@ -61,6 +62,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   canReadMembers,
   canReadJobs = false,
   canReadEmployees,
+  canReadVolunteerAbsences = false,
   canViewMealPlan,
   canReadMealAllergens,
   hasHygieneWrite,
@@ -84,6 +86,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     canReadMembers,
     canReadJobs,
     canReadEmployees,
+    canReadVolunteerAbsences,
     canViewMealPlan,
     canReadMealAllergens,
     hasHygieneWrite,

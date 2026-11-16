@@ -30,6 +30,7 @@ export type TabId =
   | 'members'
   | 'jobs'
   | 'employees'
+  | 'volunteerAbsences'
   | 'childcareFees'
   | 'childcareFeesAll'
   | 'hygieneBelehrung'
@@ -54,6 +55,7 @@ export interface UserPermissionsContext {
   canReadMembers: boolean;
   canReadJobs: boolean;
   canReadEmployees: boolean;
+  canReadVolunteerAbsences?: boolean;
   canViewMealPlan: boolean;
   canReadMealAllergens: boolean;
   hasHygieneWrite: boolean;
@@ -240,6 +242,16 @@ export const NAVIGATION_CATEGORIES: NavCategory[] = [
         defaultDescription: 'Mitarbeitendenstammdaten, Qualifikationen und Kinderschutz.',
         icon: Briefcase,
         isVisible: (ctx) => ctx.canReadEmployees,
+      },
+      {
+        id: 'volunteerAbsences',
+        labelKey: 'subtabVolunteerAbsences',
+        defaultLabel: 'Abwesenheit Freiwillige',
+        accessibleName: 'Abwesenheit Freiwillige(PA)',
+        descriptionKey: 'subtabDescVolunteerAbsences',
+        defaultDescription: 'Übersicht und Verwaltung der Abwesenheiten von Freiwilligen.',
+        icon: Calendar,
+        isVisible: (ctx) => Boolean(ctx.canReadVolunteerAbsences),
       },
     ],
   },

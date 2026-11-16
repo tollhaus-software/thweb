@@ -3654,6 +3654,123 @@ func TestEmailOutboxHandlers(t *testing.T) {
 	}
 }
 
+func TestHandleVolunteerAbsences_ValidationAndLifecycle(t *testing.T) {
+	ctx := context.Background()
+	pool := getTestDBPool(t)
+	if pool == nil {
+		t.Skip("PostgreSQL not available for integration tests")
+	}
+	defer pool.Close()
+
+	appStore := store.NewStore(pool)
+	server := &Server{Store: appStore, Hub: NewHub()}
+	go server.Hub.Run()
+
+	r := chi.NewRouter()
+	r.With(auth.RequirePermission("volunteers.absences.read")).Get("/api/volunteer-absences", server.HandleListVolunteerAbsences)
+	r.With(auth.RequirePermission("volunteers.absences.write")).Post("/api/volunteer-absences", server.HandleCreateVolunteerAbsence)
+	r.With(auth.RequirePermission("volunteers.absences.write")).Put("/api/volunteer-absences/{id}", server.HandleUpdateVolunteerAbsence)
+	r.With(auth.RequirePermission("volunteers.absences.write")).Delete("/api/volunteer-absences/{id}", server.HandleDeleteVolunteerAbsence)
+
+	uForbidden := &models.UserWithPermissions{
+		ID:                   uuid.New(),
+		Email:                "forbidden@example.com",
+		EffectivePermissions: []string{"families.all.read"},
+	}
+	uRead := &models.UserWithPermissions{
+		ID:                   uuid.New(),
+		Email:                "reader@example.com",
+		EffectivePermissions: []string{"volunteers.absences.read"},
+	}
+	uWrite := &models.UserWithPermissions{
+		ID:                   uuid.New(),
+		Email:                fmt.Sprintf("vol-writer-%s@example.com", uuid.New().String()[:8]),
+		EffectivePermissions: []string{"volunteers.absences.write"},
+	}
+	if _, err := pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, $2, $2)", uWrite.ID, uWrite.Email); err != nil {
+		t.Fatalf("failed to insert test user: %v", err)
+	}
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM volunteer_absences WHERE type = 'bufdi' AND (start_date = '2026-04-10' OR start_date = '2026-04-12')")
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", uWrite.ID)
+	}()
+
+	// 1. GET permission check
+	reqGet := httptest.NewRequest("GET", "/api/volunteer-absences", nil)
+	recGet1 := httptest.NewRecorder()
+	r.ServeHTTP(recGet1, reqGet.WithContext(context.WithValue(reqGet.Context(), auth.UserContextKey, uForbidden)))
+	if recGet1.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for forbidden user, got %d", recGet1.Code)
+	}
+
+	recGet2 := httptest.NewRecorder()
+	r.ServeHTTP(recGet2, reqGet.WithContext(context.WithValue(reqGet.Context(), auth.UserContextKey, uRead)))
+	if recGet2.Code != http.StatusOK {
+		t.Fatalf("expected 200 for reader user, got %d", recGet2.Code)
+	}
+
+	// 2. POST without write permission -> 403
+	postBodyValid := `{"type":"bufdi","start_date":"2026-04-10","end_date":"2026-04-15","note":"Frühjahrskurs"}`
+	reqPost1 := httptest.NewRequest("POST", "/api/volunteer-absences", strings.NewReader(postBodyValid))
+	recPost1 := httptest.NewRecorder()
+	r.ServeHTTP(recPost1, reqPost1.WithContext(context.WithValue(reqPost1.Context(), auth.UserContextKey, uRead)))
+	if recPost1.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for reader posting, got %d", recPost1.Code)
+	}
+
+	// 3. POST validation: end_date before start_date -> 400
+	postBodyInvalidDates := `{"type":"bufdi","start_date":"2026-04-15","end_date":"2026-04-10","note":"Ungültig"}`
+	reqPost2 := httptest.NewRequest("POST", "/api/volunteer-absences", strings.NewReader(postBodyInvalidDates))
+	recPost2 := httptest.NewRecorder()
+	r.ServeHTTP(recPost2, reqPost2.WithContext(context.WithValue(reqPost2.Context(), auth.UserContextKey, uWrite)))
+	if recPost2.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for end before start, got %d: %s", recPost2.Code, recPost2.Body.String())
+	}
+
+	// 4. POST create successfully -> 201
+	reqPost3 := httptest.NewRequest("POST", "/api/volunteer-absences", strings.NewReader(postBodyValid))
+	recPost3 := httptest.NewRecorder()
+	r.ServeHTTP(recPost3, reqPost3.WithContext(context.WithValue(reqPost3.Context(), auth.UserContextKey, uWrite)))
+	if recPost3.Code != http.StatusCreated {
+		t.Fatalf("expected 201 for valid create, got %d: %s", recPost3.Code, recPost3.Body.String())
+	}
+
+	var created models.VolunteerAbsence
+	if err := json.Unmarshal(recPost3.Body.Bytes(), &created); err != nil {
+		t.Fatalf("failed to decode created absence: %v", err)
+	}
+	if created.Type != "bufdi" || created.StartDate != "2026-04-10" || created.EndDate != "2026-04-15" {
+		t.Fatalf("unexpected created absence data: %+v", created)
+	}
+
+	// 5. Overlap rejection on POST -> 409 Conflict
+	postBodyOverlap := `{"type":"bufdi","start_date":"2026-04-12","end_date":"2026-04-18","note":"Overlap"}`
+	reqPostOverlap := httptest.NewRequest("POST", "/api/volunteer-absences", strings.NewReader(postBodyOverlap))
+	recPostOverlap := httptest.NewRecorder()
+	r.ServeHTTP(recPostOverlap, reqPostOverlap.WithContext(context.WithValue(reqPostOverlap.Context(), auth.UserContextKey, uWrite)))
+	if recPostOverlap.Code != http.StatusConflict {
+		t.Fatalf("expected 409 Conflict for overlapping dates, got %d: %s", recPostOverlap.Code, recPostOverlap.Body.String())
+	}
+
+	// 6. PUT update successfully -> 200
+	updateBody := `{"type":"bufdi","start_date":"2026-04-10","end_date":"2026-04-16","note":"Verlängert"}`
+	reqPut := httptest.NewRequest("PUT", "/api/volunteer-absences/"+created.ID.String(), strings.NewReader(updateBody))
+	recPut := httptest.NewRecorder()
+	r.ServeHTTP(recPut, reqPut.WithContext(context.WithValue(reqPut.Context(), auth.UserContextKey, uWrite)))
+	if recPut.Code != http.StatusOK {
+		t.Fatalf("expected 200 for update, got %d: %s", recPut.Code, recPut.Body.String())
+	}
+
+	// 7. DELETE -> 204
+	reqDelete := httptest.NewRequest("DELETE", "/api/volunteer-absences/"+created.ID.String(), nil)
+	recDelete := httptest.NewRecorder()
+	r.ServeHTTP(recDelete, reqDelete.WithContext(context.WithValue(reqDelete.Context(), auth.UserContextKey, uWrite)))
+	if recDelete.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 for delete, got %d: %s", recDelete.Code, recDelete.Body.String())
+	}
+}
+
+
 
 
 

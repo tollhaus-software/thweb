@@ -18,6 +18,7 @@ export interface SegmentedSubNavProps {
   canReadMembers?: boolean;
   canReadJobs?: boolean;
   canReadEmployees?: boolean;
+  canReadVolunteerAbsences?: boolean;
   canViewMealPlan?: boolean;
   canReadMealAllergens?: boolean;
   hasHygieneWrite?: boolean;
@@ -33,6 +34,7 @@ export const SegmentedSubNav: React.FC<SegmentedSubNavProps> = ({
   canReadMembers = false,
   canReadJobs = false,
   canReadEmployees = false,
+  canReadVolunteerAbsences = false,
   canViewMealPlan = false,
   canReadMealAllergens = false,
   hasHygieneWrite = false,
@@ -58,6 +60,7 @@ export const SegmentedSubNav: React.FC<SegmentedSubNavProps> = ({
     canReadMembers,
     canReadJobs,
     canReadEmployees,
+    canReadVolunteerAbsences,
     canViewMealPlan,
     canReadMealAllergens,
     hasHygieneWrite,

@@ -3511,6 +3511,126 @@ func (s *Server) HandleGetPermissions(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) HandleListVolunteerAbsences(w http.ResponseWriter, r *http.Request) {
+	absences, err := s.Store.ListVolunteerAbsences(r.Context())
+	if err != nil {
+		httpErrorLog(w, r, "Failed to list volunteer absences", http.StatusInternalServerError, err)
+		return
+	}
+	jsonResponse(w, absences)
+}
+
+func (s *Server) HandleCreateVolunteerAbsence(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	var absence models.VolunteerAbsence
+	if err := json.NewDecoder(r.Body).Decode(&absence); err != nil {
+		httpErrorLog(w, r, "Invalid request body", http.StatusBadRequest, err)
+		return
+	}
+
+	created, err := s.Store.CreateVolunteerAbsence(r.Context(), user.ID, absence, getActorEmail(r))
+	if err != nil {
+		if errors.Is(err, store.ErrAbsenceOverlap) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "Abwesenheit überschneidet sich mit einem bestehenden Eintrag."})
+			return
+		}
+		if strings.Contains(err.Error(), "invalid") || strings.Contains(err.Error(), "must be") {
+			httpErrorLog(w, r, err.Error(), http.StatusBadRequest, err)
+			return
+		}
+		httpErrorLog(w, r, "Failed to create volunteer absence", http.StatusInternalServerError, err)
+		return
+	}
+
+	if s.Hub != nil {
+		s.Hub.Broadcast(WSMessage{
+			Type:    "VOLUNTEER_ABSENCE_CREATED",
+			Payload: map[string]string{"id": created.ID.String()},
+		})
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	jsonResponse(w, created)
+}
+
+func (s *Server) HandleUpdateVolunteerAbsence(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		httpErrorLog(w, r, "Invalid volunteer absence ID", http.StatusBadRequest, err)
+		return
+	}
+
+	var absence models.VolunteerAbsence
+	if err := json.NewDecoder(r.Body).Decode(&absence); err != nil {
+		httpErrorLog(w, r, "Invalid request body", http.StatusBadRequest, err)
+		return
+	}
+	absence.ID = id
+
+	updated, err := s.Store.UpdateVolunteerAbsence(r.Context(), user.ID, absence, getActorEmail(r))
+	if err != nil {
+		if errors.Is(err, store.ErrAbsenceOverlap) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "Abwesenheit überschneidet sich mit einem bestehenden Eintrag."})
+			return
+		}
+		if strings.Contains(err.Error(), "not found") {
+			httpErrorLog(w, r, err.Error(), http.StatusNotFound, err)
+			return
+		}
+		if strings.Contains(err.Error(), "invalid") || strings.Contains(err.Error(), "must be") {
+			httpErrorLog(w, r, err.Error(), http.StatusBadRequest, err)
+			return
+		}
+		httpErrorLog(w, r, "Failed to update volunteer absence", http.StatusInternalServerError, err)
+		return
+	}
+
+	if s.Hub != nil {
+		s.Hub.Broadcast(WSMessage{
+			Type:    "VOLUNTEER_ABSENCE_UPDATED",
+			Payload: map[string]string{"id": updated.ID.String()},
+		})
+	}
+
+	jsonResponse(w, updated)
+}
+
+func (s *Server) HandleDeleteVolunteerAbsence(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		httpErrorLog(w, r, "Invalid volunteer absence ID", http.StatusBadRequest, err)
+		return
+	}
+
+	err = s.Store.DeleteVolunteerAbsence(r.Context(), user.ID, id, getActorEmail(r))
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			httpErrorLog(w, r, err.Error(), http.StatusNotFound, err)
+			return
+		}
+		httpErrorLog(w, r, "Failed to delete volunteer absence", http.StatusInternalServerError, err)
+		return
+	}
+
+	if s.Hub != nil {
+		s.Hub.Broadcast(WSMessage{
+			Type:    "VOLUNTEER_ABSENCE_DELETED",
+			Payload: map[string]string{"id": id.String()},
+		})
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+
 
 
 

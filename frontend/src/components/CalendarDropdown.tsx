@@ -2,6 +2,13 @@ import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { CURRENT_LOCALE } from '../utils/i18n';
 
+export interface MarkedDateRange {
+  startDate: string; // YYYY-MM-DD
+  endDate: string;   // YYYY-MM-DD
+  label?: string;
+  color?: string;
+}
+
 export interface CalendarDropdownProps {
   anchorEl?: HTMLElement | null;
   anchorRef?: React.RefObject<HTMLElement | null>;
@@ -10,6 +17,7 @@ export interface CalendarDropdownProps {
   selectedDateStr?: string;
   onSelectDate: (formattedDate: string) => void;
   zIndex?: number;
+  markedRanges?: MarkedDateRange[];
 }
 
 export const parseDateStringToObj = (str: string): Date => {
@@ -53,6 +61,7 @@ export const CalendarDropdown: React.FC<CalendarDropdownProps> = ({
   selectedDateStr,
   onSelectDate,
   zIndex = 10005,
+  markedRanges,
 }) => {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const markerRef = useRef<HTMLSpanElement>(null);
@@ -319,25 +328,54 @@ export const CalendarDropdown: React.FC<CalendarDropdownProps> = ({
               selectedDateObj.getFullYear() === calYear
           );
 
+          const cellDateStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          const matchedRange = markedRanges?.find((r) => cellDateStr >= r.startDate && cellDateStr <= r.endDate);
+          const isMarked = Boolean(matchedRange);
+
+          let bg = 'transparent';
+          let textColor = 'inherit';
+          let fontWeight = 'normal';
+          let border = '1px solid transparent';
+
+          if (isSelected) {
+            bg = 'var(--primary, #0284c7)';
+            textColor = '#ffffff';
+            fontWeight = '600';
+          } else if (isMarked) {
+            bg = matchedRange?.color || 'rgba(245, 158, 11, 0.22)';
+            textColor = 'var(--text-amber, #b45309)';
+            fontWeight = '500';
+            border = '1px solid rgba(245, 158, 11, 0.45)';
+          }
+
           return (
             <div
               key={`day-${day}`}
               onClick={() => handleSelectDay(day)}
+              title={matchedRange?.label || undefined}
               style={{
                 padding: '4px 0',
                 fontSize: '0.8rem',
                 cursor: 'pointer',
                 borderRadius: '4px',
-                backgroundColor: isSelected ? 'var(--primary, #0284c7)' : 'transparent',
-                color: isSelected ? '#ffffff' : 'inherit',
-                fontWeight: isSelected ? 600 : 'normal',
+                backgroundColor: bg,
+                color: textColor,
+                fontWeight,
+                border,
+                boxSizing: 'border-box',
                 transition: 'background-color 0.1s',
               }}
               onMouseEnter={(e) => {
-                if (!isSelected) e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+                if (!isSelected) {
+                  e.currentTarget.style.backgroundColor = isMarked
+                    ? 'rgba(245, 158, 11, 0.35)'
+                    : 'var(--bg-hover)';
+                }
               }}
               onMouseLeave={(e) => {
-                if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
+                if (!isSelected) {
+                  e.currentTarget.style.backgroundColor = bg;
+                }
               }}
             >
               {day}

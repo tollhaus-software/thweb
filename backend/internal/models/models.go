@@ -77,6 +77,9 @@ func (s *UserWithPermissions) HasPermission(perm string) bool {
 		if perm == "job.role_assignment.read" && (p == "job.role_assignment.write" || p == "*") {
 			return true
 		}
+		if perm == "volunteers.absences.read" && (p == "volunteers.absences.write" || p == "*") {
+			return true
+		}
 		if (perm == "hygiene.all.read" || perm == "hygiene.all.write") && (p == "hygiene.infektionsschutz.management" || p == "*") {
 			return true
 		}
@@ -98,6 +101,7 @@ func (s *UserWithPermissions) EnsureImpliedPermissions() {
 	hasAllergiesEmployeesWrite := false
 	hasMealAllergensWrite := false
 	hasJobRoleAssignmentWrite := false
+	hasVolunteerAbsencesWrite := false
 	permSet := make(map[string]bool)
 	for _, p := range s.EffectivePermissions {
 		permSet[p] = true
@@ -128,6 +132,9 @@ func (s *UserWithPermissions) EnsureImpliedPermissions() {
 		if p == "*" || p == "job.role_assignment.write" {
 			hasJobRoleAssignmentWrite = true
 		}
+		if p == "*" || p == "volunteers.absences.write" {
+			hasVolunteerAbsencesWrite = true
+		}
 	}
 	if hasFamiliesAll {
 		permSet["families.all.restrictedread"] = true
@@ -156,6 +163,9 @@ func (s *UserWithPermissions) EnsureImpliedPermissions() {
 	}
 	if hasJobRoleAssignmentWrite {
 		permSet["job.role_assignment.read"] = true
+	}
+	if hasVolunteerAbsencesWrite {
+		permSet["volunteers.absences.read"] = true
 	}
 	s.EffectivePermissions = make([]string, 0, len(permSet))
 	for p := range permSet {
@@ -269,6 +279,8 @@ var AllKnownPermissions = []string{
 	"jobs.all.write",
 	"job.role_assignment.read",
 	"job.role_assignment.write",
+	"volunteers.absences.read",
+	"volunteers.absences.write",
 }
 
 // IntersectPermissions returns the intersection of effective permissions between actual and simulated.
@@ -864,6 +876,16 @@ type CompletedTask struct {
 	IsKiosk          bool       `json:"is_kiosk"`
 	KioskName        string     `json:"kiosk_name,omitempty"`
 	CompletedAt      time.Time  `json:"completed_at"`
+}
+
+type VolunteerAbsence struct {
+	ID        uuid.UUID `json:"id"`
+	Type      string    `json:"type"` // "bufdi"
+	StartDate string    `json:"start_date"` // YYYY-MM-DD
+	EndDate   string    `json:"end_date"`   // YYYY-MM-DD
+	Note      string    `json:"note"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type MealPlanDayResponse struct {

@@ -207,6 +207,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (perm === 'job.role_assignment.read' && user.effective_permissions.includes('job.role_assignment.write')) {
       return true;
     }
+    if (perm === 'volunteers.absences.read' && user.effective_permissions.includes('volunteers.absences.write')) {
+      return true;
+    }
     if (
       (perm === 'hygiene.all.write' || perm === 'hygiene.all.read') &&
       user.effective_permissions.includes('hygiene.infektionsschutz.management')

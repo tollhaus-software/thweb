@@ -3032,6 +3032,7 @@ func (s *Store) CreateActiveDEK(ctx context.Context, rec crypto.DEKRecord) (*cry
 func (s *Store) ResetTestData(ctx context.Context) error {
 	_, err := s.db.Exec(ctx, `
 		TRUNCATE TABLE 
+			volunteer_absences,
 			email_outbox,
 			feedback,
 			completed_tasks,
@@ -4910,6 +4911,210 @@ func (s *Store) GetEmailOutboxStats(ctx context.Context) (*EmailOutboxStats, err
 	}
 	return &stats, nil
 }
+
+var ErrAbsenceOverlap = errors.New("abwesenheit overlaps with an existing entry")
+
+func (s *Store) ListVolunteerAbsences(ctx context.Context) ([]models.VolunteerAbsence, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT id, type, TO_CHAR(start_date, 'YYYY-MM-DD'), TO_CHAR(end_date, 'YYYY-MM-DD'), note, created_at, updated_at
+		FROM volunteer_absences
+		ORDER BY start_date DESC, end_date DESC
+		LIMIT 40
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list volunteer absences: %w", err)
+	}
+	defer rows.Close()
+
+	var absences []models.VolunteerAbsence
+	for rows.Next() {
+		var a models.VolunteerAbsence
+		if err := rows.Scan(&a.ID, &a.Type, &a.StartDate, &a.EndDate, &a.Note, &a.CreatedAt, &a.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan volunteer absence: %w", err)
+		}
+		absences = append(absences, a)
+	}
+	if absences == nil {
+		absences = []models.VolunteerAbsence{}
+	}
+	return absences, nil
+}
+
+func (s *Store) GetVolunteerAbsenceByID(ctx context.Context, id uuid.UUID) (*models.VolunteerAbsence, error) {
+	var a models.VolunteerAbsence
+	err := s.db.QueryRow(ctx, `
+		SELECT id, type, TO_CHAR(start_date, 'YYYY-MM-DD'), TO_CHAR(end_date, 'YYYY-MM-DD'), note, created_at, updated_at
+		FROM volunteer_absences
+		WHERE id = $1
+	`, id).Scan(&a.ID, &a.Type, &a.StartDate, &a.EndDate, &a.Note, &a.CreatedAt, &a.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get volunteer absence: %w", err)
+	}
+	return &a, nil
+}
+
+func (s *Store) checkVolunteerAbsenceOverlap(ctx context.Context, tx pgx.Tx, excludeID uuid.UUID, absenceType, startDate, endDate string) error {
+	var count int
+	query := `
+		SELECT COUNT(*)
+		FROM volunteer_absences
+		WHERE type = $1
+		  AND id != $2
+		  AND start_date <= $4::date
+		  AND end_date >= $3::date
+	`
+	if err := tx.QueryRow(ctx, query, absenceType, excludeID, startDate, endDate).Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return ErrAbsenceOverlap
+	}
+	return nil
+}
+
+func (s *Store) CreateVolunteerAbsence(ctx context.Context, userID uuid.UUID, absence models.VolunteerAbsence, userEmail ...string) (models.VolunteerAbsence, error) {
+	absence.Type = strings.TrimSpace(absence.Type)
+	absence.StartDate = strings.TrimSpace(absence.StartDate)
+	absence.EndDate = strings.TrimSpace(absence.EndDate)
+	absence.Note = strings.TrimSpace(absence.Note)
+
+	if absence.Type != "bufdi" {
+		return models.VolunteerAbsence{}, fmt.Errorf("invalid absence type: %s", absence.Type)
+	}
+	start, err := time.Parse("2006-01-02", absence.StartDate)
+	if err != nil {
+		return models.VolunteerAbsence{}, fmt.Errorf("invalid start date format (expected YYYY-MM-DD): %w", err)
+	}
+	end, err := time.Parse("2006-01-02", absence.EndDate)
+	if err != nil {
+		return models.VolunteerAbsence{}, fmt.Errorf("invalid end date format (expected YYYY-MM-DD): %w", err)
+	}
+	if end.Before(start) {
+		return models.VolunteerAbsence{}, fmt.Errorf("end date must be on or after start date")
+	}
+
+	if absence.ID == uuid.Nil {
+		absence.ID = uuid.New()
+	}
+	transactionID := uuid.New()
+
+	var created models.VolunteerAbsence
+	err = s.WithTx(ctx, func(tx pgx.Tx) error {
+		if err := s.checkVolunteerAbsenceOverlap(ctx, tx, absence.ID, absence.Type, absence.StartDate, absence.EndDate); err != nil {
+			return err
+		}
+
+		query := `
+			INSERT INTO volunteer_absences (id, type, start_date, end_date, note)
+			VALUES ($1, $2, $3::date, $4::date, $5)
+			RETURNING id, type, TO_CHAR(start_date, 'YYYY-MM-DD'), TO_CHAR(end_date, 'YYYY-MM-DD'), note, created_at, updated_at
+		`
+		if err := tx.QueryRow(ctx, query, absence.ID, absence.Type, absence.StartDate, absence.EndDate, absence.Note).Scan(
+			&created.ID,
+			&created.Type,
+			&created.StartDate,
+			&created.EndDate,
+			&created.Note,
+			&created.CreatedAt,
+			&created.UpdatedAt,
+		); err != nil {
+			return err
+		}
+		return s.recordAudit(ctx, tx, transactionID, nil, "volunteer_absence", created.ID, "INSERT", nil, created, userID, userEmail...)
+	})
+	if err != nil {
+		return models.VolunteerAbsence{}, err
+	}
+	return created, nil
+}
+
+func (s *Store) UpdateVolunteerAbsence(ctx context.Context, userID uuid.UUID, absence models.VolunteerAbsence, userEmail ...string) (models.VolunteerAbsence, error) {
+	absence.Type = strings.TrimSpace(absence.Type)
+	absence.StartDate = strings.TrimSpace(absence.StartDate)
+	absence.EndDate = strings.TrimSpace(absence.EndDate)
+	absence.Note = strings.TrimSpace(absence.Note)
+
+	if absence.Type != "bufdi" {
+		return models.VolunteerAbsence{}, fmt.Errorf("invalid absence type: %s", absence.Type)
+	}
+	start, err := time.Parse("2006-01-02", absence.StartDate)
+	if err != nil {
+		return models.VolunteerAbsence{}, fmt.Errorf("invalid start date format (expected YYYY-MM-DD): %w", err)
+	}
+	end, err := time.Parse("2006-01-02", absence.EndDate)
+	if err != nil {
+		return models.VolunteerAbsence{}, fmt.Errorf("invalid end date format (expected YYYY-MM-DD): %w", err)
+	}
+	if end.Before(start) {
+		return models.VolunteerAbsence{}, fmt.Errorf("end date must be on or after start date")
+	}
+
+	transactionID := uuid.New()
+	var updated models.VolunteerAbsence
+
+	err = s.WithTx(ctx, func(tx pgx.Tx) error {
+		existing, err := s.GetVolunteerAbsenceByID(ctx, absence.ID)
+		if err != nil {
+			return err
+		}
+		if existing == nil {
+			return fmt.Errorf("volunteer absence not found")
+		}
+
+		if err := s.checkVolunteerAbsenceOverlap(ctx, tx, absence.ID, absence.Type, absence.StartDate, absence.EndDate); err != nil {
+			return err
+		}
+
+		query := `
+			UPDATE volunteer_absences
+			SET type = $1, start_date = $2::date, end_date = $3::date, note = $4
+			WHERE id = $5
+			RETURNING id, type, TO_CHAR(start_date, 'YYYY-MM-DD'), TO_CHAR(end_date, 'YYYY-MM-DD'), note, created_at, updated_at
+		`
+		if err := tx.QueryRow(ctx, query, absence.Type, absence.StartDate, absence.EndDate, absence.Note, absence.ID).Scan(
+			&updated.ID,
+			&updated.Type,
+			&updated.StartDate,
+			&updated.EndDate,
+			&updated.Note,
+			&updated.CreatedAt,
+			&updated.UpdatedAt,
+		); err != nil {
+			return err
+		}
+		return s.recordAudit(ctx, tx, transactionID, nil, "volunteer_absence", updated.ID, "UPDATE", *existing, updated, userID, userEmail...)
+	})
+	if err != nil {
+		return models.VolunteerAbsence{}, err
+	}
+	return updated, nil
+}
+
+func (s *Store) DeleteVolunteerAbsence(ctx context.Context, userID uuid.UUID, id uuid.UUID, userEmail ...string) error {
+	transactionID := uuid.New()
+	return s.WithTx(ctx, func(tx pgx.Tx) error {
+		existing, err := s.GetVolunteerAbsenceByID(ctx, id)
+		if err != nil {
+			return err
+		}
+		if existing == nil {
+			return fmt.Errorf("volunteer absence not found")
+		}
+
+		cmd, err := tx.Exec(ctx, "DELETE FROM volunteer_absences WHERE id = $1", id)
+		if err != nil {
+			return err
+		}
+		if cmd.RowsAffected() == 0 {
+			return fmt.Errorf("volunteer absence not found")
+		}
+		return s.recordAudit(ctx, tx, transactionID, nil, "volunteer_absence", id, "DELETE", *existing, nil, userID, userEmail...)
+	})
+}
+
 
 
 

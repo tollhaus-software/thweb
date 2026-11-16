@@ -147,6 +147,12 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		r.With(auth.RequireAnyPermission("employees.all.write", "allergies.employees.write")).Put("/api/employees/{id}", server.HandleUpdateEmployee)
 		r.With(auth.RequirePermission("employees.all.write")).Delete("/api/employees/{id}", server.HandleDeleteEmployee)
 
+		// Volunteer Absences CRUD
+		r.With(auth.RequirePermission("volunteers.absences.read")).Get("/api/volunteer-absences", server.HandleListVolunteerAbsences)
+		r.With(auth.RequirePermission("volunteers.absences.write")).Post("/api/volunteer-absences", server.HandleCreateVolunteerAbsence)
+		r.With(auth.RequirePermission("volunteers.absences.write")).Put("/api/volunteer-absences/{id}", server.HandleUpdateVolunteerAbsence)
+		r.With(auth.RequirePermission("volunteers.absences.write")).Delete("/api/volunteer-absences/{id}", server.HandleDeleteVolunteerAbsence)
+
 		// Childcare Fees Calculation
 		r.With(auth.RequirePermission("fees.self.read")).Post("/api/fees/calculate", server.HandleCalculateFees)
 

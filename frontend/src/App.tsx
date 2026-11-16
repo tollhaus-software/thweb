@@ -30,6 +30,7 @@ import { MealPlanPrintView } from './components/MealPlan/MealPlanPrintView';
 import { MealAllergensTab } from './components/MealAllergens/MealAllergensTab';
 import { PersonalHygieneTab } from './components/Hygiene/PersonalHygieneTab';
 import { HygieneDocumentTab } from './components/Hygiene/HygieneDocumentTab';
+import { VolunteerAbsencesTab } from './components/VolunteerAbsences/VolunteerAbsencesTab';
 import { KioskProvisioning } from './components/Admin/KioskProvisioning';
 import { FeedbackAndActivityView } from './components/Admin/FeedbackAndActivityView';
 import { PermissionsSimulatorModal } from './components/Admin/PermissionsSimulatorModal';
@@ -1228,6 +1229,33 @@ const diffJobSnapshots = (before: any, after: any): string[] => {
   return changes;
 };
 
+const diffVolunteerAbsenceSnapshots = (before: any, after: any): string[] => {
+  const changes: string[] = [];
+  const getTypeLabel = (val: string) => (val === 'bufdi' ? 'BuFDI' : (val || '-'));
+
+  if (before.type !== after.type) {
+    changes.push(`${t('absenceType') || 'Typ'}: ${getTypeLabel(before.type)} → ${getTypeLabel(after.type)}`);
+  }
+
+  if (formatDisplayDate(before.start_date) !== formatDisplayDate(after.start_date)) {
+    changes.push(`${t('startDateLabel') || 'Startdatum'}: ${formatDisplayDate(before.start_date)} → ${formatDisplayDate(after.start_date)}`);
+  }
+
+  const bEnd = before.end_date ? formatDisplayDate(before.end_date) : '-';
+  const aEnd = after.end_date ? formatDisplayDate(after.end_date) : '-';
+  if (bEnd !== aEnd) {
+    changes.push(`${t('endDateLabel') || 'Enddatum'}: ${bEnd} → ${aEnd}`);
+  }
+
+  const bNote = before.note || '';
+  const aNote = after.note || '';
+  if (bNote !== aNote) {
+    changes.push(`${t('note') || 'Notiz'}: "${bNote}" → "${aNote}"`);
+  }
+
+  return changes;
+};
+
 const formatSnapshotDetails = (log: AuditLog, families: Family[] = []) => {
   const data = log.after_snapshot || log.before_snapshot;
   if (!data) return '-';
@@ -1517,6 +1545,31 @@ const formatSnapshotDetails = (log: AuditLog, families: Family[] = []) => {
     }
   }
 
+  if (log.entity_type === 'volunteer_absence') {
+    const typeLabel = data.type === 'bufdi' ? 'BuFDI' : (data.type || '');
+    if (typeLabel) {
+      parts.push(typeLabel);
+    }
+
+    if (log.operation === 'UPDATE' && log.before_snapshot && log.after_snapshot) {
+      const changes = diffVolunteerAbsenceSnapshots(log.before_snapshot, log.after_snapshot);
+      if (changes.length > 0) {
+        parts.push(`${t('changes')}: ${changes.join(', ')}`);
+        return parts.join(' | ');
+      }
+    }
+
+    if (data.start_date) {
+      parts.push(`${t('startDateLabel') || 'Startdatum'}: ${formatDisplayDate(data.start_date)}`);
+    }
+    if (data.end_date) {
+      parts.push(`${t('endDateLabel') || 'Enddatum'}: ${formatDisplayDate(data.end_date)}`);
+    }
+    if (data.note) {
+      parts.push(`${t('note') || 'Notiz'}: ${data.note}`);
+    }
+  }
+
   return parts.join(' | ');
 };
 
@@ -1683,6 +1736,8 @@ const AuditLogView: React.FC<AuditLogViewProps> = ({
         return t('employee');
       case 'job':
         return t('job') || 'Job';
+      case 'volunteer_absence':
+        return t('subtabVolunteerAbsences') || 'Abwesenheit Freiwillige';
       default:
         return etype;
     }
@@ -2609,6 +2664,7 @@ const Dashboard: React.FC = () => {
   const canWriteJobs = hasPermission('jobs.all.write');
   const canReadJobRoles = hasPermission('job.role_assignment.read') || hasPermission('job.role_assignment.write');
   const canWriteJobRoles = hasPermission('job.role_assignment.write');
+  const canReadVolunteerAbsences = hasPermission('volunteers.absences.read') || hasPermission('volunteers.absences.write');
 
   const [families, setFamilies] = React.useState<Family[]>([]);
   const [employees, setEmployees] = React.useState<Employee[]>([]);
@@ -2685,6 +2741,7 @@ const Dashboard: React.FC = () => {
     canReadMembers,
     canReadJobs,
     canReadEmployees,
+    canReadVolunteerAbsences,
     canViewMealPlan,
     canReadMealAllergens,
     hasHygieneWrite: canWriteHygiene,
@@ -2705,6 +2762,7 @@ const Dashboard: React.FC = () => {
     canReadMembers,
     canReadJobs,
     canReadEmployees,
+    canReadVolunteerAbsences,
     canViewMealPlan,
     canReadMealAllergens,
     canWriteHygiene,
@@ -2736,6 +2794,7 @@ const Dashboard: React.FC = () => {
       canReadMembers,
       canReadJobs,
       canReadEmployees,
+      canReadVolunteerAbsences,
       canViewMealPlan,
       canReadMealAllergens,
       hasHygieneWrite: canWriteHygiene,
@@ -2763,6 +2822,7 @@ const Dashboard: React.FC = () => {
       (hash === 'members' && canReadMembers) ||
       (hash === 'jobs' && canReadJobs) ||
       (hash === 'employees' && canReadEmployees) ||
+      (hash === 'volunteerAbsences' && canReadVolunteerAbsences) ||
       (hash === 'childcareFees' && canReadFees) ||
       (hash === 'childcareFeesAll' && canReadFeesAll) ||
       (hash === 'hygieneBelehrung' && (canManageHygiene || hasPermission('hygiene.all.write'))) ||
@@ -2789,6 +2849,7 @@ const Dashboard: React.FC = () => {
       (saved === 'members' && canReadMembers) ||
       (saved === 'jobs' && canReadJobs) ||
       (saved === 'employees' && canReadEmployees) ||
+      (saved === 'volunteerAbsences' && canReadVolunteerAbsences) ||
       (saved === 'childcareFees' && canReadFees) ||
       (saved === 'childcareFeesAll' && canReadFeesAll) ||
       (saved === 'hygieneBelehrung' && (canManageHygiene || hasPermission('hygiene.all.write'))) ||
@@ -2825,6 +2886,9 @@ const Dashboard: React.FC = () => {
     }
     if (canReadEmployees) {
       return 'employees';
+    }
+    if (canReadVolunteerAbsences) {
+      return 'volunteerAbsences';
     }
     if (canViewMealPlan) {
       return 'mealPlan';
@@ -2901,6 +2965,14 @@ const Dashboard: React.FC = () => {
       } else if (canReadFamiliesAll) {
         fallback = 'families';
       }
+    } else if (activeTab === 'volunteerAbsences' && !canReadVolunteerAbsences) {
+      if (canReadOverview) {
+        fallback = 'familiesOverview';
+      } else if (canReadFees) {
+        fallback = 'childcareFees';
+      } else if (canReadFamiliesAll) {
+        fallback = 'families';
+      }
     } else if (activeTab === 'mealPlan' && !canViewMealPlan) {
       if (canReadOverview) {
         fallback = 'familiesOverview';
@@ -2943,7 +3015,7 @@ const Dashboard: React.FC = () => {
       localStorage.setItem('thweb_active_tab', fallback);
       window.location.hash = fallback;
     }
-  }, [activeTab, canReadFamiliesAll, canReadOverview, canReadFees, canReadFeesAll, canReadMembers, canReadJobs, canReadEmployees, canViewMealPlan, canReadMealAllergens, canManageHygiene, canAccessPersonalHygiene, hasPermission, navPerms, isMainPageActive]);
+  }, [activeTab, canReadFamiliesAll, canReadOverview, canReadFees, canReadFeesAll, canReadMembers, canReadJobs, canReadEmployees, canReadVolunteerAbsences, canViewMealPlan, canReadMealAllergens, canManageHygiene, canAccessPersonalHygiene, hasPermission, navPerms, isMainPageActive]);
 
   // Navigation & Highlighting state (Patterns 2 & 3)
   const [highlightTarget, setHighlightTarget] = React.useState<{ id: string; key: number } | null>(null);
@@ -4043,6 +4115,7 @@ const Dashboard: React.FC = () => {
         (hash === 'members' && canReadMembers) ||
         (hash === 'jobs' && canReadJobs) ||
         (hash === 'employees' && canReadEmployees) ||
+        (hash === 'volunteerAbsences' && canReadVolunteerAbsences) ||
         (hash === 'childcareFees' && canReadFees) ||
         (hash === 'childcareFeesAll' && canReadFeesAll) ||
         (hash === 'hygieneBelehrung' && (canManageHygiene || hasPermission('hygiene.all.write'))) ||
@@ -4101,6 +4174,11 @@ const Dashboard: React.FC = () => {
         setActiveTab(fallback as any);
         localStorage.setItem('thweb_active_tab', fallback);
         window.location.hash = fallback;
+      } else if (hash === 'volunteerAbsences' && !canReadVolunteerAbsences) {
+        const fallback = canReadOverview ? 'familiesOverview' : canReadFamiliesAll ? 'families' : 'childcareFees';
+        setActiveTab(fallback as any);
+        localStorage.setItem('thweb_active_tab', fallback);
+        window.location.hash = fallback;
       }
     };
     window.addEventListener('hashchange', handleHashChange);
@@ -4118,7 +4196,7 @@ const Dashboard: React.FC = () => {
       handleHashChange();
     }
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [canReadAudit, canManageUsers, canViewActivity, canProvisionKiosk, canUseDashboard, canReadOverview, canReadFamiliesAll, canReadFees, canReadMembers, canReadJobs, canReadEmployees, canViewMealPlan, canReadMealAllergens, hasPermission, navPerms, isMainPageActive]);
+  }, [canReadAudit, canManageUsers, canViewActivity, canProvisionKiosk, canUseDashboard, canReadOverview, canReadFamiliesAll, canReadFees, canReadMembers, canReadJobs, canReadEmployees, canReadVolunteerAbsences, canViewMealPlan, canReadMealAllergens, hasPermission, navPerms, isMainPageActive]);
 
   useRealtime(React.useCallback((message: any) => {
     if (
@@ -8287,7 +8365,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
           </div>
         )}
 
-        {!isLandingActive && activeTab !== 'main' && activeTab !== 'childcareFees' && activeTab !== 'childcareFeesAll' && activeTab !== 'audit' && activeTab !== 'admin' && activeTab !== 'kiosk' && activeTab !== 'dashboard' && activeTab !== 'mealPlan' && activeTab !== 'mealAllergens' && activeTab !== 'hygieneDocument' && activeTab !== 'kochenHygiene' && (
+        {!isLandingActive && activeTab !== 'main' && activeTab !== 'childcareFees' && activeTab !== 'childcareFeesAll' && activeTab !== 'audit' && activeTab !== 'admin' && activeTab !== 'kiosk' && activeTab !== 'dashboard' && activeTab !== 'mealPlan' && activeTab !== 'mealAllergens' && activeTab !== 'hygieneDocument' && activeTab !== 'kochenHygiene' && activeTab !== 'volunteerAbsences' && (
           <div className="controls-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <div
               className={`controls-left ${activeTab === 'familiesOverview' ? 'overview-controls-left' : ''}`}
@@ -8896,6 +8974,8 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                 getAuthHeaders={getAuthHeaders}
                 refreshTrigger={auditRefreshTrigger}
               />
+            ) : activeTab === 'volunteerAbsences' && canReadVolunteerAbsences ? (
+              <VolunteerAbsencesTab />
             ) : activeTab === 'admin' && canManageUsers ? (
               <AdminView onOpenSimulator={() => setSimulatorModalOpen(true)} />
             ) : activeTab === 'activity' && canViewActivity ? (

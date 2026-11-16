@@ -74,6 +74,30 @@ func TestUserWithPermissions_HasPermission(t *testing.T) {
 			want:        true,
 		},
 		{
+			name:        "volunteers.absences.read directly",
+			effective:   []string{"volunteers.absences.read"},
+			permToCheck: "volunteers.absences.read",
+			want:        true,
+		},
+		{
+			name:        "volunteers.absences.write implies volunteers.absences.read",
+			effective:   []string{"volunteers.absences.write"},
+			permToCheck: "volunteers.absences.read",
+			want:        true,
+		},
+		{
+			name:        "volunteers.absences.read does not imply volunteers.absences.write",
+			effective:   []string{"volunteers.absences.read"},
+			permToCheck: "volunteers.absences.write",
+			want:        false,
+		},
+		{
+			name:        "admin * implies volunteers.absences.read and write",
+			effective:   []string{"*"},
+			permToCheck: "volunteers.absences.write",
+			want:        true,
+		},
+		{
 			name:        "memberships.all.write implies memberships.all.read",
 			effective:   []string{"memberships.all.write"},
 			permToCheck: "memberships.all.read",
