@@ -1093,4 +1093,49 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await feedbackModalCloseBtn.click();
     await expect(feedbackModalCloseBtn).toHaveCount(0);
   });
+
+  test('shows Vesper star-like badge next to the day on Wednesday and Thursday and hides it on other days', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+    });
+
+    await page.goto('/#dashboard');
+    await page.waitForLoadState('networkidle');
+
+    const embeddedPage = page.locator('.kiosk-tablet-page.embedded');
+    await expect(embeddedPage).toBeVisible();
+
+    const dateHeader = embeddedPage.locator('.kiosk-header-date');
+    await expect(dateHeader).toBeVisible();
+    const nextBtn = embeddedPage.locator('.kiosk-header-nav-btn.right');
+    const homeBtn = embeddedPage.locator('.kiosk-nav-home-btn');
+
+    // Test a full week cycle (7 consecutive days)
+    for (let i = 0; i < 7; i++) {
+      const headerDateText = await dateHeader.locator('.kiosk-header-date-text').innerText();
+      const isWedOrThu =
+        headerDateText.startsWith('Mittwoch') ||
+        headerDateText.startsWith('Donnerstag') ||
+        headerDateText.startsWith('Wednesday') ||
+        headerDateText.startsWith('Thursday');
+
+      const vesperBadge = dateHeader.locator('[data-testid="kiosk-vesper-badge"]');
+
+      if (isWedOrThu) {
+        await expect(vesperBadge).toBeVisible();
+        await expect(vesperBadge).toContainText('Vesper');
+        await expect(vesperBadge.locator('.kiosk-vesper-star-icon')).toBeVisible();
+        await expect(vesperBadge.locator('.kiosk-vesper-star-bg')).toBeVisible();
+      } else {
+        await expect(vesperBadge).toHaveCount(0);
+      }
+
+      await nextBtn.click();
+      await page.waitForTimeout(150);
+    }
+
+    // Reset back to today with Home button
+    await homeBtn.click();
+    await page.waitForTimeout(150);
+  });
 });

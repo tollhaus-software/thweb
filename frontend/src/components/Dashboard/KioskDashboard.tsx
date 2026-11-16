@@ -36,6 +36,7 @@ import {
   Check,
   ArrowLeft,
   MessageSquare,
+  Star,
 } from 'lucide-react';
 import { FeedbackModal } from './FeedbackModal';
 import { TaskConfirmModal } from './TaskConfirmModal';
@@ -399,9 +400,45 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
   const isToday = selectedDate === null || displayDateStr === todayDateStr;
   const canEditAllergensOnDashboard = canEditMealAllergens;
   const formattedDate = formatDashboardDate(displayDateStr);
+  const displayDateParts = displayDateStr.split('-').map(Number);
+  const displayDayOfWeek =
+    displayDateParts.length === 3 &&
+    !isNaN(displayDateParts[0]) &&
+    !isNaN(displayDateParts[1]) &&
+    !isNaN(displayDateParts[2])
+      ? new Date(Date.UTC(displayDateParts[0], displayDateParts[1] - 1, displayDateParts[2])).getUTCDay()
+      : new Date(displayDateStr).getUTCDay();
+  const isVesperDay = displayDayOfWeek === 3 || displayDayOfWeek === 4;
   const hours = String(currentTime.getHours()).padStart(2, '0');
   const minutes = String(currentTime.getMinutes()).padStart(2, '0');
   const formattedTime = `${hours}:${minutes}`;
+
+  const vesperBadge = isVesperDay ? (
+    <span
+      className="kiosk-vesper-badge"
+      data-testid="kiosk-vesper-badge"
+      title="Vesper"
+    >
+      <svg
+        className="kiosk-vesper-star-bg"
+        viewBox="0 0 104 36"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
+        <path
+          d="M 104.0 18.0 L 98.6 20.6 L 100.0 24.9 L 91.5 25.5 L 88.8 30.7 L 78.4 29.2 L 71.9 34.6 L 61.3 31.2 L 52.0 36.0 L 42.7 31.2 L 32.1 34.6 L 25.6 29.2 L 15.2 30.7 L 12.5 25.5 L 4.0 24.9 L 5.4 20.6 L 0.0 18.0 L 5.4 15.4 L 4.0 11.1 L 12.5 10.5 L 15.2 5.3 L 25.6 6.8 L 32.1 1.4 L 42.7 4.8 L 52.0 0.0 L 61.3 4.8 L 71.9 1.4 L 78.4 6.8 L 88.8 5.3 L 91.5 10.5 L 100.0 11.1 L 98.6 15.4 Z"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+      <Star
+        className="kiosk-vesper-star-icon"
+        size={embedded ? 13 : 16}
+        fill="currentColor"
+        aria-hidden="true"
+      />
+      <span className="kiosk-vesper-text">Vesper</span>
+    </span>
+  ) : null;
 
   const openMealAllergensEditor = (e?: React.MouseEvent) => {
     if (e) {
@@ -804,7 +841,12 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                   <span>{t('back') || 'Zurück'}</span>
                 </button>
 
-                <h1 className="kiosk-header-date">{t('allergensForDate')} {formattedDate}</h1>
+                <h1 className="kiosk-header-date">
+                  <span className="kiosk-header-date-text">
+                    {t('allergensForDate')} {formattedDate}
+                  </span>
+                  {vesperBadge}
+                </h1>
 
                 <div className="kiosk-header-right" />
               </header>
@@ -843,7 +885,10 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                   <ChevronLeft size={embedded ? 24 : 36} />
                 </button>
 
-                <h1 className="kiosk-header-date">{formattedDate}</h1>
+                <h1 className="kiosk-header-date">
+                  <span className="kiosk-header-date-text">{formattedDate}</span>
+                  {vesperBadge}
+                </h1>
 
                 <button
                   onClick={handleNextDay}
