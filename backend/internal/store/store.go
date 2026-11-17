@@ -2494,8 +2494,7 @@ func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*model
 		}
 	}
 
-	// 2. If the date that is being checked is present in the "yellow_bag_days" table:
-	// add "yellow_bin_retrieve" to tasks_and_info ("Gelbe Tonne reinholen")
+	// 2. Check yellow_bag_days for today:
 	var yellowBagToday bool
 	err = s.db.QueryRow(ctx, `
 		SELECT EXISTS(SELECT 1 FROM yellow_bag_days WHERE date = $1)
@@ -2503,12 +2502,8 @@ func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*model
 	if err != nil {
 		return nil, fmt.Errorf("failed to check yellow_bag_days for date %s: %w", dateStr, err)
 	}
-	if yellowBagToday {
-		resp.TasksAndInfo = append(resp.TasksAndInfo, "yellow_bin_retrieve")
-	}
 
-	// 3. If the date + 1 day is present in the "yellow_bag_days" table:
-	// add "yellow_bin_put_out" to tasks_and_info ("Gelbe Tonne rausstellen")
+	// 3. Check yellow_bag_days for tomorrow:
 	var yellowBagTomorrow bool
 	err = s.db.QueryRow(ctx, `
 		SELECT EXISTS(SELECT 1 FROM yellow_bag_days WHERE date = $1)
@@ -2516,17 +2511,8 @@ func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*model
 	if err != nil {
 		return nil, fmt.Errorf("failed to check yellow_bag_days for date %s: %w", nextDateStr, err)
 	}
-	if yellowBagTomorrow {
-		resp.TasksAndInfo = append(resp.TasksAndInfo, "yellow_bin_put_out")
-	}
 
-	// 4. If the date is a friday:
-	// add "clean_refrigerator" ("Kühlschrank reinigen")
-	if targetDate.Weekday() == time.Friday {
-		resp.TasksAndInfo = append(resp.TasksAndInfo, "clean_refrigerator")
-	}
-
-	// 5. If meal allergens have been recorded for targetDate:
+	// 4. If meal allergens have been recorded for targetDate:
 	mealDay, err := s.GetMealAllergenDay(ctx, targetDate)
 	if err == nil && mealDay != nil {
 		if resp.WhoIsCooking == "" && strings.TrimSpace(mealDay.CookCustomName) != "" {
@@ -2546,14 +2532,34 @@ func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*model
 		}
 	}
 
-	// 6. Allergene eintragen ("enter_allergens") task:
-	// Applies on all weekdays (Monday-Friday) or whenever cooking is scheduled,
-	// unless meal allergens for that day are explicitly marked "not_relevant".
+	// 5. Check if BuFDI has an absence on targetDate:
+	hasBufdiAbsence, err := s.HasBufdiAbsence(ctx, targetDate)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check bufdi absence for date %s: %w", dateStr, err)
+	}
+
+	// 6. Evaluate tasks via DashboardTasks registry:
 	isNotRelevant := mealDay != nil && mealDay.Status == models.MealAllergenStatusNotRelevant
 	isWeekday := targetDate.Weekday() >= time.Monday && targetDate.Weekday() <= time.Friday
+	isVesperDay := targetDate.Weekday() == time.Wednesday || targetDate.Weekday() == time.Thursday
 	hasCooking := resp.WhoIsCooking != "" || len(resp.MealComponents) > 0 || (mealDay != nil && (mealDay.HasAllergenRecord || len(mealDay.MealComponents) > 0))
-	if !isNotRelevant && (isWeekday || hasCooking) {
-		resp.TasksAndInfo = append(resp.TasksAndInfo, "enter_allergens")
+
+	evalCtx := &TaskEvaluationContext{
+		Date:                       targetDate,
+		DateStr:                    dateStr,
+		HasBufdiAbsence:            hasBufdiAbsence,
+		IsVesperDay:                isVesperDay,
+		IsWeekday:                  isWeekday,
+		IsYellowBagToday:           yellowBagToday,
+		IsYellowBagTomorrow:        yellowBagTomorrow,
+		HasCookingScheduled:        hasCooking,
+		IsMealAllergensNotRelevant: isNotRelevant,
+	}
+
+	for _, taskDef := range DashboardTasks {
+		if taskDef.Applies(evalCtx) {
+			resp.TasksAndInfo = append(resp.TasksAndInfo, taskDef.ID)
+		}
 	}
 
 	// 7. Completed tasks from completed_tasks table
@@ -2562,6 +2568,11 @@ func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*model
 		resp.CompletedTasks = completedTasks
 		for _, ct := range completedTasks {
 			resp.CompletedTaskIDs = append(resp.CompletedTaskIDs, ct.TaskTypeID)
+			for _, alias := range GetTaskAliases(ct.TaskTypeID) {
+				if alias != ct.TaskTypeID {
+					resp.CompletedTaskIDs = append(resp.CompletedTaskIDs, alias)
+				}
+			}
 		}
 	}
 	if mealDay != nil && mealDay.Status == models.MealAllergenStatusFinalized {
@@ -2632,10 +2643,12 @@ func (s *Store) CompleteTask(ctx context.Context, targetDate time.Time, taskType
 
 func (s *Store) UncompleteTask(ctx context.Context, targetDate time.Time, taskTypeID string) error {
 	dateStr := targetDate.Format("2006-01-02")
+	aliases := GetTaskAliases(taskTypeID)
+
 	_, err := s.db.Exec(ctx, `
 		DELETE FROM completed_tasks
-		WHERE task_date = $1 AND task_type_id = $2
-	`, dateStr, taskTypeID)
+		WHERE task_date = $1 AND task_type_id = ANY($2)
+	`, dateStr, aliases)
 	if err != nil {
 		return fmt.Errorf("failed to uncomplete task %s for %s: %w", taskTypeID, dateStr, err)
 	}
@@ -4913,6 +4926,21 @@ func (s *Store) GetEmailOutboxStats(ctx context.Context) (*EmailOutboxStats, err
 }
 
 var ErrAbsenceOverlap = errors.New("abwesenheit overlaps with an existing entry")
+
+func (s *Store) HasBufdiAbsence(ctx context.Context, targetDate time.Time) (bool, error) {
+	dateStr := targetDate.Format("2006-01-02")
+	var hasAbsence bool
+	err := s.db.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM volunteer_absences
+			WHERE type = 'bufdi' AND start_date <= $1 AND end_date >= $1
+		)
+	`, dateStr).Scan(&hasAbsence)
+	if err != nil {
+		return false, fmt.Errorf("failed to check bufdi absence for date %s: %w", dateStr, err)
+	}
+	return hasAbsence, nil
+}
 
 func (s *Store) ListVolunteerAbsences(ctx context.Context) ([]models.VolunteerAbsence, error) {
 	rows, err := s.db.Query(ctx, `

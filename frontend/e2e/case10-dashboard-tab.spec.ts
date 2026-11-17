@@ -436,11 +436,12 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
 
     // Verify:
     // - yellow_bin_put_out is checkable today -> has checkbox, initially not checked
-    // - enter_allergens is NOT checkable directly -> has NO checkbox!
+    // - enter_allergens also has a checkbox for consistency, initially not checked
     const yellowCheckbox = yellowTask.locator('[data-testid="task-checkbox-yellow_bin_put_out"]');
     const allergenCheckbox = allergenTask.locator('[data-testid="task-checkbox-enter_allergens"]');
     await expect(yellowCheckbox).toBeVisible();
-    await expect(allergenCheckbox).toHaveCount(0);
+    await expect(allergenCheckbox).toBeVisible();
+    await expect(allergenCheckbox).not.toHaveClass(/checked/);
 
     await expect(yellowTask).toHaveAttribute('data-completed', 'false');
     await expect(allergenTask).toHaveAttribute('data-completed', 'false');
@@ -1010,7 +1011,7 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     const contentArea = page.locator('.kiosk-content-area');
     await expect(contentArea).toBeVisible();
 
-    const dateHeader = page.locator('.kiosk-header-date');
+    const dateHeader = page.locator('.kiosk-header-date-text');
     await expect(dateHeader).toBeVisible();
     const initialDateText = await dateHeader.innerText();
 
@@ -1137,5 +1138,161 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     // Reset back to today with Home button
     await homeBtn.click();
     await page.waitForTimeout(150);
+  });
+
+  test('shows Bufdi absence tasks only when Bufdi has an absence, allows completing, persists on absence re-add', async ({ request, page }) => {
+    // 1. Reset database state
+    const resetRes = await request.post('/api/test/reset');
+    expect(resetRes.ok()).toBeTruthy();
+
+    const authHeaders = {
+      Authorization: 'Bearer developer@example.com',
+      'Content-Type': 'application/json',
+    };
+
+    // Calculate today's date in YYYY-MM-DD
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    // Ensure no existing volunteer absence for today
+    const listRes = await request.get('/api/volunteer-absences', { headers: authHeaders });
+    expect(listRes.ok()).toBeTruthy();
+    const existingAbsences = await listRes.json();
+    for (const a of existingAbsences) {
+      if (a.start_date <= todayStr && a.end_date >= todayStr) {
+        await request.delete(`/api/volunteer-absences/${a.id}`, { headers: authHeaders });
+      }
+    }
+
+    // 2. Open dashboard and verify none of the 3 Bufdi tasks are visible
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+    });
+
+    await page.goto('/#dashboard');
+    await page.waitForLoadState('networkidle');
+
+    const embeddedPage = page.locator('.kiosk-tablet-page.embedded');
+    await expect(embeddedPage).toBeVisible();
+
+    const dryerTask = embeddedPage.locator('[data-testid="kiosk-todo-item-start_dryer"]');
+    const washerTask = embeddedPage.locator('[data-testid="kiosk-todo-item-start_washer"]');
+    const diaperTask = embeddedPage.locator('[data-testid="kiosk-todo-item-change_diaper_bag"]');
+    const foldLaundryTask = embeddedPage.locator('[data-testid="kiosk-todo-item-fold_laundry"]');
+
+    await expect(dryerTask).toHaveCount(0);
+    await expect(washerTask).toHaveCount(0);
+    await expect(diaperTask).toHaveCount(0);
+    await expect(foldLaundryTask).toHaveCount(0);
+
+    // 3. Add volunteer absence for BuFDI covering today
+    const createRes = await request.post('/api/volunteer-absences', {
+      headers: authHeaders,
+      data: {
+        type: 'bufdi',
+        start_date: todayStr,
+        end_date: todayStr,
+        note: 'Seminar krank',
+      },
+    });
+    expect(createRes.ok()).toBeTruthy();
+    const createdAbsence = await createRes.json();
+
+    // 4. Verify all 4 tasks appear automatically (realtime / WebSocket update)
+    await expect(dryerTask).toBeVisible();
+    await expect(washerTask).toBeVisible();
+    await expect(diaperTask).toBeVisible();
+    await expect(foldLaundryTask).toBeVisible();
+
+    await expect(dryerTask.locator('[data-testid="task-label-start_dryer"]')).toHaveText(
+      'Morgens: Wäsche in den Trockner'
+    );
+    await expect(washerTask.locator('[data-testid="task-label-start_washer"]')).toHaveText(
+      'Nachmittags: Wäsche in die Waschmaschine'
+    );
+    await expect(diaperTask.locator('[data-testid="task-label-change_diaper_bag"]')).toHaveText(
+      'Möglichst spät: Windeleimer Tüte wechseln'
+    );
+    await expect(foldLaundryTask.locator('[data-testid="task-label-fold_laundry"]')).toHaveText(
+      'Trockene Wäsche falten und einräumen'
+    );
+
+    // Verify composite flow icons are present
+    await expect(dryerTask.locator('.kiosk-todo-icon-composite')).toBeVisible();
+    await expect(washerTask.locator('.kiosk-todo-icon-composite')).toBeVisible();
+    await expect(foldLaundryTask.locator('.kiosk-todo-icon-composite')).toBeVisible();
+
+    // Verify task sort order by orderIndex:
+    // 200 (start_dryer) < 300 (fold_laundry) < 400 (start_washer) < 500 (change_diaper_bag)
+    const initialTaskIds = await embeddedPage.locator('.kiosk-todo-item').evaluateAll((els) =>
+      els.map((el) => el.getAttribute('data-testid'))
+    );
+    const dryerIdx = initialTaskIds.indexOf('kiosk-todo-item-start_dryer');
+    const foldIdx = initialTaskIds.indexOf('kiosk-todo-item-fold_laundry');
+    const washerIdx = initialTaskIds.indexOf('kiosk-todo-item-start_washer');
+    const diaperIdx = initialTaskIds.indexOf('kiosk-todo-item-change_diaper_bag');
+    expect(dryerIdx).toBeLessThan(foldIdx);
+    expect(foldIdx).toBeLessThan(washerIdx);
+    expect(washerIdx).toBeLessThan(diaperIdx);
+
+    // 5. Complete start_dryer task
+    const dryerCheckbox = embeddedPage.locator('[data-testid="task-checkbox-start_dryer"]');
+    await dryerCheckbox.click();
+
+    const confirmModal = page.locator('[data-testid="task-confirm-modal"]');
+    await expect(confirmModal).toBeVisible();
+    await expect(confirmModal.locator('[data-testid="task-confirm-modal-title"]')).toHaveText(
+      'Wäsche in den Trockner abhaken?'
+    );
+
+    await confirmModal.locator('[data-testid="task-confirm-confirm-btn"]').click();
+    await expect(confirmModal).not.toBeVisible();
+
+    // Verify it is marked as done and moved below uncompleted tasks
+    await expect(dryerTask).toHaveAttribute('data-completed', 'true');
+    await expect(dryerTask).toHaveClass(/kiosk-todo-completed/);
+    await expect(dryerCheckbox).toHaveClass(/checked/);
+
+    const completedTaskIds = await embeddedPage.locator('.kiosk-todo-item').evaluateAll((els) =>
+      els.map((el) => el.getAttribute('data-testid'))
+    );
+    const newDryerIdx = completedTaskIds.indexOf('kiosk-todo-item-start_dryer');
+    const newDiaperIdx = completedTaskIds.indexOf('kiosk-todo-item-change_diaper_bag');
+    expect(newDiaperIdx).toBeLessThan(newDryerIdx);
+
+    // 6. Delete the volunteer absence
+    const deleteRes = await request.delete(`/api/volunteer-absences/${createdAbsence.id}`, {
+      headers: authHeaders,
+    });
+    expect(deleteRes.ok()).toBeTruthy();
+
+    // Tasks should disappear automatically
+    await expect(dryerTask).toHaveCount(0);
+    await expect(washerTask).toHaveCount(0);
+    await expect(diaperTask).toHaveCount(0);
+    await expect(foldLaundryTask).toHaveCount(0);
+
+    // 7. Re-add the volunteer absence
+    const readdRes = await request.post('/api/volunteer-absences', {
+      headers: authHeaders,
+      data: {
+        type: 'bufdi',
+        start_date: todayStr,
+        end_date: todayStr,
+        note: 'Seminar re-added',
+      },
+    });
+    expect(readdRes.ok()).toBeTruthy();
+
+    // Tasks reappear AND start_dryer is STILL marked as completed!
+    await expect(dryerTask).toBeVisible();
+    await expect(washerTask).toBeVisible();
+    await expect(diaperTask).toBeVisible();
+    await expect(foldLaundryTask).toBeVisible();
+
+    await expect(dryerTask).toHaveAttribute('data-completed', 'true');
+    await expect(dryerTask).toHaveClass(/kiosk-todo-completed/);
+    await expect(washerTask).toHaveAttribute('data-completed', 'false');
+    await expect(foldLaundryTask).toHaveAttribute('data-completed', 'false');
+    await expect(diaperTask).toHaveAttribute('data-completed', 'false');
   });
 });

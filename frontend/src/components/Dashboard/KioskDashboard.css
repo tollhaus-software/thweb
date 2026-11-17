@@ -662,6 +662,48 @@
   flex-shrink: 0;
 }
 
+/* Task: Wäsche (Laundry) */
+.kiosk-todo-laundry {
+  background-color: #e0e7ff;
+  border: 2px solid #c7d2fe;
+  color: #0f172a;
+}
+
+.kiosk-todo-laundry .kiosk-todo-icon,
+.kiosk-todo-laundry .kiosk-todo-icon-composite {
+  color: #4f46e5;
+  flex-shrink: 0;
+}
+
+.kiosk-todo-icon-composite {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.kiosk-todo-icon-composite .kiosk-todo-icon-arrow {
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+
+.kiosk-todo-icon-composite .laundry-svg-icon {
+  flex-shrink: 0;
+}
+
+/* Task: Windeleimer (Diaper bin) */
+.kiosk-todo-diaper {
+  background-color: #fce7f3;
+  border: 2px solid #fbcfe8;
+  color: #0f172a;
+}
+
+.kiosk-todo-diaper .kiosk-todo-icon {
+  color: #db2777;
+  flex-shrink: 0;
+}
+
 /* Default task fallback */
 .kiosk-todo-default {
   background-color: #f1f5f9;
@@ -1484,6 +1526,16 @@
   border-color: rgba(217, 70, 239, 0.4);
   color: #f5d0fe;
 }
+:root[data-theme='dark'] .kiosk-todo-laundry {
+  background-color: rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.4);
+  color: #c7d2fe;
+}
+:root[data-theme='dark'] .kiosk-todo-diaper {
+  background-color: rgba(236, 72, 153, 0.15);
+  border-color: rgba(236, 72, 153, 0.4);
+  color: #fbcfe8;
+}
 :root[data-theme='dark'] .kiosk-todo-default {
   background-color: rgba(148, 163, 184, 0.15);
   border-color: rgba(148, 163, 184, 0.4);
@@ -1563,6 +1615,16 @@
     background-color: rgba(217, 70, 239, 0.15);
     border-color: rgba(217, 70, 239, 0.4);
     color: #f5d0fe;
+  }
+  :root:not([data-theme='light']) .kiosk-todo-laundry {
+    background-color: rgba(99, 102, 241, 0.15);
+    border-color: rgba(99, 102, 241, 0.4);
+    color: #c7d2fe;
+  }
+  :root:not([data-theme='light']) .kiosk-todo-diaper {
+    background-color: rgba(236, 72, 153, 0.15);
+    border-color: rgba(236, 72, 153, 0.4);
+    color: #fbcfe8;
   }
   :root:not([data-theme='light']) .kiosk-todo-default {
     background-color: rgba(148, 163, 184, 0.15);

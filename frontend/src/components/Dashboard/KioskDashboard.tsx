@@ -38,6 +38,13 @@ import {
   MessageSquare,
   Star,
 } from 'lucide-react';
+import {
+  WasherIcon,
+  DryerIcon,
+  LaundryBinIcon,
+  CupboardIcon,
+  CompositeFlowIcon,
+} from './LaundryIcons';
 import { FeedbackModal } from './FeedbackModal';
 import { TaskConfirmModal } from './TaskConfirmModal';
 import { InfoPagesView } from './InfoPagesView';
@@ -258,12 +265,12 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     };
   }, [selectedDate, token]);
 
-  // 15-minute polling interval
+  // 5-minute polling interval
   useEffect(() => {
-    const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
+    const FIVE_MINUTES_MS = 5 * 60 * 1000;
     const intervalId = setInterval(() => {
       void fetchDailyBrief(selectedDateRef.current);
-    }, FIFTEEN_MINUTES_MS);
+    }, FIVE_MINUTES_MS);
 
     return () => clearInterval(intervalId);
   }, [fetchDailyBrief]);
@@ -277,6 +284,9 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
       message?.type === 'MEAL_PLAN_UPDATED' ||
       message?.type === 'MEAL_ALLERGENS_UPDATED' ||
       message?.type === 'YELLOW_BAG_DAYS_UPDATED' ||
+      message?.type === 'VOLUNTEER_ABSENCE_CREATED' ||
+      message?.type === 'VOLUNTEER_ABSENCE_UPDATED' ||
+      message?.type === 'VOLUNTEER_ABSENCE_DELETED' ||
       message?.type === 'INVALIDATE'
     ) {
       void fetchDailyBrief(selectedDateRef.current);
@@ -460,13 +470,53 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
 
   const showAllergensSection = hasAllergensAdded || canEditAllergensOnDashboard;
 
+  const normalizeTaskKey = useCallback((taskKey: string): string => {
+    if (
+      taskKey === 'Morgens: Wäsche in den Trockner' ||
+      taskKey === 'Wäsche in den Trockner' ||
+      taskKey === 'start_dryer'
+    ) {
+      return 'start_dryer';
+    }
+    if (
+      taskKey === 'Nachmittags: Wäsche in die Waschmaschine' ||
+      taskKey === 'Wäsche in die Waschmaschine' ||
+      taskKey === 'start_washer'
+    ) {
+      return 'start_washer';
+    }
+    if (
+      taskKey === 'Möglichst spät: Windeleimer Tüte wechseln' ||
+      taskKey === 'Windeleimer Tüte wechseln' ||
+      taskKey === 'change_diaper_bag' ||
+      taskKey === 'change_diaper_bin_bag'
+    ) {
+      return 'change_diaper_bag';
+    }
+    if (
+      taskKey === 'Trockene Wäsche falten und einräumen' ||
+      taskKey === 'Trockene Wäsche falten und einträumen' ||
+      taskKey === 'fold_laundry'
+    ) {
+      return 'fold_laundry';
+    }
+    return taskKey;
+  }, []);
+
   const isTaskCompleted = useCallback(
     (taskKey: string): boolean => {
       if (!data) return false;
-      if (data.completed_task_ids && data.completed_task_ids.includes(taskKey)) {
+      const normalized = normalizeTaskKey(taskKey);
+      if (
+        data.completed_task_ids &&
+        (data.completed_task_ids.includes(taskKey) || data.completed_task_ids.includes(normalized))
+      ) {
         return true;
       }
-      if (data.completed_tasks && data.completed_tasks.some((ct) => ct.task_type_id === taskKey)) {
+      if (
+        data.completed_tasks &&
+        data.completed_tasks.some((ct) => ct.task_type_id === taskKey || ct.task_type_id === normalized)
+      ) {
         return true;
       }
       if (taskKey === 'enter_allergens' || taskKey === 'allergene_eintragen') {
@@ -486,7 +536,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
       }
       return false;
     },
-    [data]
+    [data, normalizeTaskKey]
   );
 
   const getTaskLabel = useCallback((taskKey: string): string => {
@@ -498,9 +548,56 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
       return t('cleanRefrigerator');
     } else if (taskKey === 'enter_allergens' || taskKey === 'allergene_eintragen') {
       return t('enterAllergens');
+    } else if (taskKey === 'start_dryer' || taskKey === 'Morgens: Wäsche in den Trockner') {
+      return t('taskStartDryer');
+    } else if (taskKey === 'start_washer' || taskKey === 'Nachmittags: Wäsche in die Waschmaschine') {
+      return t('taskStartWasher');
+    } else if (
+      taskKey === 'change_diaper_bag' ||
+      taskKey === 'change_diaper_bin_bag' ||
+      taskKey === 'Möglichst spät: Windeleimer Tüte wechseln'
+    ) {
+      return t('taskChangeDiaperBag');
+    } else if (
+      taskKey === 'fold_laundry' ||
+      taskKey === 'Trockene Wäsche falten und einräumen' ||
+      taskKey === 'Trockene Wäsche falten und einträumen'
+    ) {
+      return t('taskFoldLaundry');
     }
-    return taskKey;
+    return t(taskKey);
   }, []);
+
+  const getTaskName = useCallback(
+    (taskKey: string): string => {
+      const normalized = normalizeTaskKey(taskKey);
+      if (normalized === 'start_dryer') {
+        return t('taskStartDryerName');
+      } else if (normalized === 'start_washer') {
+        return t('taskStartWasherName');
+      } else if (normalized === 'change_diaper_bag') {
+        return t('taskChangeDiaperBagName');
+      } else if (normalized === 'fold_laundry') {
+        return t('taskFoldLaundryName');
+      } else if (normalized === 'yellow_bin_retrieve') {
+        return t('yellowBinRetrieve');
+      } else if (normalized === 'yellow_bin_put_out') {
+        return t('yellowBinPutOut');
+      } else if (normalized === 'clean_refrigerator') {
+        return t('cleanRefrigerator');
+      } else if (normalized === 'enter_allergens' || normalized === 'allergene_eintragen') {
+        return t('enterAllergens');
+      }
+
+      const label = getTaskLabel(taskKey);
+      const colonIdx = label.indexOf(':');
+      if (colonIdx !== -1 && colonIdx < label.length - 1) {
+        return label.slice(colonIdx + 1).trim();
+      }
+      return label;
+    },
+    [normalizeTaskKey, getTaskLabel]
+  );
 
   const executeTaskToggle = async (taskKey: string, action: 'complete' | 'uncomplete') => {
     try {
@@ -559,11 +656,46 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     await executeTaskToggle(key, 'complete');
   };
 
+  const getTaskOrderIndex = useCallback(
+    (taskKey: string): number => {
+      const normalized = normalizeTaskKey(taskKey);
+      switch (normalized) {
+        case 'enter_allergens':
+        case 'allergene_eintragen':
+          return 100;
+        case 'start_dryer':
+          return 200;
+        case 'fold_laundry':
+          return 300;
+        case 'start_washer':
+          return 400;
+        case 'change_diaper_bag':
+          return 500;
+        case 'yellow_bin_retrieve':
+          return 600;
+        case 'yellow_bin_put_out':
+          return 650;
+        case 'clean_refrigerator':
+          return 700;
+        default:
+          return 999;
+      }
+    },
+    [normalizeTaskKey]
+  );
+
   const sortedTasks = [...(data?.tasks_and_info || [])].sort((a, b) => {
     const aDone = isTaskCompleted(a);
     const bDone = isTaskCompleted(b);
-    if (aDone === bDone) return 0;
-    return aDone ? 1 : -1;
+    if (aDone !== bDone) {
+      return aDone ? 1 : -1;
+    }
+    const aOrder = getTaskOrderIndex(a);
+    const bOrder = getTaskOrderIndex(b);
+    if (aOrder !== bOrder) {
+      return aOrder - bOrder;
+    }
+    return a.localeCompare(b);
   });
 
   const renderAllergiesView = () => {
@@ -994,30 +1126,61 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                     sortedTasks.map((task, idx) => {
                       const isDone = isTaskCompleted(task);
                       const isAllergens = task === 'enter_allergens' || task === 'allergene_eintragen';
-                      const isCheckable = isToday && !isAllergens;
+                      const isCheckable = isToday;
                       const showCheckbox = isDone || isCheckable;
                       const isInteractive = isAllergens ? true : isToday;
 
+                      const normalized = normalizeTaskKey(task);
                       let icon = <AlertCircle size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
                       const label = getTaskLabel(task);
                       let colorClass = 'kiosk-todo-default';
 
-                      if (task === 'yellow_bin_retrieve' || task === 'yellow_bin_put_out') {
+                      if (normalized === 'yellow_bin_retrieve' || normalized === 'yellow_bin_put_out') {
                         icon = <Trash2 size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
                         colorClass = 'kiosk-todo-yellow';
-                      } else if (task === 'clean_refrigerator') {
+                      } else if (normalized === 'clean_refrigerator') {
                         icon = <Refrigerator size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
                         colorClass = 'kiosk-todo-refrigerator';
                       } else if (isAllergens) {
                         icon = <UtensilsCrossed size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
                         colorClass = 'kiosk-todo-allergens';
+                      } else if (normalized === 'start_dryer') {
+                        icon = (
+                          <CompositeFlowIcon
+                            from={<WasherIcon size={embedded ? 18 : 24} />}
+                            to={<DryerIcon size={embedded ? 18 : 24} />}
+                            arrowSize={embedded ? 12 : 16}
+                          />
+                        );
+                        colorClass = 'kiosk-todo-laundry';
+                      } else if (normalized === 'start_washer') {
+                        icon = (
+                          <CompositeFlowIcon
+                            from={<LaundryBinIcon size={embedded ? 18 : 24} />}
+                            to={<WasherIcon size={embedded ? 18 : 24} />}
+                            arrowSize={embedded ? 12 : 16}
+                          />
+                        );
+                        colorClass = 'kiosk-todo-laundry';
+                      } else if (normalized === 'fold_laundry') {
+                        icon = (
+                          <CompositeFlowIcon
+                            from={<DryerIcon size={embedded ? 18 : 24} />}
+                            to={<CupboardIcon size={embedded ? 18 : 24} />}
+                            arrowSize={embedded ? 12 : 16}
+                          />
+                        );
+                        colorClass = 'kiosk-todo-laundry';
+                      } else if (normalized === 'change_diaper_bag') {
+                        icon = <Trash2 size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
+                        colorClass = 'kiosk-todo-diaper';
                       }
 
                       return (
                         <div
                           key={`${task}-${idx}`}
                           className={`kiosk-todo-item ${colorClass} ${isDone ? 'kiosk-todo-completed' : ''} ${!isInteractive ? 'kiosk-todo-disabled' : ''}`}
-                          data-testid={`kiosk-todo-item-${task}`}
+                          data-testid={`kiosk-todo-item-${normalized}`}
                           data-task-id={task}
                           data-completed={isDone ? 'true' : 'false'}
                           onClick={() => void handleTaskToggle(task)}
@@ -1034,7 +1197,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                             <button
                               type="button"
                               className={`kiosk-todo-checkbox ${isDone ? 'checked' : ''} ${!isToday ? 'disabled' : ''}`}
-                              data-testid={`task-checkbox-${task}`}
+                              data-testid={`task-checkbox-${normalized}`}
                               aria-label={`${label}: ${isDone ? t('taskDone') : ''}`}
                               onClick={(e) => void handleTaskToggle(task, e)}
                               disabled={!isToday}
@@ -1045,7 +1208,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                             </button>
                           )}
                           {icon}
-                          <span className="kiosk-todo-label" data-testid={`task-label-${task}`}>
+                          <span className="kiosk-todo-label" data-testid={`task-label-${normalized}`}>
                             {label}
                           </span>
                           {isAllergens && (
@@ -1188,7 +1351,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
         {/* Modal for Task Confirmation */}
         <TaskConfirmModal
           isOpen={Boolean(taskToConfirm)}
-          taskLabel={taskToConfirm ? getTaskLabel(taskToConfirm) : ''}
+          taskLabel={taskToConfirm ? getTaskName(taskToConfirm) : ''}
           onConfirm={() => void handleConfirmCheckOff()}
           onClose={() => setTaskToConfirm(null)}
           embedded={embedded}

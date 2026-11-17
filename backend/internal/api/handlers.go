@@ -2010,6 +2010,9 @@ type UpdateTaskCompletionRequest struct {
 
 func (s *Server) HandleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	taskTypeID := strings.TrimSpace(chi.URLParam(r, "taskTypeId"))
+	if unescaped, err := url.PathUnescape(taskTypeID); err == nil && unescaped != "" {
+		taskTypeID = unescaped
+	}
 	if taskTypeID == "" {
 		httpErrorLog(w, r, "taskTypeId is required", http.StatusBadRequest, nil)
 		return
@@ -2083,6 +2086,9 @@ func (s *Server) HandleCompleteTask(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) HandleUncompleteTask(w http.ResponseWriter, r *http.Request) {
 	taskTypeID := strings.TrimSpace(chi.URLParam(r, "taskTypeId"))
+	if unescaped, err := url.PathUnescape(taskTypeID); err == nil && unescaped != "" {
+		taskTypeID = unescaped
+	}
 	if taskTypeID == "" {
 		httpErrorLog(w, r, "taskTypeId is required", http.StatusBadRequest, nil)
 		return
@@ -3549,6 +3555,10 @@ func (s *Server) HandleCreateVolunteerAbsence(w http.ResponseWriter, r *http.Req
 			Type:    "VOLUNTEER_ABSENCE_CREATED",
 			Payload: map[string]string{"id": created.ID.String()},
 		})
+		s.Hub.Broadcast(WSMessage{
+			Type:    "DAILY_BRIEF_INVALIDATE",
+			Payload: map[string]string{},
+		})
 	}
 
 	w.WriteHeader(http.StatusCreated)
@@ -3596,6 +3606,10 @@ func (s *Server) HandleUpdateVolunteerAbsence(w http.ResponseWriter, r *http.Req
 			Type:    "VOLUNTEER_ABSENCE_UPDATED",
 			Payload: map[string]string{"id": updated.ID.String()},
 		})
+		s.Hub.Broadcast(WSMessage{
+			Type:    "DAILY_BRIEF_INVALIDATE",
+			Payload: map[string]string{},
+		})
 	}
 
 	jsonResponse(w, updated)
@@ -3624,6 +3638,10 @@ func (s *Server) HandleDeleteVolunteerAbsence(w http.ResponseWriter, r *http.Req
 		s.Hub.Broadcast(WSMessage{
 			Type:    "VOLUNTEER_ABSENCE_DELETED",
 			Payload: map[string]string{"id": id.String()},
+		})
+		s.Hub.Broadcast(WSMessage{
+			Type:    "DAILY_BRIEF_INVALIDATE",
+			Payload: map[string]string{},
 		})
 	}
 

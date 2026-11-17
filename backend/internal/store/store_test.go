@@ -349,6 +349,233 @@ func TestDashboardTasks_Store(t *testing.T) {
 	}
 }
 
+func TestBufdiAbsenceTasks_ConditionsAndLifecycle(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := NewStore(pool)
+
+	testDateStr := "2099-05-18" // Monday
+	testDate := time.Date(2099, time.May, 18, 0, 0, 0, 0, time.UTC)
+
+	userID := uuid.New()
+
+	cleanup := func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM volunteer_absences WHERE type = 'bufdi' AND start_date <= $1 AND end_date >= $1", testDateStr)
+		_, _ = pool.Exec(ctx, "DELETE FROM completed_tasks WHERE task_date = $1", testDateStr)
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", userID)
+	}
+	cleanup()
+	defer cleanup()
+
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, 'bufdi-test@example.com', 'bufdi-test@example.com') ON CONFLICT (id) DO NOTHING", userID)
+	if err != nil {
+		t.Fatalf("failed to insert test user: %v", err)
+	}
+
+	containsTask := func(tasks []string, taskID string) bool {
+		for _, t := range tasks {
+			if t == taskID {
+				return true
+			}
+		}
+		return false
+	}
+
+	// 1. Without absence: start_dryer, start_washer, change_diaper_bag should NOT be in TasksAndInfo
+	briefNoAbsence, err := appStore.GetDailyBrief(ctx, testDate)
+	if err != nil {
+		t.Fatalf("GetDailyBrief failed: %v", err)
+	}
+	if containsTask(briefNoAbsence.TasksAndInfo, TaskStartDryer) ||
+		containsTask(briefNoAbsence.TasksAndInfo, TaskStartWasher) ||
+		containsTask(briefNoAbsence.TasksAndInfo, TaskChangeDiaperBag) {
+		t.Errorf("expected bufdi tasks to NOT appear without absence, got: %+v", briefNoAbsence.TasksAndInfo)
+	}
+
+	// 2. Add absence:
+	absence, err := appStore.CreateVolunteerAbsence(ctx, userID, models.VolunteerAbsence{
+		Type:      "bufdi",
+		StartDate: "2099-05-17",
+		EndDate:   "2099-05-20",
+		Note:      "Seminar",
+	}, "bufdi-test@example.com")
+	if err != nil {
+		t.Fatalf("CreateVolunteerAbsence failed: %v", err)
+	}
+
+	// 3. With absence added: start_dryer, start_washer, change_diaper_bag should appear
+	briefWithAbsence, err := appStore.GetDailyBrief(ctx, testDate)
+	if err != nil {
+		t.Fatalf("GetDailyBrief failed: %v", err)
+	}
+	if !containsTask(briefWithAbsence.TasksAndInfo, TaskStartDryer) {
+		t.Errorf("expected %s in tasks, got: %+v", TaskStartDryer, briefWithAbsence.TasksAndInfo)
+	}
+	if !containsTask(briefWithAbsence.TasksAndInfo, TaskStartWasher) {
+		t.Errorf("expected %s in tasks, got: %+v", TaskStartWasher, briefWithAbsence.TasksAndInfo)
+	}
+	if !containsTask(briefWithAbsence.TasksAndInfo, TaskChangeDiaperBag) {
+		t.Errorf("expected %s in tasks, got: %+v", TaskChangeDiaperBag, briefWithAbsence.TasksAndInfo)
+	}
+	if !containsTask(briefWithAbsence.TasksAndInfo, TaskFoldLaundry) {
+		t.Errorf("expected %s in tasks, got: %+v", TaskFoldLaundry, briefWithAbsence.TasksAndInfo)
+	}
+
+	// 4. User completes start_dryer task
+	userActor := models.MealAllergenActor{
+		UserID:    &userID,
+		Email:     "bufdi-test@example.com",
+		IsKiosk:   false,
+		KioskName: "",
+	}
+	ct, err := appStore.CompleteTask(ctx, testDate, TaskStartDryer, userActor)
+	if err != nil {
+		t.Fatalf("CompleteTask failed: %v", err)
+	}
+	if ct.TaskTypeID != TaskStartDryer {
+		t.Errorf("expected task type %s, got %s", TaskStartDryer, ct.TaskTypeID)
+	}
+
+	// Verify it shows as completed for label, name, and key alias
+	briefCompleted, err := appStore.GetDailyBrief(ctx, testDate)
+	if err != nil {
+		t.Fatalf("GetDailyBrief failed: %v", err)
+	}
+	if !containsTask(briefCompleted.CompletedTaskIDs, TaskStartDryer) {
+		t.Errorf("expected %s in completed task IDs, got: %+v", TaskStartDryer, briefCompleted.CompletedTaskIDs)
+	}
+	if !containsTask(briefCompleted.CompletedTaskIDs, TaskKeyStartDryer) {
+		t.Errorf("expected %s in completed task IDs, got: %+v", TaskKeyStartDryer, briefCompleted.CompletedTaskIDs)
+	}
+	if !containsTask(briefCompleted.CompletedTaskIDs, TaskNameStartDryer) {
+		t.Errorf("expected %s in completed task IDs, got: %+v", TaskNameStartDryer, briefCompleted.CompletedTaskIDs)
+	}
+
+	// Completing via key alias (start_washer) should also mark TaskStartWasher as completed
+	_, err = appStore.CompleteTask(ctx, testDate, TaskKeyStartWasher, userActor)
+	if err != nil {
+		t.Fatalf("CompleteTask for alias failed: %v", err)
+	}
+	briefWasherCompleted, err := appStore.GetDailyBrief(ctx, testDate)
+	if err != nil {
+		t.Fatalf("GetDailyBrief failed: %v", err)
+	}
+	if !containsTask(briefWasherCompleted.CompletedTaskIDs, TaskStartWasher) ||
+		!containsTask(briefWasherCompleted.CompletedTaskIDs, TaskKeyStartWasher) {
+		t.Errorf("expected %s to be marked completed when completed via alias, got: %+v", TaskStartWasher, briefWasherCompleted.CompletedTaskIDs)
+	}
+
+	// 5. Remove the absence: the task should disappear from TasksAndInfo
+	err = appStore.DeleteVolunteerAbsence(ctx, userID, absence.ID, "bufdi-test@example.com")
+	if err != nil {
+		t.Fatalf("DeleteVolunteerAbsence failed: %v", err)
+	}
+
+	briefAfterDelete, err := appStore.GetDailyBrief(ctx, testDate)
+	if err != nil {
+		t.Fatalf("GetDailyBrief failed: %v", err)
+	}
+	if containsTask(briefAfterDelete.TasksAndInfo, TaskStartDryer) ||
+		containsTask(briefAfterDelete.TasksAndInfo, TaskStartWasher) ||
+		containsTask(briefAfterDelete.TasksAndInfo, TaskChangeDiaperBag) ||
+		containsTask(briefAfterDelete.TasksAndInfo, TaskFoldLaundry) {
+		t.Errorf("expected bufdi tasks to disappear when absence removed, got: %+v", briefAfterDelete.TasksAndInfo)
+	}
+
+	// 6. Re-add absence: task reappears AND is still marked as completed!
+	_, err = appStore.CreateVolunteerAbsence(ctx, userID, models.VolunteerAbsence{
+		Type:      "bufdi",
+		StartDate: "2099-05-18",
+		EndDate:   "2099-05-18",
+		Note:      "Seminar re-added",
+	}, "bufdi-test@example.com")
+	if err != nil {
+		t.Fatalf("Re-creating volunteer absence failed: %v", err)
+	}
+
+	briefReAdded, err := appStore.GetDailyBrief(ctx, testDate)
+	if err != nil {
+		t.Fatalf("GetDailyBrief failed: %v", err)
+	}
+	if !containsTask(briefReAdded.TasksAndInfo, TaskStartDryer) {
+		t.Errorf("expected %s to reappear after absence re-added, got: %+v", TaskStartDryer, briefReAdded.TasksAndInfo)
+	}
+	if !containsTask(briefReAdded.CompletedTaskIDs, TaskStartDryer) {
+		t.Errorf("expected %s to still be marked as completed after absence re-added, got: %+v", TaskStartDryer, briefReAdded.CompletedTaskIDs)
+	}
+}
+
+func TestDashboardTaskConditions(t *testing.T) {
+	// Wednesday is a Vesper day
+	wednesday := time.Date(2026, 11, 18, 0, 0, 0, 0, time.UTC)
+	// Tuesday is NOT a Vesper day
+	tuesday := time.Date(2026, 11, 17, 0, 0, 0, 0, time.UTC)
+
+	// Test OnlyIfBufdiAbsence
+	taskBufdi := DashboardTaskDefinition{
+		ID:                 "bufdi_only_task",
+		OnlyIfBufdiAbsence: true,
+	}
+	if taskBufdi.Applies(&TaskEvaluationContext{HasBufdiAbsence: false}) {
+		t.Errorf("expected task with OnlyIfBufdiAbsence to not apply when HasBufdiAbsence is false")
+	}
+	if !taskBufdi.Applies(&TaskEvaluationContext{HasBufdiAbsence: true}) {
+		t.Errorf("expected task with OnlyIfBufdiAbsence to apply when HasBufdiAbsence is true")
+	}
+
+	// Test OnlyIfVesperDay
+	taskVesper := DashboardTaskDefinition{
+		ID:              "vesper_only_task",
+		OnlyIfVesperDay: true,
+	}
+	if taskVesper.Applies(&TaskEvaluationContext{Date: tuesday, IsVesperDay: false}) {
+		t.Errorf("expected task with OnlyIfVesperDay to not apply on Tuesday")
+	}
+	if !taskVesper.Applies(&TaskEvaluationContext{Date: wednesday, IsVesperDay: true}) {
+		t.Errorf("expected task with OnlyIfVesperDay to apply on Wednesday")
+	}
+
+	// Test Combined conditions: BufdiAbsence AND VesperDay
+	taskCombined := DashboardTaskDefinition{
+		ID:                 "combined_task",
+		OnlyIfBufdiAbsence: true,
+		OnlyIfVesperDay:    true,
+	}
+	if taskCombined.Applies(&TaskEvaluationContext{Date: wednesday, IsVesperDay: true, HasBufdiAbsence: false}) {
+		t.Errorf("expected combined task to fail when HasBufdiAbsence is false")
+	}
+	if taskCombined.Applies(&TaskEvaluationContext{Date: tuesday, IsVesperDay: false, HasBufdiAbsence: true}) {
+		t.Errorf("expected combined task to fail when IsVesperDay is false")
+	}
+	if !taskCombined.Applies(&TaskEvaluationContext{Date: wednesday, IsVesperDay: true, HasBufdiAbsence: true}) {
+		t.Errorf("expected combined task to pass when both conditions are true")
+	}
+
+	// Test Weekdays condition
+	taskFriday := DashboardTaskDefinition{
+		ID:       "friday_task",
+		Weekdays: []time.Weekday{time.Friday},
+	}
+	friday := time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC)
+	if taskFriday.Applies(&TaskEvaluationContext{Date: tuesday}) {
+		t.Errorf("expected friday task to not apply on Tuesday")
+	}
+	if !taskFriday.Applies(&TaskEvaluationContext{Date: friday}) {
+		t.Errorf("expected friday task to apply on Friday")
+	}
+}
+
 func TestAuditModifications_ExcludesVaccinationStatus(t *testing.T) {
 	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
 	ctx := context.Background()
