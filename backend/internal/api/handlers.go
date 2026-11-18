@@ -3517,6 +3517,46 @@ func (s *Server) HandleGetPermissions(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) HandleGetVolunteerAbsenceSettings(w http.ResponseWriter, r *http.Request) {
+	name, err := s.Store.GetBufdiName(r.Context())
+	if err != nil {
+		httpErrorLog(w, r, "Failed to get volunteer absence settings", http.StatusInternalServerError, err)
+		return
+	}
+	jsonResponse(w, models.VolunteerAbsenceSettings{BufdiName: name})
+}
+
+func (s *Server) HandleUpdateVolunteerAbsenceSettings(w http.ResponseWriter, r *http.Request) {
+	var payload models.VolunteerAbsenceSettings
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		httpErrorLog(w, r, "Invalid request body", http.StatusBadRequest, err)
+		return
+	}
+
+	trimmed := strings.TrimSpace(payload.BufdiName)
+	if trimmed == "" {
+		trimmed = "BuFDI"
+	}
+
+	if err := s.Store.SetBufdiName(r.Context(), trimmed); err != nil {
+		httpErrorLog(w, r, "Failed to update volunteer absence settings", http.StatusInternalServerError, err)
+		return
+	}
+
+	if s.Hub != nil {
+		s.Hub.Broadcast(WSMessage{
+			Type:    "VOLUNTEER_ABSENCE_SETTINGS_UPDATED",
+			Payload: map[string]string{"bufdi_name": trimmed},
+		})
+		s.Hub.Broadcast(WSMessage{
+			Type:    "DAILY_BRIEF_INVALIDATE",
+			Payload: map[string]string{},
+		})
+	}
+
+	jsonResponse(w, models.VolunteerAbsenceSettings{BufdiName: trimmed})
+}
+
 func (s *Server) HandleListVolunteerAbsences(w http.ResponseWriter, r *http.Request) {
 	absences, err := s.Store.ListVolunteerAbsences(r.Context())
 	if err != nil {

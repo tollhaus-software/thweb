@@ -3667,6 +3667,8 @@ func TestHandleVolunteerAbsences_ValidationAndLifecycle(t *testing.T) {
 	go server.Hub.Run()
 
 	r := chi.NewRouter()
+	r.With(auth.RequireAnyPermission("volunteers.absences.read", "dashboard.use")).Get("/api/volunteer-absences/settings", server.HandleGetVolunteerAbsenceSettings)
+	r.With(auth.RequirePermission("volunteers.absences.write")).Put("/api/volunteer-absences/settings", server.HandleUpdateVolunteerAbsenceSettings)
 	r.With(auth.RequirePermission("volunteers.absences.read")).Get("/api/volunteer-absences", server.HandleListVolunteerAbsences)
 	r.With(auth.RequirePermission("volunteers.absences.write")).Post("/api/volunteer-absences", server.HandleCreateVolunteerAbsence)
 	r.With(auth.RequirePermission("volunteers.absences.write")).Put("/api/volunteer-absences/{id}", server.HandleUpdateVolunteerAbsence)
@@ -3767,6 +3769,49 @@ func TestHandleVolunteerAbsences_ValidationAndLifecycle(t *testing.T) {
 	r.ServeHTTP(recDelete, reqDelete.WithContext(context.WithValue(reqDelete.Context(), auth.UserContextKey, uWrite)))
 	if recDelete.Code != http.StatusNoContent {
 		t.Fatalf("expected 204 for delete, got %d: %s", recDelete.Code, recDelete.Body.String())
+	}
+
+	// 8. Settings GET permissions check
+	reqGetSettings := httptest.NewRequest("GET", "/api/volunteer-absences/settings", nil)
+	recGetSettingsForbidden := httptest.NewRecorder()
+	r.ServeHTTP(recGetSettingsForbidden, reqGetSettings.WithContext(context.WithValue(reqGetSettings.Context(), auth.UserContextKey, uForbidden)))
+	if recGetSettingsForbidden.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for forbidden user reading settings, got %d", recGetSettingsForbidden.Code)
+	}
+
+	recGetSettingsReader := httptest.NewRecorder()
+	r.ServeHTTP(recGetSettingsReader, reqGetSettings.WithContext(context.WithValue(reqGetSettings.Context(), auth.UserContextKey, uRead)))
+	if recGetSettingsReader.Code != http.StatusOK {
+		t.Fatalf("expected 200 for reader reading settings, got %d", recGetSettingsReader.Code)
+	}
+
+	// 9. Settings PUT permissions check (reader forbidden, writer allowed)
+	reqPutSettingsReader := httptest.NewRequest("PUT", "/api/volunteer-absences/settings", strings.NewReader(`{"bufdi_name":"Alex"}`))
+	recPutSettingsReader := httptest.NewRecorder()
+	r.ServeHTTP(recPutSettingsReader, reqPutSettingsReader.WithContext(context.WithValue(reqPutSettingsReader.Context(), auth.UserContextKey, uRead)))
+	if recPutSettingsReader.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for reader updating settings, got %d", recPutSettingsReader.Code)
+	}
+
+	reqPutSettingsWriter := httptest.NewRequest("PUT", "/api/volunteer-absences/settings", strings.NewReader(`{"bufdi_name":"Alex"}`))
+	recPutSettingsWriter := httptest.NewRecorder()
+	r.ServeHTTP(recPutSettingsWriter, reqPutSettingsWriter.WithContext(context.WithValue(reqPutSettingsWriter.Context(), auth.UserContextKey, uWrite)))
+	if recPutSettingsWriter.Code != http.StatusOK {
+		t.Fatalf("expected 200 for writer updating settings, got %d: %s", recPutSettingsWriter.Code, recPutSettingsWriter.Body.String())
+	}
+
+	// Verify updated name
+	recGetSettingsUpdated := httptest.NewRecorder()
+	r.ServeHTTP(recGetSettingsUpdated, reqGetSettings.WithContext(context.WithValue(reqGetSettings.Context(), auth.UserContextKey, uRead)))
+	if recGetSettingsUpdated.Code != http.StatusOK {
+		t.Fatalf("expected 200 for reader reading updated settings, got %d", recGetSettingsUpdated.Code)
+	}
+	var settings models.VolunteerAbsenceSettings
+	if err := json.Unmarshal(recGetSettingsUpdated.Body.Bytes(), &settings); err != nil {
+		t.Fatalf("failed to decode updated settings: %v", err)
+	}
+	if settings.BufdiName != "Alex" {
+		t.Fatalf("expected bufdi_name 'Alex', got '%s'", settings.BufdiName)
 	}
 }
 

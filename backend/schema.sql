@@ -386,6 +386,18 @@ CREATE INDEX IF NOT EXISTS idx_volunteer_absences_type_dates ON volunteer_absenc
 DROP TRIGGER IF EXISTS update_volunteer_absences_updated_at ON volunteer_absences;
 CREATE TRIGGER update_volunteer_absences_updated_at BEFORE UPDATE ON volunteer_absences FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
+-- System Settings table
+CREATE TABLE IF NOT EXISTS system_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL DEFAULT '',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO system_settings (key, value)
+VALUES ('bufdi_name', 'BuFDI')
+ON CONFLICT (key) DO NOTHING;
+
+
 
 
 

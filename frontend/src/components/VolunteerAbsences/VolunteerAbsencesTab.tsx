@@ -124,6 +124,12 @@ export const VolunteerAbsencesTab: React.FC = () => {
   // Delete confirm state
   const [deletingAbsence, setDeletingAbsence] = useState<VolunteerAbsence | null>(null);
 
+  // Settings states
+  const [bufdiName, setBufdiName] = useState<string>('BuFDI');
+  const [savedBufdiName, setSavedBufdiName] = useState<string>('BuFDI');
+  const [savingSettings, setSavingSettings] = useState<boolean>(false);
+  const [settingsSavedSuccess, setSettingsSavedSuccess] = useState<boolean>(false);
+
   // Range marking mode states
   const [selectionStart, setSelectionStart] = useState<string | null>(null);
   const [selectionHover, setSelectionHover] = useState<string | null>(null);
@@ -167,9 +173,57 @@ export const VolunteerAbsencesTab: React.FC = () => {
     }
   }, [token]);
 
+  const fetchSettings = useCallback(async () => {
+    try {
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch('/api/volunteer-absences/settings', { headers });
+      if (res.ok) {
+        const data = await res.json();
+        const name = data.bufdi_name || 'BuFDI';
+        setBufdiName(name);
+        setSavedBufdiName(name);
+      }
+    } catch (err) {
+      console.error('Error fetching volunteer absence settings:', err);
+    }
+  }, [token]);
+
   useEffect(() => {
     fetchAbsences();
-  }, [fetchAbsences]);
+    fetchSettings();
+  }, [fetchAbsences, fetchSettings]);
+
+  const handleSaveBufdiName = async () => {
+    if (!canWrite || savingSettings) return;
+    setSavingSettings(true);
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const trimmed = bufdiName.trim() || 'BuFDI';
+      const res = await fetch('/api/volunteer-absences/settings', {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ bufdi_name: trimmed }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const updated = data.bufdi_name || trimmed;
+        setBufdiName(updated);
+        setSavedBufdiName(updated);
+        setSettingsSavedSuccess(true);
+        setTimeout(() => setSettingsSavedSuccess(false), 2500);
+      }
+    } catch (err) {
+      console.error('Error saving volunteer absence settings:', err);
+    } finally {
+      setSavingSettings(false);
+    }
+  };
 
   const handleRealtimeMessage = useCallback((msg: RealtimeMessage) => {
     if (
@@ -179,7 +233,10 @@ export const VolunteerAbsencesTab: React.FC = () => {
     ) {
       fetchAbsences();
     }
-  }, [fetchAbsences]);
+    if (msg.type === 'VOLUNTEER_ABSENCE_SETTINGS_UPDATED') {
+      fetchSettings();
+    }
+  }, [fetchAbsences, fetchSettings]);
 
   useRealtime(handleRealtimeMessage);
 
@@ -444,6 +501,47 @@ export const VolunteerAbsencesTab: React.FC = () => {
               <Plus size={16} />
               <span>{t('addVolunteerAbsence') || 'Abwesenheit eintragen'}</span>
             </button>
+          )}
+        </div>
+      </div>
+
+      {/* BuFDI Name Configuration Bar */}
+      <div className="va-settings-bar" data-testid="va-settings-bar">
+        <label htmlFor="va-bufdi-name-input" className="va-settings-label">
+          {t('bufdiNameLabel') || 'BuFDI Name(n) (für Kochansicht):'}
+        </label>
+        <div className="va-settings-input-wrapper">
+          <input
+            id="va-bufdi-name-input"
+            data-testid="va-bufdi-name-input"
+            type="text"
+            className="va-settings-input"
+            value={bufdiName}
+            disabled={!canWrite || savingSettings}
+            placeholder={t('bufdiNamePlaceholder') || 'z. B. Max'}
+            onChange={(e) => setBufdiName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                void handleSaveBufdiName();
+              }
+            }}
+          />
+          {canWrite && (
+            <button
+              type="button"
+              className="va-settings-save-btn"
+              data-testid="va-bufdi-name-save-btn"
+              onClick={() => void handleSaveBufdiName()}
+              disabled={savingSettings || bufdiName.trim() === savedBufdiName.trim()}
+            >
+              {savingSettings ? '...' : (t('save') || 'Speichern')}
+            </button>
+          )}
+          {settingsSavedSuccess && (
+            <span className="va-settings-saved-badge" data-testid="va-bufdi-name-saved-badge">
+              ✓ {t('bufdiNameSaved') || 'Gespeichert'}
+            </span>
           )}
         </div>
       </div>

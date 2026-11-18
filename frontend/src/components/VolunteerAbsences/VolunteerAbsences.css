@@ -132,6 +132,86 @@
   opacity: 0.9;
 }
 
+/* BuFDI Settings Bar */
+.va-settings-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  box-sizing: border-box;
+  flex-wrap: wrap;
+}
+
+.va-settings-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-h);
+  white-space: nowrap;
+}
+
+.va-settings-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 220px;
+  max-width: 450px;
+}
+
+.va-settings-input {
+  flex: 1;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.875rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.va-settings-input:focus {
+  border-color: var(--primary, #3b82f6);
+}
+
+.va-settings-input:disabled {
+  opacity: 0.75;
+  cursor: not-allowed;
+  background: var(--bg-hover);
+}
+
+.va-settings-save-btn {
+  padding: 0.4rem 0.85rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: var(--primary, #2563eb);
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+  white-space: nowrap;
+}
+
+.va-settings-save-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.va-settings-save-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.va-settings-saved-badge {
+  font-size: 0.85rem;
+  color: #10b981;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 /* Calendar Grid */
 .va-calendar-card {
   background: var(--bg-surface);

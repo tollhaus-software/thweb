@@ -69,6 +69,8 @@ interface DailyBriefData {
   has_allergen_record?: boolean;
   allergen_meal_components?: MealAllergenComponent[];
   screensaver_exit_times?: string[];
+  has_volunteer_absence?: boolean;
+  volunteer_name?: string;
 }
 
 interface GroupAllergiesSummary {
@@ -287,6 +289,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
       message?.type === 'VOLUNTEER_ABSENCE_CREATED' ||
       message?.type === 'VOLUNTEER_ABSENCE_UPDATED' ||
       message?.type === 'VOLUNTEER_ABSENCE_DELETED' ||
+      message?.type === 'VOLUNTEER_ABSENCE_SETTINGS_UPDATED' ||
       message?.type === 'INVALIDATE'
     ) {
       void fetchDailyBrief(selectedDateRef.current);
@@ -1119,7 +1122,11 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
               <section className="kiosk-card kiosk-card-todos">
                 <div className="kiosk-card-header">
                   <AlertCircle size={embedded ? 18 : 22} className="kiosk-card-header-icon" />
-                  <span>{t('tasksAndInfoTitle')}</span>
+                  <span>
+                    {data?.has_volunteer_absence
+                      ? `${t('tasksAndInfoTitle')} - ! ${(data.volunteer_name || 'BuFDI').trim() || 'BuFDI'} nicht im Haus !`
+                      : t('tasksAndInfoTitle')}
+                  </span>
                 </div>
                 <div className="kiosk-todos-list">
                   {sortedTasks.length > 0 ? (

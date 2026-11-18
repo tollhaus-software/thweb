@@ -397,6 +397,9 @@ func TestBufdiAbsenceTasks_ConditionsAndLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetDailyBrief failed: %v", err)
 	}
+	if briefNoAbsence.HasVolunteerAbsence {
+		t.Errorf("expected HasVolunteerAbsence to be false without absence")
+	}
 	if containsTask(briefNoAbsence.TasksAndInfo, TaskStartDryer) ||
 		containsTask(briefNoAbsence.TasksAndInfo, TaskStartWasher) ||
 		containsTask(briefNoAbsence.TasksAndInfo, TaskChangeDiaperBag) {
@@ -418,6 +421,12 @@ func TestBufdiAbsenceTasks_ConditionsAndLifecycle(t *testing.T) {
 	briefWithAbsence, err := appStore.GetDailyBrief(ctx, testDate)
 	if err != nil {
 		t.Fatalf("GetDailyBrief failed: %v", err)
+	}
+	if !briefWithAbsence.HasVolunteerAbsence {
+		t.Errorf("expected HasVolunteerAbsence to be true with absence")
+	}
+	if briefWithAbsence.VolunteerName == "" {
+		t.Errorf("expected VolunteerName to be populated, got empty")
 	}
 	if !containsTask(briefWithAbsence.TasksAndInfo, TaskStartDryer) {
 		t.Errorf("expected %s in tasks, got: %+v", TaskStartDryer, briefWithAbsence.TasksAndInfo)
@@ -513,6 +522,59 @@ func TestBufdiAbsenceTasks_ConditionsAndLifecycle(t *testing.T) {
 	}
 	if !containsTask(briefReAdded.CompletedTaskIDs, TaskStartDryer) {
 		t.Errorf("expected %s to still be marked as completed after absence re-added, got: %+v", TaskStartDryer, briefReAdded.CompletedTaskIDs)
+	}
+}
+
+func TestVolunteerAbsenceSettings(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := NewStore(pool)
+
+	// 1. Initial default should be "BuFDI"
+	name, err := appStore.GetBufdiName(ctx)
+	if err != nil {
+		t.Fatalf("GetBufdiName failed: %v", err)
+	}
+	if name == "" {
+		t.Errorf("expected non-empty default bufdi name, got empty")
+	}
+
+	// 2. Set custom name
+	err = appStore.SetBufdiName(ctx, "Max & Moritz")
+	if err != nil {
+		t.Fatalf("SetBufdiName failed: %v", err)
+	}
+
+	name2, err := appStore.GetBufdiName(ctx)
+	if err != nil {
+		t.Fatalf("GetBufdiName failed: %v", err)
+	}
+	if name2 != "Max & Moritz" {
+		t.Errorf("expected 'Max & Moritz', got '%s'", name2)
+	}
+
+	// 3. Reset to empty string should fallback to "BuFDI"
+	err = appStore.SetBufdiName(ctx, "   ")
+	if err != nil {
+		t.Fatalf("SetBufdiName with empty failed: %v", err)
+	}
+	name3, err := appStore.GetBufdiName(ctx)
+	if err != nil {
+		t.Fatalf("GetBufdiName failed: %v", err)
+	}
+	if name3 != "BuFDI" {
+		t.Errorf("expected fallback 'BuFDI', got '%s'", name3)
 	}
 }
 

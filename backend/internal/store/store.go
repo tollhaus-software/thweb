@@ -2537,6 +2537,13 @@ func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*model
 	if err != nil {
 		return nil, fmt.Errorf("failed to check bufdi absence for date %s: %w", dateStr, err)
 	}
+	resp.HasVolunteerAbsence = hasBufdiAbsence
+
+	bufdiName, err := s.GetBufdiName(ctx)
+	if err != nil || strings.TrimSpace(bufdiName) == "" {
+		bufdiName = "BuFDI"
+	}
+	resp.VolunteerName = strings.TrimSpace(bufdiName)
 
 	// 6. Evaluate tasks via DashboardTasks registry:
 	isNotRelevant := mealDay != nil && mealDay.Status == models.MealAllergenStatusNotRelevant
@@ -3045,6 +3052,7 @@ func (s *Store) CreateActiveDEK(ctx context.Context, rec crypto.DEKRecord) (*cry
 func (s *Store) ResetTestData(ctx context.Context) error {
 	_, err := s.db.Exec(ctx, `
 		TRUNCATE TABLE 
+			system_settings,
 			volunteer_absences,
 			email_outbox,
 			feedback,
@@ -3068,6 +3076,9 @@ func (s *Store) ResetTestData(ctx context.Context) error {
 			audit_log 
 		CASCADE;
 		DELETE FROM users WHERE email NOT IN ('developer@example.com', 'caregiver@example.com');
+		INSERT INTO system_settings (key, value)
+		VALUES ('bufdi_name', 'BuFDI')
+		ON CONFLICT (key) DO NOTHING;
 	`)
 	return err
 }
@@ -5142,6 +5153,54 @@ func (s *Store) DeleteVolunteerAbsence(ctx context.Context, userID uuid.UUID, id
 		return s.recordAudit(ctx, tx, transactionID, nil, "volunteer_absence", id, "DELETE", *existing, nil, userID, userEmail...)
 	})
 }
+
+func (s *Store) GetSetting(ctx context.Context, key string) (string, error) {
+	if s == nil || s.db == nil {
+		return "", fmt.Errorf("database store is not initialized")
+	}
+	var val string
+	err := s.db.QueryRow(ctx, "SELECT value FROM system_settings WHERE key = $1", key).Scan(&val)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	return val, nil
+}
+
+func (s *Store) SetSetting(ctx context.Context, key string, value string) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("database store is not initialized")
+	}
+	_, err := s.db.Exec(ctx, `
+		INSERT INTO system_settings (key, value, updated_at)
+		VALUES ($1, $2, NOW())
+		ON CONFLICT (key) DO UPDATE
+		SET value = EXCLUDED.value, updated_at = NOW()
+	`, key, value)
+	return err
+}
+
+func (s *Store) GetBufdiName(ctx context.Context) (string, error) {
+	val, err := s.GetSetting(ctx, "bufdi_name")
+	if err != nil {
+		return "BuFDI", nil
+	}
+	if strings.TrimSpace(val) == "" {
+		return "BuFDI", nil
+	}
+	return strings.TrimSpace(val), nil
+}
+
+func (s *Store) SetBufdiName(ctx context.Context, name string) error {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		trimmed = "BuFDI"
+	}
+	return s.SetSetting(ctx, "bufdi_name", trimmed)
+}
+
 
 
 

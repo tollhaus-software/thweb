@@ -56,6 +56,10 @@ test.describe('Test Case 45: Volunteer Absences (Abwesenheit Freiwillige)', () =
 
     // Verify "+ Abwesenheit eintragen" is NOT visible for read-only user
     await expect(readerPage.getByRole('button', { name: /(Abwesenheit eintragen|Add Absence)/i })).toBeHidden();
+    // Verify "BuFDI Name(n) (für Kochansicht):" field is present and disabled for read-only user
+    await expect(readerPage.getByTestId('va-bufdi-name-input')).toBeVisible();
+    await expect(readerPage.getByTestId('va-bufdi-name-input')).toBeDisabled();
+    await expect(readerPage.getByTestId('va-bufdi-name-save-btn')).toBeHidden();
     await readerPage.close();
 
     // =========================================================================
@@ -71,6 +75,17 @@ test.describe('Test Case 45: Volunteer Absences (Abwesenheit Freiwillige)', () =
     // Verify search bar and Undo/Redo are hidden on this view
     await expect(page.locator('.controls-row')).toBeHidden();
     await expect(page.locator('button[title="Undo"]')).toBeHidden();
+
+    // Verify "BuFDI Name(n) (für Kochansicht):" field is editable and can be saved
+    const bufdiNameInput = page.getByTestId('va-bufdi-name-input');
+    await expect(bufdiNameInput).toBeVisible();
+    await expect(bufdiNameInput).toBeEnabled();
+    await bufdiNameInput.fill('Max');
+    const bufdiSaveBtn = page.getByTestId('va-bufdi-name-save-btn');
+    await expect(bufdiSaveBtn).toBeEnabled();
+    await bufdiSaveBtn.click();
+    await expect(page.getByTestId('va-bufdi-name-saved-badge')).toBeVisible();
+    await expect(bufdiNameInput).toHaveValue('Max');
 
     // Verify "+ Abwesenheit eintragen" IS visible
     const addBtn = page.getByRole('button', { name: /(Abwesenheit eintragen|Add Absence)/i });
@@ -90,7 +105,7 @@ test.describe('Test Case 45: Volunteer Absences (Abwesenheit Freiwillige)', () =
     await noteInput.fill('Bufdi Seminar A');
 
     // Save
-    await page.getByRole('button', { name: /(Speichern|Save)/i }).click();
+    await page.locator('.va-modal').getByRole('button', { name: /(Speichern|Save)/i }).click();
     await expect(page.getByRole('heading', { name: /(Abwesenheit eintragen|Add Absence)/i })).toBeHidden();
 
     // Switch to List view (Desktop)
@@ -179,7 +194,7 @@ test.describe('Test Case 45: Volunteer Absences (Abwesenheit Freiwillige)', () =
     await startInput.fill('12.11.2026');
     await endInput.fill('18.11.2026');
     await noteInput.fill('Overlap Test');
-    await page.getByRole('button', { name: /(Speichern|Save)/i }).click();
+    await page.locator('.va-modal').getByRole('button', { name: /(Speichern|Save)/i }).click();
 
     // Should display overlap error
     await expect(page.getByText(/(überschneidet sich mit einer bestehenden Abwesenheit|overlaps with an existing absence)/i)).toBeVisible();
@@ -200,7 +215,7 @@ test.describe('Test Case 45: Volunteer Absences (Abwesenheit Freiwillige)', () =
     await expect(deleteInEditBtn).toBeVisible();
 
     await noteInput.fill('Bufdi Seminar A (Aktualisiert)');
-    await page.getByRole('button', { name: /(Speichern|Save)/i }).click();
+    await page.locator('.va-modal').getByRole('button', { name: /(Speichern|Save)/i }).click();
     await expect(page.getByRole('heading', { name: /(Abwesenheit bearbeiten|Edit Absence)/i })).toBeHidden();
     await expect(page.locator('.va-desktop-table').getByText('Bufdi Seminar A (Aktualisiert)')).toBeVisible();
 
@@ -229,5 +244,79 @@ test.describe('Test Case 45: Volunteer Absences (Abwesenheit Freiwillige)', () =
     expect(ops).toContain('INSERT');
     expect(ops).toContain('UPDATE');
     expect(ops).toContain('DELETE');
+  });
+
+  test('verifies dashboard/Kochansicht header displays volunteer absence notice with custom name', async ({ request, page }) => {
+    // 1. Reset database state
+    const resetRes = await request.post('/api/test/reset');
+    expect(resetRes.ok()).toBeTruthy();
+
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+    });
+
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+    // 2. Open dashboard initially (no absence active today)
+    await page.goto('/#dashboard');
+    const todosHeader = page.locator('.kiosk-card-todos .kiosk-card-header span');
+    await expect(todosHeader).toBeVisible();
+    await expect(todosHeader).toHaveText('Hinweise & Aufgaben');
+
+    // 3. Configure BuFDI name in volunteer absences management
+    await page.goto('/#volunteerAbsences');
+    await expect(page.getByTestId('volunteer-absences-tab')).toBeVisible();
+
+    const bufdiNameInput = page.getByTestId('va-bufdi-name-input');
+    await expect(bufdiNameInput).toBeVisible();
+    await bufdiNameInput.fill('Max Mustermann');
+    await page.getByTestId('va-bufdi-name-save-btn').click();
+    await expect(page.getByTestId('va-bufdi-name-saved-badge')).toBeVisible();
+
+    // 4. Create a volunteer absence covering today
+    const addBtn = page.getByRole('button', { name: /(Abwesenheit eintragen|Add Absence)/i });
+    await addBtn.click();
+    await expect(page.getByRole('heading', { name: /(Abwesenheit eintragen|Add Absence)/i })).toBeVisible();
+
+    const parts = todayStr.split('-');
+    const todayDE = `${parts[2]}.${parts[1]}.${parts[0]}`;
+    const startInput = page.locator('.va-modal input[placeholder="TT.MM.JJJJ"]').first();
+    const endInput = page.locator('.va-modal input[placeholder="TT.MM.JJJJ"]').nth(1);
+    const noteInput = page.locator('#va-note-input');
+
+    await startInput.fill(todayDE);
+    await endInput.fill(todayDE);
+    await noteInput.fill('Krank');
+    await page.locator('.va-modal').getByRole('button', { name: /(Speichern|Save)/i }).click();
+    await expect(page.getByRole('heading', { name: /(Abwesenheit eintragen|Add Absence)/i })).toBeHidden();
+
+    // 5. Navigate to dashboard - header must show absence notice with configured name
+    await page.goto('/#dashboard');
+    await expect(todosHeader).toBeVisible();
+    await expect(todosHeader).toHaveText('Hinweise & Aufgaben - ! Max Mustermann nicht im Haus !');
+
+    // 6. Update the name in volunteer absences management to "Lisa & Tom"
+    await page.goto('/#volunteerAbsences');
+    await expect(page.getByTestId('volunteer-absences-tab')).toBeVisible();
+    await bufdiNameInput.fill('Lisa & Tom');
+    await page.getByTestId('va-bufdi-name-save-btn').click();
+    await expect(page.getByTestId('va-bufdi-name-saved-badge')).toBeVisible();
+
+    // 7. Verify dashboard immediately shows updated name
+    await page.goto('/#dashboard');
+    await expect(todosHeader).toBeVisible();
+    await expect(todosHeader).toHaveText('Hinweise & Aufgaben - ! Lisa & Tom nicht im Haus !');
+
+    // 8. Delete the absence and verify header reverts to regular "Hinweise & Aufgaben"
+    await page.goto('/#volunteerAbsences');
+    await page.getByRole('button', { name: /(Liste|List)/i }).click();
+    await page.locator('.va-icon-btn[title="Bearbeiten"]').first().click();
+    await page.locator('.va-modal .va-btn-delete').click();
+    await page.locator('.va-modal .va-btn-primary').click();
+
+    await page.goto('/#dashboard');
+    await expect(todosHeader).toBeVisible();
+    await expect(todosHeader).toHaveText('Hinweise & Aufgaben');
   });
 });
