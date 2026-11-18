@@ -101,9 +101,17 @@ test.describe('Test Case 29: Navigation Improvements, Category Landing Pages, an
     await expect(landing).toBeVisible();
   });
 
-  test('single subtab category (PA) navigates directly without landing page', async ({ page }) => {
+  test('single subtab category (PA) navigates directly without landing page', async ({ request, page }) => {
+    await request.post('/api/admin/users', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        email: 'pa-single-subtab@example.com',
+        roles: [],
+        permissions: ['employees.all.read'],
+      },
+    });
     await page.addInitScript(() => {
-      localStorage.setItem('token', 'developer@example.com');
+      localStorage.setItem('token', 'pa-single-subtab@example.com');
     });
 
     await page.goto('/');
@@ -177,5 +185,90 @@ test.describe('Test Case 29: Navigation Improvements, Category Landing Pages, an
     await expect(desktopLogo).toBeHidden();
     await expect(mobileFavicon).toBeVisible();
     await expect(mobileFavicon).toHaveAttribute('src', '/favicon.svg');
+  });
+
+  test('desktop displays tabs as sub-items in sidebar with accordion auto-expansion and landing page navigation, while mobile hides them', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+    });
+
+    // 1. Desktop viewport (> 768px)
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await page.goto('/#mga');
+    await page.waitForLoadState('networkidle');
+
+    // On MGA, MGA category is active and its sub-items are auto-expanded
+    const mgaSubTree = page.locator('[data-testid="sidebar-subtree-mga"]');
+    await expect(mgaSubTree).toBeVisible();
+    await expect(mgaSubTree.locator('[data-testid="sidebar-subtab-families"]')).toBeVisible();
+    await expect(mgaSubTree.locator('[data-testid="sidebar-subtab-parents"]')).toBeVisible();
+    await expect(mgaSubTree.locator('[data-testid="sidebar-subtab-children"]')).toBeVisible();
+    await expect(mgaSubTree.locator('[data-testid="sidebar-subtab-members"]')).toBeVisible();
+    await expect(mgaSubTree.locator('[data-testid="sidebar-subtab-jobs"]')).toBeVisible();
+
+    // Top horizontal tabs bar is ALSO visible
+    const subtabsBar = page.locator('.subtabs-bar');
+    await expect(subtabsBar).toBeVisible();
+
+    // Other multi-item category (e.g. Kochen) is collapsed by default (accordion behavior)
+    const kochenSubTree = page.locator('[data-testid="sidebar-subtree-kochen"]');
+    await expect(kochenSubTree).toHaveCount(0);
+
+    // Click sub-item "Eltern" in the sidebar menu
+    await mgaSubTree.locator('[data-testid="sidebar-subtab-parents"]').click();
+    await expect(page).toHaveURL(/.*#parents/);
+
+    // In sidebar, Eltern sub-item is active
+    await expect(mgaSubTree.locator('[data-testid="sidebar-subtab-parents"]')).toHaveAttribute('data-active', 'true');
+    // Top tab also reflects Eltern active
+    await expect(subtabsBar.getByRole('button', { name: 'Eltern(MGA)' })).toHaveAttribute('data-active', 'true');
+
+    // Requirement 2: Clicking the category header "MGA" navigates to landing page
+    const mgaHeader = page.getByRole('button', { name: 'MGA', exact: true });
+    await mgaHeader.click();
+    await expect(page).toHaveURL(/.*#mga/);
+    await expect(page.locator('[data-testid="category-landing-mga"]')).toBeVisible();
+    await expect(mgaSubTree).toBeVisible();
+
+    // Navigate to Kochen by clicking its category header
+    const kochenHeader = page.getByRole('button', { name: 'Kochen', exact: true });
+    await kochenHeader.click();
+    await expect(page).toHaveURL(/.*#kochen/);
+
+    // Kochen is now active and auto-expanded, MGA automatically collapsed (accordion)
+    await expect(kochenSubTree).toBeVisible();
+    await expect(kochenSubTree.locator('[data-testid="sidebar-subtab-mealAllergens"]')).toBeVisible();
+    await expect(kochenSubTree.locator('[data-testid="sidebar-subtab-mealPlan"]')).toBeVisible();
+    await expect(mgaSubTree).toHaveCount(0);
+
+    // Toggle chevron on MGA manually
+    const mgaChevron = page.getByRole('button', { name: 'Toggle MGA subtabs' });
+    await expect(mgaChevron).toBeVisible();
+    await mgaChevron.click();
+    // MGA is now expanded alongside Kochen
+    await expect(mgaSubTree).toBeVisible();
+
+    // Toggle chevron on MGA again to collapse
+    await mgaChevron.click();
+    await expect(mgaSubTree).toHaveCount(0);
+
+    // 2. Mobile viewport (<= 768px): tabs do NOT display as sub-items in menu
+    await page.setViewportSize({ width: 600, height: 800 });
+    // Open mobile sidebar drawer
+    const hamburgerBtn = page.locator('.sidebar-toggle-btn');
+    await hamburgerBtn.click();
+    await expect(page.locator('.app-sidebar.mobile-open')).toBeVisible();
+
+    // On mobile, multi-tab categories (MGA, Kochen, PA, Gebühren) do NOT have sub-item trees or chevrons
+    await expect(page.locator('[data-testid="sidebar-subtree-mga"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="sidebar-subtree-kochen"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="sidebar-subtree-pa"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="sidebar-subtree-fees"]')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Toggle MGA subtabs' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Toggle Kochen subtabs' })).toHaveCount(0);
+
+    // But category buttons themselves are visible in mobile drawer
+    await expect(page.getByRole('button', { name: 'MGA', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Kochen', exact: true })).toBeVisible();
   });
 });

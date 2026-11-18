@@ -8167,6 +8167,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
         canReadMembers={canReadMembers}
         canReadJobs={canReadJobs}
         canReadEmployees={canReadEmployees}
+        canReadVolunteerAbsences={canReadVolunteerAbsences}
         canViewMealPlan={canViewMealPlan}
         canReadMealAllergens={canReadMealAllergens}
         hasHygieneWrite={canWriteHygiene}

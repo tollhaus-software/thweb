@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ChevronDown,
   ChevronRight,
@@ -7,6 +7,7 @@ import {
   X,
 } from 'lucide-react';
 import { t } from '../../utils/i18n';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import {
   getCategoryForTab,
   getVisibleNavigationCategories,
@@ -77,6 +78,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   appTitle = 'TH Portal',
   appLogoUrl,
 }) => {
+  const isMobile = useIsMobile();
   const currentCategory = getCategoryForTab(activeTab);
 
   const perms: UserPermissionsContext = {
@@ -102,14 +104,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const visibleCategories = getVisibleNavigationCategories(perms);
 
-  // Expanded categories state (for More dropdown)
-  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
+  // Expanded categories overrides state: catId -> boolean
+  const [expandedOverrides, setExpandedOverrides] = useState<Record<string, boolean>>({
     more: true,
   });
 
-  const toggleCategory = (catId: string, e: React.MouseEvent) => {
+  // Automatically expand active category when it changes (Requirement 1: A)
+  useEffect(() => {
+    if (currentCategory && expandedOverrides[currentCategory] === false) {
+      setExpandedOverrides((prev) => {
+        const next = { ...prev };
+        delete next[currentCategory];
+        return next;
+      });
+    }
+  }, [currentCategory, expandedOverrides]);
+
+  const isCategoryExpanded = (catId: string, isCatActive: boolean): boolean => {
+    if (expandedOverrides[catId] !== undefined) {
+      return expandedOverrides[catId];
+    }
+    // Accordion default: the active category and 'more' are expanded
+    return isCatActive || catId === 'more';
+  };
+
+  const toggleCategory = (catId: string, isCatActive: boolean, e: React.MouseEvent) => {
     e.stopPropagation();
-    setExpandedCategories((prev) => ({ ...prev, [catId]: !prev[catId] }));
+    const currentlyExpanded = isCategoryExpanded(catId, isCatActive);
+    setExpandedOverrides((prev) => ({ ...prev, [catId]: !currentlyExpanded }));
   };
 
   const handleTabClick = (tabId: TabId | string) => {
@@ -125,12 +147,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
     if (catId === 'more') {
       if (isEffectiveCollapsed) {
         onToggleCollapse();
-        setExpandedCategories((prev) => ({ ...prev, more: true }));
+        setExpandedOverrides((prev) => ({ ...prev, more: true }));
       } else {
-        setExpandedCategories((prev) => ({ ...prev, more: !prev.more }));
+        setExpandedOverrides((prev) => {
+          const current = prev.more !== undefined ? prev.more : true;
+          return { ...prev, more: !current };
+        });
       }
       return;
     }
+
+    // Ensure category is expanded on click
+    setExpandedOverrides((prev) => {
+      if (prev[catId] === false) {
+        const next = { ...prev };
+        delete next[catId];
+        return next;
+      }
+      return prev;
+    });
 
     if (categoryHasLandingPage(catId, perms)) {
       handleTabClick(catId);
@@ -183,6 +218,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           const CatIcon = cat.icon;
           const catLabel = getCategoryLabel(cat);
           const isCatActive = currentCategory === cat.id;
+          const isCollapsible = cat.collapsibleInSidebar || (!isMobile && cat.visibleItems.length > 1);
+          const isExpanded = isCategoryExpanded(cat.id, isCatActive);
 
           return (
             <React.Fragment key={cat.id}>
@@ -190,12 +227,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {isMoreCategory && idx > 0 && <div className="sidebar-divider" />}
 
               <div className="sidebar-nav-group">
-                {cat.collapsibleInSidebar ? (
+                {isCollapsible ? (
                   <>
                     <div
                       className={`sidebar-nav-item category-header tab-btn ${isCatActive ? 'active' : ''}`}
                       onClick={() => handleCategoryClick(cat.id)}
                       title={catLabel}
+                      aria-label={cat.accessibleName || catLabel}
                       data-active={isCatActive ? 'true' : 'false'}
                       role="button"
                       tabIndex={0}
@@ -206,22 +244,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         }
                       }}
                     >
-                      <CatIcon size={18} className="nav-icon" />
+                      {isEffectiveCollapsed && cat.id === 'mga' ? (
+                        <MgaLinkIcon hideArrow className="nav-icon mga-collapsed-icon" />
+                      ) : (
+                        <CatIcon size={18} className="nav-icon" />
+                      )}
                       <span className="nav-label">{catLabel}</span>
                       {!isEffectiveCollapsed && (
                         <button
                           type="button"
                           className="accordion-toggle-btn"
-                          onClick={(e) => toggleCategory(cat.id, e)}
+                          onClick={(e) => toggleCategory(cat.id, isCatActive, e)}
                           aria-label={`Toggle ${catLabel} subtabs`}
                         >
-                          {expandedCategories[cat.id] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                          {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                         </button>
                       )}
                     </div>
 
-                    {!isEffectiveCollapsed && expandedCategories[cat.id] && (
-                      <div className="sidebar-sub-tree">
+                    {!isEffectiveCollapsed && isExpanded && (
+                      <div className="sidebar-sub-tree" data-testid={`sidebar-subtree-${cat.id}`}>
                         {cat.visibleItems.map((sub) => {
                           const SubIcon = sub.icon;
                           const subLabel = getSubItemLabel(sub);
@@ -233,8 +275,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                               type="button"
                               className={`sidebar-sub-item tab-btn ${isSubActive ? 'active' : ''}`}
                               onClick={() => handleTabClick(sub.id)}
-                              aria-label={sub.accessibleName || subLabel}
+                              aria-label={cat.id === 'more' ? (sub.accessibleName || subLabel) : `${subLabel} (Menü)`}
                               data-active={isSubActive ? 'true' : 'false'}
+                              data-testid={`sidebar-subtab-${sub.id}`}
                               title={subLabel}
                             >
                               <SubIcon size={14} className="sub-icon" />

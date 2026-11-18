@@ -429,8 +429,8 @@ export const categoryHasLandingPage = (
   catId: NavigationCategory | string,
   perms: UserPermissionsContext
 ): boolean => {
-  // fees category lands directly on the fees page and uses segmented sub-navigation for subtabs
-  if (catId === 'fees') return false;
+  // fees and pa categories land directly on their primary page and use subtabs
+  if (catId === 'fees' || catId === 'pa') return false;
   const visible = getVisibleSubTabsForCategory(catId, perms);
   return visible.length > 1;
 };
