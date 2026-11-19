@@ -8,8 +8,11 @@ import (
 const (
 	TaskYellowBinRetrieve = "yellow_bin_retrieve"
 	TaskYellowBinPutOut   = "yellow_bin_put_out"
-	TaskCleanRefrigerator = "clean_refrigerator"
-	TaskEnterAllergens    = "enter_allergens"
+	TaskCleanRefrigerator                 = "clean_refrigerator"
+	TaskCleanDishwasherFilter             = "clean_dishwasher_filter"
+	TaskCleanDishwasherFilterGerman       = "Spülmaschine - Filter reinigen"
+	TaskCleanDishwasherFilterGermanLegacy = "Spülmaschine-Filter reinigen"
+	TaskEnterAllergens                    = "enter_allergens"
 
 	// BuFDI absence tasks - German text as displayed on dashboard (task description)
 	TaskStartDryer      = "Morgens: Wäsche in den Trockner"
@@ -43,6 +46,8 @@ func GetTaskAliases(taskTypeID string) []string {
 		return []string{TaskChangeDiaperBag, TaskKeyChangeDiaperBag, TaskKeyChangeDiaperBinBag, TaskNameChangeDiaperBag}
 	case TaskFoldLaundry, TaskFoldLaundryTypo, TaskKeyFoldLaundry:
 		return []string{TaskFoldLaundry, TaskFoldLaundryTypo, TaskKeyFoldLaundry}
+	case TaskCleanDishwasherFilter, TaskCleanDishwasherFilterGerman, TaskCleanDishwasherFilterGermanLegacy:
+		return []string{TaskCleanDishwasherFilter, TaskCleanDishwasherFilterGerman, TaskCleanDishwasherFilterGermanLegacy}
 	default:
 		return []string{taskTypeID}
 	}
@@ -170,5 +175,18 @@ var DashboardTasks = []DashboardTaskDefinition{
 		ID:         TaskCleanRefrigerator,
 		OrderIndex: 700,
 		Weekdays:   []time.Weekday{time.Friday},
+	},
+	{
+		ID:          TaskCleanDishwasherFilter,
+		Name:        TaskCleanDishwasherFilterGerman,
+		Description: TaskCleanDishwasherFilterGerman,
+		OrderIndex:  800,
+		Weekdays: []time.Weekday{
+			time.Monday,
+			time.Tuesday,
+			time.Wednesday,
+			time.Thursday,
+			time.Friday,
+		},
 	},
 }

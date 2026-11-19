@@ -37,6 +37,7 @@ import {
   ArrowLeft,
   MessageSquare,
   Star,
+  Sparkles,
 } from 'lucide-react';
 import {
   WasherIcon,
@@ -503,6 +504,13 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     ) {
       return 'fold_laundry';
     }
+    if (
+      taskKey === 'clean_dishwasher_filter' ||
+      taskKey === 'Spülmaschine - Filter reinigen' ||
+      taskKey === 'Spülmaschine-Filter reinigen'
+    ) {
+      return 'clean_dishwasher_filter';
+    }
     return taskKey;
   }, []);
 
@@ -549,6 +557,12 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
       return t('yellowBinPutOut');
     } else if (taskKey === 'clean_refrigerator') {
       return t('cleanRefrigerator');
+    } else if (
+      taskKey === 'clean_dishwasher_filter' ||
+      taskKey === 'Spülmaschine - Filter reinigen' ||
+      taskKey === 'Spülmaschine-Filter reinigen'
+    ) {
+      return t('cleanDishwasherFilter');
     } else if (taskKey === 'enter_allergens' || taskKey === 'allergene_eintragen') {
       return t('enterAllergens');
     } else if (taskKey === 'start_dryer' || taskKey === 'Morgens: Wäsche in den Trockner') {
@@ -588,6 +602,8 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
         return t('yellowBinPutOut');
       } else if (normalized === 'clean_refrigerator') {
         return t('cleanRefrigerator');
+      } else if (normalized === 'clean_dishwasher_filter') {
+        return t('cleanDishwasherFilter');
       } else if (normalized === 'enter_allergens' || normalized === 'allergene_eintragen') {
         return t('enterAllergens');
       }
@@ -680,6 +696,8 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
           return 650;
         case 'clean_refrigerator':
           return 700;
+        case 'clean_dishwasher_filter':
+          return 800;
         default:
           return 999;
       }
@@ -1150,6 +1168,9 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                       } else if (normalized === 'clean_refrigerator') {
                         icon = <Refrigerator size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
                         colorClass = 'kiosk-todo-refrigerator';
+                      } else if (normalized === 'clean_dishwasher_filter') {
+                        icon = <Sparkles size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
+                        colorClass = 'kiosk-todo-dishwasher';
                       } else if (isAllergens) {
                         icon = <UtensilsCrossed size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
                         colorClass = 'kiosk-todo-allergens';

@@ -1353,4 +1353,96 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     const todosListOverflow = await todosList.evaluate((el) => window.getComputedStyle(el).overflowY);
     expect(todosListOverflow).toBe('auto');
   });
+
+  test('displays daily mon-fri task "Spülmaschine - Filter reinigen" on dashboard and allows checking off', async ({ request, page }) => {
+    page.on('dialog', (dialog) => dialog.accept());
+
+    // 1. Reset database state
+    const resetRes = await request.post('/api/test/reset');
+    expect(resetRes.ok()).toBeTruthy();
+
+    const authHeaders = {
+      Authorization: 'Bearer developer@example.com',
+      'Content-Type': 'application/json',
+    };
+
+    // Verify task presence on weekdays vs weekends via backend daily-brief API
+    const mondayBriefRes = await request.get('/api/dashboard/daily-brief?date=2026-11-16', {
+      headers: authHeaders,
+    });
+    expect(mondayBriefRes.ok()).toBeTruthy();
+    const mondayData = await mondayBriefRes.json();
+    expect(mondayData.tasks_and_info).toContain('clean_dishwasher_filter');
+
+    const saturdayBriefRes = await request.get('/api/dashboard/daily-brief?date=2026-11-21', {
+      headers: authHeaders,
+    });
+    expect(saturdayBriefRes.ok()).toBeTruthy();
+    const saturdayData = await saturdayBriefRes.json();
+    expect(saturdayData.tasks_and_info).not.toContain('clean_dishwasher_filter');
+
+    // 2. Open dashboard on today
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+    });
+
+    await page.goto('/#dashboard');
+    await page.waitForLoadState('networkidle');
+
+    const embeddedPage = page.locator('.kiosk-tablet-page.embedded');
+    await expect(embeddedPage).toBeVisible();
+
+    const initialBriefRes = await request.get('/api/dashboard/daily-brief');
+    expect(initialBriefRes.ok()).toBeTruthy();
+    const initBriefData = await initialBriefRes.json();
+    const todayStr = initBriefData.date ? initBriefData.date.split('T')[0] : new Date().toISOString().split('T')[0];
+    const todayDateObj = new Date(todayStr + 'T12:00:00Z');
+    const dayOfWeek = todayDateObj.getUTCDay(); // 0 is Sunday, 1 is Monday ... 6 is Saturday
+
+    const dishwasherTask = embeddedPage.locator('[data-testid="kiosk-todo-item-clean_dishwasher_filter"]');
+    const dishwasherLabel = embeddedPage.locator('[data-testid="task-label-clean_dishwasher_filter"]');
+    const dishwasherCheckbox = embeddedPage.locator('[data-testid="task-checkbox-clean_dishwasher_filter"]');
+
+    if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+      // It's a weekday: task must be displayed on dashboard
+      await expect(dishwasherTask).toBeVisible();
+      await expect(dishwasherLabel).toHaveText('Spülmaschine - Filter reinigen');
+      await expect(dishwasherTask).toHaveClass(/kiosk-todo-dishwasher/);
+      await expect(dishwasherCheckbox).toBeVisible();
+      await expect(dishwasherCheckbox).not.toHaveClass(/checked/);
+
+      // Complete the task
+      await dishwasherCheckbox.click();
+
+      const confirmModal = page.locator('[data-testid="task-confirm-modal"]');
+      await expect(confirmModal).toBeVisible();
+      await expect(confirmModal.locator('[data-testid="task-confirm-modal-title"]')).toHaveText(
+        'Spülmaschine - Filter reinigen abhaken?'
+      );
+
+      await confirmModal.locator('[data-testid="task-confirm-confirm-btn"]').click();
+      await expect(confirmModal).not.toBeVisible();
+
+      // Verify task is marked as done
+      await expect(dishwasherTask).toHaveClass(/kiosk-todo-completed/);
+      await expect(dishwasherCheckbox).toHaveClass(/checked/);
+      await expect(dishwasherLabel).toHaveCSS('text-decoration-line', 'line-through');
+
+      // Verify backend state
+      const updatedBriefRes = await request.get(`/api/dashboard/daily-brief?date=${todayStr}`, {
+        headers: authHeaders,
+      });
+      expect(updatedBriefRes.ok()).toBeTruthy();
+      const updatedData = await updatedBriefRes.json();
+      expect(updatedData.completed_task_ids).toContain('clean_dishwasher_filter');
+
+      // Uncomplete the task
+      await dishwasherTask.click();
+      await expect(dishwasherTask).not.toHaveClass(/kiosk-todo-completed/);
+      await expect(dishwasherCheckbox).not.toHaveClass(/checked/);
+    } else {
+      // Weekend: task should not be displayed
+      await expect(dishwasherTask).toHaveCount(0);
+    }
+  });
 });

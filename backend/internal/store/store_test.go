@@ -349,6 +349,112 @@ func TestDashboardTasks_Store(t *testing.T) {
 	}
 }
 
+func containsTask(tasks []string, taskID string) bool {
+	for _, t := range tasks {
+		if t == taskID {
+			return true
+		}
+	}
+	return false
+}
+
+func TestDishwasherFilterTask_Store(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := NewStore(pool)
+
+	// Test Mon through Fri: 2026-11-16 (Mon) to 2026-11-20 (Fri)
+	// Weekend: 2026-11-21 (Sat), 2026-11-22 (Sun)
+	weekdays := []time.Time{
+		time.Date(2026, time.November, 16, 0, 0, 0, 0, time.UTC), // Monday
+		time.Date(2026, time.November, 17, 0, 0, 0, 0, time.UTC), // Tuesday
+		time.Date(2026, time.November, 18, 0, 0, 0, 0, time.UTC), // Wednesday
+		time.Date(2026, time.November, 19, 0, 0, 0, 0, time.UTC), // Thursday
+		time.Date(2026, time.November, 20, 0, 0, 0, 0, time.UTC), // Friday
+	}
+	weekendDays := []time.Time{
+		time.Date(2026, time.November, 21, 0, 0, 0, 0, time.UTC), // Saturday
+		time.Date(2026, time.November, 22, 0, 0, 0, 0, time.UTC), // Sunday
+	}
+
+	for _, d := range weekdays {
+		brief, err := appStore.GetDailyBrief(ctx, d)
+		if err != nil {
+			t.Fatalf("GetDailyBrief failed for %s: %v", d.Format("2006-01-02"), err)
+		}
+		if !containsTask(brief.TasksAndInfo, TaskCleanDishwasherFilter) {
+			t.Errorf("expected %s on weekday %s (%s), got: %+v", TaskCleanDishwasherFilter, d.Weekday(), d.Format("2006-01-02"), brief.TasksAndInfo)
+		}
+	}
+
+	for _, d := range weekendDays {
+		brief, err := appStore.GetDailyBrief(ctx, d)
+		if err != nil {
+			t.Fatalf("GetDailyBrief failed for weekend %s: %v", d.Format("2006-01-02"), err)
+		}
+		if containsTask(brief.TasksAndInfo, TaskCleanDishwasherFilter) {
+			t.Errorf("unexpected %s on weekend %s (%s), got: %+v", TaskCleanDishwasherFilter, d.Weekday(), d.Format("2006-01-02"), brief.TasksAndInfo)
+		}
+	}
+
+	// Test task completion and alias resolution
+	testDate := weekdays[0]
+	testDateStr := testDate.Format("2006-01-02")
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM completed_tasks WHERE task_date = $1", testDateStr)
+	}()
+
+	actor := models.MealAllergenActor{
+		Email:   "test@example.com",
+		IsKiosk: false,
+	}
+
+	ct, err := appStore.CompleteTask(ctx, testDate, TaskCleanDishwasherFilter, actor)
+	if err != nil {
+		t.Fatalf("CompleteTask failed: %v", err)
+	}
+	if ct.TaskTypeID != TaskCleanDishwasherFilter {
+		t.Errorf("expected task type %s, got %s", TaskCleanDishwasherFilter, ct.TaskTypeID)
+	}
+
+	briefCompleted, err := appStore.GetDailyBrief(ctx, testDate)
+	if err != nil {
+		t.Fatalf("GetDailyBrief failed: %v", err)
+	}
+	if !containsTask(briefCompleted.CompletedTaskIDs, TaskCleanDishwasherFilter) {
+		t.Errorf("expected %s in completed task IDs, got: %+v", TaskCleanDishwasherFilter, briefCompleted.CompletedTaskIDs)
+	}
+	if !containsTask(briefCompleted.CompletedTaskIDs, TaskCleanDishwasherFilterGerman) {
+		t.Errorf("expected %s alias in completed task IDs, got: %+v", TaskCleanDishwasherFilterGerman, briefCompleted.CompletedTaskIDs)
+	}
+	if !containsTask(briefCompleted.CompletedTaskIDs, TaskCleanDishwasherFilterGermanLegacy) {
+		t.Errorf("expected %s legacy alias in completed task IDs, got: %+v", TaskCleanDishwasherFilterGermanLegacy, briefCompleted.CompletedTaskIDs)
+	}
+
+	// Uncomplete
+	if err := appStore.UncompleteTask(ctx, testDate, TaskCleanDishwasherFilterGerman); err != nil {
+		t.Fatalf("UncompleteTask failed: %v", err)
+	}
+	briefUncompleted, err := appStore.GetDailyBrief(ctx, testDate)
+	if err != nil {
+		t.Fatalf("GetDailyBrief failed: %v", err)
+	}
+	if containsTask(briefUncompleted.CompletedTaskIDs, TaskCleanDishwasherFilter) {
+		t.Errorf("expected task to be uncompleted, got: %+v", briefUncompleted.CompletedTaskIDs)
+	}
+}
+
 func TestBufdiAbsenceTasks_ConditionsAndLifecycle(t *testing.T) {
 	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
 	ctx := context.Background()
@@ -381,15 +487,6 @@ func TestBufdiAbsenceTasks_ConditionsAndLifecycle(t *testing.T) {
 	_, err = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, 'bufdi-test@example.com', 'bufdi-test@example.com') ON CONFLICT (id) DO NOTHING", userID)
 	if err != nil {
 		t.Fatalf("failed to insert test user: %v", err)
-	}
-
-	containsTask := func(tasks []string, taskID string) bool {
-		for _, t := range tasks {
-			if t == taskID {
-				return true
-			}
-		}
-		return false
 	}
 
 	// 1. Without absence: start_dryer, start_washer, change_diaper_bag should NOT be in TasksAndInfo
