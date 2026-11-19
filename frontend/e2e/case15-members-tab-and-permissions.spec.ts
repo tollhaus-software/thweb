@@ -112,7 +112,7 @@ test.describe('Test Case 15: Members Tab and Read-Only Membership Permissions', 
     if (await mgaTabBtn.isVisible()) {
       await mgaTabBtn.click();
     }
-    const membersTabBtn = page.getByRole('button', { name: 'Vereinsmitglieder' });
+    const membersTabBtn = page.getByRole('button', { name: 'Vereinsmitglieder', exact: true });
     if (await membersTabBtn.isVisible()) {
       await membersTabBtn.click();
     }
@@ -251,7 +251,7 @@ test.describe('Test Case 15: Members Tab and Read-Only Membership Permissions', 
       await toggleSidebarBtn.click();
       await page.getByRole('button', { name: 'MGA', exact: true }).click();
     }
-    const membersTabBtn = page.getByRole('button', { name: 'Vereinsmitglieder' });
+    const membersTabBtn = page.getByRole('button', { name: 'Vereinsmitglieder', exact: true });
     if (await membersTabBtn.isVisible()) {
       await membersTabBtn.click();
     }

@@ -751,7 +751,7 @@ test.describe('Test Case 1: Membership Lifecycle & Collision Prevention', () => 
     if (await mgaTab.isVisible()) {
       await mgaTab.click();
     }
-    const membersTabBtn = page.getByRole('button', { name: 'Vereinsmitglieder' });
+    const membersTabBtn = page.getByRole('button', { name: 'Vereinsmitglieder', exact: true });
     if (await membersTabBtn.isVisible()) {
       await membersTabBtn.click();
     }
