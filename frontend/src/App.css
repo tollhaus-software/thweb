@@ -338,6 +338,12 @@ tr.overview-parents-toggle-row td {
   box-sizing: border-box;
 }
 
+.tab-scroll-content.tab-scroll-dashboard,
+.tab-scroll-content:has(.kiosk-tablet-page.embedded) {
+  overflow: hidden;
+  height: 100%;
+}
+
 .tabs-wrapper {
   position: relative;
   display: flex;

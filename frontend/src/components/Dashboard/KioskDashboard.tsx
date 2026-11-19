@@ -1056,66 +1056,68 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                   <Soup size={embedded ? 18 : 22} className="kiosk-card-header-icon" />
                   <span>{t('mealTitle')}</span>
                 </div>
-                <div className="kiosk-meal-lines">
-                  {data?.meal_components && data.meal_components.length > 0 ? (
-                    data.meal_components.slice(0, 3).map((component, idx) => (
-                      <div
-                        key={idx}
-                        className={`kiosk-meal-line ${idx === 0 ? 'kiosk-meal-line-primary' : 'kiosk-meal-line-secondary'}`}
-                      >
-                        <span className="kiosk-meal-text">{component}</span>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="kiosk-empty-text">{t('noMeal')}</div>
-                  )}
-                </div>
-
-                {showAllergensSection && (
-                  <div className="kiosk-meal-allergens-section" data-testid="kiosk-meal-allergens-section">
-                    <div className="kiosk-meal-allergens-header">
-                      <span>{t('componentsAndAllergensLabel')}</span>
-                      {canEditAllergensOnDashboard && (
-                        <button
-                          type="button"
-                          className="kiosk-meal-allergens-edit-btn"
-                          onClick={(e) => openMealAllergensEditor(e)}
-                          title={t('editMealAllergens')}
-                          aria-label={t('editMealAllergens')}
-                          data-testid="kiosk-edit-meal-allergens-btn"
+                <div className="kiosk-meal-card-content">
+                  <div className="kiosk-meal-lines">
+                    {data?.meal_components && data.meal_components.length > 0 ? (
+                      data.meal_components.slice(0, 3).map((component, idx) => (
+                        <div
+                          key={idx}
+                          className={`kiosk-meal-line ${idx === 0 ? 'kiosk-meal-line-primary' : 'kiosk-meal-line-secondary'}`}
                         >
-                          <Pencil size={embedded ? 14 : 18} />
-                        </button>
-                      )}
-                    </div>
-                    {hasAllergensAdded && (
-                      <div className="kiosk-meal-allergens-list" data-testid="kiosk-meal-allergens-list">
-                        {allergenComponents.map((comp, idx) => (
-                          <div
-                            key={idx}
-                            className="kiosk-allergen-comp-row"
-                            data-testid={`kiosk-allergen-comp-${idx}`}
-                          >
-                            <span className="kiosk-allergen-comp-name">
-                              {comp.name?.trim() || t('unnamedComponent')}
-                            </span>
-                            <div className="kiosk-allergen-comp-badges">
-                              <MealComponentAllergenBadges
-                                allergens={comp.allergens}
-                                compIdx={idx}
-                                allergiesContext={allergiesData}
-                                emptyLabel={t('noAllergies')}
-                                emptyClassName="kiosk-allergen-pill-none"
-                                pillClassName="kiosk-allergen-pill"
-                                testIdPrefix="kiosk-"
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                          <span className="kiosk-meal-text">{component}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="kiosk-empty-text">{t('noMeal')}</div>
                     )}
                   </div>
-                )}
+
+                  {showAllergensSection && (
+                    <div className="kiosk-meal-allergens-section" data-testid="kiosk-meal-allergens-section">
+                      <div className="kiosk-meal-allergens-header">
+                        <span>{t('componentsAndAllergensLabel')}</span>
+                        {canEditAllergensOnDashboard && (
+                          <button
+                            type="button"
+                            className="kiosk-meal-allergens-edit-btn"
+                            onClick={(e) => openMealAllergensEditor(e)}
+                            title={t('editMealAllergens')}
+                            aria-label={t('editMealAllergens')}
+                            data-testid="kiosk-edit-meal-allergens-btn"
+                          >
+                            <Pencil size={embedded ? 14 : 18} />
+                          </button>
+                        )}
+                      </div>
+                      {hasAllergensAdded && (
+                        <div className="kiosk-meal-allergens-list" data-testid="kiosk-meal-allergens-list">
+                          {allergenComponents.map((comp, idx) => (
+                            <div
+                              key={idx}
+                              className="kiosk-allergen-comp-row"
+                              data-testid={`kiosk-allergen-comp-${idx}`}
+                            >
+                              <span className="kiosk-allergen-comp-name">
+                                {comp.name?.trim() || t('unnamedComponent')}
+                              </span>
+                              <div className="kiosk-allergen-comp-badges">
+                                <MealComponentAllergenBadges
+                                  allergens={comp.allergens}
+                                  compIdx={idx}
+                                  allergiesContext={allergiesData}
+                                  emptyLabel={t('noAllergies')}
+                                  emptyClassName="kiosk-allergen-pill-none"
+                                  pillClassName="kiosk-allergen-pill"
+                                  testIdPrefix="kiosk-"
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </section>
 
               {/* Card 4: TODOs / warnings, aligned vertically at the bottom of the content area */}

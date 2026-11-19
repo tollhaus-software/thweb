@@ -8968,7 +8968,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
             }}
           />
         ) : (
-          <div className="tab-scroll-content">
+          <div className={`tab-scroll-content ${activeTab === 'dashboard' ? 'tab-scroll-dashboard' : ''}`}>
             {activeTab === 'audit' && canReadAudit ? (
               <AuditLogView
                 families={families.length > 0 ? families : (overviewFamilies as any)}

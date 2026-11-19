@@ -157,11 +157,11 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     const editBtn = allergensHeader.locator('[data-testid="kiosk-edit-meal-allergens-btn"]');
     await expect(editBtn).toBeVisible();
 
-    // Verify component 0: Kürbissuppe with Sellerie and Milch/Laktose, with allergens always under component name (flex-direction: column)
+    // Verify component 0: Kürbissuppe with Sellerie and Milch/Laktose, with allergens directly behind component name (flex-direction: row)
     const comp0 = allergensSection.locator('[data-testid="kiosk-allergen-comp-0"]');
     await expect(comp0).toBeVisible();
     const comp0FlexDir = await comp0.evaluate((el) => window.getComputedStyle(el).flexDirection);
-    expect(comp0FlexDir).toBe('column');
+    expect(comp0FlexDir).toBe('row');
     await expect(comp0.locator('.kiosk-allergen-comp-name')).toHaveText('Kürbissuppe');
     await expect(comp0.locator('[data-testid="kiosk-allergen-pill-0-sellerie"]')).toContainText('Sellerie');
     await expect(comp0.locator('[data-testid="kiosk-allergen-pill-0-laktose"]')).toContainText('Milch/Laktose');
@@ -1294,5 +1294,63 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await expect(washerTask).toHaveAttribute('data-completed', 'false');
     await expect(foldLaundryTask).toHaveAttribute('data-completed', 'false');
     await expect(diaperTask).toHaveAttribute('data-completed', 'false');
+  });
+
+  test('verifies dashboard page takes up available space without page scrolling, header and footer are visible, cook is present, and meal/todos handle scrolling internally', async ({ page, request }) => {
+    // 1. Reset database state
+    const resetRes = await request.post('/api/test/reset');
+    expect(resetRes.ok()).toBeTruthy();
+
+    // 2. Authenticate and load dashboard
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+    });
+
+    await page.goto('/#dashboard');
+    await page.waitForLoadState('networkidle');
+
+    const embeddedPage = page.locator('.kiosk-tablet-page.embedded');
+    await expect(embeddedPage).toBeVisible();
+
+    // Verify outer tab-scroll-content and embedded page do not allow page scrolling
+    const tabScroll = page.locator('.tab-scroll-content');
+    const tabScrollOverflow = await tabScroll.evaluate((el) => window.getComputedStyle(el).overflowY);
+    expect(tabScrollOverflow).toBe('hidden');
+
+    const contentArea = embeddedPage.locator('.kiosk-content-area');
+    await expect(contentArea).toBeVisible();
+    const contentAreaOverflow = await contentArea.evaluate((el) => window.getComputedStyle(el).overflowY);
+    expect(contentAreaOverflow).toBe('hidden');
+
+    // Header date is visible at top
+    const header = embeddedPage.locator('.kiosk-header');
+    await expect(header).toBeVisible();
+
+    // Footer is visible at bottom
+    const footer = embeddedPage.locator('.kiosk-bottom-nav');
+    await expect(footer).toBeVisible();
+
+    // Cook card is present
+    const cookCard = embeddedPage.locator('.kiosk-card-cook');
+    await expect(cookCard).toBeVisible();
+
+    // Meal card takes space and has internal scrollable container
+    const mealCard = embeddedPage.locator('.kiosk-card-meal');
+    await expect(mealCard).toBeVisible();
+    const mealCardContent = mealCard.locator('.kiosk-meal-card-content');
+    await expect(mealCardContent).toBeVisible();
+    const mealContentOverflow = await mealCardContent.evaluate((el) => window.getComputedStyle(el).overflowY);
+    expect(mealContentOverflow).toBe('auto');
+
+    // Todos card has max-height: 50% and internal scrollable list
+    const todosCard = embeddedPage.locator('.kiosk-card-todos');
+    await expect(todosCard).toBeVisible();
+    const todosMaxHeight = await todosCard.evaluate((el) => window.getComputedStyle(el).maxHeight);
+    expect(todosMaxHeight).not.toBe('none');
+
+    const todosList = todosCard.locator('.kiosk-todos-list');
+    await expect(todosList).toBeVisible();
+    const todosListOverflow = await todosList.evaluate((el) => window.getComputedStyle(el).overflowY);
+    expect(todosListOverflow).toBe('auto');
   });
 });
