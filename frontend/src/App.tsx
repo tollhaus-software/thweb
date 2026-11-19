@@ -2022,9 +2022,11 @@ const ALL_AVAILABLE_PERMISSIONS = [
   'families.all.restrictedread',
   'families.all.write',
   'families.self.selfservice',
+  'children.all.read',
   'children.all.write',
   'fees.all.read',
   'fees.self.read',
+  'hygiene.all.read',
   'hygiene.all.write',
   'hygiene.infektionsschutz.management',
   'hygiene.infektionsschutz.self',
@@ -2042,13 +2044,18 @@ const ALL_AVAILABLE_PERMISSIONS = [
   'meal_allergens.read',
   'meal_allergens.write',
   'audit.view',
+  'activity.view',
   'users.all.manage',
   'vaccination.status.manage',
+  'provision.kiosk.cert',
+  'dashboard.use',
   'permissions.simulate',
   'jobs.all.read',
   'jobs.all.write',
   'job.role_assignment.read',
-  'job.role_assignment.write'
+  'job.role_assignment.write',
+  'volunteers.absences.read',
+  'volunteers.absences.write'
 ];
 
 interface AdminViewProps {
@@ -2069,6 +2076,7 @@ const AdminView: React.FC<AdminViewProps> = ({ onOpenSimulator }) => {
   
   const [users, setUsers] = React.useState<AdminUser[]>([]);
   const [roles, setRoles] = React.useState<AdminRole[]>([]);
+  const [availablePermissions, setAvailablePermissions] = React.useState<string[]>(ALL_AVAILABLE_PERMISSIONS);
   const [loading, setLoading] = React.useState(true);
 
   // User modal states
@@ -2110,11 +2118,37 @@ const AdminView: React.FC<AdminViewProps> = ({ onOpenSimulator }) => {
     }
   }, [getAdminHeaders]);
 
+  const fetchPermissions = React.useCallback(async () => {
+    try {
+      const res = await fetch('/api/permissions', { headers: getAdminHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data?.permissions) && data.permissions.length > 0) {
+          setAvailablePermissions(data.permissions);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load permissions:', e);
+    }
+  }, [getAdminHeaders]);
+
   const refreshData = React.useCallback(async () => {
     setLoading(true);
-    await Promise.all([fetchUsers(), fetchRoles()]);
+    await Promise.all([fetchUsers(), fetchRoles(), fetchPermissions()]);
     setLoading(false);
-  }, [fetchUsers, fetchRoles]);
+  }, [fetchUsers, fetchRoles, fetchPermissions]);
+
+  const displayedUserPerms = React.useMemo(() => {
+    const set = new Set(availablePermissions);
+    selectedUserPerms.forEach(p => set.add(p));
+    return Array.from(set);
+  }, [availablePermissions, selectedUserPerms]);
+
+  const displayedRolePerms = React.useMemo(() => {
+    const set = new Set(availablePermissions);
+    selectedRolePerms.forEach(p => set.add(p));
+    return Array.from(set);
+  }, [availablePermissions, selectedRolePerms]);
 
   React.useEffect(() => {
     refreshData();
@@ -2480,7 +2514,7 @@ const AdminView: React.FC<AdminViewProps> = ({ onOpenSimulator }) => {
               <div style={{ marginBottom: '1.5rem' }}>
                 <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--text-secondary)', textAlign: 'left' }}>{t('customPermissions')} (Direct Overrides)</label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.35rem', maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border)', background: 'var(--bg-subtle)', padding: '0.5rem', borderRadius: '4px', textAlign: 'left' }}>
-                  {ALL_AVAILABLE_PERMISSIONS.map(p => (
+                  {displayedUserPerms.map(p => (
                     <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontFamily: 'monospace', textAlign: 'left' }}>
                       <input
                         type="checkbox"
@@ -2552,7 +2586,7 @@ const AdminView: React.FC<AdminViewProps> = ({ onOpenSimulator }) => {
               <div style={{ marginBottom: '1.5rem' }}>
                 <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--text-secondary)', textAlign: 'left' }}>{t('permissions')}</label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.35rem', maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border)', background: 'var(--bg-subtle)', padding: '0.5rem', borderRadius: '4px', textAlign: 'left' }}>
-                  {ALL_AVAILABLE_PERMISSIONS.map(p => (
+                  {displayedRolePerms.map(p => (
                     <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontFamily: 'monospace', textAlign: 'left' }}>
                       <input
                         type="checkbox"
