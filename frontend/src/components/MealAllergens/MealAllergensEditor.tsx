@@ -764,6 +764,7 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
         setStatus(updated.status);
         setHasAllergenRecord(updated.has_allergen_record);
         onDaySaved(updated);
+        onBack();
       }
     } catch (err) {
       console.error('Error finalizing meal allergens:', err);
@@ -781,6 +782,7 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
     cookCustomName,
     mealComponents,
     onDaySaved,
+    onBack,
   ]);
 
   const dateObj = parseDateKey(initialDay.date);

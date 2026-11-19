@@ -542,16 +542,12 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await page.getByTestId('component-step-next-btn').click();
     await page.getByTestId('popover-done-btn').click();
 
-    // Click finalize in editor
+    // Click finalize in editor - finalizing should close the allergen editor automatically
     const finalizeBtn = editor.locator('[data-testid="finalize-allergens-btn"]');
     await expect(finalizeBtn).toBeEnabled();
     await finalizeBtn.click();
 
-    // Wait for finalization and return back to dashboard
-    await expect(editor.locator('[data-testid="allergens-editor-status"]')).toContainText('Abgeschlossen');
-
-    const backBtn = page.getByTestId('allergens-editor-back-btn');
-    await backBtn.click();
+    // Verify editor is closed automatically
     await expect(editor).toHaveCount(0);
 
     // 6. Verify "Allergene eintragen" is now marked done on the dashboard!

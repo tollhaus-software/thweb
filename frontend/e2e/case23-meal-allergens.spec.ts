@@ -882,20 +882,17 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     await finalizeBtn.click();
     expect(confirmPrompt).toBe('Allergene finalisieren?');
 
-    // Status moves forward to Abgeschlossen
-    await expect(page.getByTestId('allergens-editor-status')).toHaveText('Status: Abgeschlossen');
-    await expect(finalizeBtn).toBeDisabled();
-
-    // Go back to overview and verify the box is greenish (finalized)
-    await page.getByTestId('allergens-editor-back-btn').click();
+    // Finalizing automatically closes the allergen editor and returns to the overview
+    await expect(page.getByTestId('meal-allergens-editor')).toHaveCount(0);
     await expect(page.getByTestId(`meal-allergens-day-box-${futureMealDate}`)).toHaveAttribute(
       'data-bg-variant',
       'finalized'
     );
 
-    // 13. Re-open finalized day -> verify status shows "Abgeschlossen" and NO warning banner is shown
+    // 13. Re-open finalized day -> verify status shows "Abgeschlossen", finalize button is disabled, and NO warning banner is shown
     await page.getByTestId(`meal-allergens-day-box-${futureMealDate}`).click();
     await expect(page.getByTestId('allergens-editor-status')).toContainText('Abgeschlossen');
+    await expect(finalizeBtn).toBeDisabled();
     await expect(page.getByTestId('finalized-warning-banner')).toHaveCount(0);
 
     // Verify exiting edit popover without making changes does NOT reset status to draft
