@@ -503,7 +503,7 @@ func TestBufdiAbsenceTasks_ConditionsAndLifecycle(t *testing.T) {
 		t.Errorf("expected bufdi tasks to NOT appear without absence, got: %+v", briefNoAbsence.TasksAndInfo)
 	}
 
-	// 2. Add absence:
+	// 2. Add absence (without specifying BufdiName, should default to global bufdi name):
 	absence, err := appStore.CreateVolunteerAbsence(ctx, userID, models.VolunteerAbsence{
 		Type:      "bufdi",
 		StartDate: "2099-05-17",
@@ -512,6 +512,9 @@ func TestBufdiAbsenceTasks_ConditionsAndLifecycle(t *testing.T) {
 	}, "bufdi-test@example.com")
 	if err != nil {
 		t.Fatalf("CreateVolunteerAbsence failed: %v", err)
+	}
+	if absence.BufdiName == "" {
+		t.Errorf("expected absence.BufdiName to default to global name, got empty")
 	}
 
 	// 3. With absence added: start_dryer, start_washer, change_diaper_bag should appear
@@ -522,8 +525,32 @@ func TestBufdiAbsenceTasks_ConditionsAndLifecycle(t *testing.T) {
 	if !briefWithAbsence.HasVolunteerAbsence {
 		t.Errorf("expected HasVolunteerAbsence to be true with absence")
 	}
-	if briefWithAbsence.VolunteerName == "" {
-		t.Errorf("expected VolunteerName to be populated, got empty")
+	if briefWithAbsence.VolunteerName != absence.BufdiName {
+		t.Errorf("expected VolunteerName %q to match absence BufdiName %q", briefWithAbsence.VolunteerName, absence.BufdiName)
+	}
+
+	// Update absence with a custom BufdiName on the absence itself
+	updatedAbsence, err := appStore.UpdateVolunteerAbsence(ctx, userID, models.VolunteerAbsence{
+		ID:        absence.ID,
+		Type:      "bufdi",
+		BufdiName: "CustomBuFDI",
+		StartDate: "2099-05-17",
+		EndDate:   "2099-05-20",
+		Note:      "Seminar Updated",
+	}, "bufdi-test@example.com")
+	if err != nil {
+		t.Fatalf("UpdateVolunteerAbsence with custom BufdiName failed: %v", err)
+	}
+	if updatedAbsence.BufdiName != "CustomBuFDI" {
+		t.Errorf("expected updated absence BufdiName 'CustomBuFDI', got %q", updatedAbsence.BufdiName)
+	}
+
+	briefWithCustom, err := appStore.GetDailyBrief(ctx, testDate)
+	if err != nil {
+		t.Fatalf("GetDailyBrief failed: %v", err)
+	}
+	if briefWithCustom.VolunteerName != "CustomBuFDI" {
+		t.Errorf("expected daily brief VolunteerName to reflect absence property 'CustomBuFDI', got %q", briefWithCustom.VolunteerName)
 	}
 	if !containsTask(briefWithAbsence.TasksAndInfo, TaskStartDryer) {
 		t.Errorf("expected %s in tasks, got: %+v", TaskStartDryer, briefWithAbsence.TasksAndInfo)

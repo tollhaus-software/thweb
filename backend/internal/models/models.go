@@ -879,13 +879,15 @@ type CompletedTask struct {
 }
 
 type VolunteerAbsence struct {
-	ID        uuid.UUID `json:"id"`
-	Type      string    `json:"type"` // "bufdi"
-	StartDate string    `json:"start_date"` // YYYY-MM-DD
-	EndDate   string    `json:"end_date"`   // YYYY-MM-DD
-	Note      string    `json:"note"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID            uuid.UUID `json:"id"`
+	Type          string    `json:"type"` // "bufdi"
+	BufdiName     string    `json:"bufdi_name"`
+	VolunteerName string    `json:"volunteer_name,omitempty"`
+	StartDate     string    `json:"start_date"` // YYYY-MM-DD
+	EndDate       string    `json:"end_date"`   // YYYY-MM-DD
+	Note          string    `json:"note"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 type MealPlanDayResponse struct {

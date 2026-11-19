@@ -2533,17 +2533,22 @@ func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*model
 	}
 
 	// 5. Check if BuFDI has an absence on targetDate:
-	hasBufdiAbsence, err := s.HasBufdiAbsence(ctx, targetDate)
+	activeAbsence, err := s.GetActiveBufdiAbsence(ctx, targetDate)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check bufdi absence for date %s: %w", dateStr, err)
 	}
+	hasBufdiAbsence := activeAbsence != nil
 	resp.HasVolunteerAbsence = hasBufdiAbsence
 
 	bufdiName, err := s.GetBufdiName(ctx)
 	if err != nil || strings.TrimSpace(bufdiName) == "" {
 		bufdiName = "BuFDI"
 	}
-	resp.VolunteerName = strings.TrimSpace(bufdiName)
+	if hasBufdiAbsence && strings.TrimSpace(activeAbsence.BufdiName) != "" {
+		resp.VolunteerName = strings.TrimSpace(activeAbsence.BufdiName)
+	} else {
+		resp.VolunteerName = strings.TrimSpace(bufdiName)
+	}
 
 	// 6. Evaluate tasks via DashboardTasks registry:
 	isNotRelevant := mealDay != nil && mealDay.Status == models.MealAllergenStatusNotRelevant
@@ -4953,9 +4958,29 @@ func (s *Store) HasBufdiAbsence(ctx context.Context, targetDate time.Time) (bool
 	return hasAbsence, nil
 }
 
+func (s *Store) GetActiveBufdiAbsence(ctx context.Context, targetDate time.Time) (*models.VolunteerAbsence, error) {
+	dateStr := targetDate.Format("2006-01-02")
+	var a models.VolunteerAbsence
+	err := s.db.QueryRow(ctx, `
+		SELECT id, type, bufdi_name, TO_CHAR(start_date, 'YYYY-MM-DD'), TO_CHAR(end_date, 'YYYY-MM-DD'), note, created_at, updated_at
+		FROM volunteer_absences
+		WHERE type = 'bufdi' AND start_date <= $1 AND end_date >= $1
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, dateStr).Scan(&a.ID, &a.Type, &a.BufdiName, &a.StartDate, &a.EndDate, &a.Note, &a.CreatedAt, &a.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get active bufdi absence for date %s: %w", dateStr, err)
+	}
+	a.VolunteerName = a.BufdiName
+	return &a, nil
+}
+
 func (s *Store) ListVolunteerAbsences(ctx context.Context) ([]models.VolunteerAbsence, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT id, type, TO_CHAR(start_date, 'YYYY-MM-DD'), TO_CHAR(end_date, 'YYYY-MM-DD'), note, created_at, updated_at
+		SELECT id, type, bufdi_name, TO_CHAR(start_date, 'YYYY-MM-DD'), TO_CHAR(end_date, 'YYYY-MM-DD'), note, created_at, updated_at
 		FROM volunteer_absences
 		ORDER BY start_date DESC, end_date DESC
 		LIMIT 40
@@ -4968,9 +4993,10 @@ func (s *Store) ListVolunteerAbsences(ctx context.Context) ([]models.VolunteerAb
 	var absences []models.VolunteerAbsence
 	for rows.Next() {
 		var a models.VolunteerAbsence
-		if err := rows.Scan(&a.ID, &a.Type, &a.StartDate, &a.EndDate, &a.Note, &a.CreatedAt, &a.UpdatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.Type, &a.BufdiName, &a.StartDate, &a.EndDate, &a.Note, &a.CreatedAt, &a.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan volunteer absence: %w", err)
 		}
+		a.VolunteerName = a.BufdiName
 		absences = append(absences, a)
 	}
 	if absences == nil {
@@ -4982,16 +5008,17 @@ func (s *Store) ListVolunteerAbsences(ctx context.Context) ([]models.VolunteerAb
 func (s *Store) GetVolunteerAbsenceByID(ctx context.Context, id uuid.UUID) (*models.VolunteerAbsence, error) {
 	var a models.VolunteerAbsence
 	err := s.db.QueryRow(ctx, `
-		SELECT id, type, TO_CHAR(start_date, 'YYYY-MM-DD'), TO_CHAR(end_date, 'YYYY-MM-DD'), note, created_at, updated_at
+		SELECT id, type, bufdi_name, TO_CHAR(start_date, 'YYYY-MM-DD'), TO_CHAR(end_date, 'YYYY-MM-DD'), note, created_at, updated_at
 		FROM volunteer_absences
 		WHERE id = $1
-	`, id).Scan(&a.ID, &a.Type, &a.StartDate, &a.EndDate, &a.Note, &a.CreatedAt, &a.UpdatedAt)
+	`, id).Scan(&a.ID, &a.Type, &a.BufdiName, &a.StartDate, &a.EndDate, &a.Note, &a.CreatedAt, &a.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("failed to get volunteer absence: %w", err)
 	}
+	a.VolunteerName = a.BufdiName
 	return &a, nil
 }
 
@@ -5019,6 +5046,19 @@ func (s *Store) CreateVolunteerAbsence(ctx context.Context, userID uuid.UUID, ab
 	absence.StartDate = strings.TrimSpace(absence.StartDate)
 	absence.EndDate = strings.TrimSpace(absence.EndDate)
 	absence.Note = strings.TrimSpace(absence.Note)
+	absence.BufdiName = strings.TrimSpace(absence.BufdiName)
+	absence.VolunteerName = strings.TrimSpace(absence.VolunteerName)
+
+	if absence.BufdiName == "" && absence.VolunteerName != "" {
+		absence.BufdiName = absence.VolunteerName
+	}
+	if absence.BufdiName == "" {
+		defaultName, _ := s.GetBufdiName(ctx)
+		if strings.TrimSpace(defaultName) == "" {
+			defaultName = "BuFDI"
+		}
+		absence.BufdiName = strings.TrimSpace(defaultName)
+	}
 
 	if absence.Type != "bufdi" {
 		return models.VolunteerAbsence{}, fmt.Errorf("invalid absence type: %s", absence.Type)
@@ -5047,13 +5087,14 @@ func (s *Store) CreateVolunteerAbsence(ctx context.Context, userID uuid.UUID, ab
 		}
 
 		query := `
-			INSERT INTO volunteer_absences (id, type, start_date, end_date, note)
-			VALUES ($1, $2, $3::date, $4::date, $5)
-			RETURNING id, type, TO_CHAR(start_date, 'YYYY-MM-DD'), TO_CHAR(end_date, 'YYYY-MM-DD'), note, created_at, updated_at
+			INSERT INTO volunteer_absences (id, type, bufdi_name, start_date, end_date, note)
+			VALUES ($1, $2, $3, $4::date, $5::date, $6)
+			RETURNING id, type, bufdi_name, TO_CHAR(start_date, 'YYYY-MM-DD'), TO_CHAR(end_date, 'YYYY-MM-DD'), note, created_at, updated_at
 		`
-		if err := tx.QueryRow(ctx, query, absence.ID, absence.Type, absence.StartDate, absence.EndDate, absence.Note).Scan(
+		if err := tx.QueryRow(ctx, query, absence.ID, absence.Type, absence.BufdiName, absence.StartDate, absence.EndDate, absence.Note).Scan(
 			&created.ID,
 			&created.Type,
+			&created.BufdiName,
 			&created.StartDate,
 			&created.EndDate,
 			&created.Note,
@@ -5062,6 +5103,7 @@ func (s *Store) CreateVolunteerAbsence(ctx context.Context, userID uuid.UUID, ab
 		); err != nil {
 			return err
 		}
+		created.VolunteerName = created.BufdiName
 		return s.recordAudit(ctx, tx, transactionID, nil, "volunteer_absence", created.ID, "INSERT", nil, created, userID, userEmail...)
 	})
 	if err != nil {
@@ -5075,6 +5117,19 @@ func (s *Store) UpdateVolunteerAbsence(ctx context.Context, userID uuid.UUID, ab
 	absence.StartDate = strings.TrimSpace(absence.StartDate)
 	absence.EndDate = strings.TrimSpace(absence.EndDate)
 	absence.Note = strings.TrimSpace(absence.Note)
+	absence.BufdiName = strings.TrimSpace(absence.BufdiName)
+	absence.VolunteerName = strings.TrimSpace(absence.VolunteerName)
+
+	if absence.BufdiName == "" && absence.VolunteerName != "" {
+		absence.BufdiName = absence.VolunteerName
+	}
+	if absence.BufdiName == "" {
+		defaultName, _ := s.GetBufdiName(ctx)
+		if strings.TrimSpace(defaultName) == "" {
+			defaultName = "BuFDI"
+		}
+		absence.BufdiName = strings.TrimSpace(defaultName)
+	}
 
 	if absence.Type != "bufdi" {
 		return models.VolunteerAbsence{}, fmt.Errorf("invalid absence type: %s", absence.Type)
@@ -5109,13 +5164,14 @@ func (s *Store) UpdateVolunteerAbsence(ctx context.Context, userID uuid.UUID, ab
 
 		query := `
 			UPDATE volunteer_absences
-			SET type = $1, start_date = $2::date, end_date = $3::date, note = $4
-			WHERE id = $5
-			RETURNING id, type, TO_CHAR(start_date, 'YYYY-MM-DD'), TO_CHAR(end_date, 'YYYY-MM-DD'), note, created_at, updated_at
+			SET type = $1, bufdi_name = $2, start_date = $3::date, end_date = $4::date, note = $5
+			WHERE id = $6
+			RETURNING id, type, bufdi_name, TO_CHAR(start_date, 'YYYY-MM-DD'), TO_CHAR(end_date, 'YYYY-MM-DD'), note, created_at, updated_at
 		`
-		if err := tx.QueryRow(ctx, query, absence.Type, absence.StartDate, absence.EndDate, absence.Note, absence.ID).Scan(
+		if err := tx.QueryRow(ctx, query, absence.Type, absence.BufdiName, absence.StartDate, absence.EndDate, absence.Note, absence.ID).Scan(
 			&updated.ID,
 			&updated.Type,
+			&updated.BufdiName,
 			&updated.StartDate,
 			&updated.EndDate,
 			&updated.Note,
@@ -5124,6 +5180,7 @@ func (s *Store) UpdateVolunteerAbsence(ctx context.Context, userID uuid.UUID, ab
 		); err != nil {
 			return err
 		}
+		updated.VolunteerName = updated.BufdiName
 		return s.recordAudit(ctx, tx, transactionID, nil, "volunteer_absence", updated.ID, "UPDATE", *existing, updated, userID, userEmail...)
 	})
 	if err != nil {

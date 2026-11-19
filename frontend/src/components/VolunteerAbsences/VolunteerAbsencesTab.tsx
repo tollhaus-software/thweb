@@ -19,6 +19,8 @@ import './VolunteerAbsences.css';
 export interface VolunteerAbsence {
   id: string;
   type: string; // 'bufdi'
+  bufdi_name?: string;
+  volunteer_name?: string;
   start_date: string; // YYYY-MM-DD
   end_date: string;   // YYYY-MM-DD
   note: string;
@@ -109,6 +111,7 @@ export const VolunteerAbsencesTab: React.FC = () => {
 
   // Form states
   const [formType, setFormType] = useState<string>('bufdi');
+  const [formBufdiName, setFormBufdiName] = useState<string>('');
   const [formStartDate, setFormStartDate] = useState<string>('');
   const [formEndDate, setFormEndDate] = useState<string>('');
   const [formNote, setFormNote] = useState<string>('');
@@ -306,6 +309,7 @@ export const VolunteerAbsencesTab: React.FC = () => {
   const openCreateModal = (prefillStartDate?: string, prefillEndDate?: string) => {
     setEditingAbsence(null);
     setFormType('bufdi');
+    setFormBufdiName(savedBufdiName || 'BuFDI');
     const initialStart = prefillStartDate || todayStr;
     const initialEnd = prefillEndDate || initialStart;
     setFormStartDate(initialStart);
@@ -320,6 +324,7 @@ export const VolunteerAbsencesTab: React.FC = () => {
   const openEditModal = (absence: VolunteerAbsence) => {
     setEditingAbsence(absence);
     setFormType(absence.type || 'bufdi');
+    setFormBufdiName(absence.bufdi_name || absence.volunteer_name || savedBufdiName || 'BuFDI');
     setFormStartDate(absence.start_date);
     setFormEndDate(absence.end_date);
     setFormNote(absence.note || '');
@@ -332,6 +337,7 @@ export const VolunteerAbsencesTab: React.FC = () => {
   const closeModal = () => {
     setModalOpen(false);
     setEditingAbsence(null);
+    setFormBufdiName('');
     setFormError(null);
   };
 
@@ -370,6 +376,7 @@ export const VolunteerAbsencesTab: React.FC = () => {
 
       const payload = {
         type: formType,
+        bufdi_name: formBufdiName.trim() || savedBufdiName.trim() || 'BuFDI',
         start_date: formStartDate,
         end_date: formEndDate,
         note: formNote.trim(),
@@ -643,7 +650,8 @@ export const VolunteerAbsencesTab: React.FC = () => {
               let cellTitle: string | undefined = undefined;
               if (hasAbsence) {
                 const a = dayAbsences[0];
-                cellTitle = `${formatTypeName(a.type)}${a.note ? `: ${a.note}` : ''} (${formatDateDE(a.start_date)} – ${formatDateDE(a.end_date)})${canWrite ? ' – Klicken zum Bearbeiten' : ''}`;
+                const displayName = a.bufdi_name || formatTypeName(a.type);
+                cellTitle = `${displayName}${a.note ? `: ${a.note}` : ''} (${formatDateDE(a.start_date)} – ${formatDateDE(a.end_date)})${canWrite ? ' – Klicken zum Bearbeiten' : ''}`;
               } else if (selectionStart && canWrite) {
                 cellTitle = `Enddatum auswählen: ${formatDateDE(dateIso)}`;
               } else if (canWrite) {
@@ -684,9 +692,9 @@ export const VolunteerAbsencesTab: React.FC = () => {
                             setHoveredAbsenceId(a.id);
                           }
                         }}
-                        title={`${formatTypeName(a.type)}${a.note ? `: ${a.note}` : ''} (${formatDateDE(a.start_date)} – ${formatDateDE(a.end_date)})`}
+                        title={`${a.bufdi_name || formatTypeName(a.type)}${a.note ? `: ${a.note}` : ''} (${formatDateDE(a.start_date)} – ${formatDateDE(a.end_date)})`}
                       >
-                        <span className="va-badge-type">{formatTypeName(a.type)}</span>
+                        <span className="va-badge-type">{a.bufdi_name || formatTypeName(a.type)}</span>
                         {a.note && <span className="va-badge-note">{a.note}</span>}
                       </div>
                     ))}
@@ -728,7 +736,7 @@ export const VolunteerAbsencesTab: React.FC = () => {
                     return (
                       <tr key={a.id}>
                         <td>
-                          <span className="va-type-pill">{formatTypeName(a.type)}</span>
+                          <span className="va-type-pill">{a.bufdi_name || formatTypeName(a.type)}</span>
                         </td>
                         <td>
                           <strong>{formatDateDE(a.start_date)}</strong> – <strong>{formatDateDE(a.end_date)}</strong>
@@ -810,7 +818,7 @@ export const VolunteerAbsencesTab: React.FC = () => {
                       </div>
 
                       <div className="va-card-meta">
-                        <span className="va-type-pill">{formatTypeName(a.type)}</span>
+                        <span className="va-type-pill">{a.bufdi_name || formatTypeName(a.type)}</span>
                         <span className="va-card-duration">
                           {days} {days === 1 ? (t('absenceDay') || 'Tag') : (t('absenceDays') || 'Tage')}
                         </span>
@@ -873,6 +881,18 @@ export const VolunteerAbsencesTab: React.FC = () => {
                 >
                   <option value="bufdi">BuFDI</option>
                 </select>
+              </div>
+
+              <div className="va-form-group">
+                <label htmlFor="va-modal-bufdi-name-input">{t('absenceBufdiName') || 'BuFDI Name'}</label>
+                <input
+                  id="va-modal-bufdi-name-input"
+                  data-testid="va-modal-bufdi-name-input"
+                  type="text"
+                  value={formBufdiName}
+                  onChange={(e) => setFormBufdiName(e.target.value)}
+                  placeholder={savedBufdiName || 'BuFDI'}
+                />
               </div>
 
               <div className="va-form-group">
@@ -1075,7 +1095,7 @@ export const VolunteerAbsencesTab: React.FC = () => {
             </p>
 
             <div style={{ background: 'var(--bg-hover)', padding: '0.75rem', borderRadius: '6px', fontSize: '0.85rem' }}>
-              <div><strong>{t('absenceType') || 'Typ'}:</strong> {formatTypeName(deletingAbsence.type)}</div>
+              <div><strong>{t('absenceType') || 'Typ'}:</strong> {deletingAbsence.bufdi_name ? `${formatTypeName(deletingAbsence.type)} (${deletingAbsence.bufdi_name})` : formatTypeName(deletingAbsence.type)}</div>
               <div><strong>{t('absenceStartDate') || 'Zeitraum'}:</strong> {formatDateDE(deletingAbsence.start_date)} – {formatDateDE(deletingAbsence.end_date)}</div>
               {deletingAbsence.note && <div><strong>{t('absenceNote') || 'Notiz'}:</strong> {deletingAbsence.note}</div>}
             </div>

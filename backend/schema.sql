@@ -373,6 +373,7 @@ $$;
 CREATE TABLE IF NOT EXISTS volunteer_absences (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     type TEXT NOT NULL CHECK (type IN ('bufdi')),
+    bufdi_name TEXT NOT NULL DEFAULT '',
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
     note TEXT NOT NULL DEFAULT '',

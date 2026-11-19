@@ -279,6 +279,11 @@ test.describe('Test Case 45: Volunteer Absences (Abwesenheit Freiwillige)', () =
     await addBtn.click();
     await expect(page.getByRole('heading', { name: /(Abwesenheit eintragen|Add Absence)/i })).toBeVisible();
 
+    // Verify BuFDI name field in modal defaults to global name
+    const modalBufdiName = page.getByTestId('va-modal-bufdi-name-input');
+    await expect(modalBufdiName).toBeVisible();
+    await expect(modalBufdiName).toHaveValue('Max Mustermann');
+
     const parts = todayStr.split('-');
     const todayDE = `${parts[2]}.${parts[1]}.${parts[0]}`;
     const startInput = page.locator('.va-modal input[placeholder="TT.MM.JJJJ"]').first();
@@ -296,14 +301,18 @@ test.describe('Test Case 45: Volunteer Absences (Abwesenheit Freiwillige)', () =
     await expect(todosHeader).toBeVisible();
     await expect(todosHeader).toHaveText('Hinweise & Aufgaben - ! Max Mustermann nicht im Haus !');
 
-    // 6. Update the name in volunteer absences management to "Lisa & Tom"
+    // 6. Update the absence's BuFDI name to "Lisa & Tom"
     await page.goto('/#volunteerAbsences');
     await expect(page.getByTestId('volunteer-absences-tab')).toBeVisible();
-    await bufdiNameInput.fill('Lisa & Tom');
-    await page.getByTestId('va-bufdi-name-save-btn').click();
-    await expect(page.getByTestId('va-bufdi-name-saved-badge')).toBeVisible();
+    await page.getByRole('button', { name: /(Liste|List)/i }).click();
+    await page.locator('.va-icon-btn[title="Bearbeiten"]').first().click();
+    await expect(page.getByRole('heading', { name: /(Abwesenheit bearbeiten|Edit Absence)/i })).toBeVisible();
+    await expect(page.getByTestId('va-modal-bufdi-name-input')).toHaveValue('Max Mustermann');
+    await page.getByTestId('va-modal-bufdi-name-input').fill('Lisa & Tom');
+    await page.locator('.va-modal').getByRole('button', { name: /(Speichern|Save)/i }).click();
+    await expect(page.getByRole('heading', { name: /(Abwesenheit bearbeiten|Edit Absence)/i })).toBeHidden();
 
-    // 7. Verify dashboard immediately shows updated name
+    // 7. Verify dashboard immediately shows updated name from absence property
     await page.goto('/#dashboard');
     await expect(todosHeader).toBeVisible();
     await expect(todosHeader).toHaveText('Hinweise & Aufgaben - ! Lisa & Tom nicht im Haus !');

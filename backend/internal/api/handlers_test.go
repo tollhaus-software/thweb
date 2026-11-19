@@ -3744,6 +3744,9 @@ func TestHandleVolunteerAbsences_ValidationAndLifecycle(t *testing.T) {
 	if created.Type != "bufdi" || created.StartDate != "2026-04-10" || created.EndDate != "2026-04-15" {
 		t.Fatalf("unexpected created absence data: %+v", created)
 	}
+	if created.BufdiName == "" {
+		t.Fatalf("expected created absence to have defaulted bufdi_name, got empty")
+	}
 
 	// 5. Overlap rejection on POST -> 409 Conflict
 	postBodyOverlap := `{"type":"bufdi","start_date":"2026-04-12","end_date":"2026-04-18","note":"Overlap"}`
@@ -3754,13 +3757,20 @@ func TestHandleVolunteerAbsences_ValidationAndLifecycle(t *testing.T) {
 		t.Fatalf("expected 409 Conflict for overlapping dates, got %d: %s", recPostOverlap.Code, recPostOverlap.Body.String())
 	}
 
-	// 6. PUT update successfully -> 200
-	updateBody := `{"type":"bufdi","start_date":"2026-04-10","end_date":"2026-04-16","note":"Verlängert"}`
+	// 6. PUT update successfully with custom bufdi_name -> 200
+	updateBody := `{"type":"bufdi","bufdi_name":"SpecificName","start_date":"2026-04-10","end_date":"2026-04-16","note":"Verlängert"}`
 	reqPut := httptest.NewRequest("PUT", "/api/volunteer-absences/"+created.ID.String(), strings.NewReader(updateBody))
 	recPut := httptest.NewRecorder()
 	r.ServeHTTP(recPut, reqPut.WithContext(context.WithValue(reqPut.Context(), auth.UserContextKey, uWrite)))
 	if recPut.Code != http.StatusOK {
 		t.Fatalf("expected 200 for update, got %d: %s", recPut.Code, recPut.Body.String())
+	}
+	var updated models.VolunteerAbsence
+	if err := json.Unmarshal(recPut.Body.Bytes(), &updated); err != nil {
+		t.Fatalf("failed to decode updated absence: %v", err)
+	}
+	if updated.BufdiName != "SpecificName" {
+		t.Fatalf("expected updated bufdi_name 'SpecificName', got %q", updated.BufdiName)
 	}
 
 	// 7. DELETE -> 204
