@@ -1070,4 +1070,144 @@ export function abbreviateComponentName(name: string, maxLetters = 16): string {
   return `${name.slice(0, maxLetters).trimEnd()}...`;
 }
 
+/**
+ * Calculates Levenshtein edit distance between two strings.
+ */
+export function levenshteinDistance(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+
+  let prev = Array.from({ length: n + 1 }, (_, i) => i);
+  let curr = new Array<number>(n + 1);
+
+  for (let i = 1; i <= m; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= n; j++) {
+      if (a[i - 1] === b[j - 1]) {
+        curr[j] = prev[j - 1];
+      } else {
+        curr[j] = 1 + Math.min(prev[j], curr[j - 1], prev[j - 1]);
+      }
+    }
+    const temp = prev;
+    prev = curr;
+    curr = temp;
+  }
+  return prev[n];
+}
+
+/**
+ * Checks whether candidate component matches an existing component:
+ * case-insensitive, allowing up to maxDistance (default 2) edit distance.
+ * For very short strings (< 4 chars), exact case-insensitive match is required
+ * to prevent false positives (e.g. "Ei" vs "Eis", "Reis" vs "Mais").
+ */
+export function isComponentMatch(
+  candidate: string,
+  existing: string,
+  maxDistance = 2
+): boolean {
+  const c = candidate.trim().toLowerCase();
+  const e = existing.trim().toLowerCase();
+  if (!c || !e) return false;
+  if (c === e) return true;
+
+  const minLen = Math.min(c.length, e.length);
+  if (minLen < 4) {
+    return false;
+  }
+  const allowedDistance = minLen === 4 ? 1 : maxDistance;
+  return levenshteinDistance(c, e) <= allowedDistance;
+}
+
+/**
+ * Checks if a candidate component name is already present in a list of existing component names.
+ */
+export function isComponentAlreadyPresent(
+  candidate: string,
+  existingComponentNames: string[],
+  maxDistance = 2
+): boolean {
+  return existingComponentNames.some((existing) =>
+    isComponentMatch(candidate, existing, maxDistance)
+  );
+}
+
+// Regex to split on connecting words and common separators
+// Connecting words: und, mit, auf, an, dazu, oder, sowie, and, with, on, or, m., u., w/
+// Delimiters: ,, ;, /, &, +
+const CONNECTING_WORDS_REGEX =
+  /\b(?:und|mit|auf|an|dazu|oder|sowie|and|with|on|or)\b|[+,;&/]|\bm\.\s*|\bu\.\s*|\bw\/\s*/gi;
+
+const IS_STANDALONE_CONNECTING_WORD_REGEX =
+  /^(?:und|mit|auf|an|dazu|oder|sowie|and|with|on|or|m\.|u\.|w\/)$/i;
+
+function cleanProposalPiece(piece: string): string {
+  return piece
+    .replace(/^[\s\-_:;,./+&]+|[\s\-_:;,./+&]+$/g, '')
+    .trim();
+}
+
+/**
+ * Extracts proposed meal components from Kochplan text entries.
+ * Splits on connecting words ("mit", "und", "auf", etc.) and delimiters,
+ * proposing the individual sub-words as well as the full original entry (if compound),
+ * while excluding standalone connecting words and punctuation.
+ */
+export function extractKochplanProposals(planComponents: string[] = []): string[] {
+  const proposals: string[] = [];
+  const seen = new Set<string>();
+
+  for (const raw of planComponents) {
+    if (!raw || !raw.trim()) continue;
+
+    let hasValidSubPiece = false;
+    const parts = raw.split(CONNECTING_WORDS_REGEX);
+    for (const part of parts) {
+      const cleaned = cleanProposalPiece(part);
+      if (!cleaned || IS_STANDALONE_CONNECTING_WORD_REGEX.test(cleaned)) {
+        continue;
+      }
+      hasValidSubPiece = true;
+      const lower = cleaned.toLowerCase();
+      if (!seen.has(lower)) {
+        seen.add(lower);
+        proposals.push(cleaned);
+      }
+    }
+
+    // Also include the full original entry (e.g. "Kartoffeln mit Ei") if it contains valid food components
+    if (hasValidSubPiece) {
+      const fullCleaned = cleanProposalPiece(raw);
+      if (fullCleaned) {
+        const fullLower = fullCleaned.toLowerCase();
+        if (!seen.has(fullLower)) {
+          seen.add(fullLower);
+          proposals.push(fullCleaned);
+        }
+      }
+    }
+  }
+
+  return proposals;
+}
+
+/**
+ * Returns available Kochplan proposals that are not already present in the existing components
+ * (case-insensitive and allowing up to maxDistance edit distance).
+ */
+export function getAvailableKochplanProposals(
+  planComponents: string[] = [],
+  existingComponentNames: string[] = [],
+  maxDistance = 2
+): string[] {
+  const proposals = extractKochplanProposals(planComponents);
+  return proposals.filter(
+    (proposal) => !isComponentAlreadyPresent(proposal, existingComponentNames, maxDistance)
+  );
+}
+
+
 

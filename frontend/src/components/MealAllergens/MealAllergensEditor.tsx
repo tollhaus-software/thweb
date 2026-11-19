@@ -23,6 +23,7 @@ import {
   getAllergenBgColor,
   findMatchingGroupsForComponentAllergen,
   type AllergiesMatchContext,
+  getAvailableKochplanProposals,
 } from '../../utils/mealAllergens';
 import { AllergenIcon } from './AllergenIcon';
 import { MealAllergensCalendarView } from './MealAllergensCalendarView';
@@ -638,6 +639,21 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
     [currentEditorDaySnapshot, allEntries]
   );
 
+  const existingComponentNames = useMemo(() => {
+    if (editingComponentIdx === null) return [];
+    return mealComponents
+      .filter((_, idx) => idx !== editingComponentIdx)
+      .map((c) => (c.name || '').trim())
+      .filter(Boolean);
+  }, [mealComponents, editingComponentIdx]);
+
+  const availablePlanProposals = useMemo(() => {
+    return getAvailableKochplanProposals(
+      day.plan_meal_components || [],
+      existingComponentNames
+    );
+  }, [day.plan_meal_components, existingComponentNames]);
+
   const getSourceComponents = (sourceDay: MealAllergenDay): MealAllergenComponent[] => {
     if (sourceDay.meal_components && sourceDay.meal_components.length > 0) {
       return sourceDay.meal_components;
@@ -1198,13 +1214,13 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
                       data-testid={`meal-component-name-input-${editingComponentIdx}`}
                     />
 
-                    {day.plan_meal_components && day.plan_meal_components.length > 0 && (
+                    {availablePlanProposals.length > 0 && (
                       <div className="meal-allergens-plan-take-row">
                         <span className="meal-allergens-plan-take-label">{t('takeFromPlanLabel')}</span>
                         <div className="meal-allergens-plan-take-chips">
-                          {day.plan_meal_components.map((planName, pIdx) => (
+                          {availablePlanProposals.map((planName, pIdx) => (
                             <button
-                              key={pIdx}
+                              key={`${planName}-${pIdx}`}
                               type="button"
                               className={`meal-allergens-plan-take-chip ${mealComponents[editingComponentIdx].name === planName ? 'active' : ''}`}
                               onClick={() => {
@@ -1213,6 +1229,7 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
                               }}
                               title={`"${planName}" übernehmen`}
                               data-testid={`take-plan-component-btn-${editingComponentIdx}-${pIdx}`}
+                              data-plan-name={planName}
                             >
                               <Plus size={13} />
                               <span>{planName}</span>

@@ -13,6 +13,11 @@ import {
   formatCooksDisplayName,
   sortCookOptions,
   getDistinctAllergens,
+  levenshteinDistance,
+  isComponentMatch,
+  isComponentAlreadyPresent,
+  extractKochplanProposals,
+  getAvailableKochplanProposals,
   type MealAllergenDay,
   type CookOption,
 } from '../src/utils/mealAllergens';
@@ -185,6 +190,112 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
       { name: 'Salat', allergens: ['senf', 'gluten'] },
     ]);
     expect(distinct).toEqual(['gluten', 'laktose', 'senf']);
+
+    // 9. Levenshtein edit distance, fuzzy component match, and Kochplan proposal extraction
+    expect(levenshteinDistance('Apfelmuss', 'Apfelmus')).toBe(1);
+    expect(levenshteinDistance('Fischstäbchen', 'Fischstaebchen')).toBe(2);
+    expect(levenshteinDistance('Spagetti', 'Spaghetti')).toBe(1);
+    expect(levenshteinDistance('Reis', 'Reiss')).toBe(1);
+    expect(levenshteinDistance('Reis', 'Mais')).toBe(2);
+
+    // isComponentMatch: case-insensitive, allows up to 2 char diff distance for words >= 4 chars
+    expect(isComponentMatch('Apfelmuss', 'Apfelmus')).toBe(true);
+    expect(isComponentMatch('apfelmuss', 'APFELMUS')).toBe(true);
+    expect(isComponentMatch('Fischstäbchen', 'Fischstaebchen')).toBe(true);
+    expect(isComponentMatch('fischstäbchen', 'Fischstäbchen')).toBe(true);
+    expect(isComponentMatch('Kartoffelbrei', 'Gurkensalat')).toBe(false);
+    // Short strings (< 4 chars) require exact match to prevent false positives like Reis vs Mais
+    expect(isComponentMatch('Reis', 'Mais')).toBe(false);
+    expect(isComponentMatch('Reis', 'reis')).toBe(true);
+    expect(isComponentMatch('Ei', 'Eis')).toBe(false);
+
+    // isComponentAlreadyPresent
+    expect(isComponentAlreadyPresent('Apfelmuss', ['Apfelmus', 'Schupfnudeln'])).toBe(true);
+    expect(isComponentAlreadyPresent('Kartoffelbrei', ['Fischstäbchen', 'Salat'])).toBe(false);
+
+    // extractKochplanProposals: splits compound dishes on connecting words and delimiters,
+    // proposing both the sub-words and the full original entry (e.g. "Kartoffeln", "Ei", "Kartoffeln mit Ei")
+    expect(extractKochplanProposals(['Kartoffeln mit Ei'])).toEqual([
+      'Kartoffeln',
+      'Ei',
+      'Kartoffeln mit Ei',
+    ]);
+
+    expect(
+      extractKochplanProposals(['Fischstäbchen mit Kartoffelbrei', 'Schupfnudeln und Apfelmuss'])
+    ).toEqual([
+      'Fischstäbchen',
+      'Kartoffelbrei',
+      'Fischstäbchen mit Kartoffelbrei',
+      'Schupfnudeln',
+      'Apfelmuss',
+      'Schupfnudeln und Apfelmuss',
+    ]);
+
+    expect(
+      extractKochplanProposals(['Kartoffeln, Quark und Kräuter'])
+    ).toEqual(['Kartoffeln', 'Quark', 'Kräuter', 'Kartoffeln, Quark und Kräuter']);
+
+    expect(
+      extractKochplanProposals(['Lachs auf Blattspinat mit Kartoffelpüree'])
+    ).toEqual(['Lachs', 'Blattspinat', 'Kartoffelpüree', 'Lachs auf Blattspinat mit Kartoffelpüree']);
+
+    expect(
+      extractKochplanProposals(['Milchreis mit Zimt und Zucker'])
+    ).toEqual(['Milchreis', 'Zimt', 'Zucker', 'Milchreis mit Zimt und Zucker']);
+
+    expect(
+      extractKochplanProposals(['Penne oder Spaghetti', 'Suppe, dazu Baguette', 'Waffeln sowie Kirschen'])
+    ).toEqual([
+      'Penne',
+      'Spaghetti',
+      'Penne oder Spaghetti',
+      'Suppe',
+      'Baguette',
+      'Suppe, dazu Baguette',
+      'Waffeln',
+      'Kirschen',
+      'Waffeln sowie Kirschen',
+    ]);
+
+    expect(
+      extractKochplanProposals(['Fish & Chips', 'Pizza + Salat', 'Suppe / Eintopf'])
+    ).toEqual(['Fish', 'Chips', 'Fish & Chips', 'Pizza', 'Salat', 'Pizza + Salat', 'Suppe', 'Eintopf', 'Suppe / Eintopf']);
+
+    expect(
+      extractKochplanProposals(['Spaghetti Bolognese', 'Grüner Salat'])
+    ).toEqual(['Spaghetti Bolognese', 'Grüner Salat']);
+
+    // Does not include connecting words by themselves
+    expect(extractKochplanProposals(['und mit auf an oder dazu sowie'])).toEqual([]);
+
+    // getAvailableKochplanProposals: filters out proposals matching existing components
+    const planInputs = ['Fischstäbchen mit Kartoffelbrei', 'Schupfnudeln und Apfelmuss'];
+    expect(getAvailableKochplanProposals(planInputs, ['Fischstäbchen'])).toEqual([
+      'Kartoffelbrei',
+      'Fischstäbchen mit Kartoffelbrei',
+      'Schupfnudeln',
+      'Apfelmuss',
+      'Schupfnudeln und Apfelmuss',
+    ]);
+    // Match allowing up to 2 char diff distance (Apfelmus matches Apfelmuss)
+    expect(getAvailableKochplanProposals(planInputs, ['fischstäbchen', 'Apfelmus'])).toEqual([
+      'Kartoffelbrei',
+      'Fischstäbchen mit Kartoffelbrei',
+      'Schupfnudeln',
+      'Schupfnudeln und Apfelmuss',
+    ]);
+    // All already present
+    expect(
+      getAvailableKochplanProposals(planInputs, [
+        'Fischstäbchen',
+        'Kartoffelbrei',
+        'Fischstäbchen mit Kartoffelbrei',
+        'Schupfnudeln',
+        'Apfelmus',
+        'Schupfnudeln und Apfelmuss',
+      ])
+    ).toEqual([]);
   });
 
   test('desktop (5x5 month view) and mobile (5-day week view) layouts, multi-cook popover editor, component popover editor, and copy allergens', async ({
@@ -621,9 +732,11 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     await page.getByTestId('close-history-modal-btn').click();
     await expect(page.getByTestId('meal-allergens-history-modal')).toHaveCount(0);
 
-    // Add second component (Gurkensalat) from meal plan suggestion
+    // Add second component (Gurkensalat) from meal plan suggestion.
+    // Spaghetti Bolognese is already added as component 0, so it is not offered anymore.
     await addCompBtn.click();
-    await page.getByTestId('take-plan-component-btn-1-1').click();
+    await expect(page.locator('.meal-allergens-plan-take-chips').getByText('Spaghetti Bolognese')).toHaveCount(0);
+    await page.getByTestId('take-plan-component-btn-1-0').click();
     await expect(page.getByTestId('component-name-static-value')).toHaveText('Gurkensalat');
     await page.getByTestId('popover-done-btn').click();
     await expect(page.getByTestId('meal-component-name-text-1')).toHaveText('Gurkensalat');
@@ -881,5 +994,112 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     await page.getByTestId('cooks-popover-done-btn').click();
     await expect(page.getByTestId('checklist-item-cook')).toBeVisible();
     await expect(page.getByTestId('finalize-allergens-btn')).toBeDisabled();
+  });
+
+  test('component editor proposes meal components splitting compound phrases and hiding already added components with fuzzy matching', async ({
+    request,
+    page,
+  }) => {
+    // 1. Reset DB
+    const resetRes = await request.post('/api/test/reset');
+    expect(resetRes.ok()).toBeTruthy();
+
+    // Compute Monday of current week so it is always visible in the default view
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const diffToMon = (dayOfWeek + 6) % 7;
+    const currentMonday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diffToMon);
+    const targetDate = formatDateKey(currentMonday);
+
+    // Set up a meal plan day with compound texts in kochplan:
+    // "Fischstäbchen mit Kartoffelbrei" and "Schupfnudeln und Apfelmuss"
+    const seedRes = await request.post('/api/test/meal-plan', {
+      data: [
+        {
+          date: targetDate,
+          cook_name: 'Anna Köchin',
+          meal_components: ['Fischstäbchen mit Kartoffelbrei', 'Schupfnudeln und Apfelmuss'],
+        },
+      ],
+    });
+    expect(seedRes.ok()).toBeTruthy();
+
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+    });
+    await page.setViewportSize({ width: 1200, height: 800 });
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Click on "Essen/Allergene" tab
+    const kochenTab = page.getByRole('button', { name: 'Kochen', exact: true });
+    if (await kochenTab.isVisible()) {
+      await kochenTab.click();
+    }
+    const tabBtn = page.locator('.tabs').getByRole('button', { name: 'Essen/Allergene' });
+    await expect(tabBtn).toBeVisible();
+    await tabBtn.click();
+    await expect(tabBtn).toHaveAttribute('data-active', 'true');
+
+    // Click targetDate to open the editor
+    await page.getByTestId(`meal-allergens-day-box-${targetDate}`).click();
+    await expect(page.getByTestId('meal-allergens-editor')).toBeVisible();
+
+    // Click "+ Komponente"
+    const addCompBtn = page.getByTestId('add-meal-component-btn');
+    await addCompBtn.click();
+    await expect(page.locator('.meal-component-popover')).toBeVisible();
+
+    // Proposals should include sub-words as well as the full original compound entry
+    const chips = page.locator('.meal-allergens-plan-take-chips button');
+    const chipTexts = await chips.allTextContents();
+    expect(chipTexts.map((t) => t.trim())).toEqual([
+      'Fischstäbchen',
+      'Kartoffelbrei',
+      'Fischstäbchen mit Kartoffelbrei',
+      'Schupfnudeln',
+      'Apfelmuss',
+      'Schupfnudeln und Apfelmuss',
+    ]);
+
+    // Select "Fischstäbchen" (chip index 0)
+    await page.getByTestId('take-plan-component-btn-0-0').click();
+    await expect(page.getByTestId('component-name-static-value')).toHaveText('Fischstäbchen');
+    await page.getByTestId('popover-done-btn').click();
+    await expect(page.getByTestId('meal-component-name-text-0')).toHaveText('Fischstäbchen');
+
+    // Add another component: "Fischstäbchen" is already added, so it must not be offered anymore
+    await addCompBtn.click();
+    const remainingChips1 = await chips.allTextContents();
+    expect(remainingChips1.map((t) => t.trim())).toEqual([
+      'Kartoffelbrei',
+      'Fischstäbchen mit Kartoffelbrei',
+      'Schupfnudeln',
+      'Apfelmuss',
+      'Schupfnudeln und Apfelmuss',
+    ]);
+
+    // Now manually type "Apfelmus" (diff distance 1 from "Apfelmuss")
+    await page.getByTestId('meal-component-name-input-1').fill('Apfelmus');
+    await page.getByTestId('component-step-next-btn').click();
+    await expect(page.getByTestId('component-name-static-value')).toHaveText('Apfelmus');
+    await page.getByTestId('popover-done-btn').click();
+    await expect(page.getByTestId('meal-component-name-text-1')).toHaveText('Apfelmus');
+
+    // Add a 3rd component:
+    // "Fischstäbchen" is added -> not offered
+    // "Apfelmus" is added -> "Apfelmuss" matches fuzzy <= 2 diff distance -> not offered!
+    await addCompBtn.click();
+    const remainingChips2 = await chips.allTextContents();
+    expect(remainingChips2.map((t) => t.trim())).toEqual([
+      'Kartoffelbrei',
+      'Fischstäbchen mit Kartoffelbrei',
+      'Schupfnudeln',
+      'Schupfnudeln und Apfelmuss',
+    ]);
+
+    // Discard empty 3rd component
+    await page.getByTestId('component-step1-cancel-btn').click();
+    await expect(page.locator('.meal-component-popover')).toHaveCount(0);
   });
 });
