@@ -351,6 +351,7 @@ type Family struct {
 	MentorFamilyID  *uuid.UUID  `json:"mentor_family_id,omitempty"`
 	MentorParentIDs []uuid.UUID `json:"mentor_parent_ids,omitempty"`
 	Notes           string      `json:"notes"`
+	FamilyType      string      `json:"family_type"`
 }
 
 // FormatFamilyName formats parents' surnames into a standardized family name:
@@ -498,9 +499,24 @@ type Parent struct {
 	VaccinationChecks          []VaccinationCheck      `json:"vaccination_checks,omitempty"`
 	Events                     []HygieneBelehrungEvent `json:"events"`
 	Memberships                []THMembership          `json:"memberships"`
+	ContactConsents            []ContactConsent        `json:"contact_consents"`
 	Jobs                       []Job                   `json:"jobs,omitempty"`
 	CreatedAt                  time.Time               `json:"created_at"`
 	UpdatedAt                  time.Time               `json:"updated_at"`
+}
+
+type ContactConsent struct {
+	ID          uuid.UUID  `json:"id"`
+	ParentID    uuid.UUID  `json:"parent_id"`
+	ConsentType string     `json:"consent_type"`
+	Status      string     `json:"status"` // "granted", "revoked"
+	GrantedAt   time.Time  `json:"granted_at"`
+	RevokedAt   *time.Time `json:"revoked_at,omitempty"`
+	Channel     string     `json:"channel"`
+	Notes       string     `json:"notes"`
+	RecordedBy  *uuid.UUID `json:"recorded_by,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
 type HygieneBelehrungEvent struct {

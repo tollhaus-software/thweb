@@ -13,6 +13,7 @@ import { SlidersHorizontal, Plus, ChevronDown, ChevronRight } from 'lucide-react
 import { t } from '../../utils/i18n';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import { CellPopover } from './CellPopover';
+import { isFamilyFormer } from '../../utils/family';
 
 interface DataTableProps<TData> {
   data: TData[];
@@ -97,6 +98,9 @@ export function DataTable<TData>({
     const familyName = (row.original as any).family_name;
     const subHeader = (row.original as any).sub_header;
     const hasSubRows = row.subRows && row.subRows.length > 0;
+    const origFamily = (row.original as any).originalFamily || row.original;
+    const isFormer = origFamily ? isFamilyFormer(origFamily) : false;
+    const isHistorical = origFamily?.family_type === 'historical_alumni';
     return (
       <Fragment key={row.id}>
         <tr className={`family-group-row ${familyId === highlightedRowId ? 'highlighted-row' : ''}`} id={`row-${familyId}`}>
@@ -116,6 +120,20 @@ export function DataTable<TData>({
               >
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem' }}>
                   <span className="family-name-text">{familyName}</span>
+                  {isFormer && (
+                    <span
+                      style={{
+                        fontSize: '0.72rem',
+                        padding: '1px 5px',
+                        borderRadius: '4px',
+                        backgroundColor: isHistorical ? 'rgba(234, 88, 12, 0.12)' : 'rgba(100, 116, 139, 0.15)',
+                        color: isHistorical ? '#c2410c' : 'var(--text-muted)',
+                        fontWeight: 500,
+                      }}
+                    >
+                      {isHistorical ? t('alumniHistoricalBadge') : t('alumniBadge')}
+                    </span>
+                  )}
                   {onJumpToFamily && jumpToFamilyLabel && (
                     <button
                       type="button"

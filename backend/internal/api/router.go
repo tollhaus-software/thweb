@@ -104,11 +104,17 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		r.With(auth.RequirePermission("families.all.write")).Post("/api/families", server.HandleCreateFamily)
 		r.With(auth.RequirePermission("families.all.write")).Put("/api/families/{id}/mentor", server.HandleUpdateFamilyMentor)
 		r.With(auth.RequirePermission("families.all.write")).Put("/api/families/{id}/notes", server.HandleUpdateFamilyNotes)
+		r.With(auth.RequirePermission("families.all.write")).Put("/api/families/{id}/family-type", server.HandleUpdateFamilyType)
 		r.With(auth.RequirePermission("families.all.read")).Put("/api/families/{id}", server.HandleUpdateFamilyParents)
 		r.With(auth.RequirePermission("families.all.read")).Post("/api/families/{id}/parents", server.HandleUpdateFamilyParents)
 		r.With(auth.RequirePermission("families.all.read")).Put("/api/families/{id}/parents", server.HandleUpdateFamilyParents)
 		r.With(auth.RequirePermission("families.all.write")).Delete("/api/families/{id}", server.HandleDeleteFamily)
 		r.With(auth.RequirePermission("families.all.write")).Delete("/api/parents/{id}", server.HandleDeleteParent)
+
+		// Contact Consents
+		r.With(auth.RequirePermission("families.all.write")).Post("/api/contact-consents", server.HandleCreateContactConsent)
+		r.With(auth.RequirePermission("families.all.write")).Put("/api/contact-consents/{id}", server.HandleUpdateContactConsent)
+		r.With(auth.RequirePermission("families.all.write")).Delete("/api/contact-consents/{id}", server.HandleDeleteContactConsent)
 
 		r.With(auth.RequirePermission("children.all.write")).Post("/api/families/{id}/children", server.HandleUpdateChild)
 		r.With(auth.RequireAnyPermission("children.all.write", "allergies.children.write")).Put("/api/children/{id}", server.HandleUpdateChild)

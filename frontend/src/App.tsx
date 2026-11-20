@@ -7,7 +7,7 @@ import './App.css';
 import { DataTable } from './components/Table/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import EasyEdit, { Types } from './components/InlineEdit';
-import { Pencil, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, ArrowUpRight, X, Clock, AlertCircle, ChevronLeft, ChevronRight, Plus, ArrowUpDown, Check, Eye, RefreshCw, Menu } from 'lucide-react';
+import { Pencil, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, ArrowUpRight, X, Clock, AlertCircle, ChevronLeft, ChevronRight, Plus, ArrowUpDown, Check, Eye, RefreshCw, Menu, Filter } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { MultiValueListEditor, type MultiValueFlagConfig, type MultiValueEntry, type MultiValueItem, getEntryValue, isFlagActive, PHONE_TYPES, getPhoneTypeSymbol, getPhoneTypeLabel } from './components/Table/MultiValueListEditor';
 import { AllergiesListEditor } from './components/Allergies/AllergiesListEditor';
@@ -65,8 +65,10 @@ import {
   getMentorsDisplay,
   getMentoredFamiliesForFamily,
   getMentoredFamiliesForParent,
+  isFamilyFormer,
 } from './utils/family';
 import { MentorPopover } from './components/Table/MentorPopover';
+import { ContactConsentPopover, type ContactConsentItem } from './components/Table/ContactConsentPopover';
 
 const EasyEditComponent = EasyEdit;
 const EasyEditTypes = Types;
@@ -104,6 +106,7 @@ interface Parent {
   vaccination_checks?: VaccinationCheck[];
   events?: HygieneBelehrungEvent[];
   memberships?: THMembership[];
+  contact_consents?: ContactConsentItem[];
   jobs?: JobItem[];
   family_name?: string;
 }
@@ -675,6 +678,7 @@ interface OverviewParent {
   phones?: MultiValueEntry[];
   address?: string;
   memberships?: THMembership[];
+  contact_consents?: ContactConsentItem[];
   jobs?: JobItem[];
 }
 
@@ -749,6 +753,7 @@ const getOverviewChildGroupStatus = (
 
 interface OverviewFamily {
   id: string;
+  family_type?: 'regular' | 'historical_alumni';
   parents: OverviewParent[];
   children?: OverviewChild[];
 }
@@ -761,6 +766,7 @@ interface Family {
   mentor_family_id?: string | null;
   mentor_parent_ids?: string[] | null;
   notes?: string;
+  family_type?: 'regular' | 'historical_alumni';
 }
 
 export type FamilySortOrder =
@@ -912,6 +918,124 @@ const ParentMembershipCell: React.FC<ParentMembershipCellProps> = ({
       >
         <Pencil size={13} />
       </button>
+    </div>
+  );
+};
+
+interface ParentConsentCellProps {
+  parent: Parent;
+  isActive: boolean;
+  onOpenManage: (parent: Parent, anchor: HTMLElement) => void;
+  canEdit: boolean;
+}
+
+const ParentConsentCell: React.FC<ParentConsentCellProps> = ({
+  parent,
+  isActive,
+  onOpenManage,
+  canEdit,
+}) => {
+  const sortedConsents = React.useMemo(() => {
+    return [...(parent.contact_consents || [])].sort((a, b) => {
+      const timeA = new Date(a.granted_at).getTime();
+      const timeB = new Date(b.granted_at).getTime();
+      if (timeB !== timeA) return timeB - timeA;
+      const crA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const crB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return crB - crA;
+    });
+  }, [parent.contact_consents]);
+  const activeConsent = sortedConsents[0];
+  const cellId = `cell-consent-${parent.id}`;
+
+  const isGranted = activeConsent?.status === 'granted';
+  const isRevoked = activeConsent?.status === 'revoked';
+  const displayDate = activeConsent?.granted_at ? formatDisplayDate(activeConsent.granted_at) : '';
+
+  return (
+    <div
+      id={cellId}
+      className="consent-cell-wrapper"
+      onClick={(e) => {
+        if (!canEdit) return;
+        e.stopPropagation();
+        onOpenManage(parent, e.currentTarget);
+      }}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        width: '100%',
+        minHeight: '28px',
+        borderRadius: '4px',
+        padding: '2px 6px',
+        backgroundColor: isActive ? 'var(--accent-bg)' : 'transparent',
+        cursor: canEdit ? 'pointer' : 'default',
+        transition: 'background-color 0.15s ease-in-out',
+      }}
+      title={canEdit ? t('contactConsent') : undefined}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+        {isGranted ? (
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.25rem',
+              color: '#15803d',
+              background: 'rgba(34, 197, 94, 0.12)',
+              padding: '2px 6px',
+              borderRadius: '4px',
+              fontSize: '0.8rem',
+              fontWeight: 600,
+            }}
+          >
+            <Check size={12} />
+            <span>{t('consentGranted')}{displayDate ? ` (${displayDate})` : ''}</span>
+          </span>
+        ) : isRevoked ? (
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.25rem',
+              color: '#b91c1c',
+              background: 'rgba(239, 68, 68, 0.12)',
+              padding: '2px 6px',
+              borderRadius: '4px',
+              fontSize: '0.8rem',
+              fontWeight: 600,
+            }}
+          >
+            <X size={12} />
+            <span>{t('consentRevoked')}{displayDate ? ` (${displayDate})` : ''}</span>
+          </span>
+        ) : (
+          <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>-</span>
+        )}
+      </div>
+
+      {canEdit && (
+        <button
+          type="button"
+          className="cell-edit-pencil-btn"
+          style={{
+            border: 'none',
+            background: 'transparent',
+            color: 'var(--text-muted)',
+            cursor: 'pointer',
+            padding: '2px',
+            opacity: 0.6,
+          }}
+          title={t('contactConsent')}
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenManage(parent, e.currentTarget.parentElement || e.currentTarget);
+          }}
+        >
+          <Pencil size={12} />
+        </button>
+      )}
     </div>
   );
 };
@@ -2708,6 +2832,10 @@ const Dashboard: React.FC = () => {
   const [activePersonForJobs, setActivePersonForJobs] = React.useState<PersonWithJobs | null>(null);
   const [overviewFamilies, setOverviewFamilies] = React.useState<OverviewFamily[]>([]);
   const [overviewGroupBy, setOverviewGroupBy] = React.useState<'family' | 'group' | 'job'>('group');
+  const [mgaLifecycleFilter, setMgaLifecycleFilter] = React.useState<'all' | 'active' | 'former'>('active');
+  const [contactConsentPopoverAnchor, setContactConsentPopoverAnchor] = React.useState<HTMLElement | null>(null);
+  const [targetParentForConsent, setTargetParentForConsent] = React.useState<Parent | null>(null);
+  const [isHistoricalAlumni, setIsHistoricalAlumni] = React.useState<boolean>(false);
 
   const currentAuthUserFirstName = React.useMemo(() => {
     if (user?.first_name) return user.first_name;
@@ -2761,6 +2889,8 @@ const Dashboard: React.FC = () => {
 
   const [sortPopoverOpen, setSortPopoverOpen] = React.useState(false);
   const sortButtonRef = React.useRef<HTMLButtonElement>(null);
+  const [lifecycleFilterPopoverOpen, setLifecycleFilterPopoverOpen] = React.useState(false);
+  const lifecycleFilterButtonRef = React.useRef<HTMLButtonElement>(null);
 
   const isMainPageActive = React.useMemo(() => {
     return isExperimentActive('main_page', { user });
@@ -2813,7 +2943,7 @@ const Dashboard: React.FC = () => {
 
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [activeTab, setActiveTab] = React.useState<
-    'main' | 'familiesOverview' | 'families' | 'parents' | 'children' | 'members' | 'jobs' | 'employees' | 'childcareFees' | 'childcareFeesAll' | 'hygieneBelehrung' | 'hygieneDocument' | 'kochenHygiene' | 'mealPlan' | 'mealAllergens' | 'audit' | 'admin' | 'activity' | 'kiosk' | 'dashboard' | string
+    'main' | 'familiesOverview' | 'families' | 'parents' | 'children' | 'alumni' | 'members' | 'jobs' | 'employees' | 'childcareFees' | 'childcareFeesAll' | 'hygieneBelehrung' | 'hygieneDocument' | 'kochenHygiene' | 'mealPlan' | 'mealAllergens' | 'audit' | 'admin' | 'activity' | 'kiosk' | 'dashboard' | string
   >(() => {
     const rawHash = window.location.hash.replace('#', '');
     const hash = rawHash.split('?')[0];
@@ -2853,6 +2983,7 @@ const Dashboard: React.FC = () => {
       (hash === 'families' && canReadFamiliesAll) ||
       (hash === 'parents' && canReadFamiliesAll) ||
       (hash === 'children' && canReadFamiliesAll) ||
+      (hash === 'alumni' && canReadFamiliesAll) ||
       (hash === 'members' && canReadMembers) ||
       (hash === 'jobs' && canReadJobs) ||
       (hash === 'employees' && canReadEmployees) ||
@@ -2880,6 +3011,7 @@ const Dashboard: React.FC = () => {
       (saved === 'families' && canReadFamiliesAll) ||
       (saved === 'parents' && canReadFamiliesAll) ||
       (saved === 'children' && canReadFamiliesAll) ||
+      (saved === 'alumni' && canReadFamiliesAll) ||
       (saved === 'members' && canReadMembers) ||
       (saved === 'jobs' && canReadJobs) ||
       (saved === 'employees' && canReadEmployees) ||
@@ -2969,7 +3101,7 @@ const Dashboard: React.FC = () => {
       } else if (canReadFees) {
         fallback = 'childcareFees';
       }
-    } else if ((activeTab === 'parents' || activeTab === 'children') && !canReadFamiliesAll) {
+    } else if ((activeTab === 'parents' || activeTab === 'children' || activeTab === 'alumni') && !canReadFamiliesAll) {
       if (canReadOverview) {
         fallback = 'familiesOverview';
       } else if (canReadFees) {
@@ -4020,6 +4152,7 @@ const Dashboard: React.FC = () => {
       case 'families':
       case 'parents':
       case 'children':
+      case 'alumni':
       case 'hygieneBelehrung':
         if (canReadFamiliesAll) {
           fetchFamilies();
@@ -4145,6 +4278,7 @@ const Dashboard: React.FC = () => {
         (hash === 'familiesOverview' && canReadOverview) ||
         (hash === 'parents' && canReadFamiliesAll) ||
         (hash === 'children' && canReadFamiliesAll) ||
+        (hash === 'alumni' && canReadFamiliesAll) ||
         (hash === 'families' && canReadFamiliesAll) ||
         (hash === 'members' && canReadMembers) ||
         (hash === 'jobs' && canReadJobs) ||
@@ -4191,7 +4325,7 @@ const Dashboard: React.FC = () => {
         localStorage.setItem('thweb_active_tab', 'familiesOverview');
         window.location.hash = 'familiesOverview';
       } else if (
-        (hash === 'parents' || hash === 'children') &&
+        (hash === 'parents' || hash === 'children' || hash === 'alumni') &&
         !canReadFamiliesAll
       ) {
         const fallback = canReadOverview ? 'familiesOverview' : canReadFees ? 'childcareFees' : 'familiesOverview';
@@ -4244,6 +4378,7 @@ const Dashboard: React.FC = () => {
         activeTab === 'families' ||
         activeTab === 'parents' ||
         activeTab === 'children' ||
+        activeTab === 'alumni' ||
         activeTab === 'hygieneBelehrung'
       ) {
         if (canReadFamiliesAll) fetchFamilies();
@@ -4509,7 +4644,7 @@ const Dashboard: React.FC = () => {
     pushAction({
       type: 'ADD_MEMBERSHIP',
       payload: {
-        tab: 'parents',
+        tab: activeTab === 'alumni' ? 'alumni' : 'parents',
         parentId: parentId,
         membershipId: created.id,
         membership: created,
@@ -4560,7 +4695,7 @@ const Dashboard: React.FC = () => {
       pushAction({
         type: 'UPDATE_MEMBERSHIP',
         payload: {
-          tab: 'parents',
+          tab: activeTab === 'alumni' ? 'alumni' : 'parents',
           parentId: parentId,
           membershipId: membershipId,
           before: {
@@ -4968,6 +5103,15 @@ const Dashboard: React.FC = () => {
     return targetParentMultiValue;
   }, [families, targetParentMultiValue]);
 
+  const activeParentForConsent = React.useMemo(() => {
+    if (!targetParentForConsent) return null;
+    for (const f of families) {
+      const found = (f.parents || []).find((p) => p.id === targetParentForConsent.id);
+      if (found) return found;
+    }
+    return targetParentForConsent;
+  }, [families, targetParentForConsent]);
+
   const activeChildForMultiValue = React.useMemo(() => {
     if (!targetChildMultiValue) return null;
     for (const f of families) {
@@ -5197,12 +5341,80 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const openManageConsent = React.useCallback((parent: Parent, anchor: HTMLElement) => {
+    setTargetParentForConsent(parent);
+    setContactConsentPopoverAnchor(anchor);
+  }, []);
+
+  const closeManageConsent = React.useCallback(() => {
+    setTargetParentForConsent(null);
+    setContactConsentPopoverAnchor(null);
+  }, []);
+
+  const handleSaveContactConsent = React.useCallback(
+    async (payload: {
+      parentId: string;
+      consentId?: string;
+      consentType: string;
+      status: 'granted' | 'revoked';
+      grantedAt: string;
+      channel: string;
+      notes: string;
+    }) => {
+      const url = payload.consentId ? `/api/contact-consents/${payload.consentId}` : '/api/contact-consents';
+      const method = payload.consentId ? 'PUT' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          parent_id: payload.parentId,
+          consent_type: payload.consentType,
+          status: payload.status,
+          granted_at: payload.grantedAt,
+          channel: payload.channel,
+          notes: payload.notes,
+        }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData?.error || 'Failed to save contact consent');
+      }
+      if (canReadFamiliesAll) fetchFamilies();
+    },
+    [canReadFamiliesAll, fetchFamilies, getAuthHeaders]
+  );
+
+  const handleDeleteContactConsent = React.useCallback(
+    async (consentId: string) => {
+      const res = await fetch(`/api/contact-consents/${consentId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) {
+        throw new Error('Failed to delete contact consent');
+      }
+      if (canReadFamiliesAll) fetchFamilies();
+    },
+    [canReadFamiliesAll, fetchFamilies, getAuthHeaders]
+  );
+
   const openAddFamily = () => {
     setP1FirstName('');
     setP1LastName('');
     setP2FirstName('');
     setP2LastName('');
     setIsP2LastNameDirty(false);
+    setIsHistoricalAlumni(false);
+    setAddFamilyOpen(true);
+  };
+
+  const openAddAlumniFamily = () => {
+    setP1FirstName('');
+    setP1LastName('');
+    setP2FirstName('');
+    setP2LastName('');
+    setIsP2LastNameDirty(false);
+    setIsHistoricalAlumni(true);
     setAddFamilyOpen(true);
   };
 
@@ -5235,6 +5447,7 @@ const Dashboard: React.FC = () => {
       method: 'POST',
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
+        family_type: isHistoricalAlumni ? 'historical_alumni' : 'regular',
         parents: parentsToCreate,
       }),
     })
@@ -5246,7 +5459,7 @@ const Dashboard: React.FC = () => {
         pushAction({
           type: 'ADD_FAMILY',
           payload: {
-            tab: activeTab === 'children' ? 'children' : activeTab === 'families' ? 'families' : 'parents',
+            tab: activeTab === 'children' ? 'children' : activeTab === 'families' ? 'families' : activeTab === 'alumni' ? 'alumni' : 'parents',
             familyId: createdFamily.id,
             parents: createdFamily.parents || [],
           }
@@ -5299,7 +5512,7 @@ const Dashboard: React.FC = () => {
           pushAction({
             type: 'UPDATE_PARENT',
             payload: {
-              tab: 'parents',
+              tab: activeTab === 'alumni' ? 'alumni' : 'parents',
               familyId: family.id,
               parentId: parent.id,
               beforeParents: stripParentsVaccination(originalParents),
@@ -5347,7 +5560,7 @@ const Dashboard: React.FC = () => {
         pushAction({
           type: 'UPDATE_PARENT',
           payload: {
-            tab: 'parents',
+            tab: activeTab === 'alumni' ? 'alumni' : 'parents',
             familyId: family.id,
             parentId: parent.id,
             beforeParents: stripParentsVaccination(originalParents),
@@ -5393,7 +5606,7 @@ const Dashboard: React.FC = () => {
         pushAction({
           type: 'UPDATE_PARENT',
           payload: {
-            tab: 'parents',
+            tab: activeTab === 'alumni' ? 'alumni' : 'parents',
             familyId: family.id,
             beforeParents: stripParentsVaccination(originalParents),
             afterParents: stripParentsVaccination(updatedParents),
@@ -5696,7 +5909,14 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
       };
     });
 
-    const sorted = sortFamilyBlocks(mapped, familySortOrder, CURRENT_LOCALE);
+    const filteredByLifecycle = mapped.filter((f) => {
+      const isFormer = isFamilyFormer(f.originalFamily || f);
+      if (mgaLifecycleFilter === 'active') return !isFormer;
+      if (mgaLifecycleFilter === 'former') return isFormer;
+      return true;
+    });
+
+    const sorted = sortFamilyBlocks(filteredByLifecycle, familySortOrder, CURRENT_LOCALE);
 
     if (!query) return sorted;
     return sorted.filter(f => f.nameMatch || f.parents.length > 0)
@@ -5719,7 +5939,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
         }
         return f;
       });
-  }, [families, globalFilter, familySortOrder]);
+  }, [families, globalFilter, familySortOrder, mgaLifecycleFilter]);
 
   // Structure families with their children sub-rows for two-layer rendering
   const childrenFamilyData = React.useMemo(() => {
@@ -5764,7 +5984,14 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
       };
     });
 
-    const sorted = sortFamilyBlocks(mapped, familySortOrder, CURRENT_LOCALE);
+    const filteredByLifecycle = mapped.filter((f) => {
+      const isFormer = isFamilyFormer(f.originalFamily || f);
+      if (mgaLifecycleFilter === 'active') return !isFormer;
+      if (mgaLifecycleFilter === 'former') return isFormer;
+      return true;
+    });
+
+    const sorted = sortFamilyBlocks(filteredByLifecycle, familySortOrder, CURRENT_LOCALE);
 
     if (!query) return sorted;
     return sorted.filter(f => f.nameMatch || f.children.length > 0)
@@ -5787,7 +6014,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
         }
         return f;
       });
-  }, [families, globalFilter, familySortOrder]);
+  }, [families, globalFilter, familySortOrder, mgaLifecycleFilter]);
 
   // Structure families for 1-row-per-family display in families tab
   const familiesTabData = React.useMemo(() => {
@@ -5861,9 +6088,86 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
       };
     });
 
-    const sorted = sortFamilyBlocks(mapped, familySortOrder, CURRENT_LOCALE);
+    const filteredByLifecycle = mapped.filter((f) => {
+      const isFormer = isFamilyFormer(f.originalFamily || f);
+      if (mgaLifecycleFilter === 'active') return !isFormer;
+      if (mgaLifecycleFilter === 'former') return isFormer;
+      return true;
+    });
+
+    const sorted = sortFamilyBlocks(filteredByLifecycle, familySortOrder, CURRENT_LOCALE);
     if (!query) return sorted;
     return sorted.filter((f) => f.matchesQuery);
+  }, [families, globalFilter, familySortOrder, mgaLifecycleFilter]);
+
+  // Structure former families for alumni tab (only former/alumni families)
+  const alumniFamilyData = React.useMemo(() => {
+    const query = (globalFilter || '').trim().toLowerCase();
+    const formerFamilies = families.filter((f) => isFamilyFormer(f));
+
+    const mapped = formerFamilies.map((f) => {
+      const familyName = getFamilyName(f);
+
+      const sortedParents = [...(f.parents || [])].sort((a, b) => {
+        const cmp = (a.first_name || '').localeCompare(b.first_name || '', CURRENT_LOCALE);
+        if (cmp !== 0) return cmp;
+        return (a.last_name || '').localeCompare(b.last_name || '', CURRENT_LOCALE);
+      });
+
+      const allParents = sortedParents.map((p) => ({
+        ...p,
+        family_id: f.id,
+        family_name: familyName,
+      }));
+
+      const filteredParents = allParents.filter((p) => {
+        if (!query) return true;
+        const fnMatch = (p.first_name || '').toLowerCase().includes(query);
+        const lnMatch = (p.last_name || '').toLowerCase().includes(query);
+        const emailMatch = (p.emails || []).some((e) =>
+          (typeof e === 'string' ? e : e.value || '').toLowerCase().includes(query)
+        );
+        const phoneMatch = (p.phones || []).some((ph) =>
+          (typeof ph === 'string' ? ph : ph.value || '').toLowerCase().includes(query)
+        );
+        const notesMatch = (p.notes || '').toLowerCase().includes(query);
+        const addressMatch = (p.address || '').toLowerCase().includes(query);
+        return fnMatch || lnMatch || emailMatch || phoneMatch || notesMatch || addressMatch;
+      });
+
+      return {
+        id: f.id,
+        family_name: familyName,
+        parents: filteredParents,
+        nameMatch: familyName.toLowerCase().includes(query),
+        originalFamily: f,
+      };
+    });
+
+    const sorted = sortFamilyBlocks(mapped, familySortOrder, CURRENT_LOCALE);
+
+    if (!query) return sorted;
+    return sorted
+      .filter((f) => f.nameMatch || f.parents.length > 0)
+      .map((f) => {
+        if (f.nameMatch && f.parents.length === 0) {
+          const originalFamily = formerFamilies.find((orig) => orig.id === f.id);
+          const origParents = [...(originalFamily?.parents || [])].sort((a, b) => {
+            const cmp = (a.first_name || '').localeCompare(b.first_name || '', CURRENT_LOCALE);
+            if (cmp !== 0) return cmp;
+            return (a.last_name || '').localeCompare(b.last_name || '', CURRENT_LOCALE);
+          });
+          return {
+            ...f,
+            parents: origParents.map((p) => ({
+              ...p,
+              family_id: f.id,
+              family_name: f.family_name,
+            })),
+          };
+        }
+        return f;
+      });
   }, [families, globalFilter, familySortOrder]);
 
   const overviewFamiliesTabData = React.useMemo(() => {
@@ -6616,6 +6920,205 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
     [families, handleSaveParentField, handleSaveParentNames, handleSaveFamilyParents, handleDeleteParent, canWriteParents, canWriteJobs, isVaccinationUnlocked, handleRequestKmsAuth, hasPermission, user?.email, membershipPopoverAnchor, targetParentMemberships, openManageMemberships, multiValuePopoverAnchor, activeParentForMultiValue, activeMultiValueField, openManageMultiValue, vaccinationPopoverAnchor, targetVaccinationPerson, openManageVaccination, jobsPopoverAnchor, activePersonForJobs, openManageJobs, handleJumpToFamily, canWriteFamilies, mentorPopoverAnchor, activeFamilyForMentor, openManageMentor, openFamilyNotes]
   );
 
+  const alumniColumns = React.useMemo<ColumnDef<any>[]>(
+    () => [
+      {
+        header: t('firstNameEdit'),
+        accessorKey: 'first_name',
+        size: 200,
+        minSize: 200,
+        cell: (info) => {
+          const parent = info.row.original;
+          return (
+            <FirstNameEditor
+              id={`alumni-parent-${parent.id}`}
+              firstName={parent.first_name}
+              firstNameForAddressList={parent.first_name_for_address_list || ''}
+              onSave={(fn, fnAddr) => handleSaveParentNames(parent, fn, fnAddr)}
+              disabled={!canWriteParents}
+            />
+          );
+        }
+      },
+      {
+        header: t('lastNameEdit'),
+        accessorKey: 'last_name',
+        size: 200,
+        cell: (info) => {
+          const parent = info.row.original;
+          return (
+            <EasyEditComponent
+              type={EasyEditTypes.TEXT}
+              value={parent.last_name}
+              onSave={(val: string) => handleSaveParentField(parent, 'last_name', val)}
+              editButtonLabel={<Pencil size={13} />}
+              instructions={t('editLastName')}
+              viewAttributes={{}}
+              inputAttributes={{}}
+              onCancel={() => {}}
+              onValidate={() => true}
+            />
+          );
+        }
+      },
+      {
+        header: t('emailsEdit'),
+        accessorKey: 'emails',
+        size: 300,
+        cell: (info) => {
+          const parent = info.row.original;
+          const isActive = Boolean(
+            multiValuePopoverAnchor &&
+            activeParentForMultiValue?.id === parent.id &&
+            activeMultiValueField === 'emails'
+          );
+          return (
+            <ParentMultiValueCell
+              parent={parent}
+              field="emails"
+              placeholder={t('addEmail')}
+              isActive={isActive}
+              onOpenManage={openManageMultiValue}
+            />
+          );
+        }
+      },
+      {
+        header: t('phonesEdit'),
+        accessorKey: 'phones',
+        size: 250,
+        cell: (info) => {
+          const parent = info.row.original;
+          const isActive = Boolean(
+            multiValuePopoverAnchor &&
+            activeParentForMultiValue?.id === parent.id &&
+            activeMultiValueField === 'phones'
+          );
+          return (
+            <ParentMultiValueCell
+              parent={parent}
+              field="phones"
+              placeholder={t('addPhone')}
+              isActive={isActive}
+              onOpenManage={openManageMultiValue}
+            />
+          );
+        }
+      },
+      {
+        header: t('address'),
+        accessorKey: 'address',
+        size: 250,
+        cell: (info) => {
+          const parent = info.row.original;
+          const family = families.find((f) => f.id === parent.family_id);
+          const familyParents = family?.parents || [parent];
+          return (
+            <AddressEditor
+              parent={parent}
+              familyParents={familyParents}
+              onSave={(updatedParents) => handleSaveFamilyParents(parent.family_id, updatedParents)}
+            />
+          );
+        }
+      },
+      {
+        header: t('contactConsent'),
+        id: 'contact_consent',
+        size: 180,
+        cell: (info) => {
+          const parent = info.row.original;
+          if (!parent || !parent.id) return null;
+          const isCurrentActive = Boolean(contactConsentPopoverAnchor && activeParentForConsent?.id === parent.id);
+          return (
+            <ParentConsentCell
+              parent={parent}
+              isActive={isCurrentActive}
+              onOpenManage={openManageConsent}
+              canEdit={canWriteParents}
+            />
+          );
+        }
+      },
+      {
+        header: t('th_membership'),
+        id: 'th_membership',
+        size: 180,
+        cell: (info) => {
+          const parent = info.row.original;
+          if (!parent || !parent.id) return null;
+          const isCurrentActive = Boolean(membershipPopoverAnchor && targetParentMemberships?.id === parent.id);
+          return (
+            <ParentMembershipCell
+              parent={parent}
+              isActive={isCurrentActive}
+              onOpenManage={openManageMemberships}
+            />
+          );
+        }
+      },
+      {
+        header: t('notes'),
+        accessorKey: 'notes',
+        size: 260,
+        cell: (info) => {
+          const parent = info.row.original;
+          const family = families.find((f) => f.id === parent.family_id);
+          return (
+            <FamilyNotesCell
+              value={parent.notes || ''}
+              readOnly={!canWriteParents}
+              onOpen={(anchor) => {
+                if (family) {
+                  openFamilyNotes(family, { type: 'parent', id: parent.id }, anchor);
+                }
+              }}
+            />
+          );
+        }
+      },
+      {
+        id: 'actions',
+        header: '',
+        size: 50,
+        meta: { hideOnMobile: true },
+        cell: (info) => {
+          const parent = info.row.original;
+          return (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', paddingRight: '0.25rem' }}>
+              <RowActionsMenu
+                onDelete={() => handleDeleteParent(parent.id)}
+                deleteLabel={t('deleteParent')}
+                disabled={!canWriteParents}
+                disabledTooltip={!canWriteParents ? t('permissionRequired') : undefined}
+                entityName={`${parent.first_name || ''} ${parent.last_name || ''}`.trim()}
+              />
+            </div>
+          );
+        }
+      }
+    ],
+    [
+      families,
+      handleSaveParentField,
+      handleSaveParentNames,
+      handleSaveFamilyParents,
+      handleDeleteParent,
+      canWriteParents,
+      membershipPopoverAnchor,
+      targetParentMemberships,
+      openManageMemberships,
+      contactConsentPopoverAnchor,
+      activeParentForConsent,
+      openManageConsent,
+      multiValuePopoverAnchor,
+      activeParentForMultiValue,
+      activeMultiValueField,
+      openManageMultiValue,
+      openFamilyNotes,
+    ]
+  );
+
   const childGroupColumn = React.useMemo<ColumnDef<any>>(
     () => ({
       header: t('group'),
@@ -6898,9 +7401,25 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
         cell: (info) => {
           const f = info.row.original;
           const familyName = f.family_name || getFamilyName(f);
+          const isFormer = isFamilyFormer(f.originalFamily || f);
+          const isHistorical = (f.originalFamily || f).family_type === 'historical_alumni';
           return (
-            <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-h)' }}>
-              <span>{familyName}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-h)' }}>{familyName}</span>
+              {isFormer && (
+                <span
+                  style={{
+                    fontSize: '0.72rem',
+                    padding: '1px 5px',
+                    borderRadius: '4px',
+                    backgroundColor: isHistorical ? 'rgba(234, 88, 12, 0.12)' : 'rgba(100, 116, 139, 0.15)',
+                    color: isHistorical ? '#c2410c' : 'var(--text-muted)',
+                    fontWeight: 500,
+                  }}
+                >
+                  {isHistorical ? t('alumniHistoricalBadge') : t('alumniBadge')}
+                </span>
+              )}
             </div>
           );
         },
@@ -8170,7 +8689,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
   const shouldShowSubTabInBreadcrumbs = hasLandingPage && !isLandingActive && Boolean(currentSubItem);
   const subTabLabel = shouldShowSubTabInBreadcrumbs && currentSubItem ? getSubItemLabel(currentSubItem) : null;
 
-  const isTableTab = !isLandingActive && (activeTab === 'familiesOverview' || activeTab === 'parents' || activeTab === 'children' || activeTab === 'families' || activeTab === 'hygieneBelehrung' || activeTab === 'members' || activeTab === 'employees' || activeTab === 'jobs');
+  const isTableTab = !isLandingActive && (activeTab === 'familiesOverview' || activeTab === 'parents' || activeTab === 'children' || activeTab === 'families' || activeTab === 'alumni' || activeTab === 'hygieneBelehrung' || activeTab === 'members' || activeTab === 'employees' || activeTab === 'jobs');
 
   return (
     <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
@@ -8400,204 +8919,17 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
           </div>
         )}
 
-        {!isLandingActive && activeTab !== 'main' && activeTab !== 'childcareFees' && activeTab !== 'childcareFeesAll' && activeTab !== 'audit' && activeTab !== 'admin' && activeTab !== 'kiosk' && activeTab !== 'dashboard' && activeTab !== 'mealPlan' && activeTab !== 'mealAllergens' && activeTab !== 'hygieneDocument' && activeTab !== 'kochenHygiene' && activeTab !== 'volunteerAbsences' && (
-          <div className="controls-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <div
-              className={`controls-left ${activeTab === 'familiesOverview' ? 'overview-controls-left' : ''}`}
-              style={{
-                display: 'flex',
-                gap: activeTab === 'familiesOverview' ? '1.25rem' : '0.75rem',
-                alignItems: 'center',
-                flexWrap: activeTab === 'familiesOverview' ? 'nowrap' : 'wrap',
-              }}
-            >
-              <input
-                value={globalFilter ?? ''}
-                onChange={(e) => setGlobalFilter(e.target.value)}
-                className={`search-input ${activeTab === 'familiesOverview' ? 'overview-search-input' : ''}`}
-                placeholder={
-                  activeTab === 'employees'
-                    ? (t('searchEmployees') || 'Mitarbeiter suchen...')
-                    : activeTab === 'jobs'
-                    ? (t('searchJobs') || 'Jobs suchen...')
-                    : activeTab === 'members'
-                    ? t('searchMembers')
-                    : activeTab === 'familiesOverview'
-                    ? (t('search') || 'Suche')
-                    : activeTab === 'families'
-                    ? t('searchFamilies')
-                    : activeTab === 'children'
-                    ? t('searchChildren')
-                    : t('searchParents')
-                }
-                style={{ marginBottom: 0 }}
-              />
-
-              {(activeTab === 'parents' || activeTab === 'children' || activeTab === 'families') && (
-                <button
-                  type="button"
-                  onClick={openAddFamily}
-                  className="primary-button add-family-button"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.35rem',
-                    padding: '0.45rem 0.85rem',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontWeight: 600,
-                    border: 'none',
-                    background: 'var(--primary)',
-                    color: 'var(--primary-contrast, #ffffff)',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0,
-                    height: '34px',
-                    boxSizing: 'border-box',
-                    fontSize: '0.85rem',
-                  }}
-                >
-                  <Plus size={14} />
-                  <span>{t('addFamily')}</span>
-                </button>
-              )}
-
-              {activeTab === 'employees' && canWriteEmployees && (
-                <button
-                  type="button"
-                  onClick={() => setAddEmployeeOpen(true)}
-                  className="primary-button add-employee-button"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.35rem',
-                    padding: '0.45rem 0.85rem',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontWeight: 600,
-                    border: 'none',
-                    background: 'var(--primary)',
-                    color: 'var(--primary-contrast, #ffffff)',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0,
-                    height: '34px',
-                    boxSizing: 'border-box',
-                    fontSize: '0.85rem',
-                  }}
-                >
-                  <Plus size={14} />
-                  <span>{t('addEmployee') || 'Mitarbeiter/-in hinzufügen'}</span>
-                </button>
-              )}
-
-              {activeTab === 'jobs' && canWriteJobs && (
-                <button
-                  type="button"
-                  onClick={() => setAddJobOpen(true)}
-                  className="primary-button add-job-button"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.35rem',
-                    padding: '0.45rem 0.85rem',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontWeight: 600,
-                    border: 'none',
-                    background: 'var(--primary)',
-                    color: 'var(--primary-contrast, #ffffff)',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0,
-                    height: '34px',
-                    boxSizing: 'border-box',
-                    fontSize: '0.85rem',
-                  }}
-                >
-                  <Plus size={14} />
-                  <span>{t('addJobBtn') || 'Job'}</span>
-                </button>
-              )}
-
-              {activeTab === 'familiesOverview' && (
-                <div
-                  className="overview-grouping-toggle"
-                  role="group"
-                  aria-label={t('groupingLabel')}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setOverviewGroupBy('family')}
-                    aria-pressed={overviewGroupBy === 'family'}
-                    className={`overview-grouping-btn ${overviewGroupBy === 'family' ? 'active' : ''}`}
-                  >
-                    {t('groupByFamily')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setOverviewGroupBy('group')}
-                    aria-pressed={overviewGroupBy === 'group'}
-                    className={`overview-grouping-btn ${overviewGroupBy === 'group' ? 'active' : ''}`}
-                  >
-                    {t('groupByGroup')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setOverviewGroupBy('job')}
-                    aria-pressed={overviewGroupBy === 'job'}
-                    className={`overview-grouping-btn ${overviewGroupBy === 'job' ? 'active' : ''}`}
-                  >
-                    {t('groupByJob')}
-                  </button>
-                </div>
-              )}
-              {activeTab !== 'familiesOverview' && (
-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                <button
-                  onClick={handleUndo}
-                  disabled={undoStack.length === 0}
-                  className="easy-edit-button"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    height: '34px',
-                    width: '34px',
-                    opacity: undoStack.length === 0 ? 0.4 : 1,
-                    cursor: undoStack.length === 0 ? 'default' : 'pointer',
-                    border: '1px solid var(--border)',
-                    borderRadius: '4px',
-                    background: 'transparent',
-                    color: 'var(--text)',
-                  }}
-                  title="Undo"
-                >
-                  <Undo size={16} />
-                </button>
-                <button
-                  onClick={handleRedo}
-                  disabled={redoStack.length === 0}
-                  className="easy-edit-button"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    height: '34px',
-                    width: '34px',
-                    opacity: redoStack.length === 0 ? 0.4 : 1,
-                    cursor: redoStack.length === 0 ? 'default' : 'pointer',
-                    border: '1px solid var(--border)',
-                    borderRadius: '4px',
-                    background: 'transparent',
-                    color: 'var(--text)',
-                  }}
-                  title="Redo"
-                >
-                  <Redo size={16} />
-                </button>
-                </div>
-              )}
-
-              {(activeTab === 'parents' || activeTab === 'children') && hasPermission('vaccination.status.manage') && (
-                isVaccinationUnlocked ? (
+        {(() => {
+          const renderVaccinationButton = (extraClass?: string) => {
+            if (!hasPermission('vaccination.status.manage') || (activeTab !== 'parents' && activeTab !== 'children')) {
+              return null;
+            }
+            return (
+              <div
+                className={`controls-right vaccination-controls-slot ${extraClass || ''}`}
+                style={{ display: 'flex', alignItems: 'center', marginLeft: 'auto', flexShrink: 0 }}
+              >
+                {isVaccinationUnlocked ? (
                   <button
                     type="button"
                     onClick={handleLockKmsAuth}
@@ -8653,131 +8985,564 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                     <Lock size={15} color="var(--text-muted)" />
                     <span>{t('vaccinationStatus')}</span>
                   </button>
-                )
-              )}
+                )}
+              </div>
+            );
+          };
 
-              <div id="cards-view-columns-slot" style={{ display: 'inline-flex', alignItems: 'center' }} />
+          return !isLandingActive && activeTab !== 'main' && activeTab !== 'childcareFees' && activeTab !== 'childcareFeesAll' && activeTab !== 'audit' && activeTab !== 'admin' && activeTab !== 'kiosk' && activeTab !== 'dashboard' && activeTab !== 'mealPlan' && activeTab !== 'mealAllergens' && activeTab !== 'hygieneDocument' && activeTab !== 'kochenHygiene' && activeTab !== 'volunteerAbsences' && (
+            (activeTab === 'families' || activeTab === 'parents' || activeTab === 'children' || activeTab === 'alumni') ? (
+              <div className="mga-controls-container">
+                {/* Row 1: Search, Sort, Filter (all MGA tabs except alumni), Alumni Email Copy (alumni tab), Zoom (desktop), and Impfstatus (desktop far right) */}
+                <div className="controls-row mga-controls-row-1">
+                  <div className="controls-left">
+                    <input
+                      value={globalFilter ?? ''}
+                      onChange={(e) => setGlobalFilter(e.target.value)}
+                      className="search-input"
+                      placeholder={
+                        activeTab === 'families'
+                          ? t('searchFamilies')
+                          : activeTab === 'children'
+                          ? t('searchChildren')
+                          : activeTab === 'alumni'
+                          ? (t('searchAlumni') || 'Ehemalige suchen...')
+                          : t('searchParents')
+                      }
+                      style={{ marginBottom: 0 }}
+                    />
 
-              {(activeTab === 'parents' || activeTab === 'children' || activeTab === 'families') && (
-                <>
-                  <button
-                    ref={sortButtonRef}
-                    type="button"
-                    onClick={() => setSortPopoverOpen((prev) => !prev)}
-                    className="secondary-button family-sort-button"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '0.4rem',
-                      padding: '0.45rem 0.85rem',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontWeight: 500,
-                      border: '1px solid var(--border)',
-                      background: 'var(--bg-surface)',
-                      color: 'var(--text)',
-                      whiteSpace: 'nowrap',
-                      flexShrink: 0,
-                      height: '34px',
-                      boxSizing: 'border-box',
-                      fontSize: '0.85rem',
-                    }}
-                    title={t('sortFamiliesTitle')}
-                  >
-                    <ArrowUpDown size={14} />
-                    <span>{t('sort')}: {getSortOptionLabel(familySortOrder)}</span>
-                  </button>
-
-                  <CellPopover
-                    isOpen={sortPopoverOpen}
-                    onClose={() => setSortPopoverOpen(false)}
-                    anchorEl={sortButtonRef}
-                    width={320}
-                    minWidth={280}
-                  >
-                    <div
-                      style={{
-                        padding: '0.35rem 0.6rem',
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        color: 'var(--text-muted)',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.04em',
-                        borderBottom: '1px solid var(--border)',
-                        marginBottom: '0.4rem',
-                      }}
+                    <button
+                      ref={sortButtonRef}
+                      type="button"
+                      onClick={() => setSortPopoverOpen((prev) => !prev)}
+                      className="secondary-button family-sort-button"
+                      title={`${t('sort')}: ${getSortOptionLabel(familySortOrder)}`}
+                      aria-label={t('sortFamiliesTitle')}
                     >
-                      {t('sortFamiliesHeader')}
-                    </div>
-                    {sortOptionGroups.map((group, gIdx) => (
-                      <div key={group.groupLabelKey} style={{ marginTop: gIdx === 0 ? 0 : '0.5rem', marginBottom: '0.25rem' }}>
-                        <div
+                      <ArrowUpDown size={14} />
+                      <span className="family-sort-label">{t('sort')}: {getSortOptionLabel(familySortOrder)}</span>
+                    </button>
+
+                    <CellPopover
+                      isOpen={sortPopoverOpen}
+                      onClose={() => setSortPopoverOpen(false)}
+                      anchorEl={sortButtonRef}
+                      width={320}
+                      minWidth={280}
+                    >
+                      <div
+                        style={{
+                          padding: '0.35rem 0.6rem',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          color: 'var(--text-muted)',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.04em',
+                          borderBottom: '1px solid var(--border)',
+                          marginBottom: '0.4rem',
+                        }}
+                      >
+                        {t('sortFamiliesHeader')}
+                      </div>
+                      {sortOptionGroups.map((group, gIdx) => (
+                        <div key={group.groupLabelKey} style={{ marginTop: gIdx === 0 ? 0 : '0.5rem', marginBottom: '0.25rem' }}>
+                          <div
+                            style={{
+                              padding: '0.2rem 0.6rem',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              color: 'var(--text-muted)',
+                            }}
+                          >
+                            {t(group.groupLabelKey as any)}
+                          </div>
+                          {group.options.map((opt) => {
+                            const isSelected = familySortOrder === opt.key;
+                            return (
+                              <button
+                                key={opt.key}
+                                type="button"
+                                className="family-sort-option-btn"
+                                data-sort-order={opt.key}
+                                onClick={() => {
+                                  handleSetFamilySortOrder(opt.key);
+                                  setSortPopoverOpen(false);
+                                }}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  width: '100%',
+                                  textAlign: 'left',
+                                  gap: '0.5rem',
+                                  padding: '0.4rem 0.6rem',
+                                  fontSize: '0.85rem',
+                                  cursor: 'pointer',
+                                  borderRadius: '4px',
+                                  border: 'none',
+                                  background: isSelected ? 'var(--primary-subtle, rgba(0, 100, 200, 0.08))' : 'transparent',
+                                  color: isSelected ? 'var(--primary)' : 'var(--text)',
+                                  fontWeight: isSelected ? 600 : 400,
+                                  transition: 'background-color 0.15s',
+                                }}
+                                onMouseEnter={(e) => {
+                                  if (!isSelected) e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
+                                }}
+                              >
+                                <div style={{ width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  {isSelected && <Check size={14} color="var(--primary)" />}
+                                </div>
+                                <span>{t(opt.labelKey as any)}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </CellPopover>
+
+                    {/* Desktop Segmented Lifecycle Filter (only when not in alumni tab) */}
+                    {activeTab !== 'alumni' && (
+                      <div
+                        className="lifecycle-filter-toggle desktop-only"
+                        role="group"
+                        aria-label={t('filterLifecycle') || 'Status-Filter'}
+                        style={{
+                          alignItems: 'center',
+                          background: 'var(--bg-surface)',
+                          border: '1px solid var(--border)',
+                          borderRadius: '4px',
+                          padding: '2px',
+                          height: '34px',
+                          boxSizing: 'border-box',
+                          flexShrink: 0,
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setMgaLifecycleFilter('all')}
+                          className={`segmented-filter-btn ${mgaLifecycleFilter === 'all' ? 'active' : ''}`}
                           style={{
-                            padding: '0.2rem 0.6rem',
-                            fontSize: '0.75rem',
-                            fontWeight: 600,
-                            color: 'var(--text-muted)',
+                            padding: '0.2rem 0.65rem',
+                            fontSize: '0.82rem',
+                            fontWeight: mgaLifecycleFilter === 'all' ? 600 : 400,
+                            border: 'none',
+                            borderRadius: '3px',
+                            background: mgaLifecycleFilter === 'all' ? 'var(--primary)' : 'transparent',
+                            color: mgaLifecycleFilter === 'all' ? '#ffffff' : 'var(--text)',
+                            cursor: 'pointer',
+                            height: '100%',
+                            transition: 'background-color 0.15s, color 0.15s',
                           }}
                         >
-                          {t(group.groupLabelKey as any)}
-                        </div>
-                        {group.options.map((opt) => {
-                          const isSelected = familySortOrder === opt.key;
-                          return (
-                            <button
-                              key={opt.key}
-                              type="button"
-                              className="family-sort-option-btn"
-                              data-sort-order={opt.key}
-                              onClick={() => {
-                                handleSetFamilySortOrder(opt.key);
-                                setSortPopoverOpen(false);
-                              }}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                width: '100%',
-                                textAlign: 'left',
-                                gap: '0.5rem',
-                                padding: '0.4rem 0.6rem',
-                                fontSize: '0.85rem',
-                                cursor: 'pointer',
-                                borderRadius: '4px',
-                                border: 'none',
-                                background: isSelected ? 'var(--primary-subtle, rgba(0, 100, 200, 0.08))' : 'transparent',
-                                color: isSelected ? 'var(--primary)' : 'var(--text)',
-                                fontWeight: isSelected ? 600 : 400,
-                                transition: 'background-color 0.15s',
-                              }}
-                              onMouseEnter={(e) => {
-                                if (!isSelected) e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
-                              }}
-                              onMouseLeave={(e) => {
-                                if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
-                              }}
-                            >
-                              <div style={{ width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                {isSelected && <Check size={14} color="var(--primary)" />}
-                              </div>
-                              <span>{t(opt.labelKey as any)}</span>
-                            </button>
-                          );
-                        })}
+                          {t('filterAll')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMgaLifecycleFilter('active')}
+                          className={`segmented-filter-btn ${mgaLifecycleFilter === 'active' ? 'active' : ''}`}
+                          style={{
+                            padding: '0.2rem 0.65rem',
+                            fontSize: '0.82rem',
+                            fontWeight: mgaLifecycleFilter === 'active' ? 600 : 400,
+                            border: 'none',
+                            borderRadius: '3px',
+                            background: mgaLifecycleFilter === 'active' ? 'var(--primary)' : 'transparent',
+                            color: mgaLifecycleFilter === 'active' ? '#ffffff' : 'var(--text)',
+                            cursor: 'pointer',
+                            height: '100%',
+                            transition: 'background-color 0.15s, color 0.15s',
+                          }}
+                        >
+                          {t('filterActive')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMgaLifecycleFilter('former')}
+                          className={`segmented-filter-btn ${mgaLifecycleFilter === 'former' ? 'active' : ''}`}
+                          style={{
+                            padding: '0.2rem 0.65rem',
+                            fontSize: '0.82rem',
+                            fontWeight: mgaLifecycleFilter === 'former' ? 600 : 400,
+                            border: 'none',
+                            borderRadius: '3px',
+                            background: mgaLifecycleFilter === 'former' ? 'var(--primary)' : 'transparent',
+                            color: mgaLifecycleFilter === 'former' ? '#ffffff' : 'var(--text)',
+                            cursor: 'pointer',
+                            height: '100%',
+                            transition: 'background-color 0.15s, color 0.15s',
+                          }}
+                        >
+                          {t('filterFormer')}
+                        </button>
                       </div>
-                    ))}
-                  </CellPopover>
-                </>
-              )}
-            </div>
+                    )}
 
-            <div
-              className="controls-right desktop-only"
-              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: 'auto', flexShrink: 0 }}
-            >
-              <TableZoomControl />
-            </div>
-          </div>
-        )}
+                    {/* Mobile Filter Button (same size as sort button, filter icon, opens popover) */}
+                    {activeTab !== 'alumni' && (
+                      <>
+                        <button
+                          ref={lifecycleFilterButtonRef}
+                          type="button"
+                          onClick={() => setLifecycleFilterPopoverOpen((prev) => !prev)}
+                          className="secondary-button lifecycle-filter-button mobile-only"
+                          title={`${t('filterLifecycle') || 'Filter'}: ${
+                            mgaLifecycleFilter === 'active'
+                              ? t('filterActive')
+                              : mgaLifecycleFilter === 'former'
+                              ? t('filterFormer')
+                              : t('filterAll')
+                          }`}
+                          aria-label={t('filterLifecycle') || 'Filter'}
+                          style={{
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '0.45rem',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            border: '1px solid var(--border)',
+                            background: mgaLifecycleFilter !== 'all' ? 'var(--primary-subtle, rgba(0, 100, 200, 0.08))' : 'var(--bg-surface)',
+                            color: mgaLifecycleFilter !== 'all' ? 'var(--primary)' : 'var(--text)',
+                            height: '34px',
+                            width: '34px',
+                            minWidth: '34px',
+                            boxSizing: 'border-box',
+                            flexShrink: 0,
+                          }}
+                        >
+                          <Filter size={14} />
+                        </button>
+
+                        <CellPopover
+                          isOpen={lifecycleFilterPopoverOpen}
+                          onClose={() => setLifecycleFilterPopoverOpen(false)}
+                          anchorEl={lifecycleFilterButtonRef}
+                          width={180}
+                          minWidth={160}
+                        >
+                          <div
+                            style={{
+                              padding: '0.35rem 0.6rem',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              color: 'var(--text-muted)',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.04em',
+                              borderBottom: '1px solid var(--border)',
+                              marginBottom: '0.35rem',
+                            }}
+                          >
+                            {t('filterLifecycle') || 'Status-Filter'}
+                          </div>
+                          {[
+                            { key: 'all', label: t('filterAll') },
+                            { key: 'active', label: t('filterActive') },
+                            { key: 'former', label: t('filterFormer') },
+                          ].map((opt) => {
+                            const isSelected = mgaLifecycleFilter === opt.key;
+                            return (
+                              <button
+                                key={opt.key}
+                                type="button"
+                                className="lifecycle-filter-option-btn"
+                                onClick={() => {
+                                  setMgaLifecycleFilter(opt.key as any);
+                                  setLifecycleFilterPopoverOpen(false);
+                                }}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  width: '100%',
+                                  textAlign: 'left',
+                                  gap: '0.5rem',
+                                  padding: '0.4rem 0.6rem',
+                                  fontSize: '0.85rem',
+                                  cursor: 'pointer',
+                                  borderRadius: '4px',
+                                  border: 'none',
+                                  background: isSelected ? 'var(--primary-subtle, rgba(0, 100, 200, 0.08))' : 'transparent',
+                                  color: isSelected ? 'var(--primary)' : 'var(--text)',
+                                  fontWeight: isSelected ? 600 : 400,
+                                  transition: 'background-color 0.15s',
+                                }}
+                              >
+                                <div style={{ width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  {isSelected && <Check size={14} color="var(--primary)" />}
+                                </div>
+                                <span>{opt.label}</span>
+                              </button>
+                            );
+                          })}
+                        </CellPopover>
+                      </>
+                    )}
+
+                    <div className="table-zoom-control-container desktop-only">
+                      <TableZoomControl />
+                    </div>
+                  </div>
+
+                  {/* Impfstatus on Row 1 (desktop only) */}
+                  {renderVaccinationButton('desktop-only')}
+                </div>
+
+                {/* Row 2: Familie / Ehemalige hinzufügen & Undo/Redo on left, Impfstatus on mobile far right */}
+                <div className="controls-row mga-controls-row-2">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'nowrap' }}>
+                    <button
+                      type="button"
+                      onClick={activeTab === 'alumni' ? openAddAlumniFamily : openAddFamily}
+                      className="primary-button add-family-button"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                        padding: '0.45rem 0.85rem',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                        border: 'none',
+                        background: 'var(--primary)',
+                        color: 'var(--primary-contrast, #ffffff)',
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0,
+                        height: '34px',
+                        boxSizing: 'border-box',
+                        fontSize: '0.85rem',
+                      }}
+                    >
+                      <Plus size={14} />
+                      <span>{activeTab === 'alumni' ? (t('addAlumni') || 'Ehemalige hinzufügen') : t('addFamily')}</span>
+                    </button>
+
+                    <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                      <button
+                        onClick={handleUndo}
+                        disabled={undoStack.length === 0}
+                        className="easy-edit-button"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          height: '34px',
+                          width: '34px',
+                          opacity: undoStack.length === 0 ? 0.4 : 1,
+                          cursor: undoStack.length === 0 ? 'default' : 'pointer',
+                          border: '1px solid var(--border)',
+                          borderRadius: '4px',
+                          background: 'transparent',
+                          color: 'var(--text)',
+                        }}
+                        title="Undo"
+                      >
+                        <Undo size={16} />
+                      </button>
+                      <button
+                        onClick={handleRedo}
+                        disabled={redoStack.length === 0}
+                        className="easy-edit-button"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          height: '34px',
+                          width: '34px',
+                          opacity: redoStack.length === 0 ? 0.4 : 1,
+                          cursor: redoStack.length === 0 ? 'default' : 'pointer',
+                          border: '1px solid var(--border)',
+                          borderRadius: '4px',
+                          background: 'transparent',
+                          color: 'var(--text)',
+                        }}
+                        title="Redo"
+                      >
+                        <Redo size={16} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Impfstatus on Row 2 (mobile only, far right) */}
+                  {renderVaccinationButton('mobile-only')}
+                </div>
+              </div>
+            ) : (
+              <div className="controls-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <div
+                  className={`controls-left ${activeTab === 'familiesOverview' ? 'overview-controls-left' : ''}`}
+                  style={{
+                    display: 'flex',
+                    gap: activeTab === 'familiesOverview' ? '1.25rem' : '0.75rem',
+                    alignItems: 'center',
+                    flexWrap: activeTab === 'familiesOverview' ? 'nowrap' : 'wrap',
+                  }}
+                >
+                  <input
+                    value={globalFilter ?? ''}
+                    onChange={(e) => setGlobalFilter(e.target.value)}
+                    className={`search-input ${activeTab === 'familiesOverview' ? 'overview-search-input' : ''}`}
+                    placeholder={
+                      activeTab === 'employees'
+                        ? (t('searchEmployees') || 'Mitarbeiter suchen...')
+                        : activeTab === 'jobs'
+                        ? (t('searchJobs') || 'Jobs suchen...')
+                        : activeTab === 'members'
+                        ? t('searchMembers')
+                        : (t('search') || 'Suche')
+                    }
+                    style={{ marginBottom: 0 }}
+                  />
+
+                  {activeTab === 'employees' && canWriteEmployees && (
+                    <button
+                      type="button"
+                      onClick={() => setAddEmployeeOpen(true)}
+                      className="primary-button add-employee-button"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                        padding: '0.45rem 0.85rem',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                        border: 'none',
+                        background: 'var(--primary)',
+                        color: 'var(--primary-contrast, #ffffff)',
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0,
+                        height: '34px',
+                        boxSizing: 'border-box',
+                        fontSize: '0.85rem',
+                      }}
+                    >
+                      <Plus size={14} />
+                      <span>{t('addEmployee') || 'Mitarbeiter/-in hinzufügen'}</span>
+                    </button>
+                  )}
+
+                  {activeTab === 'jobs' && canWriteJobs && (
+                    <button
+                      type="button"
+                      onClick={() => setAddJobOpen(true)}
+                      className="primary-button add-job-button"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                        padding: '0.45rem 0.85rem',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                        border: 'none',
+                        background: 'var(--primary)',
+                        color: 'var(--primary-contrast, #ffffff)',
+                        whiteSpace: 'nowrap',
+                        flexShrink: 0,
+                        height: '34px',
+                        boxSizing: 'border-box',
+                        fontSize: '0.85rem',
+                      }}
+                    >
+                      <Plus size={14} />
+                      <span>{t('addJobBtn') || 'Job'}</span>
+                    </button>
+                  )}
+
+                  {activeTab === 'familiesOverview' && (
+                    <div
+                      className="overview-grouping-toggle"
+                      role="group"
+                      aria-label={t('groupingLabel')}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setOverviewGroupBy('family')}
+                        aria-pressed={overviewGroupBy === 'family'}
+                        className={`overview-grouping-btn ${overviewGroupBy === 'family' ? 'active' : ''}`}
+                      >
+                        {t('groupByFamily')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setOverviewGroupBy('group')}
+                        aria-pressed={overviewGroupBy === 'group'}
+                        className={`overview-grouping-btn ${overviewGroupBy === 'group' ? 'active' : ''}`}
+                      >
+                        {t('groupByGroup')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setOverviewGroupBy('job')}
+                        aria-pressed={overviewGroupBy === 'job'}
+                        className={`overview-grouping-btn ${overviewGroupBy === 'job' ? 'active' : ''}`}
+                      >
+                        {t('groupByJob')}
+                      </button>
+                    </div>
+                  )}
+
+                  {activeTab !== 'familiesOverview' && (
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <button
+                        onClick={handleUndo}
+                        disabled={undoStack.length === 0}
+                        className="easy-edit-button"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          height: '34px',
+                          width: '34px',
+                          opacity: undoStack.length === 0 ? 0.4 : 1,
+                          cursor: undoStack.length === 0 ? 'default' : 'pointer',
+                          border: '1px solid var(--border)',
+                          borderRadius: '4px',
+                          background: 'transparent',
+                          color: 'var(--text)',
+                        }}
+                        title="Undo"
+                      >
+                        <Undo size={16} />
+                      </button>
+                      <button
+                        onClick={handleRedo}
+                        disabled={redoStack.length === 0}
+                        className="easy-edit-button"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          height: '34px',
+                          width: '34px',
+                          opacity: redoStack.length === 0 ? 0.4 : 1,
+                          cursor: redoStack.length === 0 ? 'default' : 'pointer',
+                          border: '1px solid var(--border)',
+                          borderRadius: '4px',
+                          background: 'transparent',
+                          color: 'var(--text)',
+                        }}
+                        title="Redo"
+                      >
+                        <Redo size={16} />
+                      </button>
+                    </div>
+                  )}
+
+                  <div id="cards-view-columns-slot" style={{ display: 'inline-flex', alignItems: 'center' }} />
+                </div>
+
+                <div
+                  className="controls-right desktop-only"
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: 'auto', flexShrink: 0 }}
+                >
+                  <TableZoomControl />
+                </div>
+              </div>
+            )
+          );
+        })()}
 
         {kmsError && (
           <div
@@ -8889,6 +9654,28 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                 disabled={!canWriteChildren}
                 disabledTooltip={!canWriteChildren ? t('permissionRequired') : undefined}
                 entityName={`${child.first_name || ''} ${child.last_name || ''}`.trim()}
+              />
+            )}
+          />
+        ) : activeTab === 'alumni' ? (
+          <DataTable
+            className="card-table alumni-table parents-table"
+            data={alumniFamilyData}
+            columns={alumniColumns}
+            getSubRows={(row: any) => row.parents}
+            emptySubRowsText={t('noAlumniYet') || 'Keine Ehemaligen vorhanden'}
+            onAddParent={openAddParent}
+            highlightedRowId={highlightedRowId}
+            stickyFirstColumn
+            enableSorting={false}
+            getCardHeader={(parent: any) => `${parent.first_name || ''} ${parent.last_name || ''}`.trim() || '-'}
+            getCardActions={(parent: any) => (
+              <RowActionsMenu
+                onDelete={() => handleDeleteParent(parent.id)}
+                deleteLabel={t('deleteParent')}
+                disabled={!canWriteParents}
+                disabledTooltip={!canWriteParents ? t('permissionRequired') : undefined}
+                entityName={`${parent.first_name || ''} ${parent.last_name || ''}`.trim()}
               />
             )}
           />
@@ -9269,6 +10056,24 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                 </div>
               </div>
 
+              <div className="modal-divider" style={{ margin: '1rem 0' }}></div>
+
+              <div className="modal-form-group" style={{ marginBottom: '1.25rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 600 }}>
+                  <input
+                    id="f-historical-alumni"
+                    type="checkbox"
+                    checked={isHistoricalAlumni}
+                    onChange={(e) => setIsHistoricalAlumni(e.target.checked)}
+                    style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                  />
+                  <span>{t('isHistoricalAlumniLabel')}</span>
+                </label>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.25rem', marginLeft: '1.5rem' }}>
+                  {t('isHistoricalAlumniHint')}
+                </div>
+              </div>
+
               <div className="modal-actions">
                 <button type="button" className="cancel-btn" onClick={() => setAddFamilyOpen(false)}>
                   {t('cancel')}
@@ -9402,6 +10207,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
           onClose={closeManageMemberships}
           parent={activeParentForMemberships}
           family={activeFamilyForMemberships}
+          defaultMembershipType={activeTab === 'alumni' ? 'supporting_member' : undefined}
           readOnly={!canWriteMemberships}
           onAddMembership={handleAddMembership}
           onUpdateMembership={handleUpdateMembership}
@@ -9539,6 +10345,18 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
               ? !(canWriteEmployees || canWriteJobs)
               : !(canWriteParents || canWriteJobs)
           }
+        />
+
+        {/* Manage Contact Consent Popover */}
+        <ContactConsentPopover
+          key={activeParentForConsent?.id || 'contact-consent-popover'}
+          isOpen={Boolean(contactConsentPopoverAnchor && activeParentForConsent)}
+          anchorEl={contactConsentPopoverAnchor}
+          onClose={closeManageConsent}
+          parent={activeParentForConsent}
+          onSave={handleSaveContactConsent}
+          onDelete={handleDeleteContactConsent}
+          readOnly={!canWriteParents}
         />
 
         {/* Permissions Simulator Modal */}

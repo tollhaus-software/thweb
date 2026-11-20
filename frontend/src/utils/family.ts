@@ -249,3 +249,40 @@ export function getMentoredFamiliesForFamily(
 
   return results;
 }
+
+export function isFamilyFormer(
+  family: {
+    family_type?: string;
+    children?: {
+      group_changes?: { change_date: string; target_group: number }[];
+      current_group?: number | null;
+      planned_group?: number | null;
+      is_former?: boolean;
+    }[];
+  } | null | undefined
+): boolean {
+  if (!family) return false;
+  if (family.family_type === 'historical_alumni') {
+    return true;
+  }
+  const children = family.children || [];
+  if (children.length === 0) {
+    return false;
+  }
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const hasActiveOrPlanned = children.some((c) => {
+    if (typeof c.current_group === 'number' && c.current_group > 0) return true;
+    if (typeof c.planned_group === 'number' && c.planned_group > 0) return true;
+    if (c.group_changes && c.group_changes.length > 0) {
+      const sorted = [...c.group_changes].sort((a, b) => (a.change_date || '').localeCompare(b.change_date || ''));
+      const future = sorted.some((ch) => ch.change_date > todayStr && ch.target_group > 0);
+      if (future) return true;
+      const effective = sorted.filter((ch) => ch.change_date <= todayStr);
+      if (effective.length > 0 && effective[effective.length - 1].target_group > 0) {
+        return true;
+      }
+    }
+    return false;
+  });
+  return !hasActiveOrPlanned;
+}

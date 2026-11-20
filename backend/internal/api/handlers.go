@@ -463,20 +463,22 @@ func computeChildOverviewGroupStatus(rawChanges []models.ChildGroupChange, now t
 }
 
 type OverviewParent struct {
-	ID                      uuid.UUID              `json:"id"`
-	FirstName               string                 `json:"first_name"`
-	FirstNameForAddressList string                 `json:"first_name_for_address_list,omitempty"`
-	LastName                string                 `json:"last_name"`
-	Emails                  models.MultiValueList  `json:"emails"`
-	Phones                  models.MultiValueList  `json:"phones"`
-	Address                 string                 `json:"address"`
-	Memberships             *[]models.THMembership `json:"memberships,omitempty"`
-	Jobs                    []models.Job           `json:"jobs"`
+	ID                      uuid.UUID               `json:"id"`
+	FirstName               string                  `json:"first_name"`
+	FirstNameForAddressList string                  `json:"first_name_for_address_list,omitempty"`
+	LastName                string                  `json:"last_name"`
+	Emails                  models.MultiValueList   `json:"emails"`
+	Phones                  models.MultiValueList   `json:"phones"`
+	Address                 string                  `json:"address"`
+	Memberships             *[]models.THMembership  `json:"memberships,omitempty"`
+	ContactConsents         *[]models.ContactConsent `json:"contact_consents,omitempty"`
+	Jobs                    []models.Job            `json:"jobs"`
 }
 
 type OverviewFamily struct {
 	ID         uuid.UUID        `json:"id"`
 	FamilyName string           `json:"family_name,omitempty"`
+	FamilyType string           `json:"family_type,omitempty"`
 	Parents    []OverviewParent `json:"parents"`
 	Children   []OverviewChild  `json:"children"`
 }
@@ -581,6 +583,9 @@ func (s *Server) HandleListFamiliesOverview(w http.ResponseWriter, r *http.Reque
 
 	overview := make([]OverviewFamily, 0, len(families))
 	for _, fam := range families {
+		if fam.FamilyType == "historical_alumni" {
+			continue
+		}
 		if !shouldIncludeFamilyInOverview(fam, now) {
 			continue
 		}
@@ -671,6 +676,7 @@ func (s *Server) HandleListFamiliesOverview(w http.ResponseWriter, r *http.Reque
 		overview = append(overview, OverviewFamily{
 			ID:         fam.ID,
 			FamilyName: fam.GetFamilyName(),
+			FamilyType: fam.FamilyType,
 			Parents:    ovParents,
 			Children:   ovChildren,
 		})
@@ -905,6 +911,7 @@ func (s *Server) HandleListAuditLogs(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleCreateFamily(w http.ResponseWriter, r *http.Request) {
 	user := auth.GetUser(r.Context())
 	var req struct {
+		FamilyType              string                `json:"family_type"`
 		FirstName               string                `json:"first_name"`
 		FirstNameForAddressList string                `json:"first_name_for_address_list"`
 		LastName                string                `json:"last_name"`
@@ -953,7 +960,12 @@ func (s *Server) HandleCreateFamily(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	family, err := s.Store.CreateFamilyWithParents(r.Context(), user.ID, parents, getActorEmail(r))
+	familyType := req.FamilyType
+	if familyType == "" {
+		familyType = "regular"
+	}
+
+	family, err := s.Store.CreateFamilyWithParents(r.Context(), user.ID, parents, familyType, getActorEmail(r))
 	if err != nil {
 		httpErrorLog(w, r, "Failed to create family with parents", http.StatusInternalServerError, err)
 		return
@@ -1237,6 +1249,166 @@ func (s *Server) HandleUpdateFamilyNotes(w http.ResponseWriter, r *http.Request)
 	})
 
 	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) HandleUpdateFamilyType(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	idStr := chi.URLParam(r, "id")
+	familyID, err := uuid.Parse(idStr)
+	if err != nil {
+		httpErrorLog(w, r, "Invalid family ID", http.StatusBadRequest, err)
+		return
+	}
+
+	var req struct {
+		FamilyType string `json:"family_type"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpErrorLog(w, r, "Invalid request body JSON", http.StatusBadRequest, err)
+		return
+	}
+
+	if err := s.Store.UpdateFamilyType(r.Context(), user.ID, familyID, req.FamilyType, getActorEmail(r)); err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			httpErrorLog(w, r, err.Error(), http.StatusNotFound, err)
+			return
+		}
+		if strings.Contains(err.Error(), "invalid family_type") {
+			httpErrorLog(w, r, err.Error(), http.StatusBadRequest, err)
+			return
+		}
+		httpErrorLog(w, r, "Failed to update family type", http.StatusInternalServerError, err)
+		return
+	}
+
+	s.Hub.Broadcast(WSMessage{
+		Type:    "FAMILY_UPDATED",
+		Payload: map[string]string{"id": familyID.String()},
+	})
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) HandleCreateContactConsent(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	var req struct {
+		ParentID    uuid.UUID `json:"parent_id"`
+		ConsentType string    `json:"consent_type"`
+		Status      string    `json:"status"`
+		GrantedAt   *string   `json:"granted_at"`
+		Channel     string    `json:"channel"`
+		Notes       string    `json:"notes"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpErrorLog(w, r, "Invalid request body JSON", http.StatusBadRequest, err)
+		return
+	}
+	if req.ParentID == uuid.Nil {
+		httpErrorLog(w, r, "Missing parent_id", http.StatusBadRequest, nil)
+		return
+	}
+
+	grantedAt := time.Now()
+	if req.GrantedAt != nil && *req.GrantedAt != "" {
+		if t, err := parseFlexibleDate(*req.GrantedAt); err == nil {
+			grantedAt = t
+		}
+	}
+
+	cc := models.ContactConsent{
+		ParentID:    req.ParentID,
+		ConsentType: req.ConsentType,
+		Status:      req.Status,
+		GrantedAt:   grantedAt,
+		Channel:     req.Channel,
+		Notes:       req.Notes,
+	}
+
+	created, err := s.Store.CreateContactConsent(r.Context(), user.ID, cc, getActorEmail(r))
+	if err != nil {
+		httpErrorLog(w, r, "Failed to create contact consent", http.StatusInternalServerError, err)
+		return
+	}
+
+	s.Hub.Broadcast(WSMessage{
+		Type:    "CONTACT_CONSENT_CREATED",
+		Payload: map[string]string{"id": created.ID.String(), "parent_id": created.ParentID.String()},
+	})
+
+	jsonResponse(w, created)
+}
+
+func (s *Server) HandleUpdateContactConsent(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	idStr := chi.URLParam(r, "id")
+	consentID, err := uuid.Parse(idStr)
+	if err != nil {
+		httpErrorLog(w, r, "Invalid consent ID", http.StatusBadRequest, err)
+		return
+	}
+
+	var req struct {
+		ConsentType string  `json:"consent_type"`
+		Status      string  `json:"status"`
+		GrantedAt   *string `json:"granted_at"`
+		Channel     string  `json:"channel"`
+		Notes       string  `json:"notes"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpErrorLog(w, r, "Invalid request body JSON", http.StatusBadRequest, err)
+		return
+	}
+
+	grantedAt := time.Now()
+	if req.GrantedAt != nil && *req.GrantedAt != "" {
+		if t, err := parseFlexibleDate(*req.GrantedAt); err == nil {
+			grantedAt = t
+		}
+	}
+
+	cc := models.ContactConsent{
+		ID:          consentID,
+		ConsentType: req.ConsentType,
+		Status:      req.Status,
+		GrantedAt:   grantedAt,
+		Channel:     req.Channel,
+		Notes:       req.Notes,
+	}
+
+	updated, err := s.Store.UpdateContactConsent(r.Context(), user.ID, cc, getActorEmail(r))
+	if err != nil {
+		httpErrorLog(w, r, "Failed to update contact consent", http.StatusInternalServerError, err)
+		return
+	}
+
+	s.Hub.Broadcast(WSMessage{
+		Type:    "CONTACT_CONSENT_UPDATED",
+		Payload: map[string]string{"id": updated.ID.String(), "parent_id": updated.ParentID.String()},
+	})
+
+	jsonResponse(w, updated)
+}
+
+func (s *Server) HandleDeleteContactConsent(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	idStr := chi.URLParam(r, "id")
+	consentID, err := uuid.Parse(idStr)
+	if err != nil {
+		httpErrorLog(w, r, "Invalid consent ID", http.StatusBadRequest, err)
+		return
+	}
+
+	if err := s.Store.DeleteContactConsent(r.Context(), user.ID, consentID, getActorEmail(r)); err != nil {
+		httpErrorLog(w, r, "Failed to delete contact consent", http.StatusInternalServerError, err)
+		return
+	}
+
+	s.Hub.Broadcast(WSMessage{
+		Type:    "CONTACT_CONSENT_DELETED",
+		Payload: map[string]string{"id": consentID.String()},
+	})
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func sanitizeAndEnforceDietaryExclusivity(items []models.AllergyItem) ([]models.AllergyItem, []string) {

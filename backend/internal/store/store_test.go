@@ -798,7 +798,7 @@ func TestAuditModifications_ExcludesVaccinationStatus(t *testing.T) {
 			{Value: "+49123456", AddressList: true},
 		},
 	}
-	family, err := appStore.CreateFamilyWithParents(ctx, testUserID, []models.Parent{parent1})
+	family, err := appStore.CreateFamilyWithParents(ctx, testUserID, []models.Parent{parent1}, "regular")
 	if err != nil {
 		t.Fatalf("CreateFamilyWithParents failed: %v", err)
 	}
@@ -1056,7 +1056,7 @@ func TestListAuditLogsForUser_PermissionsAndVisibility(t *testing.T) {
 			},
 		},
 	}
-	fam1, err := appStore.CreateFamilyWithParents(ctx, testUserID, fam1Parents)
+	fam1, err := appStore.CreateFamilyWithParents(ctx, testUserID, fam1Parents, "regular")
 	if err != nil {
 		t.Fatalf("CreateFamilyWithParents failed: %v", err)
 	}
@@ -1119,7 +1119,7 @@ func TestListAuditLogsForUser_PermissionsAndVisibility(t *testing.T) {
 			Notes:     "Schmidt note",
 		},
 	}
-	fam2, err := appStore.CreateFamilyWithParents(ctx, testUserID, fam2Parents)
+	fam2, err := appStore.CreateFamilyWithParents(ctx, testUserID, fam2Parents, "regular")
 	if err != nil {
 		t.Fatalf("CreateFamilyWithParents 2 failed: %v", err)
 	}
@@ -1523,7 +1523,7 @@ func TestStore_FirstNameForAddressList(t *testing.T) {
 		},
 	}
 
-	family, err := appStore.CreateFamilyWithParents(ctx, testUserID, []models.Parent{parent})
+	family, err := appStore.CreateFamilyWithParents(ctx, testUserID, []models.Parent{parent}, "regular")
 	if err != nil {
 		t.Fatalf("CreateFamilyWithParents failed: %v", err)
 	}
@@ -1674,7 +1674,7 @@ func TestQueryAuditLogsForUser_PaginationAndSearch(t *testing.T) {
 				{Value: "albrecht@duerer-art.de", AddressList: true},
 			},
 		},
-	})
+	}, "regular")
 	if err != nil {
 		t.Fatalf("CreateFamilyWithParents failed: %v", err)
 	}
@@ -1952,7 +1952,7 @@ func TestJobs_CRUDAndAssignments(t *testing.T) {
 			FirstName: "Johannes",
 			LastName:  "TestEltern",
 		},
-	})
+	}, "regular")
 	if err != nil {
 		t.Fatalf("CreateFamilyWithParents failed: %v", err)
 	}
@@ -2382,7 +2382,7 @@ func TestAuditLog_ChangedByEmail_IdentifierEmailParent(t *testing.T) {
 			{Value: parentEmail, IdentifierEmail: true},
 		},
 	}
-	family, err := appStore.CreateFamilyWithParents(ctx, uuid.Nil, []models.Parent{parent}, parentEmail)
+	family, err := appStore.CreateFamilyWithParents(ctx, uuid.Nil, []models.Parent{parent}, "regular", parentEmail)
 	if err != nil {
 		t.Fatalf("CreateFamilyWithParents failed: %v", err)
 	}

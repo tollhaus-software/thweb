@@ -27,6 +27,7 @@ export type TabId =
   | 'families'
   | 'parents'
   | 'children'
+  | 'alumni'
   | 'members'
   | 'jobs'
   | 'employees'
@@ -170,6 +171,16 @@ export const NAVIGATION_CATEGORIES: NavCategory[] = [
         descriptionKey: 'subtabDescChildren',
         defaultDescription: 'Kinderstammdaten, Gruppen, Geburtstage, Impfstatus und Einschulung.',
         icon: Baby,
+        isVisible: (ctx) => ctx.canReadFamiliesAll,
+      },
+      {
+        id: 'alumni',
+        labelKey: 'subtabAlumni',
+        defaultLabel: 'Ehemalige',
+        accessibleName: 'Ehemalige(MGA)',
+        descriptionKey: 'subtabDescAlumni',
+        defaultDescription: 'Ehemalige Familien, historische Alumni, Kontaktdaten, Kontakteinwilligungen und Fördermitgliedschaften.',
+        icon: Award,
         isVisible: (ctx) => ctx.canReadFamiliesAll,
       },
       {

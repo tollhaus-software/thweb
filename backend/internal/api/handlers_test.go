@@ -1798,7 +1798,7 @@ func TestHandleListAuditLogs_PaginationAndSearch(t *testing.T) {
 				{Value: "wolfgang@amadeus.at", AddressList: true},
 			},
 		},
-	})
+	}, "regular")
 	if err != nil {
 		t.Fatalf("CreateFamilyWithParents failed: %v", err)
 	}
@@ -1897,7 +1897,7 @@ func TestAllergies_ChildrenEmployeesSummaryAndAudit(t *testing.T) {
 	// Create 2 families
 	fam1, err := appStore.CreateFamilyWithParents(ctx, testUserID, []models.Parent{
 		{FirstName: "Anna", LastName: "AllergieFam1"},
-	})
+	}, "regular")
 	if err != nil {
 		t.Fatalf("failed to create family 1: %v", err)
 	}
@@ -1907,7 +1907,7 @@ func TestAllergies_ChildrenEmployeesSummaryAndAudit(t *testing.T) {
 
 	fam2, err := appStore.CreateFamilyWithParents(ctx, testUserID, []models.Parent{
 		{FirstName: "Bernd", LastName: "AllergieFam2"},
-	})
+	}, "regular")
 	if err != nil {
 		t.Fatalf("failed to create family 2: %v", err)
 	}
@@ -2151,7 +2151,7 @@ func TestAllergies_CachedCipherContextInServer(t *testing.T) {
 
 	fam, err := appStore.CreateFamilyWithParents(ctx, testUserID, []models.Parent{
 		{FirstName: "CacheTester", LastName: "Family"},
-	})
+	}, "regular")
 	if err != nil {
 		t.Fatalf("failed to create family: %v", err)
 	}
@@ -2618,7 +2618,7 @@ func TestJobs_APIHandlersAndPermissions(t *testing.T) {
 			FirstName: "TestJobParent",
 			LastName:  "Mustermann",
 		},
-	})
+	}, "regular")
 	if err != nil {
 		t.Fatalf("failed to create family: %v", err)
 	}
@@ -2992,7 +2992,7 @@ func TestHandleUpdateFamilyMentor(t *testing.T) {
 	famA, err := appStore.CreateFamilyWithParents(ctx, adminUserID, []models.Parent{
 		{FirstName: "MentorA1", LastName: "FamilyA"},
 		{FirstName: "MentorA2", LastName: "FamilyA"},
-	})
+	}, "regular")
 	if err != nil {
 		t.Fatalf("failed to create Family A: %v", err)
 	}
@@ -3001,7 +3001,7 @@ func TestHandleUpdateFamilyMentor(t *testing.T) {
 	// 2. Create Family B (target)
 	famB, err := appStore.CreateFamilyWithParents(ctx, adminUserID, []models.Parent{
 		{FirstName: "TargetB1", LastName: "FamilyB"},
-	})
+	}, "regular")
 	if err != nil {
 		t.Fatalf("failed to create Family B: %v", err)
 	}
@@ -3169,7 +3169,7 @@ func TestHandleUpdateFamilyNotes(t *testing.T) {
 
 	fam, err := appStore.CreateFamilyWithParents(ctx, adminUserID, []models.Parent{
 		{FirstName: "TestP", LastName: "NotesFamily"},
-	})
+	}, "regular")
 	if err != nil {
 		t.Fatalf("failed to create Family: %v", err)
 	}
@@ -3465,7 +3465,7 @@ func TestAuditLog_IdentifierEmailParent_RecordedAndDisplayed(t *testing.T) {
 			{Value: parentEmail, IdentifierEmail: true},
 		},
 	}
-	fam, err := appStore.CreateFamilyWithParents(ctx, adminID, []models.Parent{parent}, adminEmail)
+	fam, err := appStore.CreateFamilyWithParents(ctx, adminID, []models.Parent{parent}, "regular", adminEmail)
 	if err != nil {
 		t.Fatalf("failed to create family: %v", err)
 	}

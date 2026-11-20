@@ -55,18 +55,22 @@ func (s *Store) WithTx(ctx context.Context, fn func(pgx.Tx) error) error {
 	return tx.Commit(ctx)
 }
 
-func (s *Store) CreateFamilyWithParents(ctx context.Context, userID uuid.UUID, parents []models.Parent, userEmail ...string) (*models.Family, error) {
+func (s *Store) CreateFamilyWithParents(ctx context.Context, userID uuid.UUID, parents []models.Parent, familyType string, userEmail ...string) (*models.Family, error) {
+	if familyType == "" {
+		familyType = "regular"
+	}
 	family := &models.Family{
 		ID:         uuid.New(),
 		Parents:    parents,
 		FamilyName: models.FormatFamilyName(parents),
+		FamilyType: familyType,
 	}
 	transactionID := uuid.New()
 	createdParents := make([]models.Parent, 0, len(parents))
 
 	err := s.WithTx(ctx, func(tx pgx.Tx) error {
 		// 1. Create family
-		_, err := tx.Exec(ctx, "INSERT INTO families (id) VALUES ($1)", family.ID)
+		_, err := tx.Exec(ctx, "INSERT INTO families (id, family_type) VALUES ($1, $2)", family.ID, family.FamilyType)
 		if err != nil {
 			return err
 		}
@@ -308,7 +312,7 @@ func (s *Store) recordAudit(ctx context.Context, tx pgx.Tx, tid uuid.UUID, fid *
 
 func (s *Store) ListFamilies(ctx context.Context) ([]models.Family, error) {
 	rows, err := s.db.Query(ctx, `
-		SELECT f.id, f.created_at, f.mentor_family_id, f.mentor_parent_ids, f.notes,
+		SELECT f.id, f.created_at, f.mentor_family_id, f.mentor_parent_ids, f.notes, COALESCE(f.family_type, 'regular'),
 			   COALESCE((
 				   SELECT json_agg(json_build_object(
 					   'id', p.id,
@@ -349,6 +353,22 @@ func (s *Store) ListFamilies(ctx context.Context) ([]models.Family, error) {
 							   'updated_at', m.updated_at
 						   ) ORDER BY m.start_date DESC)
 						   FROM th_memberships m WHERE m.parent_id = p.id
+					   ), '[]'),
+					   'contact_consents', COALESCE((
+						   SELECT json_agg(json_build_object(
+							   'id', cc.id,
+							   'parent_id', cc.parent_id,
+							   'consent_type', cc.consent_type,
+							   'status', cc.status,
+							   'granted_at', cc.granted_at,
+							   'revoked_at', cc.revoked_at,
+							   'channel', cc.channel,
+							   'notes', cc.notes,
+							   'recorded_by', cc.recorded_by,
+							   'created_at', cc.created_at,
+							   'updated_at', cc.updated_at
+						   ) ORDER BY cc.granted_at DESC, cc.created_at DESC)
+						   FROM contact_consents cc WHERE cc.parent_id = p.id
 					   ), '[]'),
 					   'jobs', COALESCE((
 						   SELECT json_agg(json_build_object(
@@ -406,7 +426,7 @@ func (s *Store) ListFamilies(ctx context.Context) ([]models.Family, error) {
 	for rows.Next() {
 		var f models.Family
 		var parentsJSON, childrenJSON, mentorParentIDsJSON []byte
-		if err := rows.Scan(&f.ID, &f.CreatedAt, &f.MentorFamilyID, &mentorParentIDsJSON, &f.Notes, &parentsJSON, &childrenJSON); err != nil {
+		if err := rows.Scan(&f.ID, &f.CreatedAt, &f.MentorFamilyID, &mentorParentIDsJSON, &f.Notes, &f.FamilyType, &parentsJSON, &childrenJSON); err != nil {
 			return nil, err
 		}
 		if len(mentorParentIDsJSON) > 0 {
@@ -417,6 +437,11 @@ func (s *Store) ListFamilies(ctx context.Context) ([]models.Family, error) {
 		}
 		if err := json.Unmarshal(parentsJSON, &f.Parents); err != nil {
 			return nil, err
+		}
+		for pIdx := range f.Parents {
+			if f.Parents[pIdx].ContactConsents == nil {
+				f.Parents[pIdx].ContactConsents = []models.ContactConsent{}
+			}
 		}
 		if err := json.Unmarshal(childrenJSON, &f.Children); err != nil {
 			return nil, err
@@ -599,8 +624,11 @@ func (s *Store) GetParentInfoByIdentifierEmail(ctx context.Context, email string
 	}
 	query := `
 		SELECT p.id, p.family_id
-		FROM parents p, jsonb_array_elements(p.emails) AS elem
-		WHERE elem->>'identifier_email' = 'true'
+		FROM parents p
+		JOIN families f ON f.id = p.family_id
+		, jsonb_array_elements(p.emails) AS elem
+		WHERE COALESCE(f.family_type, 'regular') = 'regular'
+		  AND elem->>'identifier_email' = 'true'
 		  AND COALESCE(
 		      NULLIF(elem->>'canonical_value', ''),
 		      CASE
@@ -1005,8 +1033,8 @@ func (s *Store) UpdateFamilyMentor(ctx context.Context, userID uuid.UUID, family
 		var oldFamily models.Family
 		var oldMentorFamilyID *uuid.UUID
 		var oldMentorParentIDsJSON []byte
-		err := tx.QueryRow(ctx, "SELECT id, created_at, mentor_family_id, mentor_parent_ids, notes FROM families WHERE id = $1", familyID).
-			Scan(&oldFamily.ID, &oldFamily.CreatedAt, &oldMentorFamilyID, &oldMentorParentIDsJSON, &oldFamily.Notes)
+		err := tx.QueryRow(ctx, "SELECT id, created_at, mentor_family_id, mentor_parent_ids, notes, COALESCE(family_type, 'regular') FROM families WHERE id = $1", familyID).
+			Scan(&oldFamily.ID, &oldFamily.CreatedAt, &oldMentorFamilyID, &oldMentorParentIDsJSON, &oldFamily.Notes, &oldFamily.FamilyType)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return fmt.Errorf("family not found")
@@ -1084,8 +1112,8 @@ func (s *Store) UpdateFamilyNotes(ctx context.Context, userID uuid.UUID, familyI
 		var oldFamily models.Family
 		var oldMentorFamilyID *uuid.UUID
 		var oldMentorParentIDsJSON []byte
-		err := tx.QueryRow(ctx, "SELECT id, created_at, mentor_family_id, mentor_parent_ids, notes FROM families WHERE id = $1", familyID).
-			Scan(&oldFamily.ID, &oldFamily.CreatedAt, &oldMentorFamilyID, &oldMentorParentIDsJSON, &oldFamily.Notes)
+		err := tx.QueryRow(ctx, "SELECT id, created_at, mentor_family_id, mentor_parent_ids, notes, COALESCE(family_type, 'regular') FROM families WHERE id = $1", familyID).
+			Scan(&oldFamily.ID, &oldFamily.CreatedAt, &oldMentorFamilyID, &oldMentorParentIDsJSON, &oldFamily.Notes, &oldFamily.FamilyType)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return fmt.Errorf("family not found")
@@ -1110,6 +1138,163 @@ func (s *Store) UpdateFamilyNotes(ctx context.Context, userID uuid.UUID, familyI
 
 		transactionID := uuid.New()
 		return s.recordAudit(ctx, tx, transactionID, &familyID, "family", familyID, "UPDATE", oldFamily, newFamily, userID, userEmail...)
+	})
+}
+
+func (s *Store) UpdateFamilyType(ctx context.Context, userID uuid.UUID, familyID uuid.UUID, familyType string, userEmail ...string) error {
+	if familyType != "regular" && familyType != "historical_alumni" {
+		return fmt.Errorf("invalid family_type: %q", familyType)
+	}
+	return s.WithTx(ctx, func(tx pgx.Tx) error {
+		var oldFamily models.Family
+		var oldMentorFamilyID *uuid.UUID
+		var oldMentorParentIDsJSON []byte
+		err := tx.QueryRow(ctx, "SELECT id, created_at, mentor_family_id, mentor_parent_ids, notes, COALESCE(family_type, 'regular') FROM families WHERE id = $1", familyID).
+			Scan(&oldFamily.ID, &oldFamily.CreatedAt, &oldMentorFamilyID, &oldMentorParentIDsJSON, &oldFamily.Notes, &oldFamily.FamilyType)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("family not found")
+			}
+			return err
+		}
+		oldFamily.MentorFamilyID = oldMentorFamilyID
+		if len(oldMentorParentIDsJSON) > 0 {
+			_ = json.Unmarshal(oldMentorParentIDsJSON, &oldFamily.MentorParentIDs)
+		}
+		if oldFamily.MentorParentIDs == nil {
+			oldFamily.MentorParentIDs = []uuid.UUID{}
+		}
+
+		_, err = tx.Exec(ctx, "UPDATE families SET family_type = $1 WHERE id = $2", familyType, familyID)
+		if err != nil {
+			return err
+		}
+
+		newFamily := oldFamily
+		newFamily.FamilyType = familyType
+
+		transactionID := uuid.New()
+		return s.recordAudit(ctx, tx, transactionID, &familyID, "family", familyID, "UPDATE", oldFamily, newFamily, userID, userEmail...)
+	})
+}
+
+func (s *Store) CreateContactConsent(ctx context.Context, userID uuid.UUID, cc models.ContactConsent, userEmail ...string) (models.ContactConsent, error) {
+	if cc.ID == uuid.Nil {
+		cc.ID = uuid.New()
+	}
+	if cc.ConsentType == "" {
+		cc.ConsentType = "alumni_contact"
+	}
+	if cc.Status == "" {
+		cc.Status = "granted"
+	}
+	if cc.GrantedAt.IsZero() {
+		cc.GrantedAt = time.Now()
+	}
+	if cc.Channel == "" {
+		cc.Channel = "email"
+	}
+
+	transactionID := uuid.New()
+	var created models.ContactConsent
+
+	err := s.WithTx(ctx, func(tx pgx.Tx) error {
+		var familyID uuid.UUID
+		err := tx.QueryRow(ctx, "SELECT family_id FROM parents WHERE id = $1", cc.ParentID).Scan(&familyID)
+		if err != nil {
+			return fmt.Errorf("parent not found: %w", err)
+		}
+
+		err = tx.QueryRow(ctx, `
+			INSERT INTO contact_consents (id, parent_id, consent_type, status, granted_at, revoked_at, channel, notes, recorded_by)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			RETURNING id, parent_id, consent_type, status, granted_at, revoked_at, channel, notes, recorded_by, created_at, updated_at
+		`, cc.ID, cc.ParentID, cc.ConsentType, cc.Status, cc.GrantedAt, cc.RevokedAt, cc.Channel, cc.Notes, userID).Scan(
+			&created.ID, &created.ParentID, &created.ConsentType, &created.Status, &created.GrantedAt, &created.RevokedAt, &created.Channel, &created.Notes, &created.RecordedBy, &created.CreatedAt, &created.UpdatedAt,
+		)
+		if err != nil {
+			return err
+		}
+
+		return s.recordAudit(ctx, tx, transactionID, &familyID, "contact_consent", created.ID, "INSERT", nil, created, userID, userEmail...)
+	})
+
+	if err != nil {
+		return models.ContactConsent{}, err
+	}
+	return created, nil
+}
+
+func (s *Store) UpdateContactConsent(ctx context.Context, userID uuid.UUID, cc models.ContactConsent, userEmail ...string) (models.ContactConsent, error) {
+	transactionID := uuid.New()
+	var updated models.ContactConsent
+
+	err := s.WithTx(ctx, func(tx pgx.Tx) error {
+		var oldCC models.ContactConsent
+		var familyID uuid.UUID
+		err := tx.QueryRow(ctx, `
+			SELECT c.id, c.parent_id, c.consent_type, c.status, c.granted_at, c.revoked_at, c.channel, c.notes, c.recorded_by, c.created_at, c.updated_at, p.family_id
+			FROM contact_consents c
+			JOIN parents p ON p.id = c.parent_id
+			WHERE c.id = $1
+		`, cc.ID).Scan(
+			&oldCC.ID, &oldCC.ParentID, &oldCC.ConsentType, &oldCC.Status, &oldCC.GrantedAt, &oldCC.RevokedAt, &oldCC.Channel, &oldCC.Notes, &oldCC.RecordedBy, &oldCC.CreatedAt, &oldCC.UpdatedAt, &familyID,
+		)
+		if err != nil {
+			return fmt.Errorf("contact consent not found: %w", err)
+		}
+
+		if cc.Status == "revoked" && cc.RevokedAt == nil {
+			now := time.Now()
+			cc.RevokedAt = &now
+		} else if cc.Status == "granted" {
+			cc.RevokedAt = nil
+		}
+
+		err = tx.QueryRow(ctx, `
+			UPDATE contact_consents
+			SET consent_type = $2, status = $3, granted_at = $4, revoked_at = $5, channel = $6, notes = $7, recorded_by = $8
+			WHERE id = $1
+			RETURNING id, parent_id, consent_type, status, granted_at, revoked_at, channel, notes, recorded_by, created_at, updated_at
+		`, cc.ID, cc.ConsentType, cc.Status, cc.GrantedAt, cc.RevokedAt, cc.Channel, cc.Notes, userID).Scan(
+			&updated.ID, &updated.ParentID, &updated.ConsentType, &updated.Status, &updated.GrantedAt, &updated.RevokedAt, &updated.Channel, &updated.Notes, &updated.RecordedBy, &updated.CreatedAt, &updated.UpdatedAt,
+		)
+		if err != nil {
+			return err
+		}
+
+		return s.recordAudit(ctx, tx, transactionID, &familyID, "contact_consent", updated.ID, "UPDATE", oldCC, updated, userID, userEmail...)
+	})
+
+	if err != nil {
+		return models.ContactConsent{}, err
+	}
+	return updated, nil
+}
+
+func (s *Store) DeleteContactConsent(ctx context.Context, userID uuid.UUID, id uuid.UUID, userEmail ...string) error {
+	transactionID := uuid.New()
+	return s.WithTx(ctx, func(tx pgx.Tx) error {
+		var oldCC models.ContactConsent
+		var familyID uuid.UUID
+		err := tx.QueryRow(ctx, `
+			SELECT c.id, c.parent_id, c.consent_type, c.status, c.granted_at, c.revoked_at, c.channel, c.notes, c.recorded_by, c.created_at, c.updated_at, p.family_id
+			FROM contact_consents c
+			JOIN parents p ON p.id = c.parent_id
+			WHERE c.id = $1
+		`, id).Scan(
+			&oldCC.ID, &oldCC.ParentID, &oldCC.ConsentType, &oldCC.Status, &oldCC.GrantedAt, &oldCC.RevokedAt, &oldCC.Channel, &oldCC.Notes, &oldCC.RecordedBy, &oldCC.CreatedAt, &oldCC.UpdatedAt, &familyID,
+		)
+		if err != nil {
+			return fmt.Errorf("contact consent not found: %w", err)
+		}
+
+		_, err = tx.Exec(ctx, "DELETE FROM contact_consents WHERE id = $1", id)
+		if err != nil {
+			return err
+		}
+
+		return s.recordAudit(ctx, tx, transactionID, &familyID, "contact_consent", id, "DELETE", oldCC, nil, userID, userEmail...)
 	})
 }
 

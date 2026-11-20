@@ -45,10 +45,12 @@ CREATE TABLE IF NOT EXISTS families (
     mentor_family_id UUID REFERENCES families(id) ON DELETE SET NULL,
     mentor_parent_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
     notes TEXT NOT NULL DEFAULT '',
+    family_type TEXT NOT NULL DEFAULT 'regular' CHECK (family_type IN ('regular', 'historical_alumni')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_families_mentor_family_id ON families(mentor_family_id);
+CREATE INDEX IF NOT EXISTS idx_families_family_type ON families(family_type);
 
 -- Parents table
 CREATE TABLE IF NOT EXISTS parents (
@@ -88,7 +90,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     transaction_id UUID NOT NULL,
     family_id UUID REFERENCES families(id) ON DELETE SET NULL,
-    entity_type TEXT NOT NULL, -- 'family', 'parent', 'child', 'hygiene_event', 'th_membership', 'child_group_change'
+    entity_type TEXT NOT NULL, -- 'family', 'parent', 'child', 'hygiene_event', 'th_membership', 'child_group_change', 'contact_consent'
     entity_id UUID NOT NULL,
     operation TEXT NOT NULL, -- 'INSERT', 'UPDATE', 'DELETE'
     -- JSON snapshot of the entity model:
@@ -177,6 +179,27 @@ CREATE TABLE IF NOT EXISTS th_memberships (
 
 DROP TRIGGER IF EXISTS update_th_memberships_updated_at ON th_memberships;
 CREATE TRIGGER update_th_memberships_updated_at BEFORE UPDATE ON th_memberships FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+
+-- Contact Consents table
+CREATE TABLE IF NOT EXISTS contact_consents (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    parent_id UUID NOT NULL REFERENCES parents(id) ON DELETE CASCADE,
+    consent_type TEXT NOT NULL DEFAULT 'alumni_contact',
+    status TEXT NOT NULL DEFAULT 'granted' CHECK (status IN ('granted', 'revoked')),
+    granted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    revoked_at TIMESTAMPTZ,
+    channel TEXT NOT NULL DEFAULT 'email',
+    notes TEXT NOT NULL DEFAULT '',
+    recorded_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_contact_consents_parent ON contact_consents (parent_id);
+CREATE INDEX IF NOT EXISTS idx_contact_consents_type_status ON contact_consents (consent_type, status);
+
+DROP TRIGGER IF EXISTS update_contact_consents_updated_at ON contact_consents;
+CREATE TRIGGER update_contact_consents_updated_at BEFORE UPDATE ON contact_consents FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 -- Children group changes table
 -- Target group: 0 = exit, 1 = Kleine Gruppe, 2 = Grosse Gruppe, 3 = Hort

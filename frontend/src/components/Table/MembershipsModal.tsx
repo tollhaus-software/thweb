@@ -44,6 +44,7 @@ export interface MembershipsModalProps {
   parent: ParentWithMemberships | null;
   family?: FamilyWithChildren | null;
   defaultStartDate?: string | null;
+  defaultMembershipType?: 'full_member' | 'supporting_member';
   readOnly?: boolean;
   onAddMembership: (
     parentId: string,
@@ -80,6 +81,7 @@ export const MembershipsModal: React.FC<MembershipsModalProps> = ({
   parent,
   family,
   defaultStartDate,
+  defaultMembershipType,
   readOnly = false,
   onAddMembership,
   onUpdateMembership,
@@ -139,8 +141,12 @@ export const MembershipsModal: React.FC<MembershipsModalProps> = ({
     return CURRENT_LOCALE === 'de' ? formatDisplayDate(today) : today.toISOString().split('T')[0];
   };
 
+  const defaultType = (defaultMembershipType && sortedMemberships.length === 0)
+    ? defaultMembershipType
+    : 'full_member';
+
   const [isAddingRow, setIsAddingRow] = useState(!readOnly && isInitiallyEmpty);
-  const [newMembershipType, setNewMembershipType] = useState<'full_member' | 'supporting_member'>('full_member');
+  const [newMembershipType, setNewMembershipType] = useState<'full_member' | 'supporting_member'>(defaultType);
   const [newStartDate, setNewStartDate] = useState<string>(getInitialNewStartDate);
   const [newEndDate, setNewEndDate] = useState<string>('');
   const [isStartCalendarOpen, setIsStartCalendarOpen] = useState(!readOnly && isInitiallyEmpty);
@@ -282,7 +288,7 @@ export const MembershipsModal: React.FC<MembershipsModalProps> = ({
     if (isMostRecentMissingEndDate) return;
     setNewStartDate(getInitialNewStartDate());
     setNewEndDate('');
-    setNewMembershipType('full_member');
+    setNewMembershipType(defaultType);
     setIsAddingRow(true);
     setIsStartCalendarOpen(true);
   };
@@ -291,6 +297,9 @@ export const MembershipsModal: React.FC<MembershipsModalProps> = ({
     setIsAddingRow(false);
     setIsStartCalendarOpen(false);
     setIsEndCalendarOpen(false);
+    if (sortedMemberships.length === 0) {
+      onClose();
+    }
   };
 
   const handleSaveNewRow = async () => {
