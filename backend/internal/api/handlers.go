@@ -3425,8 +3425,19 @@ func (s *Server) HandleUpdateJob(w http.ResponseWriter, r *http.Request) {
 		job.SollPersons = 0
 	}
 
-	if job.Roles != nil {
-		if user == nil || !user.HasPermission("job.role_assignment.write") {
+	_, hasRoles := rawMap["roles"]
+	if !hasRoles {
+		job.Roles = existingJob.Roles
+	} else if user == nil || !user.HasPermission("job.role_assignment.write") {
+		if !user.HasPermission("job.role_assignment.read") {
+			// User cannot read roles, so any empty/sanitized roles array should be ignored,
+			// while non-empty roles must be rejected.
+			if len(job.Roles) > 0 {
+				http.Error(w, "Forbidden: job.role_assignment.write required to update roles", http.StatusForbidden)
+				return
+			}
+			job.Roles = existingJob.Roles
+		} else {
 			if !slicesEqualPerms(existingJob.Roles, job.Roles) {
 				http.Error(w, "Forbidden: job.role_assignment.write required to update roles", http.StatusForbidden)
 				return

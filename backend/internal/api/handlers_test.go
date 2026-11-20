@@ -2949,6 +2949,87 @@ func TestJobs_RolesAPI(t *testing.T) {
 	if len(updatedJob.Roles) != 2 {
 		t.Fatalf("expected 2 roles after update, got %+v", updatedJob.Roles)
 	}
+
+	// 8. MGA (lacking job.role_assignment.*) updating contact email without sending roles should succeed and keep roles
+	putWithoutRoles := `{"name":"Secret Roles Job","description":"Desc updated","contact_email":"mga-contact@example.com"}`
+	reqMGAWithoutRoles := httptest.NewRequest("PUT", "/api/jobs/"+createdJob.ID.String(), strings.NewReader(putWithoutRoles))
+	reqMGAWithoutRoles.Header.Set("Content-Type", "application/json")
+	reqMGAWithoutRoles.Header.Set("X-Forwarded-Email", mgaEmail)
+	recMGAWithoutRoles := httptest.NewRecorder()
+	router.ServeHTTP(recMGAWithoutRoles, reqMGAWithoutRoles)
+	if recMGAWithoutRoles.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for MGA updating job without roles, got %d (%s)", recMGAWithoutRoles.Code, recMGAWithoutRoles.Body.String())
+	}
+	var jobAfterMGA models.Job
+	_ = json.Unmarshal(recMGAWithoutRoles.Body.Bytes(), &jobAfterMGA)
+	if jobAfterMGA.ContactEmail != "mga-contact@example.com" {
+		t.Fatalf("expected updated contact email, got %s", jobAfterMGA.ContactEmail)
+	}
+	jobInDB, err := appStore.GetJobByID(ctx, createdJob.ID)
+	if err != nil || jobInDB == nil {
+		t.Fatalf("failed to fetch job from db: %v", err)
+	}
+	if len(jobInDB.Roles) != 2 {
+		t.Fatalf("expected existing 2 roles preserved when MGA omitted roles, got %+v", jobInDB.Roles)
+	}
+
+	// 9. MGA updating contact email with sanitized roles: [] should succeed and preserve existing roles
+	putWithEmptyRoles := `{"name":"Secret Roles Job","description":"Desc updated 2","contact_email":"mga-contact2@example.com","roles":[]}`
+	reqMGAEmptyRoles := httptest.NewRequest("PUT", "/api/jobs/"+createdJob.ID.String(), strings.NewReader(putWithEmptyRoles))
+	reqMGAEmptyRoles.Header.Set("Content-Type", "application/json")
+	reqMGAEmptyRoles.Header.Set("X-Forwarded-Email", mgaEmail)
+	recMGAEmptyRoles := httptest.NewRecorder()
+	router.ServeHTTP(recMGAEmptyRoles, reqMGAEmptyRoles)
+	if recMGAEmptyRoles.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for MGA updating job with empty roles, got %d (%s)", recMGAEmptyRoles.Code, recMGAEmptyRoles.Body.String())
+	}
+	jobInDB2, err := appStore.GetJobByID(ctx, createdJob.ID)
+	if err != nil || jobInDB2 == nil {
+		t.Fatalf("failed to fetch job from db: %v", err)
+	}
+	if len(jobInDB2.Roles) != 2 {
+		t.Fatalf("expected existing 2 roles preserved when MGA passed empty roles, got %+v", jobInDB2.Roles)
+	}
+
+	// 10. MGA attempting to set non-empty roles via PUT /api/jobs/{id} should fail with 403 Forbidden
+	putWithNewRoles := `{"name":"Secret Roles Job","description":"Desc","roles":["admin"]}`
+	reqMGANewRoles := httptest.NewRequest("PUT", "/api/jobs/"+createdJob.ID.String(), strings.NewReader(putWithNewRoles))
+	reqMGANewRoles.Header.Set("Content-Type", "application/json")
+	reqMGANewRoles.Header.Set("X-Forwarded-Email", mgaEmail)
+	recMGANewRoles := httptest.NewRecorder()
+	router.ServeHTTP(recMGANewRoles, reqMGANewRoles)
+	if recMGANewRoles.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for MGA setting non-empty roles on job update, got %d", recMGANewRoles.Code)
+	}
+
+	// 11. Role-Reader (job.role_assignment.read + jobs.all.write) passing matching roles should succeed
+	roleReaderID := uuid.New()
+	roleReaderEmail := "rolereader-" + roleReaderID.String() + "@example.com"
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email, permissions) VALUES ($1, $2, $2, '[\"jobs.all.read\", \"jobs.all.write\", \"job.role_assignment.read\"]'::jsonb) ON CONFLICT (id) DO NOTHING", roleReaderID, roleReaderEmail)
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", roleReaderID)
+	}()
+
+	matchingRolesPayload := `{"name":"Secret Roles Job","description":"Desc","roles":["viewer","mga"]}`
+	reqReaderMatch := httptest.NewRequest("PUT", "/api/jobs/"+createdJob.ID.String(), strings.NewReader(matchingRolesPayload))
+	reqReaderMatch.Header.Set("Content-Type", "application/json")
+	reqReaderMatch.Header.Set("X-Forwarded-Email", roleReaderEmail)
+	recReaderMatch := httptest.NewRecorder()
+	router.ServeHTTP(recReaderMatch, reqReaderMatch)
+	if recReaderMatch.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for role reader updating with matching roles, got %d (%s)", recReaderMatch.Code, recReaderMatch.Body.String())
+	}
+
+	// 12. Role-Reader trying to change roles should fail with 403 Forbidden
+	mismatchRolesPayload := `{"name":"Secret Roles Job","description":"Desc","roles":["admin"]}`
+	reqReaderMismatch := httptest.NewRequest("PUT", "/api/jobs/"+createdJob.ID.String(), strings.NewReader(mismatchRolesPayload))
+	reqReaderMismatch.Header.Set("Content-Type", "application/json")
+	reqReaderMismatch.Header.Set("X-Forwarded-Email", roleReaderEmail)
+	recReaderMismatch := httptest.NewRecorder()
+	router.ServeHTTP(recReaderMismatch, reqReaderMismatch)
+	if recReaderMismatch.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for role reader attempting to change roles, got %d", recReaderMismatch.Code)
+	}
 }
 
 func TestHandleUpdateFamilyMentor(t *testing.T) {

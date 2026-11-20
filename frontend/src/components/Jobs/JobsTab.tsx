@@ -227,7 +227,22 @@ export const JobsTab: React.FC<JobsTabProps> = ({
     setFormError(null);
     try {
       if (editingJob) {
-        await onUpdateJob(editingJob.id, formData);
+        const payload: {
+          name: string;
+          description: string;
+          contact_email: string;
+          soll_persons?: number;
+          roles?: string[];
+        } = {
+          name: formData.name,
+          description: formData.description,
+          contact_email: formData.contact_email,
+          soll_persons: formData.soll_persons,
+        };
+        if (canWriteJobRoles) {
+          payload.roles = formData.roles;
+        }
+        await onUpdateJob(editingJob.id, payload);
       } else {
         await onCreateJob(formData);
       }
@@ -297,7 +312,6 @@ export const JobsTab: React.FC<JobsTabProps> = ({
                     name: trimmed,
                     description: row.description,
                     contact_email: row.contact_email,
-                    roles: row.roles,
                     soll_persons: row.soll_persons ?? 0,
                   });
                 }}
@@ -330,7 +344,6 @@ export const JobsTab: React.FC<JobsTabProps> = ({
                   name: row.name,
                   description: val,
                   contact_email: row.contact_email,
-                  roles: row.roles,
                   soll_persons: row.soll_persons ?? 0,
                 });
               }}
@@ -369,7 +382,6 @@ export const JobsTab: React.FC<JobsTabProps> = ({
                   name: row.name,
                   description: row.description,
                   contact_email: trimmed,
-                  roles: row.roles,
                   soll_persons: row.soll_persons ?? 0,
                 });
               }}
@@ -424,7 +436,6 @@ export const JobsTab: React.FC<JobsTabProps> = ({
                     name: row.name,
                     description: row.description,
                     contact_email: row.contact_email,
-                    roles: row.roles,
                     soll_persons: parsed,
                   });
                 }}

@@ -3971,7 +3971,10 @@ const Dashboard: React.FC = () => {
       body: JSON.stringify(jobData),
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
+      const err = await res.json().catch(async () => {
+        const text = await res.text().catch(() => '');
+        return { error: text.trim() };
+      });
       throw new Error(err.error || 'Failed to update job');
     }
     await fetchJobs();
