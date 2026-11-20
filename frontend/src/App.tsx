@@ -58,6 +58,8 @@ import { ConfirmDeleteModal } from './components/Table/ConfirmDeleteModal';
 import { MgaLinkIcon } from './components/MgaLinkIcon';
 import { JobsPopover, JobsCell, type PersonWithJobs, type JobItem } from './components/Table/JobsPopover';
 import { JobsTab, type JobWithAssignees } from './components/Jobs/JobsTab';
+import { EmployeesTab, type Employee } from './components/Employees/EmployeesTab';
+import { MembersTab, type MemberRow } from './components/Members/MembersTab';
 import { TableZoomControl } from './components/Table/TableZoomControl';
 import type { Role } from './components/Jobs/JobRolesPopover';
 import { t, CURRENT_LOCALE, formatDisplayDate, parseInputDate, formatTollhausEmail, compareBirthDates } from './utils/i18n';
@@ -112,32 +114,7 @@ interface Parent {
   family_name?: string;
 }
 
-interface MemberRow {
-  id: string;
-  family_id: string;
-  family_name?: string;
-  first_name: string;
-  last_name: string;
-  membership_type: 'full_member' | 'supporting_member';
-  first_became_member_date: string;
-  last_type_change_date?: string | null;
-  memberships: THMembership[];
-}
 
-interface Employee {
-  id: string;
-  first_name: string;
-  last_name: string;
-  employee_type: 'caregiver' | 'cook' | 'bufdi';
-  emails?: MultiValueEntry[];
-  phones?: MultiValueEntry[];
-  address?: string;
-  is_kinderschutzbeauftragter?: boolean;
-  allergies?: string[];
-  jobs?: JobItem[];
-  created_at?: string;
-  updated_at?: string;
-}
 
 interface ChildGroupChange {
   id: string;
@@ -3354,9 +3331,6 @@ const Dashboard: React.FC = () => {
 
   const [addEmployeeOpen, setAddEmployeeOpen] = React.useState(false);
   const [addJobOpen, setAddJobOpen] = React.useState(false);
-  const [empFirstName, setEmpFirstName] = React.useState('');
-  const [empLastName, setEmpLastName] = React.useState('');
-  const [empType, setEmpType] = React.useState<'caregiver' | 'cook' | 'bufdi'>('caregiver');
 
   // Hygiene Belehrung Event popover states
   const [targetParent, setTargetParent] = React.useState<ParentWithHygiene | null>(null);
@@ -7900,182 +7874,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
     [canReadFamiliesAll, handleJumpToChild, handleJumpToParent, isMobile]
   );
 
-  const memberColumns = React.useMemo<ColumnDef<MemberRow>[]>(
-    () => [
-      {
-        id: 'name',
-        accessorFn: (row: MemberRow) => `${row.first_name || ''} ${row.last_name || ''}`.trim(),
-        header: t('name') || 'Name',
-        size: 240,
-        cell: (info) => {
-          const row = info.row.original;
-          const fullName = `${row.first_name || ''} ${row.last_name || ''}`.trim() || '-';
-          return (
-            <div
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
-            >
-              <span style={{ fontWeight: 600 }}>{fullName}</span>
-              {canReadFamiliesAll && row.family_id && (
-                <button
-                  type="button"
-                  className="family-parent-link overview-mga-link"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleJumpToParent(row.id, row.family_id, row.family_name || '', 'members');
-                  }}
-                  title={t('jumpToParent')}
-                  aria-label={t('jumpToParent')}
-                >
-                  <MgaLinkIcon />
-                </button>
-              )}
-            </div>
-          );
-        },
-      },
-      {
-        id: 'membership_type',
-        accessorKey: 'membership_type',
-        header: t('memberType'),
-        meta: { cardLabel: t('memberType') },
-        size: 200,
-        cell: (info) => {
-          const row = info.row.original;
-          const label = row.membership_type === 'full_member' ? t('full_member') : t('supporting_member');
-          const cellId = `cell-member-type-${row.id}`;
-          return (
-            <div
-              id={cellId}
-              className="membership-cell-wrapper"
-              onClick={(e) => {
-                e.stopPropagation();
-                openManageMemberships(row as any, e.currentTarget);
-              }}
-              style={{
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                padding: '2px 6px',
-                borderRadius: '4px',
-                width: '100%',
-              }}
-              title={t('manageMemberships')}
-            >
-              <span style={{ fontWeight: 600, color: 'var(--text-h)' }}>{label}</span>
-              <Pencil size={13} className="cell-edit-pencil-btn" style={{ marginLeft: 'auto', opacity: 0.7 }} />
-            </div>
-          );
-        },
-      },
-      {
-        id: 'first_became_member_date',
-        accessorKey: 'first_became_member_date',
-        header: t('firstBecameMember'),
-        meta: { cardLabel: t('firstBecameMember') },
-        size: 180,
-        cell: (info) => {
-          const row = info.row.original;
-          const displayDate = row.first_became_member_date ? formatDisplayDate(row.first_became_member_date) : '-';
-          const cellId = `cell-member-first-${row.id}`;
-          return (
-            <div
-              id={cellId}
-              className="membership-cell-wrapper"
-              onClick={(e) => {
-                e.stopPropagation();
-                openManageMemberships(row as any, e.currentTarget);
-              }}
-              style={{
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                padding: '2px 6px',
-                borderRadius: '4px',
-                width: '100%',
-              }}
-              title={t('manageMemberships')}
-            >
-              <span>{displayDate}</span>
-              <Pencil size={13} className="cell-edit-pencil-btn" style={{ marginLeft: 'auto', opacity: 0.7 }} />
-            </div>
-          );
-        },
-      },
-      {
-        id: 'last_type_change_date',
-        accessorKey: 'last_type_change_date',
-        header: t('lastTypeChange'),
-        meta: { cardLabel: t('lastTypeChangeShort') || 'Letzte Änderung' },
-        size: 200,
-        cell: (info) => {
-          const row = info.row.original;
-          const displayDate = row.last_type_change_date ? formatDisplayDate(row.last_type_change_date) : '-';
-          const cellId = `cell-member-change-${row.id}`;
-          return (
-            <div
-              id={cellId}
-              className="membership-cell-wrapper"
-              onClick={(e) => {
-                e.stopPropagation();
-                openManageMemberships(row as any, e.currentTarget);
-              }}
-              style={{
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                padding: '2px 6px',
-                borderRadius: '4px',
-                width: '100%',
-              }}
-              title={t('manageMemberships')}
-            >
-              <span style={{ color: row.last_type_change_date ? 'var(--text)' : 'var(--text-muted)' }}>
-                {displayDate}
-              </span>
-              <Pencil size={13} className="cell-edit-pencil-btn" style={{ marginLeft: 'auto', opacity: 0.7 }} />
-            </div>
-          );
-        },
-      },
-    ],
-    [canReadFamiliesAll, openManageMemberships]
-  );
 
-  const filteredMembers = React.useMemo(() => {
-    if (!globalFilter.trim()) return members;
-    const q = globalFilter.toLowerCase();
-    return members.filter((m) => {
-      const name = `${m.first_name || ''} ${m.last_name || ''}`.toLowerCase();
-      const typeLabel = m.membership_type === 'full_member' ? t('full_member').toLowerCase() : t('supporting_member').toLowerCase();
-      const firstDate = m.first_became_member_date ? formatDisplayDate(m.first_became_member_date).toLowerCase() : '';
-      const changeDate = m.last_type_change_date ? formatDisplayDate(m.last_type_change_date).toLowerCase() : '';
-      return name.includes(q) || typeLabel.includes(q) || firstDate.includes(q) || changeDate.includes(q);
-    });
-  }, [members, globalFilter]);
-
-      const filteredEmployees = React.useMemo(() => {
-    if (!globalFilter.trim()) return employees;
-    const q = globalFilter.toLowerCase();
-    return employees.filter((emp) => {
-      const name = `${emp.first_name || ''} ${emp.last_name || ''}`.toLowerCase();
-      const type = (emp.employee_type || '').toLowerCase();
-      const addr = (emp.address || '').toLowerCase();
-      const emails = (emp.emails || []).map((e) => getEntryValue(e).toLowerCase()).join(' ');
-      const phones = (emp.phones || []).map((p) => getEntryValue(p).toLowerCase()).join(' ');
-      const allergies = (emp.allergies || []).map((a) => String(a || '').toLowerCase()).join(' ');
-      return (
-        name.includes(q) ||
-        type.includes(q) ||
-        addr.includes(q) ||
-        emails.includes(q) ||
-        phones.includes(q) ||
-        allergies.includes(q)
-      );
-    });
-  }, [employees, globalFilter]);
 
   const handleSaveEmployeeField = React.useCallback(
     async (employee: Employee, field: keyof Employee, value: any) => {
@@ -8154,322 +7953,36 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
     [getAuthHeaders]
   );
 
-  const handleCreateEmployeeSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!empFirstName.trim() || !empLastName.trim()) {
-      alert('Given name and surname are required');
-      return;
-    }
-    const payload: Partial<Employee> = {
-      first_name: empFirstName.trim(),
-      last_name: empLastName.trim(),
-      employee_type: empType,
-      address: '',
-      is_kinderschutzbeauftragter: false,
-      emails: [],
-      phones: [],
-    };
-    try {
-      const res = await fetch('/api/employees', {
-        method: 'POST',
-        credentials: 'include',
-        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        const created = await res.json();
-        setEmployees((prev) => [...prev, created]);
-        setAddEmployeeOpen(false);
-        setEmpFirstName('');
-        setEmpLastName('');
-        setEmpType('caregiver');
-        pushAction({
-          type: 'ADD_EMPLOYEE',
-          payload: {
-            tab: 'employees',
-            employeeId: created.id,
-            employee: created,
-          },
+  const handleCreateEmployee = React.useCallback(
+    async (payload: Partial<Employee>) => {
+      try {
+        const res = await fetch('/api/employees', {
+          method: 'POST',
+          credentials: 'include',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(payload),
         });
-      } else {
-        const errData = await res.json().catch(() => ({}));
-        alert(errData.error || 'Failed to create employee');
-      }
-    } catch (err) {
-      console.error('Failed to create employee:', err);
-    }
-  };
-
-  const employeeColumns = React.useMemo<ColumnDef<Employee>[]>(
-    () => [
-      {
-        header: t('givenName') || 'Vorname',
-        accessorKey: 'first_name',
-        size: 180,
-        cell: (info) => {
-          const emp = info.row.original;
-          if (!canWriteEmployees) {
-            return <span>{emp.first_name}</span>;
-          }
-          return (
-            <EasyEditComponent
-              type={EasyEditTypes.TEXT}
-              value={emp.first_name}
-              onSave={(val: string) => handleSaveEmployeeField(emp, 'first_name', val)}
-              editButtonLabel={<Pencil size={13} />}
-              instructions={t('editFirstName')}
-              viewAttributes={{}}
-              inputAttributes={{}}
-              onCancel={() => {}}
-              onValidate={() => true}
-            />
-          );
-        },
-      },
-      {
-        header: t('surname') || 'Nachname',
-        accessorKey: 'last_name',
-        size: 180,
-        cell: (info) => {
-          const emp = info.row.original;
-          if (!canWriteEmployees) {
-            return <span>{emp.last_name}</span>;
-          }
-          return (
-            <EasyEditComponent
-              type={EasyEditTypes.TEXT}
-              value={emp.last_name}
-              onSave={(val: string) => handleSaveEmployeeField(emp, 'last_name', val)}
-              editButtonLabel={<Pencil size={13} />}
-              instructions={t('editLastName')}
-              viewAttributes={{}}
-              inputAttributes={{}}
-              onCancel={() => {}}
-              onValidate={() => true}
-            />
-          );
-        },
-      },
-      {
-        header: t('employeeType') || 'Mitarbeiter-Typ',
-        accessorKey: 'employee_type',
-        size: 180,
-        cell: (info) => {
-          const emp = info.row.original;
-          const options = [
-            { label: t('employeeTypeCaregiver') || 'Erzieher(in)', value: 'caregiver' },
-            { label: t('employeeTypeCook') || 'Koch/Köchin', value: 'cook' },
-            { label: t('employeeTypeBufdi') || 'Bufdi', value: 'bufdi' },
-          ];
-          const displayLabel =
-            emp.employee_type === 'caregiver'
-              ? t('employeeTypeCaregiver') || 'Erzieher(in)'
-              : emp.employee_type === 'cook'
-              ? t('employeeTypeCook') || 'Koch/Köchin'
-              : emp.employee_type === 'bufdi'
-              ? t('employeeTypeBufdi') || 'Bufdi'
-              : emp.employee_type || '-';
-
-          if (!canWriteEmployees) {
-            return <span>{displayLabel}</span>;
-          }
-
-          return (
-            <EasyEditComponent
-              type={EasyEditTypes.SELECT}
-              options={options}
-              value={emp.employee_type}
-              onSave={(val: string) => handleSaveEmployeeField(emp, 'employee_type', val)}
-              editButtonLabel={<Pencil size={13} />}
-              displayComponent={<span>{displayLabel}</span>}
-              viewAttributes={{}}
-              inputAttributes={{}}
-              onCancel={() => {}}
-              onValidate={() => true}
-            />
-          );
-        },
-      },
-      {
-        header: t('emails') || 'E-mail',
-        accessorKey: 'emails',
-        size: 260,
-        cell: (info) => {
-          const emp = info.row.original;
-          const isPopActive =
-            activeEmployeeForMultiValue?.id === emp.id && activeMultiValueField === 'emails';
-          return (
-            <MultiValueCell
-              id={emp.id}
-              field="emails"
-              values={emp.emails || []}
-              placeholder={t('addEmail')}
-              isActive={isPopActive}
-              onOpenManage={(field, anchor) => openManageEmployeeMultiValue(emp, field, anchor)}
-              canEdit={canWriteEmployees}
-            />
-          );
-        },
-      },
-      {
-        header: t('phones') || 'Telefon',
-        accessorKey: 'phones',
-        size: 200,
-        cell: (info) => {
-          const emp = info.row.original;
-          const isPopActive =
-            activeEmployeeForMultiValue?.id === emp.id && activeMultiValueField === 'phones';
-          return (
-            <MultiValueCell
-              id={emp.id}
-              field="phones"
-              values={emp.phones || []}
-              placeholder={t('addPhone')}
-              isActive={isPopActive}
-              onOpenManage={(field, anchor) => openManageEmployeeMultiValue(emp, field, anchor)}
-              canEdit={canWriteEmployees}
-            />
-          );
-        },
-      },
-      {
-        header: t('address') || 'Adresse',
-        accessorKey: 'address',
-        size: 250,
-        cell: (info) => {
-          const emp = info.row.original;
-          return (
-            <AddressEditor
-              parent={emp}
-              familyParents={[emp]}
-              canEdit={canWriteEmployees}
-              onSave={([updatedEmp]) =>
-                handleSaveEmployeeField(emp, 'address', updatedEmp.address || '')
-              }
-            />
-          );
-        },
-      },
-      {
-        header: t('kinderschutzbeauftragter') || 'Kinderschutzbeauftragte(r)',
-        accessorKey: 'is_kinderschutzbeauftragter',
-        size: 180,
-        cell: (info) => {
-          const emp = info.row.original;
-          if (emp.employee_type !== 'caregiver') {
-            return null;
-          }
-          const isOfficer = Boolean(emp.is_kinderschutzbeauftragter);
-          const displayLabel = isOfficer ? (t('kinderschutzbeauftragterYes') || 'Ja') : '-';
-
-          if (!canWriteEmployees) {
-            return <span>{displayLabel}</span>;
-          }
-
-          const options = [
-            { label: t('kinderschutzbeauftragterYes') || 'Ja', value: 'yes' },
-            { label: t('kinderschutzbeauftragterNo') || 'Nein', value: 'no' },
-          ];
-
-          return (
-            <EasyEditComponent
-              type={EasyEditTypes.SELECT}
-              options={options}
-              value={isOfficer ? 'yes' : 'no'}
-              onSave={(val: string) =>
-                handleSaveEmployeeField(
-                  emp,
-                  'is_kinderschutzbeauftragter',
-                  val === 'yes'
-                )
-              }
-              editButtonLabel={<Pencil size={13} />}
-              displayComponent={<span>{displayLabel}</span>}
-              instructions={t('kinderschutzbeauftragter') || 'Kinderschutzbeauftragte(r)'}
-              viewAttributes={{}}
-              inputAttributes={{}}
-              onCancel={() => {}}
-              onValidate={() => true}
-            />
-          );
-        },
-      },
-      ...(canReadEmployeeAllergies ? [
-        {
-          id: 'allergies',
-          header: t('allergies') || 'Allergien',
-          accessorKey: 'allergies',
-          size: 220,
-          cell: (info: any) => {
-            const emp = info.row.original;
-            const isPopActive =
-              activeEmployeeForMultiValue?.id === emp.id && activeMultiValueField === 'allergies';
-            return (
-              <MultiValueCell
-                id={emp.id}
-                field="allergies"
-                values={emp.allergies || []}
-                placeholder={canWriteEmployeeAllergies ? t('addAllergy') : t('noAllergiesOrDiet')}
-                isActive={isPopActive}
-                onOpenManage={(field, anchor) => openManageEmployeeMultiValue(emp, field, anchor)}
-                canEdit={canWriteEmployeeAllergies}
-              />
-            );
-          },
+        if (res.ok) {
+          const created = await res.json();
+          setEmployees((prev) => [...prev, created]);
+          setAddEmployeeOpen(false);
+          pushAction({
+            type: 'ADD_EMPLOYEE',
+            payload: {
+              tab: 'employees',
+              employeeId: created.id,
+              employee: created,
+            },
+          });
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          alert(errData.error || 'Failed to create employee');
         }
-      ] : []),
-      {
-        header: t('jobs'),
-        id: 'jobs',
-        size: 200,
-        cell: (info) => {
-          const emp = info.row.original;
-          if (!emp || !emp.id) return null;
-          const isCurrentActive = Boolean(jobsPopoverAnchor && activePersonForJobs?.id === emp.id);
-          return (
-            <JobsCell
-              person={{ id: emp.id, first_name: emp.first_name, last_name: emp.last_name, jobs: emp.jobs, type: 'employee' }}
-              isActive={isCurrentActive}
-              onOpenManage={openManageJobs}
-              readOnly={!(canWriteEmployees || canWriteJobs)}
-            />
-          );
-        },
-      },
-      {
-        id: 'actions',
-        header: '',
-        size: 50,
-        meta: { hideOnMobile: true },
-        cell: (info) => {
-          const emp = info.row.original;
-          const fullName = `${emp.first_name} ${emp.last_name}`.trim();
-          return (
-            <RowActionsMenu
-              onDelete={() => handleDeleteEmployee(emp)}
-              deleteLabel={t('deleteEmployee') || 'Mitarbeiter löschen'}
-              disabled={!canWriteEmployees}
-              disabledTooltip={!canWriteEmployees ? t('permissionRequired') : undefined}
-              entityName={fullName}
-            />
-          );
-        },
-      },
-    ],
-    [
-      canWriteEmployees,
-      canReadEmployeeAllergies,
-      canWriteEmployeeAllergies,
-      canWriteJobs,
-      jobsPopoverAnchor,
-      activePersonForJobs,
-      openManageJobs,
-      activeEmployeeForMultiValue,
-      activeMultiValueField,
-      openManageEmployeeMultiValue,
-      handleSaveEmployeeField,
-      handleDeleteEmployee,
-    ]
+      } catch (err) {
+        console.error('Failed to create employee:', err);
+      }
+    },
+    [getAuthHeaders, pushAction]
   );
 
   const currentCategory = getCategoryForTab(activeTab);
@@ -9631,70 +9144,35 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
             highlightedRowId={highlightedRowId}
           />
         ) : activeTab === 'members' && canReadMembers ? (
-          <DataTable
-            key="members"
-            className="card-table members-table"
-            data={filteredMembers}
-            columns={memberColumns}
-            emptySubRowsText={t('noMembersYet')}
+          <MembersTab
+            members={members}
+            searchQuery={globalFilter}
             highlightedRowId={highlightedRowId}
-            stickyFirstColumn
-            getCardHeader={(member: any) => {
-              const fullName = `${member.first_name || ''} ${member.last_name || ''}`.trim() || '-';
-              return (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                  <span>{fullName}</span>
-                  {canReadFamiliesAll && member.family_id && (
-                    <button
-                      type="button"
-                      className="family-parent-link overview-mga-link"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleJumpToParent(member.id, member.family_id, member.family_name || '', 'members');
-                      }}
-                      title={t('jumpToParent')}
-                      aria-label={t('jumpToParent')}
-                    >
-                      <MgaLinkIcon />
-                    </button>
-                  )}
-                </div>
-              );
-            }}
+            canReadFamiliesAll={canReadFamiliesAll}
+            canWriteMemberships={canWriteMemberships}
+            onJumpToParent={handleJumpToParent}
+            onOpenManageMemberships={openManageMemberships}
           />
         ) : activeTab === 'employees' && canReadEmployees ? (
-          <DataTable
-            key="employees"
-            className="card-table employees-table"
-            data={filteredEmployees}
-            columns={employeeColumns}
-            emptySubRowsText={t('noEmployeesYet') || 'Keine Mitarbeiter vorhanden'}
+          <EmployeesTab
+            employees={employees}
+            searchQuery={globalFilter}
             highlightedRowId={highlightedRowId}
-            getCardHeader={(emp: any) => {
-              const fullName = `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || '-';
-              return (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span>{fullName}</span>
-                  {emp.employee_type === 'caregiver' && emp.is_kinderschutzbeauftragter && (
-                    <span style={{ fontSize: '0.75rem', padding: '2px 6px', borderRadius: '4px', background: 'rgba(59, 130, 246, 0.1)', color: '#2563eb', fontWeight: 600 }}>
-                      🛡️ {t('kinderschutzbeauftragterShort') || 'Kinderschutz'}
-                    </span>
-                  )}
-                </div>
-              );
-            }}
-            getCardActions={(emp: any) => {
-              const fullName = `${emp.first_name || ''} ${emp.last_name || ''}`.trim();
-              return (
-                <RowActionsMenu
-                  onDelete={() => handleDeleteEmployee(emp)}
-                  deleteLabel={t('deleteEmployee') || 'Mitarbeiter löschen'}
-                  disabled={!canWriteEmployees}
-                  disabledTooltip={!canWriteEmployees ? t('permissionRequired') : undefined}
-                  entityName={fullName}
-                />
-              );
-            }}
+            canWriteEmployees={canWriteEmployees}
+            canReadEmployeeAllergies={canReadEmployeeAllergies}
+            canWriteEmployeeAllergies={canWriteEmployeeAllergies}
+            canWriteJobs={canWriteJobs}
+            isCreateModalOpen={addEmployeeOpen}
+            onCloseCreateModal={() => setAddEmployeeOpen(false)}
+            onCreateEmployee={handleCreateEmployee}
+            onSaveEmployeeField={handleSaveEmployeeField}
+            onDeleteEmployee={handleDeleteEmployee}
+            activeEmployeeForMultiValue={activeEmployeeForMultiValue}
+            activeMultiValueField={activeMultiValueField}
+            onOpenManageMultiValue={openManageEmployeeMultiValue}
+            jobsPopoverAnchor={jobsPopoverAnchor}
+            activePersonForJobs={activePersonForJobs}
+            onOpenManageJobs={openManageJobs}
           />
         ) : activeTab === 'jobs' && canReadJobs ? (
           <JobsTab
@@ -9773,80 +9251,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
 
       <ImpressumFooter isInternal={true} />
 
-      {/* Add Employee Modal */}
-      {addEmployeeOpen && (
-        <div className="modal-overlay" onClick={() => setAddEmployeeOpen(false)}>
-          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
-            <h2>{t('addEmployee') || 'Mitarbeiter/-in hinzufügen'}</h2>
-            <form onSubmit={handleCreateEmployeeSubmit}>
-              <div style={{ display: 'flex', gap: '1rem' }}>
-                <div className="modal-form-group" style={{ flex: 1 }}>
-                  <label htmlFor="emp-first-name">{t('givenName') || 'Vorname'}</label>
-                  <input
-                    id="emp-first-name"
-                    name="firstName"
-                    type="text"
-                    value={empFirstName}
-                    onChange={(e) => setEmpFirstName(e.target.value)}
-                    required
-                    autoFocus
-                  />
-                </div>
-                <div className="modal-form-group" style={{ flex: 1 }}>
-                  <label htmlFor="emp-last-name">{t('surname') || 'Nachname'}</label>
-                  <input
-                    id="emp-last-name"
-                    name="lastName"
-                    type="text"
-                    value={empLastName}
-                    onChange={(e) => setEmpLastName(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
 
-              <div className="modal-form-group">
-                <label htmlFor="emp-type">{t('employeeType') || 'Mitarbeiter-Typ'}</label>
-                <select
-                  id="emp-type"
-                  name="employeeType"
-                  value={empType}
-                  onChange={(e) => setEmpType(e.target.value as any)}
-                  style={{
-                    width: '100%',
-                    padding: '0.5rem',
-                    borderRadius: '4px',
-                    border: '1px solid var(--border)',
-                    background: 'var(--input-bg)',
-                    color: 'var(--text)',
-                  }}
-                  required
-                >
-                  <option value="caregiver">{t('employeeTypeCaregiver') || 'Erzieher(in)'}</option>
-                  <option value="cook">{t('employeeTypeCook') || 'Koch/Köchin'}</option>
-                  <option value="bufdi">{t('employeeTypeBufdi') || 'Bufdi'}</option>
-                </select>
-              </div>
-
-              <div className="modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.25rem' }}>
-                <button
-                  type="button"
-                  onClick={() => setAddEmployeeOpen(false)}
-                  className="secondary-button"
-                >
-                  {t('cancel')}
-                </button>
-                <button
-                  type="submit"
-                  className="primary-button"
-                >
-                  {t('addEmployee') || 'Mitarbeiter/-in hinzufügen'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Add Parent Modal */}
       {addParentOpen && targetFamily && (
