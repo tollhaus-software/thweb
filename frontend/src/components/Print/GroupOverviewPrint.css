@@ -1,0 +1,331 @@
+/* =========================================================
+   Group Overview Print & Preview Styles
+   ========================================================= */
+
+/* Options Dialog */
+.group-print-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+  padding: 1rem;
+}
+
+.group-print-dialog-container {
+  background: var(--surface, #ffffff);
+  color: var(--text, #1e293b);
+  border-radius: 8px;
+  width: 100%;
+  max-width: 460px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.group-print-dialog-header {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border, #e2e8f0);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.group-print-dialog-header h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-h, #0f172a);
+}
+
+.group-print-dialog-body {
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.group-print-section-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted, #64748b);
+  margin-bottom: 0.6rem;
+}
+
+.group-print-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.group-print-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text, #334155);
+}
+
+.group-print-checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--primary, #2563eb);
+}
+
+.group-print-dialog-footer {
+  padding: 1rem 1.5rem;
+  background: var(--bg-hover, #f8fafc);
+  border-top: 1px solid var(--border, #e2e8f0);
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+/* =========================================================
+   Print Preview Modal
+   ========================================================= */
+
+.print-preview-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.75);
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.print-preview-toolbar {
+  height: 56px;
+  background: #1e293b;
+  color: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.25rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.print-preview-toolbar-left,
+.print-preview-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.print-preview-toolbar-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.print-preview-canvas {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2rem 1rem;
+  background: #475569;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+}
+
+/* Screen representation of A4 landscape page */
+.print-page {
+  background: #ffffff;
+  color: #0f172a;
+  width: 297mm;
+  max-width: 100%;
+  min-height: 210mm;
+  height: auto;
+  padding: 10mm 12mm;
+  box-sizing: border-box;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  border-radius: 2px;
+  display: flex;
+  flex-direction: column;
+}
+
+.print-page-header {
+  margin-bottom: 4mm;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.print-page-title {
+  margin: 0;
+  font-size: 16pt;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+
+.print-page-date {
+  font-size: 8.5pt;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.print-table-wrapper {
+  width: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Table with thicker borders and bold text */
+.print-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  color: #0f172a;
+  border: 2.5px solid #0f172a;
+  font-weight: 600;
+}
+
+.print-table td {
+  border: 1.5px solid #334155;
+  padding: 3px 6px;
+  vertical-align: middle;
+  word-break: break-word;
+  overflow: hidden;
+  box-sizing: border-box;
+  font-weight: 600;
+}
+
+.print-table .phone-line {
+  line-height: 1.35;
+  margin: 1px 0;
+}
+
+.print-empty-group-msg {
+  padding: 2rem 0;
+  text-align: center;
+  color: #64748b;
+  font-size: 10.5pt;
+  font-style: italic;
+  font-weight: 500;
+}
+
+/* =========================================================
+   A4 Landscape Print Styles
+   ========================================================= */
+
+@page {
+  size: A4 landscape;
+  margin: 8mm 10mm;
+}
+
+@media print {
+  html,
+  body {
+    height: auto !important;
+    min-height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    overflow: visible !important;
+  }
+
+  body > *:not(.print-portal-root) {
+    display: none !important;
+  }
+
+  .print-portal-root {
+    display: block !important;
+    position: static !important;
+    background: #ffffff !important;
+    height: auto !important;
+    min-height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .print-preview-modal-overlay {
+    position: static !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    display: block !important;
+    height: auto !important;
+    min-height: auto !important;
+  }
+
+  .print-preview-toolbar,
+  .no-print {
+    display: none !important;
+  }
+
+  .print-preview-canvas {
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    overflow: visible !important;
+    display: block !important;
+    gap: 0 !important;
+    height: auto !important;
+    min-height: auto !important;
+  }
+
+  .print-page {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: 185mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    break-after: page !important;
+    page-break-after: always !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .print-page:last-child,
+  .print-page:last-of-type {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+
+  .print-page-header {
+    border-bottom: none !important;
+    padding-bottom: 0 !important;
+    margin-bottom: 3mm !important;
+  }
+
+  .print-table {
+    border: 3px solid #000000 !important;
+    font-weight: 600 !important;
+  }
+
+  .print-table td {
+    border: 2px solid #000000 !important;
+    font-weight: 600 !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}

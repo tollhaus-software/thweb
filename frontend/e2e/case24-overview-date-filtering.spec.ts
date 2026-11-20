@@ -250,6 +250,12 @@ test.describe('Test Case 24: Families Overview Date-based Filtering', () => {
     await familiesMgaTab.click();
     await expect(familiesMgaTab).toHaveClass(/active/);
 
+    // Switch lifecycle filter to "Alle" so exited families are visible as well
+    const filterAllBtn = page.getByRole('button', { name: 'Alle', exact: true });
+    if (await filterAllBtn.isVisible()) {
+      await filterAllBtn.click();
+    }
+
     // In Familien(MGA), ALL families MUST be visible
     await expect(page.locator('.families-table tbody tr', { hasText: 'Altexited' })).toBeVisible();
     await expect(page.locator('.families-table tbody tr', { hasText: 'Neunexited' })).toBeVisible();

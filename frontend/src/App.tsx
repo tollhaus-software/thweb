@@ -7,7 +7,8 @@ import './App.css';
 import { DataTable } from './components/Table/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import EasyEdit, { Types } from './components/InlineEdit';
-import { Pencil, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, ArrowUpRight, X, Clock, AlertCircle, ChevronLeft, ChevronRight, Plus, ArrowUpDown, Check, Eye, RefreshCw, Menu, Filter } from 'lucide-react';
+import { Pencil, Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, ArrowRight, ArrowUpRight, X, Clock, AlertCircle, ChevronLeft, ChevronRight, Plus, ArrowUpDown, Check, Eye, RefreshCw, Menu, Filter, Printer, Users } from 'lucide-react';
+import { GroupOverviewPrintModal } from './components/Print/GroupOverviewPrintModal';
 import { useGoogleLogin } from '@react-oauth/google';
 import { MultiValueListEditor, type MultiValueFlagConfig, type MultiValueEntry, type MultiValueItem, getEntryValue, isFlagActive, PHONE_TYPES, getPhoneTypeSymbol, getPhoneTypeLabel } from './components/Table/MultiValueListEditor';
 import { AllergiesListEditor } from './components/Allergies/AllergiesListEditor';
@@ -2891,6 +2892,11 @@ const Dashboard: React.FC = () => {
   const sortButtonRef = React.useRef<HTMLButtonElement>(null);
   const [lifecycleFilterPopoverOpen, setLifecycleFilterPopoverOpen] = React.useState(false);
   const lifecycleFilterButtonRef = React.useRef<HTMLButtonElement>(null);
+  const [printMenuOpen, setPrintMenuOpen] = React.useState(false);
+  const printButtonRef = React.useRef<HTMLButtonElement>(null);
+  const [printMgaMenuOpen, setPrintMgaMenuOpen] = React.useState(false);
+  const printMgaButtonRef = React.useRef<HTMLButtonElement>(null);
+  const [groupPrintModalOpen, setGroupPrintModalOpen] = React.useState(false);
 
   const isMainPageActive = React.useMemo(() => {
     return isExperimentActive('main_page', { user });
@@ -9361,6 +9367,89 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                         <Redo size={16} />
                       </button>
                     </div>
+
+                    {activeTab === 'families' && (
+                      <div style={{ position: 'relative', display: 'inline-flex' }}>
+                        <button
+                          ref={printMgaButtonRef}
+                          type="button"
+                          onClick={() => setPrintMgaMenuOpen((prev) => !prev)}
+                          className="secondary-button print-toolbar-button"
+                          data-testid="print-toolbar-button-mga"
+                          title={t('print') || 'Drucken'}
+                          aria-label={t('print') || 'Drucken'}
+                          aria-haspopup="menu"
+                          aria-expanded={printMgaMenuOpen}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.4rem',
+                            height: '34px',
+                            padding: '0.45rem 0.85rem',
+                            fontSize: '0.85rem',
+                            fontWeight: 500,
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            border: '1px solid var(--border)',
+                            background: 'var(--surface, #ffffff)',
+                            color: 'var(--text, #1f2937)',
+                            whiteSpace: 'nowrap',
+                            boxSizing: 'border-box',
+                          }}
+                        >
+                          <Printer size={15} />
+                          <span>{t('print') || 'Drucken'}</span>
+                        </button>
+
+                        <CellPopover
+                          isOpen={printMgaMenuOpen}
+                          onClose={() => setPrintMgaMenuOpen(false)}
+                          anchorEl={printMgaButtonRef}
+                          width={200}
+                          minWidth={180}
+                        >
+                          <div role="menu" style={{ padding: '0.25rem 0' }}>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              data-testid="print-menu-item-group-overview-mga"
+                              onClick={() => {
+                                setPrintMgaMenuOpen(false);
+                                if (canReadFamiliesAll && families.length === 0) {
+                                  fetchFamilies();
+                                } else if (overviewFamilies.length === 0 && canReadOverview) {
+                                  fetchOverviewFamilies();
+                                }
+                                setGroupPrintModalOpen(true);
+                              }}
+                              style={{
+                                width: '100%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                                padding: '0.5rem 0.75rem',
+                                fontSize: '0.875rem',
+                                border: 'none',
+                                background: 'transparent',
+                                color: 'var(--text, #1e293b)',
+                                cursor: 'pointer',
+                                textAlign: 'left',
+                                borderRadius: '2px',
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = 'var(--bg-hover, rgba(0, 0, 0, 0.04))';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = 'transparent';
+                              }}
+                            >
+                              <Users size={16} />
+                              <span>{t('groupOverview') || 'Gruppenübersicht'}</span>
+                            </button>
+                          </div>
+                        </CellPopover>
+                      </div>
+                    )}
                   </div>
 
                   {/* Impfstatus on Row 2 (mobile only, far right) */}
@@ -9480,6 +9569,89 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                       >
                         {t('groupByJob')}
                       </button>
+                    </div>
+                  )}
+
+                  {activeTab === 'familiesOverview' && (
+                    <div style={{ position: 'relative', display: 'inline-flex' }}>
+                      <button
+                        ref={printButtonRef}
+                        type="button"
+                        onClick={() => setPrintMenuOpen((prev) => !prev)}
+                        className="secondary-button print-toolbar-button"
+                        data-testid="print-toolbar-button"
+                        title={t('print') || 'Drucken'}
+                        aria-label={t('print') || 'Drucken'}
+                        aria-haspopup="menu"
+                        aria-expanded={printMenuOpen}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.4rem',
+                          height: '34px',
+                          padding: '0.45rem 0.85rem',
+                          fontSize: '0.85rem',
+                          fontWeight: 500,
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          border: '1px solid var(--border)',
+                          background: 'var(--surface, #ffffff)',
+                          color: 'var(--text, #1f2937)',
+                          whiteSpace: 'nowrap',
+                          boxSizing: 'border-box',
+                        }}
+                      >
+                        <Printer size={15} />
+                        <span>{t('print') || 'Drucken'}</span>
+                      </button>
+
+                      <CellPopover
+                        isOpen={printMenuOpen}
+                        onClose={() => setPrintMenuOpen(false)}
+                        anchorEl={printButtonRef}
+                        width={200}
+                        minWidth={180}
+                      >
+                        <div role="menu" style={{ padding: '0.25rem 0' }}>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            data-testid="print-menu-item-group-overview"
+                            onClick={() => {
+                              setPrintMenuOpen(false);
+                              if (canReadFamiliesAll && families.length === 0) {
+                                fetchFamilies();
+                              } else if (overviewFamilies.length === 0 && canReadOverview) {
+                                fetchOverviewFamilies();
+                              }
+                              setGroupPrintModalOpen(true);
+                            }}
+                            style={{
+                              width: '100%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.5rem',
+                              padding: '0.5rem 0.75rem',
+                              fontSize: '0.875rem',
+                              border: 'none',
+                              background: 'transparent',
+                              color: 'var(--text, #1e293b)',
+                              cursor: 'pointer',
+                              textAlign: 'left',
+                              borderRadius: '2px',
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = 'var(--bg-hover, rgba(0, 0, 0, 0.04))';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = 'transparent';
+                            }}
+                          >
+                            <Users size={16} />
+                            <span>{t('groupOverview') || 'Gruppenübersicht'}</span>
+                          </button>
+                        </div>
+                      </CellPopover>
                     </div>
                   )}
 
@@ -10383,6 +10555,14 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
           token={token}
           initialType={feedbackInitialData.type}
           initialDescription={feedbackInitialData.description}
+        />
+
+        {/* Group Overview Print Modal */}
+        <GroupOverviewPrintModal
+          isOpen={groupPrintModalOpen}
+          onClose={() => setGroupPrintModalOpen(false)}
+          families={families.length > 0 ? families : (overviewFamilies as any)}
+          getChildGroupStatus={getOverviewChildGroupStatus}
         />
       </div>
     </div>
