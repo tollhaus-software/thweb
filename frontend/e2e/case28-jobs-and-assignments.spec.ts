@@ -519,5 +519,48 @@ test.describe('Test Case 28: Jobs and Assignments (MGA)', () => {
 
     // Hygiene remains
     await expect(page.locator('tr', { hasText: 'Hygiene' })).toBeVisible();
+
+    // =========================================================================
+    // Part 9: Verify scrolling on MGA > Jobs in mobile view
+    // =========================================================================
+    // Create multiple jobs so that the list exceeds mobile screen height
+    for (let i = 1; i <= 6; i++) {
+      await request.post('/api/jobs', {
+        headers: { Authorization: 'Bearer developer@example.com' },
+        data: {
+          name: `Scroll Test Job ${i}`,
+          description: `Description for scroll test job ${i}`,
+          soll_persons: 2,
+        },
+      });
+    }
+
+    // Re-click Jobs tab to refresh list
+    await jobsTabBtn.click();
+    await expect(page.locator('tr', { hasText: 'Scroll Test Job 6' })).toBeVisible();
+
+    // Switch to mobile viewport
+    await page.setViewportSize({ width: 375, height: 667 });
+
+    // Verify .table-container is scrollable (scrollHeight > clientHeight)
+    const tableContainer = page.locator('.jobs-tab-container .table-container');
+    await expect(tableContainer).toBeVisible();
+
+    const scrollInfo = await tableContainer.evaluate((el) => ({
+      scrollHeight: el.scrollHeight,
+      clientHeight: el.clientHeight,
+    }));
+    expect(scrollInfo.scrollHeight).toBeGreaterThan(scrollInfo.clientHeight);
+
+    // Scroll down inside .table-container
+    await tableContainer.evaluate((el) => {
+      el.scrollTop = 300;
+    });
+
+    const scrollTop = await tableContainer.evaluate((el) => el.scrollTop);
+    expect(scrollTop).toBeGreaterThan(0);
+
+    // Reset viewport back to desktop
+    await page.setViewportSize({ width: 1280, height: 800 });
   });
 });

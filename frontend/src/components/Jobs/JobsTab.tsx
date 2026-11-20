@@ -780,6 +780,11 @@ export const JobsTab: React.FC<JobsTabProps> = ({
         padding: searchQuery !== undefined ? 0 : '1rem',
         width: '100%',
         boxSizing: 'border-box',
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1,
+        minHeight: 0,
+        overflow: 'hidden',
       }}
     >
       {/* Standalone Tab Header Controls when not integrated in App controls-row */}
@@ -793,6 +798,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
             flexWrap: 'wrap',
             gap: '0.75rem',
             marginBottom: '1rem',
+            flexShrink: 0,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: '220px', maxWidth: '360px', flex: 1 }}>

@@ -34,6 +34,7 @@ interface DataTableProps<TData> {
   stickyFirstColumn?: boolean;
   enableSorting?: boolean;
   familyCardMode?: 'family' | 'group' | 'job';
+  initialColumnVisibility?: Record<string, boolean>;
 }
 
 export function DataTable<TData>({
@@ -55,9 +56,20 @@ export function DataTable<TData>({
   stickyFirstColumn = false,
   enableSorting = true,
   familyCardMode,
+  initialColumnVisibility,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
+  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>(() => {
+    const defaultVis: Record<string, boolean> = { ...(initialColumnVisibility || {}) };
+    columns.forEach((col: any) => {
+      const colId = col.id || col.accessorKey;
+      if (colId && col.meta?.defaultHidden && defaultVis[colId] === undefined) {
+        defaultVis[colId] = false;
+      }
+    });
+    return defaultVis;
+  });
+
   const [isOpen, setIsOpen] = useState(false);
 
   const desktopButtonRef = useRef<HTMLButtonElement>(null);
@@ -380,6 +392,7 @@ export function DataTable<TData>({
           anchorEl={isMobile ? mobileButtonRef : desktopButtonRef}
           width={220}
           minWidth={180}
+          closeOnScrollOutOfView={false}
         >
           <div style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', borderBottom: '1px solid var(--border)', marginBottom: '0.4rem' }}>
             {t('toggleColumns')}

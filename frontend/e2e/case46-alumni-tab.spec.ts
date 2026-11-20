@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('Test Case 46: Dedicated Alumni (Ehemalige) Tab & Lifecycle Filtering', () => {
+test.describe('Test Case 46: Contact Consent in Eltern Tab & Removal of Alumni Tab', () => {
   test.beforeEach(async ({ request, page }) => {
     // 1. Reset database state to ensure clean environment
     const resetRes = await request.post('/api/test/reset');
@@ -16,83 +16,88 @@ test.describe('Test Case 46: Dedicated Alumni (Ehemalige) Tab & Lifecycle Filter
     await expect(page.getByRole('button', { name: 'Familie hinzufügen' })).toBeVisible();
   });
 
-  test('default filter in Eltern is Aktive, contact_consent is hidden, and Ehemalige tab shows alumni features', async ({ page }) => {
-    // --- Step 1: In Eltern tab, verify default lifecycle filter is "Aktive" and contact_consent is not present ---
+  test('default filter in Eltern is Aktive, contact_consent is hidden by default, can be toggled on via column picker, and Ehemalige subtab is removed', async ({ page }) => {
+    // --- Step 1: Verify Ehemalige subtab button does NOT exist in MGA section ---
+    const alumniTabBtn = page.getByRole('button', { name: 'Ehemalige(MGA)', exact: true });
+    await expect(alumniTabBtn).toHaveCount(0);
+
+    // --- Step 2: In Eltern tab, verify default lifecycle filter is "Aktive" ---
     await page.getByRole('button', { name: 'Eltern(MGA)', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Aktive', exact: true })).toHaveClass(/active/);
 
-    // Verify contact_consent column is NOT present in Eltern tab
+    // Verify contact_consent column is NOT present by default in Eltern tab
     const elternConsentHeader = page.locator('th', { hasText: 'Kontakt-Einwilligung' });
     await expect(elternConsentHeader).toHaveCount(0);
 
-    // --- Step 2: Navigate to Ehemalige tab ---
-    const alumniTabBtn = page.getByRole('button', { name: 'Ehemalige(MGA)', exact: true });
-    await expect(alumniTabBtn).toBeVisible();
-    await alumniTabBtn.click();
+    // --- Step 3: Open Columns toggle popover and verify "Kontakt-Einwilligung" is unchecked by default ---
+    const columnsBtn = page.locator('button.table-header-columns-btn');
+    await expect(columnsBtn).toBeVisible();
+    await columnsBtn.click();
 
-    // Verify search input placeholder
-    const searchInput = page.locator('.mga-controls-row-1 input.search-input');
-    await expect(searchInput).toHaveAttribute('placeholder', 'Ehemalige suchen...');
+    const columnPopover = page.locator('.glass-popup');
+    await expect(columnPopover).toBeVisible();
+    const consentCheckboxLabel = columnPopover.locator('label', { hasText: 'Kontakt-Einwilligung' });
+    await expect(consentCheckboxLabel).toBeVisible();
+    const consentCheckbox = consentCheckboxLabel.locator('input[type="checkbox"]');
+    await expect(consentCheckbox).not.toBeChecked();
 
-    // Verify Copy Emails button is not present
-    await expect(page.locator('.alumni-copy-emails-btn')).toHaveCount(0);
+    // Toggle contact_consent ON
+    await consentCheckbox.check();
+    await page.keyboard.press('Escape');
 
-    // Verify lifecycle filter segmented control is NOT shown in Ehemalige tab
-    await expect(page.locator('.lifecycle-filter-toggle')).toHaveCount(0);
+    // Verify contact_consent column IS now visible in the Eltern table
+    await expect(elternConsentHeader).toBeVisible();
 
-    // Verify Add button in Ehemalige tab says "Ehemalige hinzufügen"
-    const addAlumniBtn = page.locator('button.add-family-button');
-    await expect(addAlumniBtn).toBeVisible();
-    await expect(addAlumniBtn).toContainText('Ehemalige hinzufügen');
-
-    // --- Step 3: Open Add Alumni dialog and verify "Historische Ehemalige" checkbox is checked by default ---
-    await addAlumniBtn.click();
+    // --- Step 4: Add historical alumni family "Altmann" ---
+    const addFamilyBtn = page.locator('button.add-family-button');
+    await addFamilyBtn.click();
     const familyModal = page.locator('.modal-container');
     await expect(familyModal).toBeVisible();
 
     const historicalAlumniCheckbox = page.locator('#f-historical-alumni');
-    await expect(historicalAlumniCheckbox).toBeChecked();
+    await expect(historicalAlumniCheckbox).toBeVisible();
+    await historicalAlumniCheckbox.check();
 
-    // Add historical alumni family "Altmann"
     await page.locator('#f-p1-first').fill('Johannes');
     await page.locator('#f-p1-last').fill('Altmann');
     await page.locator('form').getByRole('button', { name: 'Familie hinzufügen' }).click();
     await expect(familyModal).toBeHidden();
 
-    // --- Step 4: Verify Altmann appears in Ehemalige tab ---
-    const alumniRow = page.locator('tr.family-group-row', { hasText: 'Altmann' });
-    await expect(alumniRow).toBeVisible();
-
-    // Verify contact_consent column IS present in Ehemalige tab
-    const alumniConsentHeader = page.locator('th', { hasText: 'Kontakt-Einwilligung' });
-    await expect(alumniConsentHeader).toBeVisible();
-
-    // Verify consent cell is visible for Johannes Altmann (defaults to no consent / not granted)
-    const consentCell = page.locator('td[data-column-id="contact_consent"]');
-    await expect(consentCell).toBeVisible();
-
-    // --- Step 5: Switch back to Eltern tab and verify Altmann is not visible under default "Aktive" filter ---
-    await page.getByRole('button', { name: 'Eltern(MGA)', exact: true }).click();
+    // Altmann is former, so under "Aktive" filter he should not be visible
     await expect(page.locator('tr.family-group-row', { hasText: 'Altmann' })).toHaveCount(0);
 
     // Switch lifecycle filter in Eltern tab to "Ehemalige"
     await page.getByRole('button', { name: 'Ehemalige', exact: true }).click();
-    await expect(page.locator('tr.family-group-row', { hasText: 'Altmann' })).toBeVisible();
+    const alumniRow = page.locator('tr.family-group-row', { hasText: 'Altmann' });
+    await expect(alumniRow).toBeVisible();
+
+    // Verify consent cell is visible for Johannes Altmann
+    const consentCell = page.locator('td[data-column-id="contact_consent"]');
+    await expect(consentCell).toBeVisible();
 
     // Switch lifecycle filter in Eltern tab to "Alle"
     await page.getByRole('button', { name: 'Alle', exact: true }).click();
     await expect(page.locator('tr.family-group-row', { hasText: 'Altmann' })).toBeVisible();
   });
 
-  test('manages contact consent on desktop and mobile', async ({ page }) => {
-    // 1. Go to Alumni tab and add an alumni family with parent Johannes Altmann
-    await page.getByRole('button', { name: 'Ehemalige(MGA)', exact: true }).click();
+  test('manages contact consent on desktop and mobile in Eltern tab', async ({ page }) => {
+    // 1. Add historical alumni family Altmann
+    await page.getByRole('button', { name: 'Eltern(MGA)', exact: true }).click();
     await page.locator('button.add-family-button').click();
+    await page.locator('#f-historical-alumni').check();
     await page.locator('#f-p1-first').fill('Johannes');
     await page.locator('#f-p1-last').fill('Altmann');
     await page.locator('form').getByRole('button', { name: 'Familie hinzufügen' }).click();
 
-    // 2. Add an email to Johannes Altmann
+    // 2. Switch filter to "Ehemalige" and enable Contact Consent column
+    await page.getByRole('button', { name: 'Ehemalige', exact: true }).click();
+    const columnsBtn = page.locator('button.table-header-columns-btn');
+    await columnsBtn.click();
+    const consentCheckboxLabel = page.locator('.glass-popup label', { hasText: 'Kontakt-Einwilligung' });
+    await consentCheckboxLabel.locator('input[type="checkbox"]').check();
+    await page.keyboard.press('Escape');
+
+    // 3. Add an email to Johannes Altmann
     const parentRow = page.locator('tbody tr', { hasText: 'Johannes' });
     await expect(parentRow).toBeVisible();
     const emailCell = parentRow.locator('.emails-cell-wrapper');
@@ -106,20 +111,7 @@ test.describe('Test Case 46: Dedicated Alumni (Ehemalige) Tab & Lifecycle Filter
     await page.keyboard.press('Escape');
     await expect(parentRow).toContainText('alumni.altmann@example.com');
 
-    // 2b. Test membership default in Ehemalige tab: row without membership should default to Förder (supporting_member)
-    const membershipCell = parentRow.locator('.membership-cell-wrapper');
-    await expect(membershipCell).toBeVisible();
-    await membershipCell.locator('.cell-edit-pencil-btn').click();
-    const membershipsModal = page.locator('.memberships-popover');
-    await expect(membershipsModal).toBeVisible();
-    const membershipTypeSelect = membershipsModal.locator('select');
-    await expect(membershipTypeSelect).toBeVisible();
-    await expect(membershipTypeSelect).toHaveValue('supporting_member');
-    await page.keyboard.press('Escape');
-    await page.keyboard.press('Escape');
-    await expect(membershipsModal).toBeHidden();
-
-    // 3. Grant contact consent
+    // 4. Grant contact consent
     const consentCell = parentRow.locator('.consent-cell-wrapper');
     await expect(consentCell).toBeVisible();
     await consentCell.click();
@@ -142,7 +134,7 @@ test.describe('Test Case 46: Dedicated Alumni (Ehemalige) Tab & Lifecycle Filter
     await expect(consentCell).toContainText('Erteilt (');
     await expect(consentCell).toContainText(dateVal);
 
-    // 4. Test multi-entry history: Add a newer consent entry ("Widerrufen")
+    // 5. Test multi-entry history: Add a newer consent entry ("Widerrufen")
     await consentCell.click();
     await expect(consentModal).toBeVisible();
 
@@ -166,12 +158,9 @@ test.describe('Test Case 46: Dedicated Alumni (Ehemalige) Tab & Lifecycle Filter
     // Table cell now shows the newest entry: "Widerrufen (DD.MM.TTTT)"
     await expect(consentCell).toContainText('Widerrufen (');
 
-    // 5. Test mobile responsive view (375x667)
+    // 6. Test mobile responsive view (375x667)
     await page.setViewportSize({ width: 375, height: 667 });
     await expect(page.locator('.table-zoom-control-container.desktop-only')).toBeHidden();
-
-    // Go to Eltern tab in mobile view
-    await page.getByRole('button', { name: 'Eltern(MGA)', exact: true }).click();
 
     // Mobile filter button exists and opens popover
     const mobileFilterBtn = page.locator('.lifecycle-filter-button.mobile-only');
@@ -183,61 +172,14 @@ test.describe('Test Case 46: Dedicated Alumni (Ehemalige) Tab & Lifecycle Filter
     await formerFilterOption.click();
     await expect(formerFilterOption).toBeHidden();
 
-    // Altmann is now visible under Ehemalige filter on mobile
+    // Altmann is visible under Ehemalige filter on mobile
     await expect(page.locator('.table-container')).toContainText('Altmann');
   });
 
-  test('navigating directly to /#alumni and switching from main menu shows existing data immediately', async ({ page, request }) => {
-    // 1. Seed an alumni family via API first
-    const createRes = await request.post('/api/families', {
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer developer@example.com',
-      },
-      data: {
-        family_type: 'historical_alumni',
-        parents: [
-          {
-            first_name: 'Erika',
-            last_name: 'Muster-Alumni',
-            emails: [],
-            phones: [],
-          },
-        ],
-      },
-    });
-    expect(createRes.ok()).toBeTruthy();
-
-    // 2. Direct navigation to http://localhost/#alumni on fresh page load
+  test('navigating directly to /#alumni redirects to /#parents', async ({ page }) => {
+    // Direct navigation to http://localhost/#alumni redirects to #parents
     await page.goto('/#alumni');
-
-    // Verify it stays on #alumni and does NOT redirect to main page
-    await expect(page).toHaveURL(/#alumni$/);
-    const searchInput = page.locator('.mga-controls-row-1 input.search-input');
-    await expect(searchInput).toHaveAttribute('placeholder', 'Ehemalige suchen...');
-
-    // Verify pre-existing data is visible immediately on initial load without adding a family
-    await expect(page.locator('tr.family-group-row', { hasText: 'Muster-Alumni' })).toBeVisible();
-
-    // 3. Navigate away to Eltern tab
-    await page.getByRole('button', { name: 'Eltern(MGA)', exact: true }).click();
     await expect(page).toHaveURL(/#parents$/);
-
-    // 4. Click through menu to Ehemalige tab
-    const alumniTabBtn = page.getByRole('button', { name: 'Ehemalige(MGA)', exact: true });
-    await expect(alumniTabBtn).toBeVisible();
-    await alumniTabBtn.click();
-    await expect(page).toHaveURL(/#alumni$/);
-
-    // Verify pre-existing data is visible immediately after menu navigation as well
-    await expect(page.locator('tr.family-group-row', { hasText: 'Muster-Alumni' })).toBeVisible();
-
-    // 5. Navigate to MGA landing page and verify sidebar subtab works
-    await page.goto('/#mga');
-    const mgaSubTree = page.locator('[data-testid="sidebar-subtree-mga"]');
-    await expect(mgaSubTree).toBeVisible();
-    await mgaSubTree.locator('[data-testid="sidebar-subtab-alumni"]').click();
-    await expect(page).toHaveURL(/#alumni$/);
-    await expect(page.locator('tr.family-group-row', { hasText: 'Muster-Alumni' })).toBeVisible();
+    await expect(page.locator('.search-input')).toHaveAttribute('placeholder', 'Eltern suchen...');
   });
 });

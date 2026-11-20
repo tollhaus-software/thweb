@@ -174,16 +174,6 @@ export const NAVIGATION_CATEGORIES: NavCategory[] = [
         isVisible: (ctx) => ctx.canReadFamiliesAll,
       },
       {
-        id: 'alumni',
-        labelKey: 'subtabAlumni',
-        defaultLabel: 'Ehemalige',
-        accessibleName: 'Ehemalige(MGA)',
-        descriptionKey: 'subtabDescAlumni',
-        defaultDescription: 'Ehemalige Familien, historische Alumni, Kontaktdaten, Kontakteinwilligungen und Fördermitgliedschaften.',
-        icon: Award,
-        isVisible: (ctx) => ctx.canReadFamiliesAll,
-      },
-      {
         id: 'members',
         labelKey: 'subtabMembers',
         defaultLabel: 'Vereinsmitglieder',

@@ -2983,13 +2983,15 @@ const Dashboard: React.FC = () => {
     if (isMainPageActiveInitial && (!hash || hash === 'main' || hash === 'home')) {
       return 'main';
     }
+    if (hash === 'alumni') {
+      return canReadFamiliesAll ? 'parents' : 'familiesOverview';
+    }
     if (
       (hash === 'main' && isMainPageActiveInitial) ||
       (hash === 'familiesOverview' && canReadOverview) ||
       (hash === 'families' && canReadFamiliesAll) ||
       (hash === 'parents' && canReadFamiliesAll) ||
       (hash === 'children' && canReadFamiliesAll) ||
-      (hash === 'alumni' && canReadFamiliesAll) ||
       (hash === 'members' && canReadMembers) ||
       (hash === 'jobs' && canReadJobs) ||
       (hash === 'employees' && canReadEmployees) ||
@@ -3011,13 +3013,15 @@ const Dashboard: React.FC = () => {
       return hash as any;
     }
     const saved = localStorage.getItem('thweb_active_tab');
+    if (saved === 'alumni') {
+      return canReadFamiliesAll ? 'parents' : 'familiesOverview';
+    }
     if (
       (saved === 'main' && isMainPageActiveInitial) ||
       (saved === 'familiesOverview' && canReadOverview) ||
       (saved === 'families' && canReadFamiliesAll) ||
       (saved === 'parents' && canReadFamiliesAll) ||
       (saved === 'children' && canReadFamiliesAll) ||
-      (saved === 'alumni' && canReadFamiliesAll) ||
       (saved === 'members' && canReadMembers) ||
       (saved === 'jobs' && canReadJobs) ||
       (saved === 'employees' && canReadEmployees) ||
@@ -3107,7 +3111,7 @@ const Dashboard: React.FC = () => {
       } else if (canReadFees) {
         fallback = 'childcareFees';
       }
-    } else if ((activeTab === 'parents' || activeTab === 'children' || activeTab === 'alumni') && !canReadFamiliesAll) {
+    } else if ((activeTab === 'parents' || activeTab === 'children') && !canReadFamiliesAll) {
       if (canReadOverview) {
         fallback = 'familiesOverview';
       } else if (canReadFees) {
@@ -4161,7 +4165,6 @@ const Dashboard: React.FC = () => {
       case 'families':
       case 'parents':
       case 'children':
-      case 'alumni':
       case 'hygieneBelehrung':
         if (canReadFamiliesAll) {
           fetchFamilies();
@@ -4281,13 +4284,20 @@ const Dashboard: React.FC = () => {
       const type = searchParams.get('type') as 'parent' | 'child' | 'family' | null;
       const fromTab = searchParams.get('fromTab') as 'families' | 'familiesOverview' | 'parents' | 'children' | 'members' | null;
 
+      if (hash === 'alumni') {
+        const targetTab = canReadFamiliesAll ? 'parents' : (canReadOverview ? 'familiesOverview' : 'main');
+        setActiveTab(targetTab as any);
+        localStorage.setItem('thweb_active_tab', targetTab);
+        window.location.hash = targetTab;
+        return;
+      }
+
       if (
         (isMainPageActive && (!hash || hash === 'main' || hash === 'home')) ||
         (!hash && (canReadOverview || canReadFamiliesAll)) ||
         (hash === 'familiesOverview' && canReadOverview) ||
         (hash === 'parents' && canReadFamiliesAll) ||
         (hash === 'children' && canReadFamiliesAll) ||
-        (hash === 'alumni' && canReadFamiliesAll) ||
         (hash === 'families' && canReadFamiliesAll) ||
         (hash === 'members' && canReadMembers) ||
         (hash === 'jobs' && canReadJobs) ||
@@ -4334,7 +4344,7 @@ const Dashboard: React.FC = () => {
         localStorage.setItem('thweb_active_tab', 'familiesOverview');
         window.location.hash = 'familiesOverview';
       } else if (
-        (hash === 'parents' || hash === 'children' || hash === 'alumni') &&
+        (hash === 'parents' || hash === 'children') &&
         !canReadFamiliesAll
       ) {
         const fallback = canReadOverview ? 'familiesOverview' : canReadFees ? 'childcareFees' : 'familiesOverview';
@@ -4387,7 +4397,6 @@ const Dashboard: React.FC = () => {
         activeTab === 'families' ||
         activeTab === 'parents' ||
         activeTab === 'children' ||
-        activeTab === 'alumni' ||
         activeTab === 'hygieneBelehrung'
       ) {
         if (canReadFamiliesAll) fetchFamilies();
@@ -4653,7 +4662,7 @@ const Dashboard: React.FC = () => {
     pushAction({
       type: 'ADD_MEMBERSHIP',
       payload: {
-        tab: activeTab === 'alumni' ? 'alumni' : 'parents',
+        tab: 'parents',
         parentId: parentId,
         membershipId: created.id,
         membership: created,
@@ -4704,7 +4713,7 @@ const Dashboard: React.FC = () => {
       pushAction({
         type: 'UPDATE_MEMBERSHIP',
         payload: {
-          tab: activeTab === 'alumni' ? 'alumni' : 'parents',
+          tab: 'parents',
           parentId: parentId,
           membershipId: membershipId,
           before: {
@@ -5417,16 +5426,6 @@ const Dashboard: React.FC = () => {
     setAddFamilyOpen(true);
   };
 
-  const openAddAlumniFamily = () => {
-    setP1FirstName('');
-    setP1LastName('');
-    setP2FirstName('');
-    setP2LastName('');
-    setIsP2LastNameDirty(false);
-    setIsHistoricalAlumni(true);
-    setAddFamilyOpen(true);
-  };
-
   const handleAddFamilySubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!p1FirstName.trim() || p1LastName.trim() === '') {
@@ -5468,7 +5467,7 @@ const Dashboard: React.FC = () => {
         pushAction({
           type: 'ADD_FAMILY',
           payload: {
-            tab: activeTab === 'children' ? 'children' : activeTab === 'families' ? 'families' : activeTab === 'alumni' ? 'alumni' : 'parents',
+            tab: activeTab === 'children' ? 'children' : activeTab === 'families' ? 'families' : 'parents',
             familyId: createdFamily.id,
             parents: createdFamily.parents || [],
           }
@@ -5521,7 +5520,7 @@ const Dashboard: React.FC = () => {
           pushAction({
             type: 'UPDATE_PARENT',
             payload: {
-              tab: activeTab === 'alumni' ? 'alumni' : 'parents',
+              tab: 'parents',
               familyId: family.id,
               parentId: parent.id,
               beforeParents: stripParentsVaccination(originalParents),
@@ -5569,7 +5568,7 @@ const Dashboard: React.FC = () => {
         pushAction({
           type: 'UPDATE_PARENT',
           payload: {
-            tab: activeTab === 'alumni' ? 'alumni' : 'parents',
+            tab: 'parents',
             familyId: family.id,
             parentId: parent.id,
             beforeParents: stripParentsVaccination(originalParents),
@@ -5615,7 +5614,7 @@ const Dashboard: React.FC = () => {
         pushAction({
           type: 'UPDATE_PARENT',
           payload: {
-            tab: activeTab === 'alumni' ? 'alumni' : 'parents',
+            tab: 'parents',
             familyId: family.id,
             beforeParents: stripParentsVaccination(originalParents),
             afterParents: stripParentsVaccination(updatedParents),
@@ -6108,76 +6107,6 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
     if (!query) return sorted;
     return sorted.filter((f) => f.matchesQuery);
   }, [families, globalFilter, familySortOrder, mgaLifecycleFilter]);
-
-  // Structure former families for alumni tab (only former/alumni families)
-  const alumniFamilyData = React.useMemo(() => {
-    const query = (globalFilter || '').trim().toLowerCase();
-    const formerFamilies = families.filter((f) => isFamilyFormer(f));
-
-    const mapped = formerFamilies.map((f) => {
-      const familyName = getFamilyName(f);
-
-      const sortedParents = [...(f.parents || [])].sort((a, b) => {
-        const cmp = (a.first_name || '').localeCompare(b.first_name || '', CURRENT_LOCALE);
-        if (cmp !== 0) return cmp;
-        return (a.last_name || '').localeCompare(b.last_name || '', CURRENT_LOCALE);
-      });
-
-      const allParents = sortedParents.map((p) => ({
-        ...p,
-        family_id: f.id,
-        family_name: familyName,
-      }));
-
-      const filteredParents = allParents.filter((p) => {
-        if (!query) return true;
-        const fnMatch = (p.first_name || '').toLowerCase().includes(query);
-        const lnMatch = (p.last_name || '').toLowerCase().includes(query);
-        const emailMatch = (p.emails || []).some((e) =>
-          (typeof e === 'string' ? e : e.value || '').toLowerCase().includes(query)
-        );
-        const phoneMatch = (p.phones || []).some((ph) =>
-          (typeof ph === 'string' ? ph : ph.value || '').toLowerCase().includes(query)
-        );
-        const notesMatch = (p.notes || '').toLowerCase().includes(query);
-        const addressMatch = (p.address || '').toLowerCase().includes(query);
-        return fnMatch || lnMatch || emailMatch || phoneMatch || notesMatch || addressMatch;
-      });
-
-      return {
-        id: f.id,
-        family_name: familyName,
-        parents: filteredParents,
-        nameMatch: familyName.toLowerCase().includes(query),
-        originalFamily: f,
-      };
-    });
-
-    const sorted = sortFamilyBlocks(mapped, familySortOrder, CURRENT_LOCALE);
-
-    if (!query) return sorted;
-    return sorted
-      .filter((f) => f.nameMatch || f.parents.length > 0)
-      .map((f) => {
-        if (f.nameMatch && f.parents.length === 0) {
-          const originalFamily = formerFamilies.find((orig) => orig.id === f.id);
-          const origParents = [...(originalFamily?.parents || [])].sort((a, b) => {
-            const cmp = (a.first_name || '').localeCompare(b.first_name || '', CURRENT_LOCALE);
-            if (cmp !== 0) return cmp;
-            return (a.last_name || '').localeCompare(b.last_name || '', CURRENT_LOCALE);
-          });
-          return {
-            ...f,
-            parents: origParents.map((p) => ({
-              ...p,
-              family_id: f.id,
-              family_name: f.family_name,
-            })),
-          };
-        }
-        return f;
-      });
-  }, [families, globalFilter, familySortOrder]);
 
   const overviewFamiliesTabData = React.useMemo(() => {
     const query = (globalFilter || '').trim().toLowerCase();
@@ -6906,136 +6835,11 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
         },
       },
       {
-        id: 'actions',
-        header: '',
-        size: 50,
-        meta: { hideOnMobile: true },
-        cell: (info) => {
-          const parent = info.row.original;
-          return (
-            <div style={{ display: 'flex', justifyContent: 'flex-end', paddingRight: '0.25rem' }}>
-              <RowActionsMenu
-                onDelete={() => handleDeleteParent(parent.id)}
-                deleteLabel={t('deleteParent')}
-                disabled={!canWriteParents}
-                disabledTooltip={!canWriteParents ? t('permissionRequired') : undefined}
-                entityName={`${parent.first_name || ''} ${parent.last_name || ''}`.trim()}
-              />
-            </div>
-          );
-        }
-      }
-    ],
-    [families, handleSaveParentField, handleSaveParentNames, handleSaveFamilyParents, handleDeleteParent, canWriteParents, canWriteJobs, isVaccinationUnlocked, handleRequestKmsAuth, hasPermission, user?.email, membershipPopoverAnchor, targetParentMemberships, openManageMemberships, multiValuePopoverAnchor, activeParentForMultiValue, activeMultiValueField, openManageMultiValue, vaccinationPopoverAnchor, targetVaccinationPerson, openManageVaccination, jobsPopoverAnchor, activePersonForJobs, openManageJobs, handleJumpToFamily, canWriteFamilies, mentorPopoverAnchor, activeFamilyForMentor, openManageMentor, openFamilyNotes]
-  );
-
-  const alumniColumns = React.useMemo<ColumnDef<any>[]>(
-    () => [
-      {
-        header: t('firstNameEdit'),
-        accessorKey: 'first_name',
-        size: 200,
-        minSize: 200,
-        cell: (info) => {
-          const parent = info.row.original;
-          return (
-            <FirstNameEditor
-              id={`alumni-parent-${parent.id}`}
-              firstName={parent.first_name}
-              firstNameForAddressList={parent.first_name_for_address_list || ''}
-              onSave={(fn, fnAddr) => handleSaveParentNames(parent, fn, fnAddr)}
-              disabled={!canWriteParents}
-            />
-          );
-        }
-      },
-      {
-        header: t('lastNameEdit'),
-        accessorKey: 'last_name',
-        size: 200,
-        cell: (info) => {
-          const parent = info.row.original;
-          return (
-            <EasyEditComponent
-              type={EasyEditTypes.TEXT}
-              value={parent.last_name}
-              onSave={(val: string) => handleSaveParentField(parent, 'last_name', val)}
-              editButtonLabel={<Pencil size={13} />}
-              instructions={t('editLastName')}
-              viewAttributes={{}}
-              inputAttributes={{}}
-              onCancel={() => {}}
-              onValidate={() => true}
-            />
-          );
-        }
-      },
-      {
-        header: t('emailsEdit'),
-        accessorKey: 'emails',
-        size: 300,
-        cell: (info) => {
-          const parent = info.row.original;
-          const isActive = Boolean(
-            multiValuePopoverAnchor &&
-            activeParentForMultiValue?.id === parent.id &&
-            activeMultiValueField === 'emails'
-          );
-          return (
-            <ParentMultiValueCell
-              parent={parent}
-              field="emails"
-              placeholder={t('addEmail')}
-              isActive={isActive}
-              onOpenManage={openManageMultiValue}
-            />
-          );
-        }
-      },
-      {
-        header: t('phonesEdit'),
-        accessorKey: 'phones',
-        size: 250,
-        cell: (info) => {
-          const parent = info.row.original;
-          const isActive = Boolean(
-            multiValuePopoverAnchor &&
-            activeParentForMultiValue?.id === parent.id &&
-            activeMultiValueField === 'phones'
-          );
-          return (
-            <ParentMultiValueCell
-              parent={parent}
-              field="phones"
-              placeholder={t('addPhone')}
-              isActive={isActive}
-              onOpenManage={openManageMultiValue}
-            />
-          );
-        }
-      },
-      {
-        header: t('address'),
-        accessorKey: 'address',
-        size: 250,
-        cell: (info) => {
-          const parent = info.row.original;
-          const family = families.find((f) => f.id === parent.family_id);
-          const familyParents = family?.parents || [parent];
-          return (
-            <AddressEditor
-              parent={parent}
-              familyParents={familyParents}
-              onSave={(updatedParents) => handleSaveFamilyParents(parent.family_id, updatedParents)}
-            />
-          );
-        }
-      },
-      {
         header: t('contactConsent'),
         id: 'contact_consent',
         size: 180,
-        cell: (info) => {
+        meta: { defaultHidden: true },
+        cell: (info: any) => {
           const parent = info.row.original;
           if (!parent || !parent.id) return null;
           const isCurrentActive = Boolean(contactConsentPopoverAnchor && activeParentForConsent?.id === parent.id);
@@ -7045,43 +6849,6 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
               isActive={isCurrentActive}
               onOpenManage={openManageConsent}
               canEdit={canWriteParents}
-            />
-          );
-        }
-      },
-      {
-        header: t('th_membership'),
-        id: 'th_membership',
-        size: 180,
-        cell: (info) => {
-          const parent = info.row.original;
-          if (!parent || !parent.id) return null;
-          const isCurrentActive = Boolean(membershipPopoverAnchor && targetParentMemberships?.id === parent.id);
-          return (
-            <ParentMembershipCell
-              parent={parent}
-              isActive={isCurrentActive}
-              onOpenManage={openManageMemberships}
-            />
-          );
-        }
-      },
-      {
-        header: t('notes'),
-        accessorKey: 'notes',
-        size: 260,
-        cell: (info) => {
-          const parent = info.row.original;
-          const family = families.find((f) => f.id === parent.family_id);
-          return (
-            <FamilyNotesCell
-              value={parent.notes || ''}
-              readOnly={!canWriteParents}
-              onOpen={(anchor) => {
-                if (family) {
-                  openFamilyNotes(family, { type: 'parent', id: parent.id }, anchor);
-                }
-              }}
             />
           );
         }
@@ -7114,6 +6881,11 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
       handleSaveFamilyParents,
       handleDeleteParent,
       canWriteParents,
+      canWriteJobs,
+      isVaccinationUnlocked,
+      handleRequestKmsAuth,
+      hasPermission,
+      user?.email,
       membershipPopoverAnchor,
       targetParentMemberships,
       openManageMemberships,
@@ -7124,7 +6896,18 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
       activeParentForMultiValue,
       activeMultiValueField,
       openManageMultiValue,
-      openFamilyNotes,
+      vaccinationPopoverAnchor,
+      targetVaccinationPerson,
+      openManageVaccination,
+      jobsPopoverAnchor,
+      activePersonForJobs,
+      openManageJobs,
+      handleJumpToFamily,
+      canWriteFamilies,
+      mentorPopoverAnchor,
+      activeFamilyForMentor,
+      openManageMentor,
+      openFamilyNotes
     ]
   );
 
@@ -8698,7 +8481,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
   const shouldShowSubTabInBreadcrumbs = hasLandingPage && !isLandingActive && Boolean(currentSubItem);
   const subTabLabel = shouldShowSubTabInBreadcrumbs && currentSubItem ? getSubItemLabel(currentSubItem) : null;
 
-  const isTableTab = !isLandingActive && (activeTab === 'familiesOverview' || activeTab === 'parents' || activeTab === 'children' || activeTab === 'families' || activeTab === 'alumni' || activeTab === 'hygieneBelehrung' || activeTab === 'members' || activeTab === 'employees' || activeTab === 'jobs');
+  const isTableTab = !isLandingActive && (activeTab === 'familiesOverview' || activeTab === 'parents' || activeTab === 'children' || activeTab === 'families' || activeTab === 'hygieneBelehrung' || activeTab === 'members' || activeTab === 'employees' || activeTab === 'jobs');
 
   return (
     <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
@@ -9000,9 +8783,9 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
           };
 
           return !isLandingActive && activeTab !== 'main' && activeTab !== 'childcareFees' && activeTab !== 'childcareFeesAll' && activeTab !== 'audit' && activeTab !== 'admin' && activeTab !== 'kiosk' && activeTab !== 'dashboard' && activeTab !== 'mealPlan' && activeTab !== 'mealAllergens' && activeTab !== 'hygieneDocument' && activeTab !== 'kochenHygiene' && activeTab !== 'volunteerAbsences' && (
-            (activeTab === 'families' || activeTab === 'parents' || activeTab === 'children' || activeTab === 'alumni') ? (
+            (activeTab === 'families' || activeTab === 'parents' || activeTab === 'children') ? (
               <div className="mga-controls-container">
-                {/* Row 1: Search, Sort, Filter (all MGA tabs except alumni), Alumni Email Copy (alumni tab), Zoom (desktop), and Impfstatus (desktop far right) */}
+                {/* Row 1: Search, Sort, Filter, Zoom (desktop), and Impfstatus (desktop far right) */}
                 <div className="controls-row mga-controls-row-1">
                   <div className="controls-left">
                     <input
@@ -9014,8 +8797,6 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                           ? t('searchFamilies')
                           : activeTab === 'children'
                           ? t('searchChildren')
-                          : activeTab === 'alumni'
-                          ? (t('searchAlumni') || 'Ehemalige suchen...')
                           : t('searchParents')
                       }
                       style={{ marginBottom: 0 }}
@@ -9112,23 +8893,22 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                       ))}
                     </CellPopover>
 
-                    {/* Desktop Segmented Lifecycle Filter (only when not in alumni tab) */}
-                    {activeTab !== 'alumni' && (
-                      <div
-                        className="lifecycle-filter-toggle desktop-only"
-                        role="group"
-                        aria-label={t('filterLifecycle') || 'Status-Filter'}
-                        style={{
-                          alignItems: 'center',
-                          background: 'var(--bg-surface)',
-                          border: '1px solid var(--border)',
-                          borderRadius: '4px',
-                          padding: '2px',
-                          height: '34px',
-                          boxSizing: 'border-box',
-                          flexShrink: 0,
-                        }}
-                      >
+                    {/* Desktop Segmented Lifecycle Filter */}
+                    <div
+                      className="lifecycle-filter-toggle desktop-only"
+                      role="group"
+                      aria-label={t('filterLifecycle') || 'Status-Filter'}
+                      style={{
+                        alignItems: 'center',
+                        background: 'var(--bg-surface)',
+                        border: '1px solid var(--border)',
+                        borderRadius: '4px',
+                        padding: '2px',
+                        height: '34px',
+                        boxSizing: 'border-box',
+                        flexShrink: 0,
+                      }}
+                    >
                         <button
                           type="button"
                           onClick={() => setMgaLifecycleFilter('all')}
@@ -9187,16 +8967,13 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                           {t('filterFormer')}
                         </button>
                       </div>
-                    )}
 
                     {/* Mobile Filter Button (same size as sort button, filter icon, opens popover) */}
-                    {activeTab !== 'alumni' && (
-                      <>
-                        <button
-                          ref={lifecycleFilterButtonRef}
-                          type="button"
-                          onClick={() => setLifecycleFilterPopoverOpen((prev) => !prev)}
-                          className="secondary-button lifecycle-filter-button mobile-only"
+                    <button
+                      ref={lifecycleFilterButtonRef}
+                      type="button"
+                      onClick={() => setLifecycleFilterPopoverOpen((prev) => !prev)}
+                      className="secondary-button lifecycle-filter-button mobile-only"
                           title={`${t('filterLifecycle') || 'Filter'}: ${
                             mgaLifecycleFilter === 'active'
                               ? t('filterActive')
@@ -9285,8 +9062,6 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                             );
                           })}
                         </CellPopover>
-                      </>
-                    )}
 
                     <div className="table-zoom-control-container desktop-only">
                       <TableZoomControl />
@@ -9297,12 +9072,12 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                   {renderVaccinationButton('desktop-only')}
                 </div>
 
-                {/* Row 2: Familie / Ehemalige hinzufügen & Undo/Redo on left, Impfstatus on mobile far right */}
+                {/* Row 2: Familie hinzufügen & Undo/Redo on left, Impfstatus on mobile far right */}
                 <div className="controls-row mga-controls-row-2">
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'nowrap' }}>
                     <button
                       type="button"
-                      onClick={activeTab === 'alumni' ? openAddAlumniFamily : openAddFamily}
+                      onClick={openAddFamily}
                       className="primary-button add-family-button"
                       style={{
                         display: 'inline-flex',
@@ -9323,7 +9098,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                       }}
                     >
                       <Plus size={14} />
-                      <span>{activeTab === 'alumni' ? (t('addAlumni') || 'Ehemalige hinzufügen') : t('addFamily')}</span>
+                      <span>{t('addFamily')}</span>
                     </button>
 
                     <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
@@ -9774,6 +9549,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
           </div>
         ) : activeTab === 'familiesOverview' ? (
           <DataTable
+            key="familiesOverview"
             className="overview-table"
             data={overviewFamiliesTabData}
             columns={overviewColumns}
@@ -9785,6 +9561,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
           />
         ) : activeTab === 'parents' ? (
           <DataTable
+            key="parents"
             className="card-table parents-table"
             data={parentsFamilyData}
             columns={parentColumns}
@@ -9796,6 +9573,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
             highlightedRowId={highlightedRowId}
             stickyFirstColumn
             enableSorting={false}
+            initialColumnVisibility={{ contact_consent: false }}
             getCardHeader={(parent: any) => `${parent.first_name || ''} ${parent.last_name || ''}`.trim() || '-'}
             getCardActions={(parent: any) => (
               <RowActionsMenu
@@ -9809,6 +9587,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
           />
         ) : activeTab === 'children' ? (
           <DataTable
+            key="children"
             className="card-table children-table"
             data={childrenFamilyData}
             columns={childColumns}
@@ -9832,30 +9611,9 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
               />
             )}
           />
-        ) : activeTab === 'alumni' ? (
-          <DataTable
-            className="card-table alumni-table parents-table"
-            data={alumniFamilyData}
-            columns={alumniColumns}
-            getSubRows={(row: any) => row.parents}
-            emptySubRowsText={t('noAlumniYet') || 'Keine Ehemaligen vorhanden'}
-            onAddParent={openAddParent}
-            highlightedRowId={highlightedRowId}
-            stickyFirstColumn
-            enableSorting={false}
-            getCardHeader={(parent: any) => `${parent.first_name || ''} ${parent.last_name || ''}`.trim() || '-'}
-            getCardActions={(parent: any) => (
-              <RowActionsMenu
-                onDelete={() => handleDeleteParent(parent.id)}
-                deleteLabel={t('deleteParent')}
-                disabled={!canWriteParents}
-                disabledTooltip={!canWriteParents ? t('permissionRequired') : undefined}
-                entityName={`${parent.first_name || ''} ${parent.last_name || ''}`.trim()}
-              />
-            )}
-          />
         ) : activeTab === 'families' ? (
           <DataTable
+            key="families"
             className="card-table families-table"
             data={familiesTabData}
             columns={familyColumns}
@@ -9866,6 +9624,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
           />
         ) : activeTab === 'hygieneBelehrung' ? (
           <DataTable
+            key="hygieneBelehrung"
             data={parentsFamilyData}
             columns={hygieneColumns}
             getSubRows={(row: any) => row.parents}
@@ -9873,6 +9632,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
           />
         ) : activeTab === 'members' && canReadMembers ? (
           <DataTable
+            key="members"
             className="card-table members-table"
             data={filteredMembers}
             columns={memberColumns}
@@ -9904,6 +9664,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
           />
         ) : activeTab === 'employees' && canReadEmployees ? (
           <DataTable
+            key="employees"
             className="card-table employees-table"
             data={filteredEmployees}
             columns={employeeColumns}
@@ -10382,7 +10143,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
           onClose={closeManageMemberships}
           parent={activeParentForMemberships}
           family={activeFamilyForMemberships}
-          defaultMembershipType={activeTab === 'alumni' ? 'supporting_member' : undefined}
+          defaultMembershipType={undefined}
           readOnly={!canWriteMemberships}
           onAddMembership={handleAddMembership}
           onUpdateMembership={handleUpdateMembership}
