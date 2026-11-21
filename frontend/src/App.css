@@ -1413,10 +1413,6 @@ tr.family-group-row td {
     gap: 0.5rem !important;
   }
 
-  .cards-view-columns-btn {
-    display: none !important;
-  }
-
   button.mobile-only {
     display: inline-flex !important;
   }

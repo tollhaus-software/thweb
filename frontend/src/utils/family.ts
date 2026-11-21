@@ -1,3 +1,6 @@
+import { t } from './i18n';
+import type { THMembership } from '../types/family';
+
 /**
  * Utility for formatting standardized family names from parent surnames.
  * Deduplicates non-empty surnames, sorts them alphabetically, and joins with " / ".
@@ -284,5 +287,121 @@ export function isFamilyFormer(
     }
     return false;
   });
-  return !hasActiveOrPlanned;
+  if (hasActiveOrPlanned) {
+    return false;
+  }
+
+  const hasExitedChild = children.some((c) => {
+    if (c.is_former) return true;
+    if (c.group_changes && c.group_changes.length > 0) {
+      const effective = c.group_changes.filter((ch) => (ch.change_date || '').split('T')[0] <= todayStr);
+      if (effective.length > 0) {
+        const sorted = [...effective].sort((a, b) => (a.change_date || '').localeCompare(b.change_date || ''));
+        return sorted[sorted.length - 1].target_group === 0;
+      }
+    }
+    return false;
+  });
+
+  return hasExitedChild;
 }
+
+export interface FamiliencardSummary {
+  text: string;
+  color: string;
+  status: 'valid' | 'expired' | 'none';
+}
+
+export function getFamiliencardSummary(cards: number[] | undefined | null, overrideCurrentYear?: number): FamiliencardSummary {
+  if (!cards || cards.length === 0) {
+    return { text: '', color: 'inherit', status: 'none' };
+  }
+
+  const currentYear = overrideCurrentYear ?? new Date().getFullYear();
+  const hasCurrent = cards.includes(currentYear);
+  const futureYears = cards.filter((y) => y > currentYear).sort((a, b) => a - b);
+
+  if (hasCurrent) {
+    if (futureYears.length > 0) {
+      return {
+        text: `ja (${currentYear}+)`,
+        color: 'black',
+        status: 'valid',
+      };
+    }
+    return {
+      text: `ja (${currentYear})`,
+      color: 'black',
+      status: 'valid',
+    };
+  }
+
+  if (futureYears.length > 0) {
+    return {
+      text: `ja (ab ${futureYears[0]})`,
+      color: 'black',
+      status: 'valid',
+    };
+  }
+
+  const latestPastYear = Math.max(...cards);
+  return {
+    text: `abgelaufen (${latestPastYear})`,
+    color: 'gray',
+    status: 'expired',
+  };
+}
+
+export interface MembershipStatus {
+  text: string;
+  color: string;
+  fontWeight?: string;
+  fontStyle?: string;
+}
+
+export function getMembershipStatus(memberships: THMembership[] | undefined): MembershipStatus {
+  if (!memberships || memberships.length === 0) return { text: '', color: 'inherit' };
+  
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const todayStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const endOfCurrentMonthDate = new Date(currentYear, currentMonth, 0);
+  const endOfCurrentMonthStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(endOfCurrentMonthDate.getDate()).padStart(2, '0')}`;
+
+  // 1. First check if there is a membership active today
+  let active = memberships.find((m) => {
+    const start = m.start_date.split('T')[0];
+    const end = m.end_date ? m.end_date.split('T')[0] : null;
+    return start <= todayStr && (!end || end >= todayStr);
+  });
+
+  // 2. If no membership is active today, check if there is a membership starting this month
+  if (!active) {
+    active = memberships.find((m) => {
+      const start = m.start_date.split('T')[0];
+      const end = m.end_date ? m.end_date.split('T')[0] : null;
+      return start <= endOfCurrentMonthStr && (!end || end >= todayStr);
+    });
+  }
+
+  if (active) {
+    if (active.membership_type === 'full_member') {
+      return { text: t('full_member'), color: 'var(--text-h)', fontWeight: '600' };
+    } else {
+      return { text: t('supporting_member'), color: 'var(--text-h)', fontWeight: '600' };
+    }
+  }
+
+  const expired = memberships.some((m) => {
+    const end = m.end_date ? m.end_date.split('T')[0] : null;
+    return end && end < todayStr;
+  });
+
+  if (expired) {
+    return { text: t('expired'), color: '#94a3b8', fontStyle: 'italic' };
+  }
+
+  return { text: '', color: 'inherit' };
+}
+

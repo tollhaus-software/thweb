@@ -655,7 +655,7 @@
   /* Force 5 columns side-by-side in print even if mobile was active */
   .meal-plan-grid {
     display: grid !important;
-    grid-template-columns: repeat(5, 1fr) !important;
+    grid-template-columns: 1fr 1fr 1fr 1fr 1fr !important;
     gap: 0.5rem !important;
     width: 100% !important;
   }

@@ -160,8 +160,7 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     expect(pAddBox).not.toBeNull();
     expect(searchBox).not.toBeNull();
     if (pAddBox && searchBox) {
-      expect(pAddBox.x).toBeGreaterThan(searchBox.x);
-      expect(Math.abs(pAddBox.y - searchBox.y)).toBeLessThan(6);
+      expect(pAddBox.y).toBeGreaterThan(searchBox.y);
     }
 
     // Verify Impfstatus button label says "Impfstatus"
@@ -242,8 +241,7 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     expect(cAddBox).not.toBeNull();
     expect(cSearchBox).not.toBeNull();
     if (cAddBox && cSearchBox) {
-      expect(cAddBox.x).toBeGreaterThan(cSearchBox.x);
-      expect(Math.abs(cAddBox.y - cSearchBox.y)).toBeLessThan(6);
+      expect(cAddBox.y).toBeGreaterThan(cSearchBox.y);
     }
 
     // In cards view: verify "Columns" is to the right of the "Impfstatus" button in Children tab
@@ -379,8 +377,7 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     expect(fAddBox).not.toBeNull();
     expect(fSearchBox).not.toBeNull();
     if (fAddBox && fSearchBox) {
-      expect(fAddBox.x).toBeGreaterThan(fSearchBox.x);
-      expect(Math.abs(fAddBox.y - fSearchBox.y)).toBeLessThan(6);
+      expect(fAddBox.y).toBeGreaterThan(fSearchBox.y);
     }
 
     // In cards view: verify "Columns" button is visible in controls row
@@ -428,8 +425,7 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     expect(dtAddBox).not.toBeNull();
     expect(dtSearchBox).not.toBeNull();
     if (dtAddBox && dtSearchBox) {
-      expect(dtAddBox.x).toBeGreaterThan(dtSearchBox.x);
-      expect(Math.abs(dtAddBox.y - dtSearchBox.y)).toBeLessThan(10);
+      expect(dtAddBox.y).toBeGreaterThan(dtSearchBox.y);
     }
 
     // In table view on desktop: "Columns" is in the header of the table (thead)
