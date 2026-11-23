@@ -32,6 +32,7 @@ import { KioskProvisioning } from './components/Admin/KioskProvisioning';
 import { FeedbackAndActivityView } from './components/Admin/FeedbackAndActivityView';
 import { PermissionsSimulatorModal } from './components/Admin/PermissionsSimulatorModal';
 import { SimulatedRolesPermissionsModal } from './components/Admin/SimulatedRolesPermissionsModal';
+import { ParentContactSelfServiceModal } from './components/Families/ParentContactSelfServiceModal';
 import { FeedbackModal, type FeedbackType } from './components/Dashboard/FeedbackModal';
 import { getAppConfig } from './config/appConfig';
 import { HeaderOverflowMenu } from './components/Header/HeaderOverflowMenu';
@@ -1762,6 +1763,8 @@ const Dashboard: React.FC = () => {
   const [simulatorModalOpen, setSimulatorModalOpen] = React.useState(false);
   const [viewRolesModalOpen, setViewRolesModalOpen] = React.useState(false);
   const [feedbackModalOpen, setFeedbackModalOpen] = React.useState(false);
+  const [selfServiceModalOpen, setSelfServiceModalOpen] = React.useState(false);
+  const [selfServiceInitialParentId, setSelfServiceInitialParentId] = React.useState<string | null>(null);
   const [feedbackInitialData, setFeedbackInitialData] = React.useState<{
     type?: FeedbackType;
     description?: string;
@@ -1836,6 +1839,12 @@ const Dashboard: React.FC = () => {
   const canReadJobRoles = hasPermission('job.role_assignment.read') || hasPermission('job.role_assignment.write');
   const canWriteJobRoles = hasPermission('job.role_assignment.write');
   const canReadVolunteerAbsences = hasPermission('volunteers.absences.read') || hasPermission('volunteers.absences.write');
+  const canSelfService = hasPermission('families.self.selfservice') && Boolean(user?.family_id);
+
+  const openSelfService = React.useCallback((parent?: any) => {
+    setSelfServiceInitialParentId(parent?.original_id || parent?.id || null);
+    setSelfServiceModalOpen(true);
+  }, []);
 
   const [families, setFamilies] = React.useState<Family[]>([]);
   const [employees, setEmployees] = React.useState<Employee[]>([]);
@@ -5821,6 +5830,8 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
             <span className="header-user-email desktop-only" title={user?.email}>{user?.email}</span>
             <HeaderOverflowMenu
               userEmail={user?.email}
+              canSelfService={canSelfService}
+              onOpenSelfService={() => openSelfService()}
               canSimulate={canSimulate}
               onOpenSimulator={() => setSimulatorModalOpen(true)}
               onOpenFeedback={() => setFeedbackModalOpen(true)}
@@ -6738,6 +6749,9 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
             canReadFamiliesAll={canReadFamiliesAll}
             overviewGroupBy={overviewGroupBy}
             highlightedRowId={highlightedRowId}
+            currentFamilyId={user?.family_id}
+            canSelfService={canSelfService}
+            onOpenSelfService={openSelfService}
             onJumpToParent={handleJumpToParent}
             onJumpToChild={handleJumpToChild}
             getChildGroupStatus={getOverviewChildGroupStatus}
@@ -7395,6 +7409,21 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
           onSave={handleSaveContactConsent}
           onDelete={handleDeleteContactConsent}
           readOnly={!canWriteParents}
+        />
+
+        {/* Parent Contact Self-Service Modal */}
+        <ParentContactSelfServiceModal
+          isOpen={selfServiceModalOpen}
+          onClose={() => setSelfServiceModalOpen(false)}
+          getAuthHeaders={getAuthHeaders}
+          onSaved={() => {
+            fetchOverviewFamilies();
+            if (canReadFamiliesAll) {
+              fetchFamilies();
+            }
+          }}
+          initialParentId={selfServiceInitialParentId}
+          userEmail={user?.email}
         />
 
         {/* Permissions Simulator Modal */}

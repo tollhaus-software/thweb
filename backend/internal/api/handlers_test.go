@@ -444,6 +444,185 @@ func TestHandleUpdateFamilyParents_IdentifierEmailPermissions(t *testing.T) {
 	}
 }
 
+func TestHandleSelfServiceParents(t *testing.T) {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	}
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: db not reachable: %v", err)
+	}
+
+	appStore := store.NewStore(pool)
+	hub := NewHub()
+	go hub.Run()
+	s := &Server{
+		Store: appStore,
+		Hub:   hub,
+	}
+
+	familyID := uuid.New()
+	parentID := uuid.New()
+	_, err = pool.Exec(ctx, "INSERT INTO families (id) VALUES ($1)", familyID)
+	if err != nil {
+		t.Fatalf("failed to insert family: %v", err)
+	}
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM parents WHERE family_id = $1", familyID)
+		_, _ = pool.Exec(ctx, "DELETE FROM families WHERE id = $1", familyID)
+	}()
+
+	initialEmails := `[{"value":"self.id@example.com","identifier_email":true,"address_list":true},{"value":"self.alt@example.com","identifier_email":false,"address_list":true}]`
+	initialPhones := `[{"value":"0170111111","type":"mobile","address_list":true}]`
+	_, err = pool.Exec(ctx, "INSERT INTO parents (id, family_id, first_name, last_name, emails, phones, notes) VALUES ($1, $2, 'Self', 'Parent', $3, $4, 'Confidential staff note')",
+		parentID, familyID, initialEmails, initialPhones)
+	if err != nil {
+		t.Fatalf("failed to insert parent: %v", err)
+	}
+
+	userWithoutFamily := &models.UserWithPermissions{
+		ID:                   uuid.Nil,
+		Email:                "nofam@example.com",
+		EffectivePermissions: []string{"families.self.selfservice"},
+		FamilyID:             nil,
+	}
+
+	parentUser := &models.UserWithPermissions{
+		ID:                   uuid.Nil,
+		Email:                "self.id@example.com",
+		EffectivePermissions: []string{"families.self.selfservice", "families.all.restrictedread"},
+		FamilyID:             &familyID,
+		ParentID:             &parentID,
+	}
+
+	// 1. GET self-service without family -> 403
+	{
+		req := httptest.NewRequest("GET", "/api/self-service/parents", nil)
+		req = req.WithContext(context.WithValue(req.Context(), auth.UserContextKey, userWithoutFamily))
+		rec := httptest.NewRecorder()
+		s.HandleGetSelfServiceParents(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("expected 403 when GET self-service without family, got %d", rec.Code)
+		}
+	}
+
+	// 2. GET self-service with parentUser -> 200 and confidential note is stripped
+	{
+		req := httptest.NewRequest("GET", "/api/self-service/parents", nil)
+		req = req.WithContext(context.WithValue(req.Context(), auth.UserContextKey, parentUser))
+		rec := httptest.NewRecorder()
+		s.HandleGetSelfServiceParents(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200 for valid GET self-service, got %d (%s)", rec.Code, rec.Body.String())
+		}
+		var resp struct {
+			FamilyID string          `json:"family_id"`
+			Parents  []models.Parent `json:"parents"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to parse GET response: %v", err)
+		}
+		if len(resp.Parents) != 1 || resp.Parents[0].Notes != "" {
+			t.Errorf("expected 1 parent with stripped notes, got: %+v", resp.Parents)
+		}
+	}
+
+	// Helper for PUT self-service
+	makePutRequest := func(u *models.UserWithPermissions, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest("PUT", "/api/self-service/parents", strings.NewReader(body))
+		req = req.WithContext(context.WithValue(req.Context(), auth.UserContextKey, u))
+		rec := httptest.NewRecorder()
+		s.HandleUpdateSelfServiceParents(rec, req)
+		return rec
+	}
+
+	// 3. PUT without family -> 403
+	{
+		rec := makePutRequest(userWithoutFamily, `{"parents":[]}`)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("expected 403 when PUT without family, got %d", rec.Code)
+		}
+	}
+
+	// 4. PUT attempting to remove identifier email -> 403
+	{
+		body := fmt.Sprintf(`{"parents":[{"id":"%s","emails":[{"value":"self.alt@example.com","identifier_email":false}],"phones":[]}]}`, parentID)
+		rec := makePutRequest(parentUser, body)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("expected 403 when removing identifier email, got %d", rec.Code)
+		}
+	}
+
+	// 5. PUT attempting to alter identifier email value -> 403
+	{
+		body := fmt.Sprintf(`{"parents":[{"id":"%s","emails":[{"value":"hacked@example.com","identifier_email":true}],"phones":[]}]}`, parentID)
+		rec := makePutRequest(parentUser, body)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("expected 403 when modifying identifier email value, got %d", rec.Code)
+		}
+	}
+
+	// 6. PUT attempting to add a second identifier email -> 403
+	{
+		body := fmt.Sprintf(`{"parents":[{"id":"%s","emails":[{"value":"self.id@example.com","identifier_email":true},{"value":"new.id@example.com","identifier_email":true}],"phones":[]}]}`, parentID)
+		rec := makePutRequest(parentUser, body)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("expected 403 when adding second identifier email, got %d", rec.Code)
+		}
+	}
+
+	// 7. PUT with parent ID of another family -> 403
+	{
+		foreignID := uuid.New()
+		body := fmt.Sprintf(`{"parents":[{"id":"%s","emails":[],"phones":[]}]}`, foreignID)
+		rec := makePutRequest(parentUser, body)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("expected 403 when updating foreign parent ID, got %d", rec.Code)
+		}
+	}
+
+	// 8. PUT with valid phone and secondary email change while keeping identifier email -> 200
+	{
+		validBody := fmt.Sprintf(`{"parents":[{"id":"%s","emails":[{"value":"self.id@example.com","identifier_email":true,"address_list":false},{"value":"updated.contact@example.com","identifier_email":false,"address_list":true}],"phones":[{"value":"0170999999","type":"work","address_list":true},{"value":"030123456","type":"landline","address_list":false}]}]}`, parentID)
+		rec := makePutRequest(parentUser, validBody)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200 for valid self-service update, got %d (%s)", rec.Code, rec.Body.String())
+		}
+
+		// Verify changes persisted in database
+		updatedParents, err := appStore.GetParentsByFamilyID(ctx, familyID)
+		if err != nil {
+			t.Fatalf("failed to reload parents from db: %v", err)
+		}
+		if len(updatedParents) != 1 {
+			t.Fatalf("expected 1 parent, got %d", len(updatedParents))
+		}
+		p := updatedParents[0]
+		if len(p.Phones) != 2 || p.Phones[0].Value != "0170999999" || p.Phones[0].Type != "work" {
+			t.Errorf("phones not persisted properly: %+v", p.Phones)
+		}
+		if len(p.Emails) != 2 || p.Emails[1].Value != "updated.contact@example.com" {
+			t.Errorf("emails not persisted properly: %+v", p.Emails)
+		}
+		// AddressList toggle on identifier email should have updated to false
+		if p.Emails[0].AddressList != false {
+			t.Errorf("expected identifier email address_list to be false, got true")
+		}
+		// Confidential notes must remain intact in DB
+		if p.Notes != "Confidential staff note" {
+			t.Errorf("expected notes to be preserved in DB, got %q", p.Notes)
+		}
+	}
+}
+
 func TestHandleListFamiliesOverview_ProjectionAndScoping(t *testing.T) {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {

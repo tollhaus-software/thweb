@@ -1154,6 +1154,164 @@ func (s *Server) HandleUpdateFamilyParents(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusOK)
 }
 
+func (s *Server) HandleGetSelfServiceParents(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	if user == nil || user.FamilyID == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Forbidden: no family associated with current user",
+		})
+		return
+	}
+
+	parents, err := s.Store.GetParentsByFamilyID(r.Context(), *user.FamilyID)
+	if err != nil {
+		httpErrorLog(w, r, "Failed to load parents", http.StatusInternalServerError, err)
+		return
+	}
+
+	for i := range parents {
+		parents[i].Notes = ""
+		parents[i].VaccinationStatusProtected = nil
+		parents[i].VaccinationChecks = nil
+		if parents[i].Emails == nil {
+			parents[i].Emails = models.MultiValueList{}
+		}
+		if parents[i].Phones == nil {
+			parents[i].Phones = models.MultiValueList{}
+		}
+	}
+
+	jsonResponse(w, map[string]interface{}{
+		"family_id": user.FamilyID.String(),
+		"parents":   parents,
+	})
+}
+
+func (s *Server) HandleUpdateSelfServiceParents(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	if user == nil || user.FamilyID == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Forbidden: no family associated with current user",
+		})
+		return
+	}
+	familyID := *user.FamilyID
+
+	var req struct {
+		Parents []models.Parent `json:"parents"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpErrorLog(w, r, "Invalid request body JSON", http.StatusBadRequest, err)
+		return
+	}
+
+	existingParents, err := s.Store.GetParentsByFamilyID(r.Context(), familyID)
+	if err != nil {
+		httpErrorLog(w, r, "Failed to load existing parents", http.StatusInternalServerError, err)
+		return
+	}
+	existingParentsMap := make(map[uuid.UUID]models.Parent, len(existingParents))
+	for _, ep := range existingParents {
+		existingParentsMap[ep.ID] = ep
+	}
+
+	updatedMap := make(map[uuid.UUID]models.Parent)
+	for _, submitted := range req.Parents {
+		ep, exists := existingParentsMap[submitted.ID]
+		if !exists {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			json.NewEncoder(w).Encode(map[string]string{
+				"error": "Forbidden: parent does not belong to user's family",
+			})
+			return
+		}
+
+		// 1. Verify that every existing identifier email is preserved without removal or value changes
+		for _, oldEmail := range ep.Emails {
+			if !oldEmail.IdentifierEmail {
+				continue
+			}
+			found := false
+			for _, newEmail := range submitted.Emails {
+				if models.CanonicalEmail(newEmail.Value) == models.CanonicalEmail(oldEmail.Value) && newEmail.IdentifierEmail {
+					found = true
+					break
+				}
+			}
+			if !found {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				json.NewEncoder(w).Encode(map[string]string{
+					"error": "Forbidden: modifying or removing an identifier email is not permitted in self-service",
+				})
+				return
+			}
+		}
+
+		// 2. Verify that no new or non-identifier email in submitted has been assigned IdentifierEmail = true
+		for _, newEmail := range submitted.Emails {
+			if !newEmail.IdentifierEmail {
+				continue
+			}
+			alreadyIdentifier := false
+			for _, oldEmail := range ep.Emails {
+				if models.CanonicalEmail(oldEmail.Value) == models.CanonicalEmail(newEmail.Value) && oldEmail.IdentifierEmail {
+					alreadyIdentifier = true
+					break
+				}
+			}
+			if !alreadyIdentifier {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				json.NewEncoder(w).Encode(map[string]string{
+					"error": "Forbidden: adding or assigning an identifier email is not permitted in self-service",
+				})
+				return
+			}
+		}
+
+		updatedParent := ep
+		updatedParent.Phones = submitted.Phones
+		updatedParent.Emails = submitted.Emails
+		updatedMap[ep.ID] = updatedParent
+	}
+
+	var allParentsToSave []models.Parent
+	for _, ep := range existingParents {
+		if up, ok := updatedMap[ep.ID]; ok {
+			allParentsToSave = append(allParentsToSave, up)
+		} else {
+			allParentsToSave = append(allParentsToSave, ep)
+		}
+	}
+
+	if err := s.Store.UpdateFamilyParents(r.Context(), user.ID, familyID, allParentsToSave, getActorEmail(r)); err != nil {
+		httpErrorLog(w, r, "Failed to update family parents", http.StatusInternalServerError, err)
+		return
+	}
+
+	s.Hub.Broadcast(WSMessage{
+		Type:    "FAMILY_UPDATED",
+		Payload: map[string]string{"id": familyID.String()},
+	})
+
+	for i := range allParentsToSave {
+		allParentsToSave[i].Notes = ""
+		allParentsToSave[i].VaccinationStatusProtected = nil
+		allParentsToSave[i].VaccinationChecks = nil
+	}
+
+	jsonResponse(w, map[string]interface{}{
+		"family_id": familyID.String(),
+		"parents":   allParentsToSave,
+	})
+}
+
 func (s *Server) HandleDeleteFamily(w http.ResponseWriter, r *http.Request) {
 	user := auth.GetUser(r.Context())
 	idStr := chi.URLParam(r, "id")

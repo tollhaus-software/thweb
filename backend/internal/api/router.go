@@ -100,6 +100,10 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		r.With(auth.RequirePermission("provision.kiosk.cert")).Get("/api/admin/kiosk-certs/status", server.HandleGetKioskCertStatus)
 		r.With(auth.RequirePermission("provision.kiosk.cert")).Post("/api/admin/kiosk-certs", server.HandleIssueKioskCert)
 
+		// Parent Self-Service
+		r.With(auth.RequirePermission("families.self.selfservice")).Get("/api/self-service/parents", server.HandleGetSelfServiceParents)
+		r.With(auth.RequirePermission("families.self.selfservice")).Put("/api/self-service/parents", server.HandleUpdateSelfServiceParents)
+
 		// Family & Child CRUD
 		r.With(auth.RequirePermission("families.all.write")).Post("/api/families", server.HandleCreateFamily)
 		r.With(auth.RequirePermission("families.all.write")).Put("/api/families/{id}/mentor", server.HandleUpdateFamilyMentor)

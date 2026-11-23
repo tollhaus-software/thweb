@@ -19,6 +19,7 @@ interface User {
   permissions: string[];
   effective_permissions: string[];
   family_id?: string;
+  parent_id?: string;
   simulation?: SimulationInfo;
 }
 

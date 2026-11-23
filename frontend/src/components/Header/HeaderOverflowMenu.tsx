@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MoreVertical, LogOut, Eye, ExternalLink, LayoutDashboard, History, Shield, Key, User, MessageSquare, Activity } from 'lucide-react';
+import { MoreVertical, LogOut, Eye, ExternalLink, LayoutDashboard, History, Shield, Key, User, MessageSquare, Activity, UserCheck } from 'lucide-react';
 import { t } from '../../utils/i18n';
 import type { TabId } from '../../utils/navigation';
 
@@ -7,6 +7,8 @@ export interface HeaderOverflowMenuProps {
   onLogout: () => void;
   className?: string;
   userEmail?: string;
+  canSelfService?: boolean;
+  onOpenSelfService?: () => void;
   canSimulate?: boolean;
   onOpenSimulator?: () => void;
   onOpenFeedback?: () => void;
@@ -23,6 +25,8 @@ export const HeaderOverflowMenu: React.FC<HeaderOverflowMenuProps> = ({
   onLogout,
   className = '',
   userEmail,
+  canSelfService = false,
+  onOpenSelfService,
   canSimulate = false,
   onOpenSimulator,
   onOpenFeedback,
@@ -104,6 +108,26 @@ export const HeaderOverflowMenu: React.FC<HeaderOverflowMenuProps> = ({
               <div className="header-overflow-divider" />
             </>
           )}
+
+          {canSelfService && (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                className="header-overflow-menu-item"
+                data-testid="overflow-selfservice-button"
+                onClick={() => {
+                  setIsOpen(false);
+                  onOpenSelfService?.();
+                }}
+              >
+                <UserCheck size={16} />
+                <span>{t('selfServiceMenuTitle')}</span>
+              </button>
+              <div className="header-overflow-divider" />
+            </>
+          )}
+
           {onSelectTab && (
             <>
               {canUseDashboard && (

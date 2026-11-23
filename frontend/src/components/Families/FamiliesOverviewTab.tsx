@@ -1,5 +1,6 @@
 import React from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
+import { Edit3 } from 'lucide-react';
 import { DataTable } from '../Table/DataTable';
 import { MgaLinkIcon } from '../MgaLinkIcon';
 import {
@@ -30,6 +31,9 @@ export interface FamiliesOverviewTabProps {
   canReadFamiliesAll: boolean;
   overviewGroupBy: 'family' | 'group' | 'job';
   highlightedRowId?: string | null;
+  currentFamilyId?: string | null;
+  canSelfService?: boolean;
+  onOpenSelfService?: (parent?: any) => void;
   onJumpToParent: (parentId: string, familyId: string, familyName: string, fromTab?: any) => void;
   onJumpToChild: (childId: string, familyId: string, familyName: string, fromTab?: any) => void;
   getChildGroupStatus: (child: any) => ChildGroupStatus;
@@ -60,6 +64,9 @@ export const FamiliesOverviewTab: React.FC<FamiliesOverviewTabProps> = ({
   canReadFamiliesAll,
   overviewGroupBy,
   highlightedRowId,
+  currentFamilyId,
+  canSelfService,
+  onOpenSelfService,
   onJumpToParent,
   onJumpToChild,
   getChildGroupStatus,
@@ -109,9 +116,33 @@ export const FamiliesOverviewTab: React.FC<FamiliesOverviewTabProps> = ({
             );
           }
           const fullName = `${effectiveFn} ${item.last_name || ''}`.trim() || '-';
+          const isOwnFamily = Boolean(currentFamilyId && item.family_id === currentFamilyId);
           return (
             <span className="overview-person-name" style={isIndented ? { paddingLeft: '1.25rem', display: 'inline-block' } : undefined}>
               {fullName}
+              {canSelfService && isOwnFamily && (
+                <button
+                  type="button"
+                  className="family-selfservice-link overview-mga-link"
+                  data-testid={`selfservice-edit-${item.original_id || item.id}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenSelfService?.(item);
+                  }}
+                  title={t('selfServiceEditButton')}
+                  aria-label={t('selfServiceEditButton')}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--primary)',
+                    cursor: 'pointer',
+                    padding: '0.1rem 0.25rem',
+                    verticalAlign: 'middle',
+                  }}
+                >
+                  <Edit3 size={13} />
+                </button>
+              )}
               {canReadFamiliesAll && (
                 <button
                   type="button"
@@ -370,7 +401,7 @@ export const FamiliesOverviewTab: React.FC<FamiliesOverviewTabProps> = ({
         },
       },
     ],
-    [canReadFamiliesAll, onJumpToChild, onJumpToParent, isMobile, getChildGroupStatus]
+    [canReadFamiliesAll, currentFamilyId, canSelfService, onOpenSelfService, onJumpToChild, onJumpToParent, isMobile, getChildGroupStatus]
   );
 
   return (
