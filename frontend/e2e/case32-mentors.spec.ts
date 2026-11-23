@@ -350,6 +350,30 @@ test.describe('Test Case 32: Mentors and "Paten von"', () => {
     await mentorPopover.getByRole('button', { name: 'Abbrechen' }).click();
     await expect(mentorPopover).not.toBeVisible();
 
+    // --- Verification of Undo / Redo when changing mentor ---
+    await targetPatenBtn.click();
+    await expect(mentorPopover).toBeVisible();
+    await mentorPopover.locator('select').selectOption({ label: '-- Keine Patenfamilie --' });
+    await mentorPopover.getByRole('button', { name: 'Speichern' }).click();
+    await expect(mentorPopover).not.toBeVisible();
+    await expect(f2Header.locator('td[data-column-id="paten"]')).toContainText('-');
+
+    // Undo should restore "Familie Mentor"
+    const undoBtn = page.locator('button[title="Undo"]');
+    await expect(undoBtn).toBeEnabled();
+    await undoBtn.click();
+    await expect(f2Header.locator('td[data-column-id="paten"]')).toContainText('Familie Mentor');
+
+    // Redo should re-apply removing the mentor
+    const redoBtn = page.locator('button[title="Redo"]');
+    await expect(redoBtn).toBeEnabled();
+    await redoBtn.click();
+    await expect(f2Header.locator('td[data-column-id="paten"]')).toContainText('-');
+
+    // Undo again to restore "Familie Mentor" for the card view verification below
+    await undoBtn.click();
+    await expect(f2Header.locator('td[data-column-id="paten"]')).toContainText('Familie Mentor');
+
     // --- Verification of Cards View (under breakpoint <= 768px) ---
     await page.setViewportSize({ width: 500, height: 800 });
     // In card view, verify "Paten von" is shown on family card

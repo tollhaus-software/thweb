@@ -2537,7 +2537,7 @@ const Dashboard: React.FC = () => {
     redoStackRef.current = redoStack;
   }, [undoStack, redoStack]);
 
-  const saveStacks = (undo: any[], redo: any[]) => {
+  const saveStacks = React.useCallback((undo: any[], redo: any[]) => {
     undoStackRef.current = undo;
     redoStackRef.current = redo;
     setUndoStack(undo);
@@ -2548,9 +2548,9 @@ const Dashboard: React.FC = () => {
     } catch {
       // Ignore quota/security errors in storage
     }
-  };
+  }, []);
 
-  const pushAction = (action: any) => {
+  const pushAction = React.useCallback((action: any) => {
     if (isPureVaccinationAction(action)) return;
     const sanitized = sanitizeHistoryAction(action);
     const newUndo = [...undoStackRef.current, sanitized];
@@ -2558,7 +2558,7 @@ const Dashboard: React.FC = () => {
       newUndo.shift();
     }
     saveStacks(newUndo, []);
-  };
+  }, [saveStacks]);
 
   const purgeActionsForEntity = (entityId: string) => {
     const isActionReferencing = (action: any) => {
@@ -2577,6 +2577,10 @@ const Dashboard: React.FC = () => {
         p.event?.id === entityId ||
         p.change?.id === entityId ||
         p.employee?.id === entityId ||
+        p.before?.mentor_family_id === entityId ||
+        p.after?.mentor_family_id === entityId ||
+        (Array.isArray(p.before?.mentor_parent_ids) && p.before.mentor_parent_ids.includes(entityId)) ||
+        (Array.isArray(p.after?.mentor_parent_ids) && p.after.mentor_parent_ids.includes(entityId)) ||
         (Array.isArray(p.beforeParents) && p.beforeParents.some((x: any) => x?.id === entityId)) ||
         (Array.isArray(p.afterParents) && p.afterParents.some((x: any) => x?.id === entityId))
       );
@@ -2591,7 +2595,7 @@ const Dashboard: React.FC = () => {
     const { type, payload } = action;
 
     // Switch to target tab if needed
-    const targetTab = payload.tab || (type.includes('CHILD') ? 'children' : type.includes('EMPLOYEE') ? 'employees' : 'parents');
+    const targetTab = payload.tab || (type.includes('CHILD') ? 'children' : type.includes('EMPLOYEE') ? 'employees' : type.includes('MENTOR') ? 'families' : 'parents');
     if (targetTab) {
       setActiveTab(targetTab);
       window.location.hash = targetTab;
@@ -2802,8 +2806,23 @@ const Dashboard: React.FC = () => {
         });
         if (!res.ok && res.status !== 404) throw new Error();
       }
+      else if (type === 'UPDATE_FAMILY_MENTOR') {
+        const target = isUndo ? payload.before : payload.after;
+        const res = await fetch(`/api/families/${payload.familyId}/mentor`, {
+          method: 'PUT',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({
+            mentor_family_id: target.mentor_family_id,
+            mentor_parent_ids: target.mentor_parent_ids,
+          }),
+        });
+        if (!res.ok) throw new Error();
+      }
 
       await fetchFamilies();
+      if (canReadOverview) {
+        await fetchOverviewFamilies();
+      }
       if (canReadMembers) {
         await fetchMembers();
       }
@@ -4063,6 +4082,10 @@ const Dashboard: React.FC = () => {
 
   const handleSaveFamilyMentor = React.useCallback(
     async (familyId: string, mentorFamilyId: string | null, mentorParentIds: string[]) => {
+      const existingFamily = families.find((f) => f.id === familyId);
+      const beforeMentorFamilyId = existingFamily?.mentor_family_id ?? null;
+      const beforeMentorParentIds = existingFamily?.mentor_parent_ids ? [...existingFamily.mentor_parent_ids] : [];
+
       const res = await fetch(`/api/families/${familyId}/mentor`, {
         method: 'PUT',
         headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
@@ -4075,10 +4098,36 @@ const Dashboard: React.FC = () => {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error || errData.message || 'Failed to update mentor');
       }
+
+      const hasFamilyChanged = beforeMentorFamilyId !== mentorFamilyId;
+      const sortedBefore = [...beforeMentorParentIds].sort();
+      const sortedAfter = [...mentorParentIds].sort();
+      const hasParentsChanged =
+        sortedBefore.length !== sortedAfter.length ||
+        sortedBefore.some((val, idx) => val !== sortedAfter[idx]);
+
+      if (hasFamilyChanged || hasParentsChanged) {
+        pushAction({
+          type: 'UPDATE_FAMILY_MENTOR',
+          payload: {
+            tab: activeTab === 'parents' ? 'parents' : 'families',
+            familyId,
+            before: {
+              mentor_family_id: beforeMentorFamilyId,
+              mentor_parent_ids: beforeMentorParentIds,
+            },
+            after: {
+              mentor_family_id: mentorFamilyId,
+              mentor_parent_ids: mentorParentIds,
+            },
+          },
+        });
+      }
+
       if (canReadFamiliesAll) fetchFamilies();
       if (canReadOverview) fetchOverviewFamilies();
     },
-    [getAuthHeaders, canReadFamiliesAll, canReadOverview, fetchFamilies, fetchOverviewFamilies]
+    [families, activeTab, pushAction, getAuthHeaders, canReadFamiliesAll, canReadOverview, fetchFamilies, fetchOverviewFamilies]
   );
 
   const handleSaveFamilyNotes = React.useCallback(
