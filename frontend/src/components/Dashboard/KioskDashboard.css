@@ -434,6 +434,58 @@
   font-weight: 500;
 }
 
+/* Warning banner under cook/food/allergens when BuFDI is absent */
+.kiosk-bufdi-warning {
+  width: 100%;
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 1rem 1.35rem;
+  border-radius: 18px;
+  background-color: #fef3c7;
+  border: 2px solid #f59e0b;
+  color: #78350f;
+  font-size: 1.45rem;
+  font-weight: 700;
+  line-height: 1.3;
+  box-sizing: border-box;
+}
+
+.kiosk-bufdi-warning-icon {
+  color: #d97706;
+  flex-shrink: 0;
+}
+
+.kiosk-bufdi-warning-text {
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+:root[data-theme='dark'] .kiosk-bufdi-warning {
+  background-color: rgba(245, 158, 11, 0.2);
+  border-color: #f59e0b;
+  color: #fef08a;
+}
+
+:root[data-theme='dark'] .kiosk-bufdi-warning-icon {
+  color: #fbbf24;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .kiosk-bufdi-warning {
+    background-color: rgba(245, 158, 11, 0.2);
+    border-color: #f59e0b;
+    color: #fef08a;
+  }
+
+  :root:not([data-theme='light']) .kiosk-bufdi-warning-icon {
+    color: #fbbf24;
+  }
+}
+
 /* Card: TODOs / Warnings (displayed in the TODOs bottom-nav tab) */
 .kiosk-card-todos {
   width: 100%;
@@ -944,6 +996,12 @@
     font-size: 1.25rem;
     padding: 0.75rem 0.85rem;
   }
+  .kiosk-bufdi-warning {
+    font-size: 1.2rem;
+    padding: 0.75rem 0.95rem;
+    border-radius: 14px;
+    gap: 0.65rem;
+  }
   .kiosk-bottom-nav {
     height: 62px;
     min-height: 62px;
@@ -1143,6 +1201,14 @@
 
 .kiosk-tablet-page.embedded .kiosk-allergen-pill-none {
   font-size: 0.8rem;
+}
+
+.kiosk-tablet-page.embedded .kiosk-bufdi-warning {
+  font-size: 1.05rem;
+  padding: 0.75rem 1.15rem;
+  border-radius: 12px;
+  border-width: 1.5px;
+  gap: 0.65rem;
 }
 
 .kiosk-tablet-page.embedded .kiosk-todos-list {

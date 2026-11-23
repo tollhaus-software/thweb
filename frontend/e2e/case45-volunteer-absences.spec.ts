@@ -258,8 +258,11 @@ test.describe('Test Case 45: Volunteer Absences (Abwesenheit Freiwillige)', () =
     const now = new Date();
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-    // 2. Open dashboard initially (no absence active today) and switch to TODOs tab
+    // 2. Open dashboard initially (no absence active today) and verify Home warning is hidden + TODOs header is regular
     await page.goto('/#dashboard');
+    await expect(page.locator('.kiosk-card-meal')).toBeVisible();
+    await expect(page.getByTestId('kiosk-bufdi-absence-warning')).toHaveCount(0);
+
     await page.getByTestId('kiosk-todos-btn').click();
     const todosHeader = page.locator('.kiosk-card-todos .kiosk-card-header span');
     await expect(todosHeader).toBeVisible();
@@ -297,8 +300,23 @@ test.describe('Test Case 45: Volunteer Absences (Abwesenheit Freiwillige)', () =
     await page.locator('.va-modal').getByRole('button', { name: /(Speichern|Save)/i }).click();
     await expect(page.getByRole('heading', { name: /(Abwesenheit eintragen|Add Absence)/i })).toBeHidden();
 
-    // 5. Navigate to dashboard TODOs tab - header must show absence notice with configured name
+    // 5. Navigate to dashboard - Home view must show warning under cook/food/allergens, and TODOs tab header must show absence notice
     await page.goto('/#dashboard');
+    const mealCard = page.locator('.kiosk-card-meal');
+    const homeWarning = page.getByTestId('kiosk-bufdi-absence-warning');
+    await expect(mealCard).toBeVisible();
+    await expect(homeWarning).toBeVisible();
+    await expect(homeWarning.locator('svg')).toBeVisible();
+    await expect(homeWarning).toHaveText('Max Mustermann heute nicht im Haus!');
+
+    const mealBox = await mealCard.boundingBox();
+    const warningBox = await homeWarning.boundingBox();
+    expect(mealBox).not.toBeNull();
+    expect(warningBox).not.toBeNull();
+    if (mealBox && warningBox) {
+      expect(warningBox.y).toBeGreaterThanOrEqual(mealBox.y + mealBox.height);
+    }
+
     await page.getByTestId('kiosk-todos-btn').click();
     await expect(todosHeader).toBeVisible();
     await expect(todosHeader).toHaveText('Hinweise & Aufgaben - ! Max Mustermann nicht im Haus !');
@@ -314,13 +332,16 @@ test.describe('Test Case 45: Volunteer Absences (Abwesenheit Freiwillige)', () =
     await page.locator('.va-modal').getByRole('button', { name: /(Speichern|Save)/i }).click();
     await expect(page.getByRole('heading', { name: /(Abwesenheit bearbeiten|Edit Absence)/i })).toBeHidden();
 
-    // 7. Verify dashboard immediately shows updated name from absence property
+    // 7. Verify dashboard immediately shows updated name from absence property on Home and TODOs
     await page.goto('/#dashboard');
+    await expect(homeWarning).toBeVisible();
+    await expect(homeWarning).toHaveText('Lisa & Tom heute nicht im Haus!');
+
     await page.getByTestId('kiosk-todos-btn').click();
     await expect(todosHeader).toBeVisible();
     await expect(todosHeader).toHaveText('Hinweise & Aufgaben - ! Lisa & Tom nicht im Haus !');
 
-    // 8. Delete the absence and verify header reverts to regular "Hinweise & Aufgaben"
+    // 8. Delete the absence and verify Home warning disappears and TODOs header reverts to regular "Hinweise & Aufgaben"
     await page.goto('/#volunteerAbsences');
     await page.getByRole('button', { name: /(Liste|List)/i }).click();
     await page.locator('.va-icon-btn[title="Bearbeiten"]').first().click();
@@ -328,6 +349,9 @@ test.describe('Test Case 45: Volunteer Absences (Abwesenheit Freiwillige)', () =
     await page.locator('.va-modal .va-btn-primary').click();
 
     await page.goto('/#dashboard');
+    await expect(page.locator('.kiosk-card-meal')).toBeVisible();
+    await expect(homeWarning).toHaveCount(0);
+
     await page.getByTestId('kiosk-todos-btn').click();
     await expect(todosHeader).toBeVisible();
     await expect(todosHeader).toHaveText('Hinweise & Aufgaben');

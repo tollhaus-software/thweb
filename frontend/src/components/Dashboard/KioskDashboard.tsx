@@ -1180,6 +1180,26 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                   )}
                 </div>
               </section>
+
+              {data?.has_volunteer_absence && (
+                <div
+                  className="kiosk-bufdi-warning"
+                  data-testid="kiosk-bufdi-absence-warning"
+                  role="status"
+                >
+                  <AlertTriangle
+                    size={embedded ? 20 : 28}
+                    className="kiosk-bufdi-warning-icon"
+                    aria-hidden="true"
+                  />
+                  <span className="kiosk-bufdi-warning-text">
+                    {t('bufdiNotInHouseToday').replace(
+                      '{name}',
+                      (data.volunteer_name || 'BuFDI').trim() || 'BuFDI'
+                    )}
+                  </span>
+                </div>
+              )}
             </>
           ) : effectiveActiveTab === 'todos' ? (
             <section className="kiosk-card kiosk-card-todos">

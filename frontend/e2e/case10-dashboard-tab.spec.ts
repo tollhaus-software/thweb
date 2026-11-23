@@ -140,7 +140,8 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     expect(parseFloat(cardPadding)).toBeLessThanOrEqual(18);
 
     // 5. Add allergens for TODAY as well so today immediately has them
-    const todayStr = new Date().toISOString().split('T')[0];
+    const now1 = new Date();
+    const todayStr = `${now1.getFullYear()}-${String(now1.getMonth() + 1).padStart(2, '0')}-${String(now1.getDate()).padStart(2, '0')}`;
     const putTodayRes = await request.put(`/api/meal-allergens/${todayStr}`, {
       headers: {
         Authorization: 'Bearer developer@example.com',
@@ -222,7 +223,8 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
       Authorization: 'Bearer developer@example.com',
       'Content-Type': 'application/json',
     };
-    const todayStr = new Date().toISOString().split('T')[0];
+    const now2 = new Date();
+    const todayStr = `${now2.getFullYear()}-${String(now2.getMonth() + 1).padStart(2, '0')}-${String(now2.getDate()).padStart(2, '0')}`;
 
     // 2. Create family & child in Group 1 with Milch/Laktose allergy
     const famRes = await request.post('/api/families', {
@@ -1179,8 +1181,9 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
       'Content-Type': 'application/json',
     };
 
-    // Calculate today's date in YYYY-MM-DD
-    const todayStr = new Date().toISOString().split('T')[0];
+    // Calculate today's date in YYYY-MM-DD (matching Europe/Berlin local day)
+    const now3 = new Date();
+    const todayStr = `${now3.getFullYear()}-${String(now3.getMonth() + 1).padStart(2, '0')}-${String(now3.getDate()).padStart(2, '0')}`;
 
     // Ensure no existing volunteer absence for today
     const listRes = await request.get('/api/volunteer-absences', { headers: authHeaders });
@@ -1202,6 +1205,9 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
 
     const embeddedPage = page.locator('.kiosk-tablet-page.embedded');
     await expect(embeddedPage).toBeVisible();
+
+    const homeWarning = embeddedPage.getByTestId('kiosk-bufdi-absence-warning');
+    await expect(homeWarning).toHaveCount(0);
 
     const todosBtn = embeddedPage.getByTestId('kiosk-todos-btn');
     await todosBtn.click();
@@ -1235,6 +1241,12 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await expect(washerTask).toBeVisible();
     await expect(diaperTask).toBeVisible();
     await expect(foldLaundryTask).toBeVisible();
+
+    // Switch briefly to Home tab to verify default BuFDI warning banner under cook/food/allergens
+    await embeddedPage.getByTestId('kiosk-home-btn').click();
+    await expect(homeWarning).toBeVisible();
+    await expect(homeWarning).toHaveText('BuFDI heute nicht im Haus!');
+    await todosBtn.click();
 
     await expect(dryerTask.locator('[data-testid="task-label-start_dryer"]')).toHaveText(
       'Morgens: Wäsche in den Trockner'
@@ -1315,6 +1327,11 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await expect(washerTask).toHaveCount(0);
     await expect(diaperTask).toHaveCount(0);
     await expect(foldLaundryTask).toHaveCount(0);
+
+    // Home warning should also disappear
+    await embeddedPage.getByTestId('kiosk-home-btn').click();
+    await expect(homeWarning).toHaveCount(0);
+    await todosBtn.click();
 
     // 7. Re-add the volunteer absence
     const readdRes = await request.post('/api/volunteer-absences', {
