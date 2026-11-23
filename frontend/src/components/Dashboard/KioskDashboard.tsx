@@ -38,10 +38,12 @@ import {
   MessageSquare,
   Sparkles,
   ListTodo,
+  Info,
 } from 'lucide-react';
 import { WasherIcon } from './LaundryIcons';
 import { FeedbackPanel } from './FeedbackModal';
 import { TaskConfirmModal } from './TaskConfirmModal';
+import { TaskInfoModal } from './TaskInfoModal';
 import { InfoPagesView } from './InfoPagesView';
 import './KioskDashboard.css';
 
@@ -117,6 +119,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
   const [activeTab, setActiveTab] = useState<DashboardNavTab>('home');
   const [activeInfoPageId, setActiveInfoPageId] = useState<string | null>(null);
   const [taskToConfirm, setTaskToConfirm] = useState<string | null>(null);
+  const [taskInfoKey, setTaskInfoKey] = useState<string | null>(null);
   const [isEditingAllergens, setIsEditingAllergens] = useState<boolean>(false);
   const contentAreaRef = useRef<HTMLElement | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -319,6 +322,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     setActiveInfoPageId(null);
     setIsEditingAllergens(false);
     setTaskToConfirm(null);
+    setTaskInfoKey(null);
     setSelectedDate(`${y}-${m}-${d}`);
     if (contentAreaRef.current) {
       contentAreaRef.current.scrollTop = 0;
@@ -336,6 +340,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     setActiveInfoPageId(null);
     setIsEditingAllergens(false);
     setTaskToConfirm(null);
+    setTaskInfoKey(null);
     setSelectedDate(`${y}-${m}-${d}`);
     if (contentAreaRef.current) {
       contentAreaRef.current.scrollTop = 0;
@@ -346,6 +351,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     setActiveTab('home');
     setActiveInfoPageId(null);
     setTaskToConfirm(null);
+    setTaskInfoKey(null);
     setIsEditingAllergens(false);
     setSelectedDate(null); // Omitting date fetches "today" from backend
     if (contentAreaRef.current) {
@@ -359,6 +365,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     } else {
       setIsEditingAllergens(false);
       setTaskToConfirm(null);
+      setTaskInfoKey(null);
       setActiveInfoPageId(null);
       setActiveTab('home');
     }
@@ -370,6 +377,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
   const handleSelectTab = useCallback((tab: DashboardNavTab) => {
     setIsEditingAllergens(false);
     setTaskToConfirm(null);
+    setTaskInfoKey(null);
     if (tab === 'infoPages') {
       setActiveInfoPageId(null);
     }
@@ -405,7 +413,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     enabled: true,
   });
 
-  const isSwipeDisabled = !canChangeDate || Boolean(taskToConfirm);
+  const isSwipeDisabled = !canChangeDate || Boolean(taskToConfirm) || Boolean(taskInfoKey);
 
   useSwipeGesture(contentAreaRef, {
     onSwipeLeft: handleNextDay,
@@ -426,6 +434,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
       e.stopPropagation();
     }
     setTaskToConfirm(null);
+    setTaskInfoKey(null);
     setIsEditingAllergens(true);
   };
 
@@ -476,6 +485,27 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
       taskKey === 'Spülmaschine-Filter reinigen'
     ) {
       return 'clean_dishwasher_filter';
+    }
+    if (
+      taskKey === 'serve_small_group' ||
+      taskKey === 'Kleine Gruppe servieren' ||
+      taskKey === 'Kleine Gruppe servieren (auf 11:45)'
+    ) {
+      return 'serve_small_group';
+    }
+    if (
+      taskKey === 'serve_large_group' ||
+      taskKey === 'Große Gruppe servieren' ||
+      taskKey === 'Große Gruppe servieren (auf 12:00)'
+    ) {
+      return 'serve_large_group';
+    }
+    if (
+      taskKey === 'serve_hort' ||
+      taskKey === 'Hort servieren' ||
+      taskKey === 'Hort servieren (meist auf 13:00)'
+    ) {
+      return 'serve_hort';
     }
     return taskKey;
   }, []);
@@ -547,6 +577,24 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
       taskKey === 'Trockene Wäsche falten und einträumen'
     ) {
       return t('taskFoldLaundry');
+    } else if (
+      taskKey === 'serve_small_group' ||
+      taskKey === 'Kleine Gruppe servieren' ||
+      taskKey === 'Kleine Gruppe servieren (auf 11:45)'
+    ) {
+      return t('serveSmallGroup');
+    } else if (
+      taskKey === 'serve_large_group' ||
+      taskKey === 'Große Gruppe servieren' ||
+      taskKey === 'Große Gruppe servieren (auf 12:00)'
+    ) {
+      return t('serveLargeGroup');
+    } else if (
+      taskKey === 'serve_hort' ||
+      taskKey === 'Hort servieren' ||
+      taskKey === 'Hort servieren (meist auf 13:00)'
+    ) {
+      return t('serveHort');
     }
     return t(taskKey);
   }, []);
@@ -570,6 +618,12 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
         return t('cleanRefrigerator');
       } else if (normalized === 'clean_dishwasher_filter') {
         return t('cleanDishwasherFilter');
+      } else if (normalized === 'serve_small_group') {
+        return t('serveSmallGroupName');
+      } else if (normalized === 'serve_large_group') {
+        return t('serveLargeGroupName');
+      } else if (normalized === 'serve_hort') {
+        return t('serveHortName');
       } else if (normalized === 'enter_allergens' || normalized === 'allergene_eintragen') {
         return t('enterAllergens');
       }
@@ -641,6 +695,23 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     await executeTaskToggle(key, 'complete');
   };
 
+  const getTaskInfoContent = useCallback(
+    (taskKey: string): string => {
+      const normalized = normalizeTaskKey(taskKey);
+      if (normalized === 'serve_small_group') {
+        return t('serveSmallGroupInfo');
+      }
+      if (normalized === 'serve_large_group') {
+        return t('serveLargeGroupInfo');
+      }
+      if (normalized === 'serve_hort') {
+        return t('serveHortInfo');
+      }
+      return t('taskInfoPlaceholder');
+    },
+    [normalizeTaskKey]
+  );
+
   const getTaskOrderIndex = useCallback(
     (taskKey: string): number => {
       const normalized = normalizeTaskKey(taskKey);
@@ -652,6 +723,12 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
           return 200;
         case 'fold_laundry':
           return 300;
+        case 'serve_small_group':
+          return 350;
+        case 'serve_large_group':
+          return 360;
+        case 'serve_hort':
+          return 370;
         case 'start_washer':
           return 400;
         case 'change_diaper_bag':
@@ -1125,6 +1202,10 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
 
                     const normalized = normalizeTaskKey(task);
                     const label = getTaskLabel(task);
+                    const isServingTask =
+                      normalized === 'serve_small_group' ||
+                      normalized === 'serve_large_group' ||
+                      normalized === 'serve_hort';
                     const isLaundryTask =
                       normalized === 'start_dryer' ||
                       normalized === 'start_washer' ||
@@ -1149,6 +1230,9 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                     } else if (isAllergens) {
                       icon = null;
                       colorClass = 'kiosk-todo-allergens';
+                    } else if (isServingTask) {
+                      icon = null;
+                      colorClass = 'kiosk-todo-serving';
                     } else if (isLaundryTask) {
                       icon = <WasherIcon size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
                       colorClass = 'kiosk-todo-laundry';
@@ -1202,6 +1286,24 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                             onClick={(e) => openMealAllergensEditor(e)}
                           >
                             <Pencil size={embedded ? 16 : 22} className="kiosk-todo-icon" />
+                          </button>
+                        )}
+                        {isServingTask && (
+                          <button
+                            type="button"
+                            className="kiosk-todo-info-btn"
+                            data-testid={`task-info-btn-${normalized}`}
+                            title={`${label} – ${t('taskFurtherInfo')}`}
+                            aria-label={`${label} – ${t('taskFurtherInfo')}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setTaskInfoKey(normalized);
+                            }}
+                            onKeyDown={(e) => {
+                              e.stopPropagation();
+                            }}
+                          >
+                            <Info size={embedded ? 18 : 24} className="kiosk-todo-icon" />
                           </button>
                         )}
                       </div>
@@ -1319,6 +1421,15 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
           taskLabel={taskToConfirm ? getTaskName(taskToConfirm) : ''}
           onConfirm={() => void handleConfirmCheckOff()}
           onClose={() => setTaskToConfirm(null)}
+          embedded={embedded}
+        />
+
+        {/* Modal for Task Further Information */}
+        <TaskInfoModal
+          isOpen={Boolean(taskInfoKey)}
+          taskTitle={taskInfoKey ? getTaskName(taskInfoKey) : ''}
+          infoText={taskInfoKey ? getTaskInfoContent(taskInfoKey) : ''}
+          onClose={() => setTaskInfoKey(null)}
           embedded={embedded}
         />
       </div>

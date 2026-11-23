@@ -1490,4 +1490,165 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
       await expect(dishwasherTask).toHaveCount(0);
     }
   });
+
+  test('displays daily mon-fri serving TODOs with clickable info (i-in-a-circle) popup and allows checking off', async ({ request, page }) => {
+    page.on('dialog', (dialog) => dialog.accept());
+
+    // 1. Reset database state
+    const resetRes = await request.post('/api/test/reset');
+    expect(resetRes.ok()).toBeTruthy();
+
+    const authHeaders = {
+      Authorization: 'Bearer developer@example.com',
+      'Content-Type': 'application/json',
+    };
+
+    // 2. Verify serving tasks presence on Mon-Fri vs Sat-Sun via backend daily-brief API
+    const weekdayDates = ['2026-11-16', '2026-11-17', '2026-11-18', '2026-11-19', '2026-11-20'];
+    for (const dateStr of weekdayDates) {
+      const briefRes = await request.get(`/api/dashboard/daily-brief?date=${dateStr}`, {
+        headers: authHeaders,
+      });
+      expect(briefRes.ok()).toBeTruthy();
+      const briefData = await briefRes.json();
+      expect(briefData.tasks_and_info).toContain('serve_small_group');
+      expect(briefData.tasks_and_info).toContain('serve_large_group');
+      expect(briefData.tasks_and_info).toContain('serve_hort');
+    }
+
+    const weekendDates = ['2026-11-21', '2026-11-22'];
+    for (const dateStr of weekendDates) {
+      const briefRes = await request.get(`/api/dashboard/daily-brief?date=${dateStr}`, {
+        headers: authHeaders,
+      });
+      expect(briefRes.ok()).toBeTruthy();
+      const briefData = await briefRes.json();
+      expect(briefData.tasks_and_info).not.toContain('serve_small_group');
+      expect(briefData.tasks_and_info).not.toContain('serve_large_group');
+      expect(briefData.tasks_and_info).not.toContain('serve_hort');
+    }
+
+    // 3. Open dashboard and switch to TODOs tab
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+    });
+
+    await page.goto('/#dashboard');
+    await page.waitForLoadState('networkidle');
+
+    const embeddedPage = page.locator('.kiosk-tablet-page.embedded');
+    await expect(embeddedPage).toBeVisible();
+    await embeddedPage.getByTestId('kiosk-todos-btn').click();
+
+    const initialBriefRes = await request.get('/api/dashboard/daily-brief');
+    expect(initialBriefRes.ok()).toBeTruthy();
+    const initBriefData = await initialBriefRes.json();
+    const todayStr = initBriefData.date ? initBriefData.date.split('T')[0] : new Date().toISOString().split('T')[0];
+    const todayDateObj = new Date(todayStr + 'T12:00:00Z');
+    const dayOfWeek = todayDateObj.getUTCDay();
+
+    const servingDefs = [
+      { key: 'serve_small_group', label: 'Kleine Gruppe servieren (auf 11:45)', name: 'Kleine Gruppe servieren' },
+      { key: 'serve_large_group', label: 'Große Gruppe servieren (auf 12:00)', name: 'Große Gruppe servieren' },
+      { key: 'serve_hort', label: 'Hort servieren (meist auf 13:00)', name: 'Hort servieren' },
+    ];
+
+    if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+      // Verify all 3 tasks are visible, styled, ordered properly, and have clickable info icons
+      const taskIds = await embeddedPage.locator('.kiosk-todo-item').evaluateAll((els) =>
+        els.map((el) => el.getAttribute('data-testid'))
+      );
+      const smallIdx = taskIds.indexOf('kiosk-todo-item-serve_small_group');
+      const largeIdx = taskIds.indexOf('kiosk-todo-item-serve_large_group');
+      const hortIdx = taskIds.indexOf('kiosk-todo-item-serve_hort');
+      expect(smallIdx).toBeGreaterThanOrEqual(0);
+      expect(smallIdx).toBeLessThan(largeIdx);
+      expect(largeIdx).toBeLessThan(hortIdx);
+
+      for (const def of servingDefs) {
+        const item = embeddedPage.getByTestId(`kiosk-todo-item-${def.key}`);
+        const label = embeddedPage.getByTestId(`task-label-${def.key}`);
+        const infoBtn = embeddedPage.getByTestId(`task-info-btn-${def.key}`);
+        const checkbox = embeddedPage.getByTestId(`task-checkbox-${def.key}`);
+
+        await expect(item).toBeVisible();
+        await expect(item).toHaveClass(/kiosk-todo-serving/);
+        await expect(label).toHaveText(def.label);
+        await expect(checkbox).toBeVisible();
+        await expect(infoBtn).toBeVisible();
+        await expect(infoBtn.locator('svg')).toBeVisible();
+
+        // Clicking info icon opens popup with further information placeholder without opening check-off modal
+        await infoBtn.click();
+        await expect(page.getByTestId('task-confirm-modal')).toHaveCount(0);
+
+        const infoModal = page.getByTestId('task-info-modal');
+        await expect(infoModal).toBeVisible();
+        await expect(infoModal.getByTestId('task-info-modal-title')).toHaveText(def.name);
+        await expect(infoModal.getByTestId('task-info-modal-body')).toContainText('Weitere Informationen');
+
+        await infoModal.getByTestId('task-info-close-btn').click();
+        await expect(infoModal).toHaveCount(0);
+        await expect(item).toHaveAttribute('data-completed', 'false');
+      }
+
+      // Verify Escape and overlay click also close the info popup
+      await embeddedPage.getByTestId('task-info-btn-serve_large_group').click();
+      await expect(page.getByTestId('task-info-modal')).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(page.getByTestId('task-info-modal')).toHaveCount(0);
+
+      await embeddedPage.getByTestId('task-info-btn-serve_hort').click();
+      await expect(page.getByTestId('task-info-modal')).toBeVisible();
+      await page.getByTestId('task-info-modal-overlay').click({ position: { x: 10, y: 10 } });
+      await expect(page.getByTestId('task-info-modal')).toHaveCount(0);
+
+      // Verify checking off and unchecking a serving task works normally
+      const largeCheckbox = embeddedPage.getByTestId('task-checkbox-serve_large_group');
+      const largeItem = embeddedPage.getByTestId('kiosk-todo-item-serve_large_group');
+      await largeCheckbox.click();
+
+      const confirmModal = page.getByTestId('task-confirm-modal');
+      await expect(confirmModal).toBeVisible();
+      await expect(confirmModal.getByTestId('task-confirm-modal-title')).toHaveText(
+        'Große Gruppe servieren abhaken?'
+      );
+      await confirmModal.getByTestId('task-confirm-confirm-btn').click();
+      await expect(confirmModal).toHaveCount(0);
+
+      await expect(largeItem).toHaveClass(/kiosk-todo-completed/);
+      await expect(largeCheckbox).toHaveClass(/checked/);
+
+      // Uncomplete the task
+      await largeItem.click();
+      await expect(largeItem).not.toHaveClass(/kiosk-todo-completed/);
+    } else {
+      // If today happens to be weekend, navigate to Monday to verify UI rendering and info popup
+      for (const def of servingDefs) {
+        await expect(embeddedPage.getByTestId(`kiosk-todo-item-${def.key}`)).toHaveCount(0);
+      }
+      await embeddedPage.getByTestId('kiosk-home-btn').click();
+      const nextBtn = embeddedPage.locator('.kiosk-header-nav-btn.right');
+      await nextBtn.click();
+      if (dayOfWeek === 6) {
+        await page.waitForTimeout(200);
+        await nextBtn.click();
+      }
+      await page.waitForTimeout(300);
+      await embeddedPage.getByTestId('kiosk-todos-btn').click();
+
+      for (const def of servingDefs) {
+        const item = embeddedPage.getByTestId(`kiosk-todo-item-${def.key}`);
+        const infoBtn = embeddedPage.getByTestId(`task-info-btn-${def.key}`);
+        await expect(item).toBeVisible();
+        await expect(embeddedPage.getByTestId(`task-label-${def.key}`)).toHaveText(def.label);
+        await infoBtn.click();
+        const infoModal = page.getByTestId('task-info-modal');
+        await expect(infoModal).toBeVisible();
+        await expect(infoModal.getByTestId('task-info-modal-title')).toHaveText(def.name);
+        await infoModal.getByTestId('task-info-close-btn').click();
+        await expect(infoModal).toHaveCount(0);
+      }
+    }
+  });
 });

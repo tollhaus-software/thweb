@@ -14,6 +14,17 @@ const (
 	TaskCleanDishwasherFilterGermanLegacy = "Spülmaschine-Filter reinigen"
 	TaskEnterAllergens                    = "enter_allergens"
 
+	// Daily group serving tasks (Mon-Fri)
+	TaskServeSmallGroup           = "serve_small_group"
+	TaskServeSmallGroupName       = "Kleine Gruppe servieren"
+	TaskServeSmallGroupGerman     = "Kleine Gruppe servieren (auf 11:45)"
+	TaskServeLargeGroup           = "serve_large_group"
+	TaskServeLargeGroupName       = "Große Gruppe servieren"
+	TaskServeLargeGroupGerman     = "Große Gruppe servieren (auf 12:00)"
+	TaskServeHort                 = "serve_hort"
+	TaskServeHortName             = "Hort servieren"
+	TaskServeHortGerman           = "Hort servieren (meist auf 13:00)"
+
 	// BuFDI absence tasks - German text as displayed on dashboard (task description)
 	TaskStartDryer      = "Morgens: Wäsche in den Trockner"
 	TaskStartWasher     = "Nachmittags: Wäsche in die Waschmaschine"
@@ -48,6 +59,12 @@ func GetTaskAliases(taskTypeID string) []string {
 		return []string{TaskFoldLaundry, TaskFoldLaundryTypo, TaskKeyFoldLaundry}
 	case TaskCleanDishwasherFilter, TaskCleanDishwasherFilterGerman, TaskCleanDishwasherFilterGermanLegacy:
 		return []string{TaskCleanDishwasherFilter, TaskCleanDishwasherFilterGerman, TaskCleanDishwasherFilterGermanLegacy}
+	case TaskServeSmallGroup, TaskServeSmallGroupName, TaskServeSmallGroupGerman:
+		return []string{TaskServeSmallGroup, TaskServeSmallGroupName, TaskServeSmallGroupGerman}
+	case TaskServeLargeGroup, TaskServeLargeGroupName, TaskServeLargeGroupGerman:
+		return []string{TaskServeLargeGroup, TaskServeLargeGroupName, TaskServeLargeGroupGerman}
+	case TaskServeHort, TaskServeHortName, TaskServeHortGerman:
+		return []string{TaskServeHort, TaskServeHortName, TaskServeHortGerman}
 	default:
 		return []string{taskTypeID}
 	}
@@ -140,6 +157,47 @@ var DashboardTasks = []DashboardTaskDefinition{
 		Description:        TaskFoldLaundry,
 		OrderIndex:         300,
 		OnlyIfBufdiAbsence: true,
+	},
+
+	// Daily group serving tasks (Mon-Fri):
+	{
+		ID:          TaskServeSmallGroup,
+		Name:        TaskServeSmallGroupName,
+		Description: TaskServeSmallGroupGerman,
+		OrderIndex:  350,
+		Weekdays: []time.Weekday{
+			time.Monday,
+			time.Tuesday,
+			time.Wednesday,
+			time.Thursday,
+			time.Friday,
+		},
+	},
+	{
+		ID:          TaskServeLargeGroup,
+		Name:        TaskServeLargeGroupName,
+		Description: TaskServeLargeGroupGerman,
+		OrderIndex:  360,
+		Weekdays: []time.Weekday{
+			time.Monday,
+			time.Tuesday,
+			time.Wednesday,
+			time.Thursday,
+			time.Friday,
+		},
+	},
+	{
+		ID:          TaskServeHort,
+		Name:        TaskServeHortName,
+		Description: TaskServeHortGerman,
+		OrderIndex:  370,
+		Weekdays: []time.Weekday{
+			time.Monday,
+			time.Tuesday,
+			time.Wednesday,
+			time.Thursday,
+			time.Friday,
+		},
 	},
 	{
 		ID:                 TaskStartWasher,

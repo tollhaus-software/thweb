@@ -455,6 +455,108 @@ func TestDishwasherFilterTask_Store(t *testing.T) {
 	}
 }
 
+func TestServingTasks_Store(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := NewStore(pool)
+
+	weekdays := []time.Time{
+		time.Date(2026, time.November, 16, 0, 0, 0, 0, time.UTC), // Monday
+		time.Date(2026, time.November, 17, 0, 0, 0, 0, time.UTC), // Tuesday
+		time.Date(2026, time.November, 18, 0, 0, 0, 0, time.UTC), // Wednesday
+		time.Date(2026, time.November, 19, 0, 0, 0, 0, time.UTC), // Thursday
+		time.Date(2026, time.November, 20, 0, 0, 0, 0, time.UTC), // Friday
+	}
+	weekendDays := []time.Time{
+		time.Date(2026, time.November, 21, 0, 0, 0, 0, time.UTC), // Saturday
+		time.Date(2026, time.November, 22, 0, 0, 0, 0, time.UTC), // Sunday
+	}
+
+	servingTasks := []string{TaskServeSmallGroup, TaskServeLargeGroup, TaskServeHort}
+
+	for _, d := range weekdays {
+		brief, err := appStore.GetDailyBrief(ctx, d)
+		if err != nil {
+			t.Fatalf("GetDailyBrief failed for %s: %v", d.Format("2006-01-02"), err)
+		}
+		for _, taskID := range servingTasks {
+			if !containsTask(brief.TasksAndInfo, taskID) {
+				t.Errorf("expected %s on weekday %s (%s), got: %+v", taskID, d.Weekday(), d.Format("2006-01-02"), brief.TasksAndInfo)
+			}
+		}
+	}
+
+	for _, d := range weekendDays {
+		brief, err := appStore.GetDailyBrief(ctx, d)
+		if err != nil {
+			t.Fatalf("GetDailyBrief failed for weekend %s: %v", d.Format("2006-01-02"), err)
+		}
+		for _, taskID := range servingTasks {
+			if containsTask(brief.TasksAndInfo, taskID) {
+				t.Errorf("unexpected %s on weekend %s (%s), got: %+v", taskID, d.Weekday(), d.Format("2006-01-02"), brief.TasksAndInfo)
+			}
+		}
+	}
+
+	testDate := weekdays[0]
+	testDateStr := testDate.Format("2006-01-02")
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM completed_tasks WHERE task_date = $1", testDateStr)
+	}()
+
+	actor := models.MealAllergenActor{
+		Email:   "test@example.com",
+		IsKiosk: false,
+	}
+
+	for _, pair := range []struct {
+		id     string
+		name   string
+		german string
+	}{
+		{TaskServeSmallGroup, TaskServeSmallGroupName, TaskServeSmallGroupGerman},
+		{TaskServeLargeGroup, TaskServeLargeGroupName, TaskServeLargeGroupGerman},
+		{TaskServeHort, TaskServeHortName, TaskServeHortGerman},
+	} {
+		ct, err := appStore.CompleteTask(ctx, testDate, pair.id, actor)
+		if err != nil {
+			t.Fatalf("CompleteTask(%s) failed: %v", pair.id, err)
+		}
+		if ct.TaskTypeID != pair.id {
+			t.Errorf("expected task type %s, got %s", pair.id, ct.TaskTypeID)
+		}
+
+		briefCompleted, err := appStore.GetDailyBrief(ctx, testDate)
+		if err != nil {
+			t.Fatalf("GetDailyBrief failed: %v", err)
+		}
+		if !containsTask(briefCompleted.CompletedTaskIDs, pair.id) {
+			t.Errorf("expected %s in completed task IDs, got: %+v", pair.id, briefCompleted.CompletedTaskIDs)
+		}
+		if !containsTask(briefCompleted.CompletedTaskIDs, pair.name) {
+			t.Errorf("expected %s name alias in completed task IDs, got: %+v", pair.name, briefCompleted.CompletedTaskIDs)
+		}
+		if !containsTask(briefCompleted.CompletedTaskIDs, pair.german) {
+			t.Errorf("expected %s alias in completed task IDs, got: %+v", pair.german, briefCompleted.CompletedTaskIDs)
+		}
+
+		if err := appStore.UncompleteTask(ctx, testDate, pair.german); err != nil {
+			t.Fatalf("UncompleteTask(%s) failed: %v", pair.german, err)
+		}
+	}
+}
+
 func TestBufdiAbsenceTasks_ConditionsAndLifecycle(t *testing.T) {
 	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
 	ctx := context.Background()
