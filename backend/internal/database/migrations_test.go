@@ -350,6 +350,16 @@ func TestApplySchemaMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected roles table to exist after re-applying migrations: %v", err)
 	}
+
+	var allergenPDFExportsTable string
+	err = testDB.QueryRow(`
+		SELECT table_name
+		FROM information_schema.tables
+		WHERE table_schema = 'public' AND table_name = 'meal_allergen_pdf_exports';
+	`).Scan(&allergenPDFExportsTable)
+	if err != nil {
+		t.Fatalf("expected meal_allergen_pdf_exports table to exist after migrations: %v", err)
+	}
 }
 
 func TestSQLCanonicalEmailParityWithGo(t *testing.T) {

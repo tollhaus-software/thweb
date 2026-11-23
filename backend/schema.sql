@@ -308,6 +308,15 @@ CREATE TABLE IF NOT EXISTS meal_allergens_history (
 CREATE INDEX IF NOT EXISTS idx_meal_allergens_history_cooking_date ON meal_allergens_history (cooking_date, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_meal_allergens_history_created_at ON meal_allergens_history (created_at DESC);
 
+-- Sync state for exported finalized meal allergen documentation PDFs in Google Drive
+CREATE TABLE IF NOT EXISTS meal_allergen_pdf_exports (
+    cooking_date DATE PRIMARY KEY,
+    content_hash TEXT NOT NULL,
+    drive_file_id TEXT NOT NULL DEFAULT '',
+    drive_path TEXT NOT NULL DEFAULT '',
+    generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Jobs table
 CREATE TABLE IF NOT EXISTS jobs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
