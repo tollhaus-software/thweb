@@ -36,17 +36,11 @@ import {
   Check,
   ArrowLeft,
   MessageSquare,
-  Star,
   Sparkles,
+  ListTodo,
 } from 'lucide-react';
-import {
-  WasherIcon,
-  DryerIcon,
-  LaundryBinIcon,
-  CupboardIcon,
-  CompositeFlowIcon,
-} from './LaundryIcons';
-import { FeedbackModal } from './FeedbackModal';
+import { WasherIcon } from './LaundryIcons';
+import { FeedbackPanel } from './FeedbackModal';
 import { TaskConfirmModal } from './TaskConfirmModal';
 import { InfoPagesView } from './InfoPagesView';
 import './KioskDashboard.css';
@@ -98,6 +92,8 @@ interface RealtimeEvent {
   payload?: unknown;
 }
 
+export type DashboardNavTab = 'home' | 'todos' | 'allergies' | 'infoPages' | 'feedback';
+
 export interface KioskDashboardProps {
   onBackToPortal?: () => void;
   embedded?: boolean;
@@ -118,10 +114,8 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
   const [todayDateStr, setTodayDateStr] = useState<string>(() => formatDateKey(new Date()));
   const [data, setData] = useState<DailyBriefData | null>(null);
   const [allergiesData, setAllergiesData] = useState<AllergiesSummaryData | null>(null);
-  const [showAllergies, setShowAllergies] = useState<boolean>(false);
-  const [showInfoPages, setShowInfoPages] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<DashboardNavTab>('home');
   const [activeInfoPageId, setActiveInfoPageId] = useState<string | null>(null);
-  const [showFeedbackModal, setShowFeedbackModal] = useState<boolean>(false);
   const [taskToConfirm, setTaskToConfirm] = useState<string | null>(null);
   const [isEditingAllergens, setIsEditingAllergens] = useState<boolean>(false);
   const contentAreaRef = useRef<HTMLElement | null>(null);
@@ -141,18 +135,6 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     }, 1000);
     return () => clearInterval(clockTimer);
   }, []);
-
-  // Close allergies popup on Escape key
-  useEffect(() => {
-    if (!showAllergies) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setShowAllergies(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showAllergies]);
 
   // Mark active view as dashboard while KioskDashboard is mounted
   useEffect(() => {
@@ -321,33 +303,48 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     return new Date();
   };
 
+  const effectiveActiveTab: DashboardNavTab =
+    activeTab === 'allergies' && !canViewAllergiesSummary ? 'home' : activeTab;
+
+  const canChangeDate = effectiveActiveTab === 'home' && !isEditingAllergens;
+
   const handlePrevDay = () => {
+    if (!canChangeDate) return;
     const current = getCurrentDateObj();
     current.setDate(current.getDate() - 1);
     const y = current.getFullYear();
     const m = String(current.getMonth() + 1).padStart(2, '0');
     const d = String(current.getDate()).padStart(2, '0');
+    setActiveTab('home');
+    setActiveInfoPageId(null);
     setIsEditingAllergens(false);
     setTaskToConfirm(null);
     setSelectedDate(`${y}-${m}-${d}`);
+    if (contentAreaRef.current) {
+      contentAreaRef.current.scrollTop = 0;
+    }
   };
 
   const handleNextDay = () => {
+    if (!canChangeDate) return;
     const current = getCurrentDateObj();
     current.setDate(current.getDate() + 1);
     const y = current.getFullYear();
     const m = String(current.getMonth() + 1).padStart(2, '0');
     const d = String(current.getDate()).padStart(2, '0');
+    setActiveTab('home');
+    setActiveInfoPageId(null);
     setIsEditingAllergens(false);
     setTaskToConfirm(null);
     setSelectedDate(`${y}-${m}-${d}`);
+    if (contentAreaRef.current) {
+      contentAreaRef.current.scrollTop = 0;
+    }
   };
 
-  const handleHomeClick = useCallback(() => {
-    setShowInfoPages(false);
+  const resetDashboardToToday = useCallback(() => {
+    setActiveTab('home');
     setActiveInfoPageId(null);
-    setShowAllergies(false);
-    setShowFeedbackModal(false);
     setTaskToConfirm(null);
     setIsEditingAllergens(false);
     setSelectedDate(null); // Omitting date fetches "today" from backend
@@ -356,20 +353,31 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     }
   }, []);
 
-  const handleInfoPagesClick = useCallback(() => {
-    setIsEditingAllergens(false);
-    setShowAllergies(false);
-    setShowFeedbackModal(false);
-    setTaskToConfirm(null);
-    if (!showInfoPages) {
-      setShowInfoPages(true);
-      setActiveInfoPageId(null);
-    } else if (activeInfoPageId) {
-      setActiveInfoPageId(null);
+  const handleHomeNavClick = useCallback(() => {
+    if (activeTab === 'home' && !isEditingAllergens) {
+      setSelectedDate(null);
     } else {
-      setShowInfoPages(false);
+      setIsEditingAllergens(false);
+      setTaskToConfirm(null);
+      setActiveInfoPageId(null);
+      setActiveTab('home');
     }
-  }, [showInfoPages, activeInfoPageId]);
+    if (contentAreaRef.current) {
+      contentAreaRef.current.scrollTop = 0;
+    }
+  }, [activeTab, isEditingAllergens]);
+
+  const handleSelectTab = useCallback((tab: DashboardNavTab) => {
+    setIsEditingAllergens(false);
+    setTaskToConfirm(null);
+    if (tab === 'infoPages') {
+      setActiveInfoPageId(null);
+    }
+    setActiveTab(tab);
+    if (contentAreaRef.current) {
+      contentAreaRef.current.scrollTop = 0;
+    }
+  }, []);
 
   const effectiveIdleTimeoutMs =
     idleTimeoutMs ??
@@ -380,15 +388,15 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
 
   useIdleTimer({
     timeoutMs: effectiveIdleTimeoutMs,
-    onIdle: handleHomeClick,
+    onIdle: resetDashboardToToday,
     enabled: true,
     throttleMs: 5000,
   });
 
   const handleScreensaverWake = useCallback(() => {
-    handleHomeClick();
+    resetDashboardToToday();
     void fetchDailyBrief(null);
-  }, [handleHomeClick, fetchDailyBrief]);
+  }, [resetDashboardToToday, fetchDailyBrief]);
 
   const { scheduledTimes } = useFullyKioskScreensaver({
     serverTimes: data?.screensaver_exit_times,
@@ -397,12 +405,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     enabled: true,
   });
 
-  const isSwipeDisabled =
-    isEditingAllergens ||
-    showInfoPages ||
-    showAllergies ||
-    showFeedbackModal ||
-    Boolean(taskToConfirm);
+  const isSwipeDisabled = !canChangeDate || Boolean(taskToConfirm);
 
   useSwipeGesture(contentAreaRef, {
     onSwipeLeft: handleNextDay,
@@ -414,51 +417,14 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
   const isToday = selectedDate === null || displayDateStr === todayDateStr;
   const canEditAllergensOnDashboard = canEditMealAllergens;
   const formattedDate = formatDashboardDate(displayDateStr);
-  const displayDateParts = displayDateStr.split('-').map(Number);
-  const displayDayOfWeek =
-    displayDateParts.length === 3 &&
-    !isNaN(displayDateParts[0]) &&
-    !isNaN(displayDateParts[1]) &&
-    !isNaN(displayDateParts[2])
-      ? new Date(Date.UTC(displayDateParts[0], displayDateParts[1] - 1, displayDateParts[2])).getUTCDay()
-      : new Date(displayDateStr).getUTCDay();
-  const isVesperDay = displayDayOfWeek === 3 || displayDayOfWeek === 4;
   const hours = String(currentTime.getHours()).padStart(2, '0');
   const minutes = String(currentTime.getMinutes()).padStart(2, '0');
   const formattedTime = `${hours}:${minutes}`;
-
-  const vesperBadge = isVesperDay ? (
-    <span
-      className="kiosk-vesper-badge"
-      data-testid="kiosk-vesper-badge"
-      title="Vesper"
-    >
-      <svg
-        className="kiosk-vesper-star-bg"
-        viewBox="0 0 104 36"
-        preserveAspectRatio="none"
-        aria-hidden="true"
-      >
-        <path
-          d="M 104.0 18.0 L 98.6 20.6 L 100.0 24.9 L 91.5 25.5 L 88.8 30.7 L 78.4 29.2 L 71.9 34.6 L 61.3 31.2 L 52.0 36.0 L 42.7 31.2 L 32.1 34.6 L 25.6 29.2 L 15.2 30.7 L 12.5 25.5 L 4.0 24.9 L 5.4 20.6 L 0.0 18.0 L 5.4 15.4 L 4.0 11.1 L 12.5 10.5 L 15.2 5.3 L 25.6 6.8 L 32.1 1.4 L 42.7 4.8 L 52.0 0.0 L 61.3 4.8 L 71.9 1.4 L 78.4 6.8 L 88.8 5.3 L 91.5 10.5 L 100.0 11.1 L 98.6 15.4 Z"
-          vectorEffect="non-scaling-stroke"
-        />
-      </svg>
-      <Star
-        className="kiosk-vesper-star-icon"
-        size={embedded ? 13 : 16}
-        fill="currentColor"
-        aria-hidden="true"
-      />
-      <span className="kiosk-vesper-text">Vesper</span>
-    </span>
-  ) : null;
 
   const openMealAllergensEditor = (e?: React.MouseEvent) => {
     if (e) {
       e.stopPropagation();
     }
-    setShowAllergies(false);
     setTaskToConfirm(null);
     setIsEditingAllergens(true);
   };
@@ -719,6 +685,10 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     return a.localeCompare(b);
   });
 
+  const totalTasksCount = sortedTasks.length;
+  const doneTasksCount = sortedTasks.filter((task) => isTaskCompleted(task)).length;
+  const todosNavLabel = `${t('todosNav')} (${doneTasksCount}/${totalTasksCount})`;
+
   const renderAllergiesView = () => {
     const mealComponents: MealAllergenComponent[] = allergiesData?.meal_components || [];
 
@@ -951,8 +921,70 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
   return (
     <div className={`kiosk-tablet-page ${embedded ? 'embedded' : ''}`}>
       <div className="kiosk-tablet-container">
-        
-        {/* Content Area (taking up most of the screen space) */}
+        {/* Header: Centered date (or allergens editor title + back button) */}
+        <header className="kiosk-header" data-testid="kiosk-dashboard-header">
+          {isEditingAllergens ? (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditingAllergens(false);
+                  void fetchDailyBrief(selectedDate);
+                  void fetchAllergiesSummary(selectedDate);
+                }}
+                className="kiosk-header-back-btn"
+                data-testid="allergens-editor-back-btn"
+                title={t('back') || 'Zurück'}
+                aria-label={t('back') || 'Zurück'}
+              >
+                <ArrowLeft size={embedded ? 20 : 26} />
+                <span>{t('back') || 'Zurück'}</span>
+              </button>
+
+              <h1 className="kiosk-header-date">
+                <span className="kiosk-header-date-text">
+                  {t('allergensForDate')} {formattedDate}
+                </span>
+              </h1>
+
+              <div className="kiosk-header-right" />
+            </>
+          ) : (
+            <>
+              {canChangeDate ? (
+                <button
+                  onClick={handlePrevDay}
+                  className="kiosk-header-nav-btn left"
+                  title={t('previousDay')}
+                  aria-label={t('previousDay')}
+                >
+                  <ChevronLeft size={embedded ? 24 : 36} />
+                </button>
+              ) : (
+                <div className="kiosk-header-right" />
+              )}
+
+              <h1 className="kiosk-header-date">
+                <span className="kiosk-header-date-text">{formattedDate}</span>
+              </h1>
+
+              {canChangeDate ? (
+                <button
+                  onClick={handleNextDay}
+                  className="kiosk-header-nav-btn right"
+                  title={t('nextDay')}
+                  aria-label={t('nextDay')}
+                >
+                  <ChevronRight size={embedded ? 24 : 36} />
+                </button>
+              ) : (
+                <div className="kiosk-header-right" />
+              )}
+            </>
+          )}
+        </header>
+
+        {/* Content Area (displayed between header (date) and footer (nav buttons)) */}
         <main
           ref={contentAreaRef}
           className={`kiosk-content-area ${isEditingAllergens ? 'editing-allergens' : ''}`}
@@ -964,95 +996,29 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
             </div>
           )}
 
-          {showInfoPages ? (
-            <InfoPagesView
-              embedded={embedded}
-              activePageId={activeInfoPageId}
-              onSelectPage={setActiveInfoPageId}
-              onBackToDashboard={() => {
-                setShowInfoPages(false);
-                setActiveInfoPageId(null);
+          {isEditingAllergens ? (
+            <MealAllergensEditor
+              initialDay={{
+                ...createEmptyMealAllergenDay(displayDateStr),
+                has_allergen_record: Boolean(data?.has_allergen_record),
+                meal_components: allergenComponents,
+                plan_meal_components: data?.meal_components || [],
+                plan_cook_name: data?.who_is_cooking || '',
+              }}
+              hidePlanReference={true}
+              isDashboard={true}
+              onBack={() => {
+                setIsEditingAllergens(false);
+                void fetchDailyBrief(selectedDate);
+                void fetchAllergiesSummary(selectedDate);
+              }}
+              onDaySaved={() => {
+                void fetchDailyBrief(selectedDate);
+                void fetchAllergiesSummary(selectedDate);
               }}
             />
-          ) : isEditingAllergens ? (
+          ) : effectiveActiveTab === 'home' ? (
             <>
-              {/* Dashboard day header without < > navigation items, showing date and clear Back button */}
-              <header className="kiosk-header" data-testid="kiosk-dashboard-header">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsEditingAllergens(false);
-                    void fetchDailyBrief(selectedDate);
-                    void fetchAllergiesSummary(selectedDate);
-                  }}
-                  className="kiosk-header-back-btn"
-                  data-testid="allergens-editor-back-btn"
-                  title={t('back') || 'Zurück'}
-                  aria-label={t('back') || 'Zurück'}
-                >
-                  <ArrowLeft size={embedded ? 20 : 26} />
-                  <span>{t('back') || 'Zurück'}</span>
-                </button>
-
-                <h1 className="kiosk-header-date">
-                  <span className="kiosk-header-date-text">
-                    {t('allergensForDate')} {formattedDate}
-                  </span>
-                  {vesperBadge}
-                </h1>
-
-                <div className="kiosk-header-right" />
-              </header>
-
-              <MealAllergensEditor
-                initialDay={{
-                  ...createEmptyMealAllergenDay(displayDateStr),
-                  has_allergen_record: Boolean(data?.has_allergen_record),
-                  meal_components: allergenComponents,
-                  plan_meal_components: data?.meal_components || [],
-                  plan_cook_name: data?.who_is_cooking || '',
-                }}
-                hidePlanReference={true}
-                isDashboard={true}
-                onBack={() => {
-                  setIsEditingAllergens(false);
-                  void fetchDailyBrief(selectedDate);
-                  void fetchAllergiesSummary(selectedDate);
-                }}
-                onDaySaved={() => {
-                  void fetchDailyBrief(selectedDate);
-                  void fetchAllergiesSummary(selectedDate);
-                }}
-              />
-            </>
-          ) : (
-            <>
-              {/* Header: Just centered text saying the current date, with left/right day switch arrows at the screen sides */}
-              <header className="kiosk-header">
-                <button
-                  onClick={handlePrevDay}
-                  className="kiosk-header-nav-btn left"
-                  title={t('previousDay')}
-                  aria-label={t('previousDay')}
-                >
-                  <ChevronLeft size={embedded ? 24 : 36} />
-                </button>
-
-                <h1 className="kiosk-header-date">
-                  <span className="kiosk-header-date-text">{formattedDate}</span>
-                  {vesperBadge}
-                </h1>
-
-                <button
-                  onClick={handleNextDay}
-                  className="kiosk-header-nav-btn right"
-                  title={t('nextDay')}
-                  aria-label={t('nextDay')}
-                >
-                  <ChevronRight size={embedded ? 24 : 36} />
-                </button>
-              </header>
-
               {/* Card 2: Shows who is cooking. Header on top left: "Koch / Köchin" */}
               <section className="kiosk-card kiosk-card-cook">
                 <div className="kiosk-card-header">
@@ -1137,167 +1103,172 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                   )}
                 </div>
               </section>
-
-              {/* Card 4: TODOs / warnings, aligned vertically at the bottom of the content area */}
-              <section className="kiosk-card kiosk-card-todos">
-                <div className="kiosk-card-header">
-                  <AlertCircle size={embedded ? 18 : 22} className="kiosk-card-header-icon" />
-                  <span>
-                    {data?.has_volunteer_absence
-                      ? `${t('tasksAndInfoTitle')} - ! ${(data.volunteer_name || 'BuFDI').trim() || 'BuFDI'} nicht im Haus !`
-                      : t('tasksAndInfoTitle')}
-                  </span>
-                </div>
-                <div className="kiosk-todos-list">
-                  {sortedTasks.length > 0 ? (
-                    sortedTasks.map((task, idx) => {
-                      const isDone = isTaskCompleted(task);
-                      const isAllergens = task === 'enter_allergens' || task === 'allergene_eintragen';
-                      const isCheckable = isToday;
-                      const showCheckbox = isDone || isCheckable;
-                      const isInteractive = isAllergens ? true : isToday;
-
-                      const normalized = normalizeTaskKey(task);
-                      let icon = <AlertCircle size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
-                      const label = getTaskLabel(task);
-                      let colorClass = 'kiosk-todo-default';
-
-                      if (normalized === 'yellow_bin_retrieve' || normalized === 'yellow_bin_put_out') {
-                        icon = <Trash2 size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
-                        colorClass = 'kiosk-todo-yellow';
-                      } else if (normalized === 'clean_refrigerator') {
-                        icon = <Refrigerator size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
-                        colorClass = 'kiosk-todo-refrigerator';
-                      } else if (normalized === 'clean_dishwasher_filter') {
-                        icon = <Sparkles size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
-                        colorClass = 'kiosk-todo-dishwasher';
-                      } else if (isAllergens) {
-                        icon = <UtensilsCrossed size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
-                        colorClass = 'kiosk-todo-allergens';
-                      } else if (normalized === 'start_dryer') {
-                        icon = (
-                          <CompositeFlowIcon
-                            from={<WasherIcon size={embedded ? 18 : 24} />}
-                            to={<DryerIcon size={embedded ? 18 : 24} />}
-                            arrowSize={embedded ? 12 : 16}
-                          />
-                        );
-                        colorClass = 'kiosk-todo-laundry';
-                      } else if (normalized === 'start_washer') {
-                        icon = (
-                          <CompositeFlowIcon
-                            from={<LaundryBinIcon size={embedded ? 18 : 24} />}
-                            to={<WasherIcon size={embedded ? 18 : 24} />}
-                            arrowSize={embedded ? 12 : 16}
-                          />
-                        );
-                        colorClass = 'kiosk-todo-laundry';
-                      } else if (normalized === 'fold_laundry') {
-                        icon = (
-                          <CompositeFlowIcon
-                            from={<DryerIcon size={embedded ? 18 : 24} />}
-                            to={<CupboardIcon size={embedded ? 18 : 24} />}
-                            arrowSize={embedded ? 12 : 16}
-                          />
-                        );
-                        colorClass = 'kiosk-todo-laundry';
-                      } else if (normalized === 'change_diaper_bag') {
-                        icon = <Trash2 size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
-                        colorClass = 'kiosk-todo-diaper';
-                      }
-
-                      return (
-                        <div
-                          key={`${task}-${idx}`}
-                          className={`kiosk-todo-item ${colorClass} ${isDone ? 'kiosk-todo-completed' : ''} ${!isInteractive ? 'kiosk-todo-disabled' : ''}`}
-                          data-testid={`kiosk-todo-item-${normalized}`}
-                          data-task-id={task}
-                          data-completed={isDone ? 'true' : 'false'}
-                          onClick={() => void handleTaskToggle(task)}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              void handleTaskToggle(task);
-                            }
-                          }}
-                        >
-                          {showCheckbox && (
-                            <button
-                              type="button"
-                              className={`kiosk-todo-checkbox ${isDone ? 'checked' : ''} ${!isToday ? 'disabled' : ''}`}
-                              data-testid={`task-checkbox-${normalized}`}
-                              aria-label={`${label}: ${isDone ? t('taskDone') : ''}`}
-                              onClick={(e) => void handleTaskToggle(task, e)}
-                              disabled={!isToday}
-                            >
-                              {isDone && (
-                                <Check size={embedded ? 14 : 20} strokeWidth={3} className="kiosk-todo-check-icon" />
-                              )}
-                            </button>
-                          )}
-                          {icon}
-                          <span className="kiosk-todo-label" data-testid={`task-label-${normalized}`}>
-                            {label}
-                          </span>
-                          {isAllergens && (
-                            <button
-                              type="button"
-                              className="kiosk-todo-open-allergens-btn"
-                              data-testid="open-allergens-editor-btn"
-                              title={t('openComponentsAndAllergens')}
-                              onClick={(e) => openMealAllergensEditor(e)}
-                            >
-                              {t('openComponentsAndAllergens')}
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="kiosk-todo-empty">
-                      <span>{t('noTasks')}</span>
-                    </div>
-                  )}
-                </div>
-              </section>
             </>
+          ) : effectiveActiveTab === 'todos' ? (
+            <section className="kiosk-card kiosk-card-todos">
+              <div className="kiosk-card-header">
+                <AlertCircle size={embedded ? 18 : 22} className="kiosk-card-header-icon" />
+                <span>
+                  {data?.has_volunteer_absence
+                    ? `${t('tasksAndInfoTitle')} - ! ${(data.volunteer_name || 'BuFDI').trim() || 'BuFDI'} nicht im Haus !`
+                    : t('tasksAndInfoTitle')}
+                </span>
+              </div>
+              <div className="kiosk-todos-list">
+                {sortedTasks.length > 0 ? (
+                  sortedTasks.map((task, idx) => {
+                    const isDone = isTaskCompleted(task);
+                    const isAllergens = task === 'enter_allergens' || task === 'allergene_eintragen';
+                    const isCheckable = isToday;
+                    const showCheckbox = isDone || isCheckable;
+                    const isInteractive = isAllergens ? true : isToday;
+
+                    const normalized = normalizeTaskKey(task);
+                    const label = getTaskLabel(task);
+                    const isLaundryTask =
+                      normalized === 'start_dryer' ||
+                      normalized === 'start_washer' ||
+                      normalized === 'fold_laundry' ||
+                      /waschmaschine|trockner|wäsche/i.test(task) ||
+                      /waschmaschine|trockner|wäsche/i.test(label);
+
+                    let icon: React.ReactNode = (
+                      <AlertCircle size={embedded ? 20 : 28} className="kiosk-todo-icon" />
+                    );
+                    let colorClass = 'kiosk-todo-default';
+
+                    if (normalized === 'yellow_bin_retrieve' || normalized === 'yellow_bin_put_out') {
+                      icon = <Trash2 size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
+                      colorClass = 'kiosk-todo-yellow';
+                    } else if (normalized === 'clean_refrigerator') {
+                      icon = <Refrigerator size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
+                      colorClass = 'kiosk-todo-refrigerator';
+                    } else if (normalized === 'clean_dishwasher_filter') {
+                      icon = <Sparkles size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
+                      colorClass = 'kiosk-todo-dishwasher';
+                    } else if (isAllergens) {
+                      icon = null;
+                      colorClass = 'kiosk-todo-allergens';
+                    } else if (isLaundryTask) {
+                      icon = <WasherIcon size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
+                      colorClass = 'kiosk-todo-laundry';
+                    } else if (normalized === 'change_diaper_bag') {
+                      icon = <Trash2 size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
+                      colorClass = 'kiosk-todo-diaper';
+                    }
+
+                    return (
+                      <div
+                        key={`${task}-${idx}`}
+                        className={`kiosk-todo-item ${colorClass} ${isDone ? 'kiosk-todo-completed' : ''} ${!isInteractive ? 'kiosk-todo-disabled' : ''}`}
+                        data-testid={`kiosk-todo-item-${normalized}`}
+                        data-task-id={task}
+                        data-completed={isDone ? 'true' : 'false'}
+                        onClick={() => void handleTaskToggle(task)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            void handleTaskToggle(task);
+                          }
+                        }}
+                      >
+                        {showCheckbox && (
+                          <button
+                            type="button"
+                            className={`kiosk-todo-checkbox ${isDone ? 'checked' : ''} ${!isToday ? 'disabled' : ''}`}
+                            data-testid={`task-checkbox-${normalized}`}
+                            aria-label={`${label}: ${isDone ? t('taskDone') : ''}`}
+                            onClick={(e) => void handleTaskToggle(task, e)}
+                            disabled={!isToday}
+                          >
+                            {isDone && (
+                              <Check size={embedded ? 14 : 20} strokeWidth={3} className="kiosk-todo-check-icon" />
+                            )}
+                          </button>
+                        )}
+                        {icon}
+                        <span className="kiosk-todo-label" data-testid={`task-label-${normalized}`}>
+                          {label}
+                        </span>
+                        {isAllergens && (
+                          <button
+                            type="button"
+                            className="kiosk-todo-open-allergens-btn"
+                            data-testid="open-allergens-editor-btn"
+                            title={t('openComponentsAndAllergens')}
+                            aria-label={t('openComponentsAndAllergens')}
+                            onClick={(e) => openMealAllergensEditor(e)}
+                          >
+                            <Pencil size={embedded ? 16 : 22} className="kiosk-todo-icon" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="kiosk-todo-empty">
+                    <span>{t('noTasks')}</span>
+                  </div>
+                )}
+              </div>
+            </section>
+          ) : effectiveActiveTab === 'allergies' ? (
+            <div className="kiosk-tab-scroll-view" data-testid="kiosk-allergies-section">
+              {renderAllergiesView()}
+            </div>
+          ) : effectiveActiveTab === 'infoPages' ? (
+            <InfoPagesView
+              embedded={embedded}
+              activePageId={activeInfoPageId}
+              onSelectPage={setActiveInfoPageId}
+            />
+          ) : (
+            <div className="kiosk-tab-scroll-view">
+              <FeedbackPanel embedded={embedded} token={token} />
+            </div>
           )}
         </main>
 
         {/* Navigation bar at the bottom: max width, fixed height */}
         <footer className="kiosk-bottom-nav">
-          {/* Left: Home button (house icon) + Anleitungen (icon) + Allergien/Ernährung (icon + text) + Feedback (icon) */}
+          {/* Left: Home + TODOs (done/total) + Allergien/Ernährung + Anleitungen + Feedback */}
           <div className="kiosk-nav-left">
             <button
-              onClick={handleHomeClick}
-              className="kiosk-nav-btn kiosk-nav-home-btn"
+              onClick={handleHomeNavClick}
+              className={`kiosk-nav-btn kiosk-nav-home-btn ${effectiveActiveTab === 'home' ? 'active' : ''}`}
+              data-active={effectiveActiveTab === 'home' ? 'true' : 'false'}
+              aria-current={effectiveActiveTab === 'home' ? 'page' : undefined}
               title={t('home')}
               aria-label={t('home')}
+              data-testid="kiosk-home-btn"
             >
               <Home size={embedded ? 18 : 24} />
             </button>
 
             <button
-              onClick={handleInfoPagesClick}
-              className={`kiosk-nav-btn ${showInfoPages ? 'active' : ''}`}
-              title={t('infoPages')}
-              aria-label={t('infoPages')}
-              data-testid="kiosk-info-pages-btn"
+              onClick={() => handleSelectTab('todos')}
+              className={`kiosk-nav-btn ${effectiveActiveTab === 'todos' ? 'active' : ''}`}
+              data-active={effectiveActiveTab === 'todos' ? 'true' : 'false'}
+              aria-current={effectiveActiveTab === 'todos' ? 'page' : undefined}
+              title={todosNavLabel}
+              aria-label={todosNavLabel}
+              data-testid="kiosk-todos-btn"
             >
-              <BookOpen size={embedded ? 18 : 22} />
+              <ListTodo size={embedded ? 16 : 20} />
+              <span>{todosNavLabel}</span>
             </button>
 
             {canViewAllergiesSummary && (
               <button
-                onClick={() => {
-                  setIsEditingAllergens(false);
-                  setShowAllergies((prev) => !prev);
-                }}
-                className={`kiosk-nav-btn ${showAllergies ? 'active' : ''}`}
+                onClick={() => handleSelectTab('allergies')}
+                className={`kiosk-nav-btn ${effectiveActiveTab === 'allergies' ? 'active' : ''}`}
+                data-active={effectiveActiveTab === 'allergies' ? 'true' : 'false'}
+                aria-current={effectiveActiveTab === 'allergies' ? 'page' : undefined}
                 title={t('allergies')}
                 aria-label={t('allergies')}
+                data-testid="kiosk-allergies-btn"
               >
                 <UtensilsCrossed size={embedded ? 16 : 20} />
                 <span>{t('allergies')}</span>
@@ -1305,12 +1276,22 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
             )}
 
             <button
-              onClick={() => {
-                setIsEditingAllergens(false);
-                setShowAllergies(false);
-                setShowFeedbackModal(true);
-              }}
-              className={`kiosk-nav-btn ${showFeedbackModal ? 'active' : ''}`}
+              onClick={() => handleSelectTab('infoPages')}
+              className={`kiosk-nav-btn ${effectiveActiveTab === 'infoPages' ? 'active' : ''}`}
+              data-active={effectiveActiveTab === 'infoPages' ? 'true' : 'false'}
+              aria-current={effectiveActiveTab === 'infoPages' ? 'page' : undefined}
+              title={t('infoPages')}
+              aria-label={t('infoPages')}
+              data-testid="kiosk-info-pages-btn"
+            >
+              <BookOpen size={embedded ? 18 : 22} />
+            </button>
+
+            <button
+              onClick={() => handleSelectTab('feedback')}
+              className={`kiosk-nav-btn ${effectiveActiveTab === 'feedback' ? 'active' : ''}`}
+              data-active={effectiveActiveTab === 'feedback' ? 'true' : 'false'}
+              aria-current={effectiveActiveTab === 'feedback' ? 'page' : undefined}
               title={t('feedback')}
               aria-label={t('feedback')}
               data-testid="kiosk-feedback-btn"
@@ -1332,52 +1313,6 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
           </div>
         </footer>
 
-        {/* Modal-ish Popover for Allergies */}
-        {showAllergies && (
-          <div
-            className="kiosk-allergies-overlay"
-            data-testid="kiosk-allergies-overlay"
-            onClick={() => setShowAllergies(false)}
-          >
-            <div
-              className="kiosk-allergies-popup"
-              data-testid="kiosk-allergies-popup"
-              onClick={(e) => e.stopPropagation()}
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="kiosk-allergies-title"
-            >
-              <div className="kiosk-allergies-popup-header">
-                <button
-                  type="button"
-                  className="kiosk-allergies-popup-back-btn"
-                  data-testid="kiosk-allergies-back-btn"
-                  onClick={() => setShowAllergies(false)}
-                  aria-label={t('back') || 'Zurück'}
-                  title={t('back') || 'Zurück'}
-                >
-                  <ArrowLeft size={embedded ? 18 : 22} />
-                </button>
-                <h2 id="kiosk-allergies-title" className="kiosk-allergies-popup-title">
-                  {t('allergies')}
-                </h2>
-              </div>
-
-              <div className="kiosk-allergies-popup-content">
-                {renderAllergiesView()}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Modal for Feedback */}
-        <FeedbackModal
-          isOpen={showFeedbackModal}
-          onClose={() => setShowFeedbackModal(false)}
-          embedded={embedded}
-          token={token}
-        />
-
         {/* Modal for Task Confirmation */}
         <TaskConfirmModal
           isOpen={Boolean(taskToConfirm)}
@@ -1386,7 +1321,6 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
           onClose={() => setTaskToConfirm(null)}
           embedded={embedded}
         />
-
       </div>
     </div>
   );

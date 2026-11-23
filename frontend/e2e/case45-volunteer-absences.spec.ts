@@ -258,8 +258,9 @@ test.describe('Test Case 45: Volunteer Absences (Abwesenheit Freiwillige)', () =
     const now = new Date();
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-    // 2. Open dashboard initially (no absence active today)
+    // 2. Open dashboard initially (no absence active today) and switch to TODOs tab
     await page.goto('/#dashboard');
+    await page.getByTestId('kiosk-todos-btn').click();
     const todosHeader = page.locator('.kiosk-card-todos .kiosk-card-header span');
     await expect(todosHeader).toBeVisible();
     await expect(todosHeader).toHaveText('Hinweise & Aufgaben');
@@ -296,8 +297,9 @@ test.describe('Test Case 45: Volunteer Absences (Abwesenheit Freiwillige)', () =
     await page.locator('.va-modal').getByRole('button', { name: /(Speichern|Save)/i }).click();
     await expect(page.getByRole('heading', { name: /(Abwesenheit eintragen|Add Absence)/i })).toBeHidden();
 
-    // 5. Navigate to dashboard - header must show absence notice with configured name
+    // 5. Navigate to dashboard TODOs tab - header must show absence notice with configured name
     await page.goto('/#dashboard');
+    await page.getByTestId('kiosk-todos-btn').click();
     await expect(todosHeader).toBeVisible();
     await expect(todosHeader).toHaveText('Hinweise & Aufgaben - ! Max Mustermann nicht im Haus !');
 
@@ -314,6 +316,7 @@ test.describe('Test Case 45: Volunteer Absences (Abwesenheit Freiwillige)', () =
 
     // 7. Verify dashboard immediately shows updated name from absence property
     await page.goto('/#dashboard');
+    await page.getByTestId('kiosk-todos-btn').click();
     await expect(todosHeader).toBeVisible();
     await expect(todosHeader).toHaveText('Hinweise & Aufgaben - ! Lisa & Tom nicht im Haus !');
 
@@ -325,6 +328,7 @@ test.describe('Test Case 45: Volunteer Absences (Abwesenheit Freiwillige)', () =
     await page.locator('.va-modal .va-btn-primary').click();
 
     await page.goto('/#dashboard');
+    await page.getByTestId('kiosk-todos-btn').click();
     await expect(todosHeader).toBeVisible();
     await expect(todosHeader).toHaveText('Hinweise & Aufgaben');
   });

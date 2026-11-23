@@ -37,12 +37,34 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     const embeddedPage = page.locator('.kiosk-tablet-page.embedded');
     await expect(embeddedPage).toBeVisible();
 
-    // Verify key dashboard sections are visible inside the embedded container
+    // Verify key dashboard sections are visible inside the embedded container (Home tab active by default)
+    const homeBtn = embeddedPage.locator('.kiosk-nav-home-btn');
+    const todosBtn = embeddedPage.getByTestId('kiosk-todos-btn');
+    await expect(homeBtn).toBeVisible();
+    await expect(homeBtn).toHaveClass(/active/);
+    await expect(todosBtn).toBeVisible();
+    await expect(todosBtn).toContainText(/TODOs \(\d+\/\d+\)/);
+
     await expect(embeddedPage.locator('.kiosk-header-date')).toBeVisible();
     await expect(embeddedPage.locator('.kiosk-card-cook')).toBeVisible();
     await expect(embeddedPage.locator('.kiosk-card-meal')).toBeVisible();
-    await expect(embeddedPage.locator('.kiosk-card-todos')).toBeVisible();
+    await expect(embeddedPage.locator('.kiosk-card-todos')).toHaveCount(0);
     await expect(embeddedPage.locator('.kiosk-bottom-nav')).toBeVisible();
+
+    // Clicking TODOs nav button switches content between header and footer, highlights TODOs, and hides date change arrows
+    await todosBtn.click();
+    await expect(todosBtn).toHaveClass(/active/);
+    await expect(homeBtn).not.toHaveClass(/active/);
+    await expect(embeddedPage.locator('.kiosk-header-date')).toBeVisible();
+    await expect(embeddedPage.locator('.kiosk-header-nav-btn')).toHaveCount(0);
+    await expect(embeddedPage.locator('.kiosk-card-todos')).toBeVisible();
+    await expect(embeddedPage.locator('.kiosk-card-cook')).toHaveCount(0);
+
+    // Switch back to Home tab
+    await homeBtn.click();
+    await expect(homeBtn).toHaveClass(/active/);
+    await expect(todosBtn).not.toHaveClass(/active/);
+    await expect(embeddedPage.locator('.kiosk-card-cook')).toBeVisible();
 
     // 9. Verify date navigation arrows
     const prevDayBtn = embeddedPage.locator('.kiosk-header-nav-btn.left');
@@ -56,9 +78,7 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     const newDateText = await embeddedPage.locator('.kiosk-header-date').innerText();
     expect(newDateText).not.toBe(initialDateText);
 
-    // Click Home button to return to today
-    const homeBtn = embeddedPage.locator('.kiosk-nav-home-btn');
-    await expect(homeBtn).toBeVisible();
+    // Click Home button while already on Home to return to today
     await homeBtn.click();
     await page.waitForTimeout(300);
     const resetDateText = await embeddedPage.locator('.kiosk-header-date').innerText();
@@ -425,8 +445,17 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     const embeddedPage = page.locator('.kiosk-tablet-page.embedded');
     await expect(embeddedPage).toBeVisible();
 
+    // Switch to TODOs tab via bottom navigation bar
+    const todosBtn = embeddedPage.getByTestId('kiosk-todos-btn');
+    await expect(todosBtn).toBeVisible();
+    await todosBtn.click();
+    await expect(todosBtn).toHaveClass(/active/);
+
     const todosCard = embeddedPage.locator('.kiosk-card-todos');
     await expect(todosCard).toBeVisible();
+
+    const totalTasks = await todosCard.locator('.kiosk-todo-item').count();
+    await expect(todosBtn).toContainText(`TODOs (0/${totalTasks})`);
 
     // Verify task items exist: yellow_bin_put_out and enter_allergens
     const yellowTask = todosCard.locator('[data-testid="kiosk-todo-item-yellow_bin_put_out"]');
@@ -475,6 +504,7 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await expect(yellowTask).toHaveClass(/kiosk-todo-completed/);
     await expect(yellowCheckbox).toHaveClass(/checked/);
     await expect(yellowCheckbox.locator('.kiosk-todo-check-icon')).toBeVisible();
+    await expect(todosBtn).toContainText(`TODOs (1/${totalTasks})`);
 
     const yellowLabel = yellowTask.locator('.kiosk-todo-label');
     await expect(yellowLabel).toHaveCSS('text-decoration-line', 'line-through');
@@ -500,12 +530,20 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     expect(yellowCompleted.is_kiosk).toBe(false);
     expect(yellowCompleted.completed_at).toBeTruthy();
 
-    // 4. Verify date restriction: navigate to previous day (yesterday)
+    // 4. Verify date restriction: date changing is hidden on non-Home tabs; switch to Home to navigate to yesterday
+    const homeBtn = embeddedPage.locator('.kiosk-nav-home-btn');
+    await expect(embeddedPage.locator('.kiosk-header-nav-btn')).toHaveCount(0);
+    await homeBtn.click();
+    await expect(homeBtn).toHaveClass(/active/);
+
     const prevDayBtn = embeddedPage.locator('.kiosk-header-nav-btn.left');
     await prevDayBtn.click();
     await page.waitForTimeout(300);
 
-    // On non-today date, tasks that are not checkable do NOT have a checkbox
+    // Switch to TODOs on yesterday: tasks that are not checkable do NOT have a checkbox, and date arrows are hidden
+    await todosBtn.click();
+    await expect(todosBtn).toHaveClass(/active/);
+    await expect(embeddedPage.locator('.kiosk-header-nav-btn')).toHaveCount(0);
     const pastYellowCheckbox = todosCard.locator('[data-testid="task-checkbox-yellow_bin_put_out"]');
     await expect(pastYellowCheckbox).toHaveCount(0);
 
@@ -515,18 +553,24 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     );
     expect(pastAttempt.status()).toBe(400);
 
-    // Return to today via Home button
-    const homeBtn = embeddedPage.locator('.kiosk-nav-home-btn');
+    // Return to Home, navigate back to today via nextDayBtn, then switch back to TODOs tab
     await homeBtn.click();
+    const nextDayToTodayBtn = embeddedPage.locator('.kiosk-header-nav-btn.right');
+    await nextDayToTodayBtn.click();
     await page.waitForTimeout(300);
+    await todosBtn.click();
+    await expect(todosBtn).toHaveClass(/active/);
 
-    // 5. "Allergene eintragen...": "Komponenten und Allergene öffnen" button is always displayed!
+    // 5. "Allergene eintragen...": has a pencil icon button instead of the large text button, and only 1 symbol!
     const allergenLabel = allergenTask.locator('[data-testid="task-label-enter_allergens"]');
     await expect(allergenLabel).toHaveText('Allergene eintragen...');
 
     const openAllergensBtn = allergenTask.locator('[data-testid="open-allergens-editor-btn"]');
     await expect(openAllergensBtn).toBeVisible();
-    await expect(openAllergensBtn).toHaveText('Komponenten und Allergene öffnen');
+    await expect(openAllergensBtn).toHaveText('');
+    await expect(openAllergensBtn.locator('svg')).toBeVisible();
+    // Max one symbol on the uncompleted enter_allergens row (just the pencil SVG)
+    await expect(allergenTask.locator('svg')).toHaveCount(1);
 
     // Clicking anywhere on the "Allergene eintragen" TODO item opens the allergens editor directly!
     await allergenLabel.click();
@@ -547,14 +591,16 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await expect(finalizeBtn).toBeEnabled();
     await finalizeBtn.click();
 
-    // Verify editor is closed automatically
+    // Verify editor is closed automatically and we are back on the TODOs tab
     await expect(editor).toHaveCount(0);
+    await expect(todosBtn).toHaveClass(/active/);
 
-    // 6. Verify "Allergene eintragen" is now marked done on the dashboard!
+    // 6. Verify "Allergene eintragen" is now marked done on the dashboard and bottom bar counter updated!
     const allergenTaskAfter = todosCard.locator('[data-testid="kiosk-todo-item-enter_allergens"]');
     await expect(allergenTaskAfter).toBeVisible();
     await expect(allergenTaskAfter).toHaveAttribute('data-completed', 'true');
     await expect(allergenTaskAfter).toHaveClass(/kiosk-todo-completed/);
+    await expect(todosBtn).toContainText(`TODOs (2/${totalTasks})`);
 
     const allergenCheckboxAfter = allergenTaskAfter.locator('[data-testid="task-checkbox-enter_allergens"]');
     await expect(allergenCheckboxAfter).toBeVisible();
@@ -574,16 +620,21 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await expect(allergenTaskAfter).toHaveAttribute('data-completed', 'true');
 
     // 7. Verify future dates ALLOW editing allergens from dashboard, but restrict "Finalisieren" to today!
+    // Switch to Home first since date can only be changed on Home
+    await homeBtn.click();
     const nextDayBtn = embeddedPage.locator('.kiosk-header-nav-btn.right');
     await nextDayBtn.click();
     await page.waitForTimeout(300);
 
-    // On tomorrow (future date):
+    // On tomorrow (future date), we are on Home:
     // - Card 3 pencil edit button IS visible
+    await expect(homeBtn).toHaveClass(/active/);
     const tomorrowEditPencil = embeddedPage.locator('[data-testid="kiosk-edit-meal-allergens-btn"]');
     await expect(tomorrowEditPencil).toBeVisible();
 
-    // - Card 4 allergen task button IS enabled on future date
+    await todosBtn.click();
+
+    // - Card 4 allergen task pencil button IS enabled on future date
     const futureAllergenTask = todosCard.locator('[data-testid="kiosk-todo-item-enter_allergens"]');
     await expect(futureAllergenTask).toBeVisible();
     await expect(futureAllergenTask.locator('[data-testid="task-checkbox-enter_allergens"]')).toHaveCount(0);
@@ -608,14 +659,16 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await expect(tomorrowEditor).toHaveCount(0);
 
     // 8. Verify past days ALLOW editing allergens from the dashboard (with Finalisieren also restricted to today)!
-    // Navigate from tomorrow back to today, then to yesterday
+    // Switch to Home to navigate from tomorrow back to today, then to yesterday
+    await homeBtn.click();
     const prevDayBtn2 = embeddedPage.locator('.kiosk-header-nav-btn.left');
     await prevDayBtn2.click(); // back to today
     await page.waitForTimeout(200);
     await prevDayBtn2.click(); // to yesterday
     await page.waitForTimeout(300);
 
-    // On yesterday (past day):
+    // Switch to TODOs on yesterday (past day):
+    await todosBtn.click();
     // - Regular tasks cannot be checked (no checkbox)
     await expect(todosCard.locator('[data-testid="task-checkbox-yellow_bin_put_out"]')).toHaveCount(0);
 
@@ -642,7 +695,7 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await expect(yesterdayEditor).toHaveCount(0);
   });
 
-  test('opens Allergies button in a modal popover with group allergies, and allows going back via back arrow on top or clicking outside', async ({ request, page }) => {
+  test('displays Allergies view inline between header and footer when selected in bottom navigation', async ({ request, page }) => {
     // 1. Reset database state
     const resetRes = await request.post('/api/test/reset');
     expect(resetRes.ok()).toBeTruthy();
@@ -697,64 +750,55 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     const embeddedPage = page.locator('.kiosk-tablet-page.embedded');
     await expect(embeddedPage).toBeVisible();
 
-    // Verify main dashboard cards (cook, meal, todos) are visible
+    // Verify main Home cards (cook, meal) are visible and Home is highlighted
+    const homeBtn = embeddedPage.locator('.kiosk-nav-home-btn');
+    await expect(homeBtn).toHaveClass(/active/);
     await expect(embeddedPage.locator('.kiosk-card-cook')).toBeVisible();
     await expect(embeddedPage.locator('.kiosk-card-meal')).toBeVisible();
-    await expect(embeddedPage.locator('.kiosk-card-todos')).toBeVisible();
-
-    // Modal is initially not present
-    const allergiesPopup = page.locator('[data-testid="kiosk-allergies-popup"]');
-    const allergiesOverlay = page.locator('[data-testid="kiosk-allergies-overlay"]');
-    await expect(allergiesPopup).toHaveCount(0);
+    await expect(embeddedPage.locator('[data-testid="kiosk-allergies-section"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="kiosk-allergies-popup"]')).toHaveCount(0);
 
     // 4. Click the Allergies ("Allergien") button in the bottom navigation
     const allergiesBtn = embeddedPage.locator('.kiosk-nav-btn', { hasText: 'Allergien' });
     await expect(allergiesBtn).toBeVisible();
     await allergiesBtn.click();
 
-    // 5. Verify the modal-ish popover/popup appears
-    await expect(allergiesPopup).toBeVisible();
-    await expect(allergiesOverlay).toBeVisible();
+    // 5. Verify Allergies button is highlighted and allergies view is displayed inline between header and footer
+    await expect(allergiesBtn).toHaveClass(/active/);
+    await expect(homeBtn).not.toHaveClass(/active/);
+    await expect(page.locator('[data-testid="kiosk-allergies-popup"]')).toHaveCount(0);
 
-    // Verify header in light mode has light styling (not dark slate background)
-    const popupHeader = allergiesPopup.locator('.kiosk-allergies-popup-header');
-    await expect(popupHeader).toBeVisible();
-    const headerBg = await popupHeader.evaluate((el) => window.getComputedStyle(el).backgroundColor);
-    expect(headerBg).not.toContain('30, 41, 59');
+    const header = embeddedPage.locator('.kiosk-header');
+    const footer = embeddedPage.locator('.kiosk-bottom-nav');
+    const allergiesSection = embeddedPage.locator('[data-testid="kiosk-allergies-section"]');
+    await expect(header).toBeVisible();
+    await expect(footer).toBeVisible();
+    await expect(allergiesSection).toBeVisible();
 
-    // Verify group allergies are displayed inside the popup
-    const allergiesView = allergiesPopup.locator('.kiosk-allergies-view');
+    const headerBox = await header.boundingBox();
+    const sectionBox = await allergiesSection.boundingBox();
+    const footerBox = await footer.boundingBox();
+    expect(headerBox).not.toBeNull();
+    expect(sectionBox).not.toBeNull();
+    expect(footerBox).not.toBeNull();
+    if (headerBox && sectionBox && footerBox) {
+      expect(sectionBox.y).toBeGreaterThanOrEqual(headerBox.y + headerBox.height - 2);
+      expect(sectionBox.y + sectionBox.height).toBeLessThanOrEqual(footerBox.y + 2);
+    }
+
+    // Verify group allergies are displayed inside the inline view
+    const allergiesView = allergiesSection.locator('.kiosk-allergies-view');
     await expect(allergiesView).toBeVisible();
     const group1 = allergiesView.locator('.kiosk-card-allergies-group').first();
     await expect(group1).toBeVisible();
     await expect(group1.locator('.kiosk-allergy-badge', { hasText: 'Milch/Laktose' })).toBeVisible();
 
-    // 6. Verify small "back" arrow on top
-    const backBtn = allergiesPopup.locator('[data-testid="kiosk-allergies-back-btn"]');
-    await expect(backBtn).toBeVisible();
-
-    // 7. Click the small "back" arrow on top to go back
-    await backBtn.click();
-    await expect(allergiesPopup).toHaveCount(0);
-    await expect(allergiesOverlay).toHaveCount(0);
-
-    // Main dashboard cards remain visible
+    // 6. Switch back to Home via bottom nav
+    await homeBtn.click();
+    await expect(homeBtn).toHaveClass(/active/);
+    await expect(allergiesBtn).not.toHaveClass(/active/);
+    await expect(allergiesSection).toHaveCount(0);
     await expect(embeddedPage.locator('.kiosk-card-cook')).toBeVisible();
-
-    // 8. Re-open Allergies popover, and go back by clicking OUTSIDE of the popup (on the backdrop overlay)
-    await allergiesBtn.click();
-    await expect(allergiesPopup).toBeVisible();
-
-    // Click outside of the popup content card (e.g. at top-left corner of the overlay)
-    await allergiesOverlay.click({ position: { x: 10, y: 10 } });
-    await expect(allergiesPopup).toHaveCount(0);
-    await expect(allergiesOverlay).toHaveCount(0);
-
-    // 9. Re-open Allergies popover, and verify pressing Escape also goes back
-    await allergiesBtn.click();
-    await expect(allergiesPopup).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(allergiesPopup).toHaveCount(0);
   });
 
   test('automatically returns to home view after inactivity timeout', async ({ request, page }) => {
@@ -783,19 +827,20 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     const changedDateText = await embeddedPage.locator('.kiosk-header-date').innerText();
     expect(changedDateText).not.toBe(initialDateText);
 
-    // Open allergies modal
+    // Switch to allergies view
     const allergiesBtn = embeddedPage.locator('.kiosk-nav-btn', { hasText: 'Allergien' });
     await allergiesBtn.click();
-    const allergiesPopup = embeddedPage.locator('[data-testid="kiosk-allergies-popup"]');
-    await expect(allergiesPopup).toBeVisible();
+    const allergiesSection = embeddedPage.locator('[data-testid="kiosk-allergies-section"]');
+    await expect(allergiesSection).toBeVisible();
+    await expect(allergiesBtn).toHaveClass(/active/);
 
     // Wait without interacting for the idle timeout to expire
     await page.waitForTimeout(1600);
 
-    // Verify allergies modal has automatically closed
-    await expect(allergiesPopup).toHaveCount(0);
-
-    // Verify date has automatically reset back to initial (today)
+    // Verify view has automatically returned to Home and date reset back to initial (today)
+    await expect(allergiesSection).toHaveCount(0);
+    await expect(embeddedPage.locator('.kiosk-nav-home-btn')).toHaveClass(/active/);
+    await expect(embeddedPage.locator('.kiosk-card-cook')).toBeVisible();
     const resetDateText = await embeddedPage.locator('.kiosk-header-date').innerText();
     expect(resetDateText).toBe(initialDateText);
   });
@@ -851,11 +896,11 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     const prevDateText = await embeddedPage.locator('.kiosk-header-date').innerText();
     expect(prevDateText).not.toBe(initialDateText);
 
-    // Open allergies modal
+    // Switch to allergies view
     const allergiesBtn = embeddedPage.locator('.kiosk-nav-btn', { hasText: 'Allergien' });
     await allergiesBtn.click();
-    const allergiesPopup = embeddedPage.locator('[data-testid="kiosk-allergies-popup"]');
-    await expect(allergiesPopup).toBeVisible();
+    const allergiesSection = embeddedPage.locator('[data-testid="kiosk-allergies-section"]');
+    await expect(allergiesSection).toBeVisible();
 
     // 5. Trigger Fully screensaver exit programmatically
     const exitResult = await page.evaluate(() => {
@@ -873,8 +918,9 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     expect(exitResult.calls).not.toContain('stopDaydream');
     expect(exitResult.calls).not.toContain('bringToForeground');
 
-    // 6. Verify view resets back to today and popups close
-    await expect(allergiesPopup).toHaveCount(0);
+    // 6. Verify view resets back to Home on today
+    await expect(allergiesSection).toHaveCount(0);
+    await expect(embeddedPage.locator('.kiosk-nav-home-btn')).toHaveClass(/active/);
     const currentDateText = await embeddedPage.locator('.kiosk-header-date').innerText();
     expect(currentDateText).toBe(initialDateText);
 
@@ -1074,24 +1120,26 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     });
     await expect(dateHeader).toHaveText(initialDateText);
 
-    // 9. Verify swiping is disabled when an overlay / modal is open (e.g. Feedback Modal)
-    const feedbackNavBtn = page.getByTestId('kiosk-feedback-btn');
-    await expect(feedbackNavBtn).toBeVisible();
-    await feedbackNavBtn.click();
-    const feedbackModalCloseBtn = page.getByTestId('feedback-modal-close-btn');
-    await expect(feedbackModalCloseBtn).toBeVisible();
+    // 9. Verify date changing (arrows + swiping) is disabled on ALL non-home tabs (TODOs, Allergies, Feedback)
+    for (const nonHomeBtnTestId of ['kiosk-todos-btn', 'kiosk-allergies-btn', 'kiosk-feedback-btn']) {
+      const navBtn = page.getByTestId(nonHomeBtnTestId);
+      await expect(navBtn).toBeVisible();
+      await navBtn.click();
+      await expect(navBtn).toHaveClass(/active/);
+      await expect(page.locator('.kiosk-header-nav-btn')).toHaveCount(0);
 
-    // Try swiping while modal is open
-    await simulatePointerSwipe(300, 200, 100, 200, 'touch');
-    await page.waitForTimeout(300);
-    expect(await dateHeader.innerText()).toBe(initialDateText);
+      await page.waitForTimeout(450);
+      await simulatePointerSwipe(300, 200, 100, 200, 'touch');
+      await page.waitForTimeout(250);
+      expect(await dateHeader.innerText()).toBe(initialDateText);
+    }
 
-    // Close feedback modal
-    await feedbackModalCloseBtn.click();
-    await expect(feedbackModalCloseBtn).toHaveCount(0);
+    // Switch back to Home tab — arrows return
+    await page.getByTestId('kiosk-home-btn').click();
+    await expect(page.locator('.kiosk-header-nav-btn')).toHaveCount(2);
   });
 
-  test('shows Vesper star-like badge next to the day on Wednesday and Thursday and hides it on other days', async ({ page }) => {
+  test('does not show Vesper badge on any day of the week including Wednesday and Thursday', async ({ page }) => {
     await page.addInitScript(() => {
       localStorage.setItem('token', 'developer@example.com');
     });
@@ -1107,25 +1155,10 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     const nextBtn = embeddedPage.locator('.kiosk-header-nav-btn.right');
     const homeBtn = embeddedPage.locator('.kiosk-nav-home-btn');
 
-    // Test a full week cycle (7 consecutive days)
+    // Test a full week cycle (7 consecutive days) — Vesper badge must never appear
     for (let i = 0; i < 7; i++) {
-      const headerDateText = await dateHeader.locator('.kiosk-header-date-text').innerText();
-      const isWedOrThu =
-        headerDateText.startsWith('Mittwoch') ||
-        headerDateText.startsWith('Donnerstag') ||
-        headerDateText.startsWith('Wednesday') ||
-        headerDateText.startsWith('Thursday');
-
-      const vesperBadge = dateHeader.locator('[data-testid="kiosk-vesper-badge"]');
-
-      if (isWedOrThu) {
-        await expect(vesperBadge).toBeVisible();
-        await expect(vesperBadge).toContainText('Vesper');
-        await expect(vesperBadge.locator('.kiosk-vesper-star-icon')).toBeVisible();
-        await expect(vesperBadge.locator('.kiosk-vesper-star-bg')).toBeVisible();
-      } else {
-        await expect(vesperBadge).toHaveCount(0);
-      }
+      await expect(dateHeader.locator('[data-testid="kiosk-vesper-badge"]')).toHaveCount(0);
+      await expect(dateHeader).not.toContainText('Vesper');
 
       await nextBtn.click();
       await page.waitForTimeout(150);
@@ -1170,6 +1203,10 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     const embeddedPage = page.locator('.kiosk-tablet-page.embedded');
     await expect(embeddedPage).toBeVisible();
 
+    const todosBtn = embeddedPage.getByTestId('kiosk-todos-btn');
+    await todosBtn.click();
+    await expect(todosBtn).toHaveClass(/active/);
+
     const dryerTask = embeddedPage.locator('[data-testid="kiosk-todo-item-start_dryer"]');
     const washerTask = embeddedPage.locator('[data-testid="kiosk-todo-item-start_washer"]');
     const diaperTask = embeddedPage.locator('[data-testid="kiosk-todo-item-change_diaper_bag"]');
@@ -1212,10 +1249,22 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
       'Trockene Wäsche falten und einräumen'
     );
 
-    // Verify composite flow icons are present
-    await expect(dryerTask.locator('.kiosk-todo-icon-composite')).toBeVisible();
-    await expect(washerTask.locator('.kiosk-todo-icon-composite')).toBeVisible();
-    await expect(foldLaundryTask.locator('.kiosk-todo-icon-composite')).toBeVisible();
+    // Verify each laundry/dryer task uses ONLY the single washing machine symbol (no composite flow icons, max 1 symbol per TODO)
+    await expect(dryerTask.locator('.kiosk-todo-icon-composite')).toHaveCount(0);
+    await expect(washerTask.locator('.kiosk-todo-icon-composite')).toHaveCount(0);
+    await expect(foldLaundryTask.locator('.kiosk-todo-icon-composite')).toHaveCount(0);
+
+    await expect(dryerTask.locator('svg.laundry-svg-icon')).toHaveCount(1);
+    await expect(washerTask.locator('svg.laundry-svg-icon')).toHaveCount(1);
+    await expect(foldLaundryTask.locator('svg.laundry-svg-icon')).toHaveCount(1);
+
+    // Every uncompleted TODO item has at most 1 SVG symbol
+    const allTodoItems = embeddedPage.locator('.kiosk-todo-item[data-completed="false"]');
+    const todoCount = await allTodoItems.count();
+    for (let i = 0; i < todoCount; i++) {
+      const svgCount = await allTodoItems.nth(i).locator('svg').count();
+      expect(svgCount).toBeLessThanOrEqual(1);
+    }
 
     // Verify task sort order by orderIndex:
     // 200 (start_dryer) < 300 (fold_laundry) < 400 (start_washer) < 500 (change_diaper_bag)
@@ -1338,11 +1387,10 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     const mealContentOverflow = await mealCardContent.evaluate((el) => window.getComputedStyle(el).overflowY);
     expect(mealContentOverflow).toBe('auto');
 
-    // Todos card has max-height: 50% and internal scrollable list
+    // Switch to TODOs tab and verify Todos card fits between header and footer with internal scrollable list
+    await embeddedPage.getByTestId('kiosk-todos-btn').click();
     const todosCard = embeddedPage.locator('.kiosk-card-todos');
     await expect(todosCard).toBeVisible();
-    const todosMaxHeight = await todosCard.evaluate((el) => window.getComputedStyle(el).maxHeight);
-    expect(todosMaxHeight).not.toBe('none');
 
     const todosList = todosCard.locator('.kiosk-todos-list');
     await expect(todosList).toBeVisible();
@@ -1377,7 +1425,7 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     const saturdayData = await saturdayBriefRes.json();
     expect(saturdayData.tasks_and_info).not.toContain('clean_dishwasher_filter');
 
-    // 2. Open dashboard on today
+    // 2. Open dashboard on today and switch to TODOs tab
     await page.addInitScript(() => {
       localStorage.setItem('token', 'developer@example.com');
     });
@@ -1387,6 +1435,7 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
 
     const embeddedPage = page.locator('.kiosk-tablet-page.embedded');
     await expect(embeddedPage).toBeVisible();
+    await embeddedPage.getByTestId('kiosk-todos-btn').click();
 
     const initialBriefRes = await request.get('/api/dashboard/daily-brief');
     expect(initialBriefRes.ok()).toBeTruthy();

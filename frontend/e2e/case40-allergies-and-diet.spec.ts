@@ -215,10 +215,16 @@ test.describe('Test Case 40: Allergies & Dietary Preferences (Vegetarisch / Vega
     await expect(embeddedPage).toBeVisible();
 
     // Verify bottom navigation bar buttons:
-    // - Home button is icon-only
+    // - Home button is icon-only and active initially
     const homeBtn = embeddedPage.locator('.kiosk-nav-home-btn');
     await expect(homeBtn).toBeVisible();
+    await expect(homeBtn).toHaveClass(/active/);
     await expect(homeBtn.locator('span')).toHaveCount(0);
+
+    // - TODOs button displays TODOs (done/total)
+    const todosBtn = embeddedPage.locator('[data-testid="kiosk-todos-btn"]');
+    await expect(todosBtn).toBeVisible();
+    await expect(todosBtn.locator('span')).toHaveText(/TODOs \(\d+\/\d+\)/);
 
     // - Anleitungen button is icon-only
     const infoPagesBtn = embeddedPage.locator('[data-testid="kiosk-info-pages-btn"]');
@@ -235,17 +241,17 @@ test.describe('Test Case 40: Allergies & Dietary Preferences (Vegetarisch / Vega
     await expect(allergiesBtn).toBeVisible();
     await expect(allergiesBtn.locator('span')).toHaveText('Allergien/Ernährung');
 
-    // 10. Open Allergien/Ernährung popup
+    // 10. Switch to Allergien/Ernährung tab in bottom nav
     await allergiesBtn.click();
-    const allergiesPopup = embeddedPage.locator('[data-testid="kiosk-allergies-popup"]');
-    await expect(allergiesPopup).toBeVisible();
+    await expect(allergiesBtn).toHaveClass(/active/);
+    await expect(homeBtn).not.toHaveClass(/active/);
 
-    // Verify popup header title is "Allergien/Ernährung"
-    const popupTitle = allergiesPopup.locator('.kiosk-allergies-popup-title');
-    await expect(popupTitle).toHaveText('Allergien/Ernährung');
+    const allergiesSection = embeddedPage.locator('[data-testid="kiosk-allergies-section"]');
+    await expect(allergiesSection).toBeVisible();
+    await expect(embeddedPage.locator('.kiosk-header-date')).toBeVisible();
 
-    // 11. Verify Group 1 (Kleine Gruppe) shows Vegan (1) and Milch/Laktose (1)
-    const allergiesView = allergiesPopup.locator('.kiosk-allergies-view');
+    // 11. Verify Group 1 (Kleine Gruppe) shows Vegan (2) and Milch/Laktose (1)
+    const allergiesView = allergiesSection.locator('.kiosk-allergies-view');
     await expect(allergiesView).toBeVisible();
 
     const group1 = allergiesView.locator('.kiosk-card-allergies-group').first();

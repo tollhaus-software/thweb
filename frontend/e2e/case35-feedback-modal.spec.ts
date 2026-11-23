@@ -24,18 +24,20 @@ test.describe('Test Case 35: Dashboard Feedback Modal', () => {
     await expect(feedbackBtn).toBeVisible();
     await expect(feedbackBtn).toHaveAttribute('title', 'Feedback');
 
-    // 6. Click the Feedback button
+    // 6. Click the Feedback button in bottom nav
     await feedbackBtn.click();
+    await expect(feedbackBtn).toHaveClass(/active/);
 
-    // 7. Verify modal appears
-    const modal = page.locator('[data-testid="feedback-modal"]');
-    await expect(modal).toBeVisible();
-    await expect(modal.locator('.feedback-modal-title')).toHaveText('Feedback geben');
+    // 7. Verify inline feedback view appears between header (date) and footer (nav buttons)
+    await expect(embeddedPage.locator('.kiosk-header-date')).toBeVisible();
+    const feedbackView = embeddedPage.locator('[data-testid="kiosk-feedback-view"]');
+    await expect(feedbackView).toBeVisible();
+    await expect(feedbackView.locator('.feedback-modal-title')).toHaveText('Feedback geben');
 
     // 8. Verify the 3 feedback types
-    const improvementBtn = modal.locator('[data-testid="feedback-type-improvement"]');
-    const errorBtn = modal.locator('[data-testid="feedback-type-error"]');
-    const otherBtn = modal.locator('[data-testid="feedback-type-other"]');
+    const improvementBtn = feedbackView.locator('[data-testid="feedback-type-improvement"]');
+    const errorBtn = feedbackView.locator('[data-testid="feedback-type-error"]');
+    const otherBtn = feedbackView.locator('[data-testid="feedback-type-other"]');
 
     await expect(improvementBtn).toBeVisible();
     await expect(errorBtn).toBeVisible();
@@ -50,9 +52,9 @@ test.describe('Test Case 35: Dashboard Feedback Modal', () => {
     await expect(improvementBtn).not.toHaveClass(/active/);
 
     // 9. Verify description field, pre-filled contact email for authenticated user, and submit button disabled state
-    const descInput = modal.locator('[data-testid="feedback-description-input"]');
-    const submitBtn = modal.locator('[data-testid="feedback-submit-btn"]');
-    const contactInput = modal.locator('[data-testid="feedback-contact-input"]');
+    const descInput = feedbackView.locator('[data-testid="feedback-description-input"]');
+    const submitBtn = feedbackView.locator('[data-testid="feedback-submit-btn"]');
+    const contactInput = feedbackView.locator('[data-testid="feedback-contact-input"]');
 
     await expect(descInput).toBeVisible();
     await expect(contactInput).toBeVisible();
@@ -88,7 +90,7 @@ test.describe('Test Case 35: Dashboard Feedback Modal', () => {
     expect(created.contact_name).toBe('developer@example.com');
   });
 
-  test('can cancel and close feedback modal via cancel button and escape key', async ({ page }) => {
+  test('navigates between feedback view and other bottom-nav tabs cleanly', async ({ page }) => {
     await page.addInitScript(() => {
       localStorage.setItem('token', 'developer@example.com');
     });
@@ -97,21 +99,25 @@ test.describe('Test Case 35: Dashboard Feedback Modal', () => {
     await page.waitForLoadState('networkidle');
 
     const feedbackBtn = page.locator('[data-testid="kiosk-feedback-btn"]');
+    const homeBtn = page.locator('[data-testid="kiosk-home-btn"]');
+    const todosBtn = page.locator('[data-testid="kiosk-todos-btn"]');
+
     await feedbackBtn.click();
+    const feedbackView = page.locator('[data-testid="kiosk-feedback-view"]');
+    await expect(feedbackView).toBeVisible();
+    await expect(feedbackBtn).toHaveClass(/active/);
+    await expect(homeBtn).not.toHaveClass(/active/);
 
-    const modal = page.locator('[data-testid="feedback-modal"]');
-    await expect(modal).toBeVisible();
+    // Switch to TODOs tab
+    await todosBtn.click();
+    await expect(feedbackView).not.toBeVisible();
+    await expect(todosBtn).toHaveClass(/active/);
+    await expect(feedbackBtn).not.toHaveClass(/active/);
 
-    // Cancel with Abbrechen button
-    const cancelBtn = modal.locator('[data-testid="feedback-cancel-btn"]');
-    await cancelBtn.click();
-    await expect(modal).not.toBeVisible();
-
-    // Open again and close with ESC key
-    await feedbackBtn.click();
-    await expect(modal).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(modal).not.toBeVisible();
+    // Switch back to Home tab
+    await homeBtn.click();
+    await expect(homeBtn).toHaveClass(/active/);
+    await expect(todosBtn).not.toHaveClass(/active/);
   });
 
   test('does not pre-fill contact name when running in kiosk mode', async ({ page }) => {
@@ -123,11 +129,11 @@ test.describe('Test Case 35: Dashboard Feedback Modal', () => {
     await expect(feedbackBtn).toBeVisible();
     await feedbackBtn.click();
 
-    const modal = page.locator('[data-testid="feedback-modal"]');
-    await expect(modal).toBeVisible();
+    const feedbackView = page.locator('[data-testid="kiosk-feedback-view"]');
+    await expect(feedbackView).toBeVisible();
 
     // Verify contact input is empty in kiosk mode
-    const contactInput = modal.locator('[data-testid="feedback-contact-input"]');
+    const contactInput = feedbackView.locator('[data-testid="feedback-contact-input"]');
     await expect(contactInput).toBeVisible();
     await expect(contactInput).toHaveValue('');
   });
@@ -143,14 +149,14 @@ test.describe('Test Case 35: Dashboard Feedback Modal', () => {
     const feedbackBtn = page.locator('[data-testid="kiosk-feedback-btn"]');
     await feedbackBtn.click();
 
-    const modal = page.locator('[data-testid="feedback-modal"]');
-    await expect(modal).toBeVisible();
+    const feedbackView = page.locator('[data-testid="kiosk-feedback-view"]');
+    await expect(feedbackView).toBeVisible();
 
-    const improvementBtn = modal.locator('[data-testid="feedback-type-improvement"]');
+    const improvementBtn = feedbackView.locator('[data-testid="feedback-type-improvement"]');
     await expect(improvementBtn).toHaveClass(/active/);
     await expect(improvementBtn).toHaveCSS('color', 'rgb(0, 0, 0)');
 
-    const errorBtn = modal.locator('[data-testid="feedback-type-error"]');
+    const errorBtn = feedbackView.locator('[data-testid="feedback-type-error"]');
     await errorBtn.click();
     await expect(errorBtn).toHaveClass(/active/);
     await expect(errorBtn).toHaveCSS('color', 'rgb(0, 0, 0)');

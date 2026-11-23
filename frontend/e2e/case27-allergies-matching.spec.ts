@@ -347,11 +347,11 @@ test.describe('Test Case 27: Allergen & Allergy Matching (MealAllergens Tab & Al
     await expect(empErdnuesseWarning).toContainText('Dessert');
     await expect(empErdnuesseWarning).toHaveCSS('color', 'rgb(69, 26, 3)');
 
-    // Go back from Allergies popup via the small back button on top
-    const backBtn = embeddedPage.locator('[data-testid="kiosk-allergies-back-btn"]');
-    await expect(backBtn).toBeVisible();
-    await backBtn.click();
-    await expect(embeddedPage.locator('[data-testid="kiosk-allergies-popup"]')).toHaveCount(0);
+    // Switch back to Home view via the bottom navigation bar
+    const homeBtn = embeddedPage.getByTestId('kiosk-home-btn');
+    await expect(homeBtn).toBeVisible();
+    await homeBtn.click();
+    await expect(embeddedPage.locator('[data-testid="kiosk-allergies-section"]')).toHaveCount(0);
 
     // 9. Verify editing allergens on a date before child's enrollment start date (yesterday):
     // Child is not yet started on yesterday, so child group warning does not appear.
@@ -403,11 +403,12 @@ test.describe('Test Case 27: Allergen & Allergy Matching (MealAllergens Tab & Al
     await expect(erdnuesseYesterdayWarning).toBeVisible();
     await expect(erdnuesseYesterdayWarning).toContainText('Mitarbeitende');
 
-    // 10. Navigate back to Dashboard -> navigate to yesterday -> open Allergies popover -> verify component abbreviation
+    // 10. Navigate back to Dashboard -> navigate to yesterday -> switch to Allergies tab -> verify component abbreviation
     await dashboardTab.click();
     await expect(dashboardTab).toHaveClass(/active/);
     await navigateDashboardByOffset(diffFromRealToday - 1);
     await toggleAllergiesBtn.click();
+    await expect(toggleAllergiesBtn).toHaveClass(/active/);
     await expect(allergiesView).toBeVisible();
 
     // Verify employee allergy warning abbreviates >16 chars component name
@@ -416,9 +417,8 @@ test.describe('Test Case 27: Allergen & Allergy Matching (MealAllergens Tab & Al
     await expect(empWarningYesterday).toContainText('Käsebrot mit Spe...');
     await expect(empWarningYesterday).toHaveAttribute('title', 'Käsebrot mit Spezialbelag');
 
-    // Go back by clicking outside (on the overlay backdrop)
-    const allergiesOverlay = page.locator('[data-testid="kiosk-allergies-overlay"]');
-    await allergiesOverlay.click({ position: { x: 10, y: 10 } });
-    await expect(page.locator('[data-testid="kiosk-allergies-popup"]')).toHaveCount(0);
+    // Switch back to Home tab via bottom navigation bar
+    await embeddedPage.getByTestId('kiosk-home-btn').click();
+    await expect(page.locator('[data-testid="kiosk-allergies-section"]')).toHaveCount(0);
   });
 });

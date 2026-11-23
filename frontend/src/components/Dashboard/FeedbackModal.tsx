@@ -277,4 +277,222 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
   );
 };
 
+export interface FeedbackPanelProps {
+  embedded?: boolean;
+  token?: string | null;
+  initialType?: FeedbackType;
+  initialDescription?: string;
+}
+
+export const FeedbackPanel: React.FC<FeedbackPanelProps> = ({
+  embedded = false,
+  token = null,
+  initialType,
+  initialDescription,
+}) => {
+  const { user } = useAuth();
+  const [feedbackType, setFeedbackType] = useState<FeedbackType>(initialType || 'Verbesserungsvorschlag');
+  const [description, setDescription] = useState<string>(initialDescription || '');
+  const [contactName, setContactName] = useState<string>(() => {
+    const isKiosk = isKioskMode() || user?.roles?.includes('kiosk') || user?.email?.startsWith('kiosk@');
+    const userEmail = user?.email || (token && token.includes('@') && !token.startsWith('kiosk') ? token : '');
+    return !isKiosk && userEmail ? userEmail : '';
+  });
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [isSuccess, setIsSuccess] = useState<boolean>(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const isKiosk = isKioskMode() || user?.roles?.includes('kiosk') || user?.email?.startsWith('kiosk@');
+    const userEmail = user?.email || (token && token.includes('@') && !token.startsWith('kiosk') ? token : '');
+    const defaultContact = !isKiosk && userEmail ? userEmail : '';
+    setContactName(defaultContact);
+  }, [user, token]);
+
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current) {
+        clearTimeout(resetTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!description.trim()) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'X-App-View': 'dashboard',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const res = await fetch('/api/dashboard/feedback', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          feedback_type: feedbackType,
+          description: description.trim(),
+          contact_name: contactName.trim(),
+        }),
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => '');
+        throw new Error(errorText || `Status ${res.status}`);
+      }
+
+      setIsSubmitting(false);
+      setIsSuccess(true);
+      setDescription('');
+      if (resetTimerRef.current) {
+        clearTimeout(resetTimerRef.current);
+      }
+      resetTimerRef.current = setTimeout(() => {
+        setIsSuccess(false);
+      }, 3000);
+    } catch (err: unknown) {
+      console.error('Failed to submit feedback:', err);
+      setErrorMessage(t('feedbackError'));
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <section
+      className={`kiosk-card kiosk-card-feedback ${embedded ? 'embedded' : ''}`}
+      data-testid="kiosk-feedback-view"
+    >
+      <div className="kiosk-card-header">
+        <MessageSquare size={embedded ? 18 : 22} className="kiosk-card-header-icon" />
+        <span className="feedback-modal-title">{t('feedbackTitle')}</span>
+      </div>
+
+      {isSuccess ? (
+        <div className="feedback-modal-success" data-testid="feedback-modal-success">
+          <CheckCircle2 size={48} className="feedback-modal-success-icon" />
+          <p className="feedback-modal-success-text">{t('feedbackSuccess')}</p>
+        </div>
+      ) : (
+        <form
+          className="feedback-modal-form feedback-inline-form"
+          onSubmit={handleSubmit}
+          data-testid="feedback-form"
+        >
+          {errorMessage && (
+            <div className="feedback-modal-error-banner" data-testid="feedback-modal-error">
+              <AlertTriangle size={18} />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
+          {/* Feedback Type Selector */}
+          <div className="feedback-modal-field">
+            <label className="feedback-modal-label">{t('feedbackType')}</label>
+            <div className="feedback-modal-type-grid" role="radiogroup" aria-label={t('feedbackType')}>
+              <button
+                type="button"
+                className={`feedback-type-btn ${feedbackType === 'Verbesserungsvorschlag' ? 'active' : ''}`}
+                onClick={() => setFeedbackType('Verbesserungsvorschlag')}
+                role="radio"
+                aria-checked={feedbackType === 'Verbesserungsvorschlag'}
+                data-testid="feedback-type-improvement"
+              >
+                <Lightbulb size={16} className="feedback-type-icon improvement" />
+                <span>{t('feedbackTypeImprovement')}</span>
+              </button>
+
+              <button
+                type="button"
+                className={`feedback-type-btn ${feedbackType === 'Fehlermeldung' ? 'active' : ''}`}
+                onClick={() => setFeedbackType('Fehlermeldung')}
+                role="radio"
+                aria-checked={feedbackType === 'Fehlermeldung'}
+                data-testid="feedback-type-error"
+              >
+                <AlertTriangle size={16} className="feedback-type-icon error" />
+                <span>{t('feedbackTypeError')}</span>
+              </button>
+
+              <button
+                type="button"
+                className={`feedback-type-btn ${feedbackType === 'Andere' ? 'active' : ''}`}
+                onClick={() => setFeedbackType('Andere')}
+                role="radio"
+                aria-checked={feedbackType === 'Andere'}
+                data-testid="feedback-type-other"
+              >
+                <MessageSquare size={16} className="feedback-type-icon other" />
+                <span>{t('feedbackTypeOther')}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Description */}
+          <div className="feedback-modal-field">
+            <label htmlFor="feedback-inline-description" className="feedback-modal-label">
+              {t('feedbackDescription')} <span className="required-star">*</span>
+            </label>
+            <textarea
+              id="feedback-inline-description"
+              className="feedback-modal-textarea"
+              rows={embedded ? 4 : 6}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder={t('feedbackDescriptionPlaceholder')}
+              required
+              data-testid="feedback-description-input"
+            />
+          </div>
+
+          {/* Contact Name (Optional) */}
+          <div className="feedback-modal-field">
+            <label htmlFor="feedback-inline-contact-name" className="feedback-modal-label">
+              {t('feedbackContactLabel')}{' '}
+              <span className="feedback-modal-optional-label">({t('optional') || 'optional'})</span>
+            </label>
+            <input
+              id="feedback-inline-contact-name"
+              type="text"
+              className="feedback-modal-input"
+              value={contactName}
+              onChange={(e) => setContactName(e.target.value)}
+              placeholder={t('feedbackContactPlaceholder')}
+              data-testid="feedback-contact-input"
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="feedback-modal-actions">
+            <button
+              type="submit"
+              className="feedback-modal-btn submit"
+              disabled={isSubmitting || !description.trim()}
+              data-testid="feedback-submit-btn"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 size={18} className="feedback-spinner" />
+                  <span>{t('feedbackSending')}</span>
+                </>
+              ) : (
+                <span>{t('feedbackSubmit')}</span>
+              )}
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
+  );
+};
+
 export default FeedbackModal;

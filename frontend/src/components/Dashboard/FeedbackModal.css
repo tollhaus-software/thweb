@@ -103,6 +103,10 @@
   gap: 0.95rem;
 }
 
+.feedback-modal-form.feedback-inline-form {
+  padding: 0;
+}
+
 .feedback-modal-field {
   display: flex;
   flex-direction: column;

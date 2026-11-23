@@ -110,20 +110,21 @@ test.describe('Test Case 38: Dashboard infoPages Grid and Video Guides', () => {
     // 14. Click Home button in bottom nav to return to main dashboard
     const homeBtn = embeddedPage.locator('.kiosk-nav-home-btn');
     await homeBtn.click();
+    await expect(homeBtn).toHaveClass(/active/);
+    await expect(infoPagesBtn).not.toHaveClass(/active/);
 
     // Verify back on main dashboard
     await expect(embeddedPage.locator('.kiosk-card-cook')).toBeVisible();
     await expect(pageView).toHaveCount(0);
     await expect(grid).toHaveCount(0);
 
-    // 15. Re-open Info Pages and use "Home/Zurück" button in header
+    // 15. Re-open Info Pages and verify date header remains at the top and bottom nav switches cleanly
     await infoPagesBtn.click();
+    await expect(infoPagesBtn).toHaveClass(/active/);
+    await expect(embeddedPage.locator('.kiosk-header-date')).toBeVisible();
     await expect(grid).toBeVisible();
 
-    const backToDashboardBtn = embeddedPage.locator('[data-testid="info-pages-back-to-dashboard-btn"]');
-    await expect(backToDashboardBtn).toBeVisible();
-    await backToDashboardBtn.click();
-
+    await homeBtn.click();
     await expect(embeddedPage.locator('.kiosk-card-cook')).toBeVisible();
     await expect(grid).toHaveCount(0);
   });

@@ -45,14 +45,13 @@ export interface InfoPagesViewProps {
   embedded?: boolean;
   activePageId: string | null;
   onSelectPage: (id: string | null) => void;
-  onBackToDashboard: () => void;
+  onBackToDashboard?: () => void;
 }
 
 export const InfoPagesView: React.FC<InfoPagesViewProps> = ({
   embedded = false,
   activePageId,
   onSelectPage,
-  onBackToDashboard,
 }) => {
   const [pages, setPages] = useState<InfoPage[]>(DEFAULT_INFO_PAGES);
 
@@ -131,23 +130,6 @@ export const InfoPagesView: React.FC<InfoPagesViewProps> = ({
 
   return (
     <div className="kiosk-info-pages-container" data-testid="kiosk-info-pages-container">
-      <header className="kiosk-header">
-        <button
-          onClick={onBackToDashboard}
-          className="kiosk-info-page-back-btn"
-          data-testid="info-pages-back-to-dashboard-btn"
-          title={t('home')}
-          aria-label={t('home')}
-        >
-          <ArrowLeft size={embedded ? 18 : 22} />
-          <span>{t('home')}</span>
-        </button>
-
-        <h1 className="kiosk-header-date">{t('infoPages')}</h1>
-
-        <div style={{ width: embedded ? 80 : 120 }} />
-      </header>
-
       <div className="kiosk-info-pages-grid" data-testid="kiosk-info-pages-grid">
         {pages.map((page) => (
           <button
