@@ -5735,6 +5735,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
       <Sidebar
         activeTab={activeTab}
         onSelectTab={handleTabClick}
+        perms={navPerms}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => {
           setSidebarCollapsed((prev) => {
@@ -5895,13 +5896,17 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
             />
           </div>
         </header>
-        <main className={isTableTab ? 'main-table-view' : 'main-scroll-view'}>
+        <main
+          className={isTableTab ? 'main-table-view' : 'main-scroll-view'}
+          aria-hidden={isMobile && isMobileSidebarOpen ? 'true' : undefined}
+        >
           {/* Segmented Control Sub-Tabs (Hybrid bar directly above table/content) */}
           <SegmentedSubNav
             activeTab={activeTab}
             onSelectTab={handleTabClick}
             perms={navPerms}
             currentCategory={currentCategory}
+            sidebarCollapsed={sidebarCollapsed}
           />
 
           {/* Category Landing Page */}

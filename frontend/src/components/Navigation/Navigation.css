@@ -572,6 +572,19 @@ img.desktop-only {
     display: flex !important;
   }
 
+  .accordion-toggle-btn {
+    min-width: 32px;
+    min-height: 28px;
+    padding: 0.25rem 0.4rem;
+    margin: -0.15rem -0.35rem -0.15rem 0;
+    border-radius: 6px;
+  }
+
+  .accordion-toggle-btn:active {
+    background-color: var(--bg-subtle);
+    color: var(--text-h);
+  }
+
   .sidebar-backdrop {
     position: fixed;
     inset: 0;

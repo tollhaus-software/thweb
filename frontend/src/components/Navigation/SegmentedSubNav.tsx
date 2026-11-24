@@ -1,4 +1,5 @@
 import React from 'react';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import {
   type TabId,
   type NavigationCategory,
@@ -13,6 +14,7 @@ export interface SegmentedSubNavProps {
   onSelectTab: (tabId: TabId) => void;
   perms?: UserPermissionsContext;
   currentCategory?: NavigationCategory | string;
+  sidebarCollapsed?: boolean;
   // Backward compatibility props
   canReadFamiliesAll?: boolean;
   canReadMembers?: boolean;
@@ -30,6 +32,7 @@ export const SegmentedSubNav: React.FC<SegmentedSubNavProps> = ({
   onSelectTab,
   perms,
   currentCategory,
+  sidebarCollapsed = false,
   canReadFamiliesAll = false,
   canReadMembers = false,
   canReadJobs = false,
@@ -40,6 +43,14 @@ export const SegmentedSubNav: React.FC<SegmentedSubNavProps> = ({
   hasHygieneWrite = false,
   canReadOverview = false,
 }) => {
+  const isMobile = useIsMobile();
+
+  // When the sidebar navigation list is showing (e.g. expanded on desktop),
+  // it already displays sub-tabs, so do not duplicate them at the top of the page.
+  if (!isMobile && !sidebarCollapsed) {
+    return null;
+  }
+
   const effectiveCategory = (currentCategory || getCategoryForTab(activeTab)) as NavigationCategory;
 
   // Categories that use page-level segmented sub-navigation

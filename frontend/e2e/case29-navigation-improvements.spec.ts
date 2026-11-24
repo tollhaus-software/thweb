@@ -6,7 +6,7 @@ test.describe('Test Case 29: Navigation Improvements, Category Landing Pages, an
     expect(resetRes.ok()).toBeTruthy();
   });
 
-  test('MGA category landing page displays cards with descriptions, reusable subtabs, and clickable breadcrumbs', async ({ page }) => {
+  test('MGA category landing page displays cards with descriptions, sidebar subtabs on desktop, and clickable breadcrumbs', async ({ page }) => {
     await page.addInitScript(() => {
       localStorage.setItem('token', 'developer@example.com');
     });
@@ -14,9 +14,10 @@ test.describe('Test Case 29: Navigation Improvements, Category Landing Pages, an
     await page.goto('/#mga');
     await page.waitForLoadState('networkidle');
 
-    // Verify subtabs bar is rendered at the top of content area
+    // On desktop with the navigation list showing, subtabs are in the sidebar and NOT at the top of the page
     const subtabsBar = page.locator('.subtabs-bar');
-    await expect(subtabsBar).toBeVisible();
+    await expect(subtabsBar).toHaveCount(0);
+    await expect(page.locator('[data-testid="sidebar-subtree-mga"]')).toBeVisible();
 
     // Verify category landing page container is rendered and takes full horizontal width
     const landing = page.locator('[data-testid="category-landing-mga"]');
@@ -187,7 +188,7 @@ test.describe('Test Case 29: Navigation Improvements, Category Landing Pages, an
     await expect(mobileFavicon).toHaveAttribute('src', '/favicon.svg');
   });
 
-  test('desktop displays tabs as sub-items in sidebar with accordion auto-expansion and landing page navigation, while mobile hides them', async ({ page }) => {
+  test('desktop hides top sub-tabs when sidebar shows sub-items, while mobile shows both top sub-tabs and expandable drawer sub-items', async ({ page }) => {
     await page.addInitScript(() => {
       localStorage.setItem('token', 'developer@example.com');
     });
@@ -206,9 +207,9 @@ test.describe('Test Case 29: Navigation Improvements, Category Landing Pages, an
     await expect(mgaSubTree.locator('[data-testid="sidebar-subtab-members"]')).toBeVisible();
     await expect(mgaSubTree.locator('[data-testid="sidebar-subtab-jobs"]')).toBeVisible();
 
-    // Top horizontal tabs bar is ALSO visible
+    // Top horizontal sub-tabs bar is NOT shown on desktop when navigation list is showing
     const subtabsBar = page.locator('.subtabs-bar');
-    await expect(subtabsBar).toBeVisible();
+    await expect(subtabsBar).toHaveCount(0);
 
     // Other multi-item category (e.g. Kochen) is collapsed by default (accordion behavior)
     const kochenSubTree = page.locator('[data-testid="sidebar-subtree-kochen"]');
@@ -218,10 +219,19 @@ test.describe('Test Case 29: Navigation Improvements, Category Landing Pages, an
     await mgaSubTree.locator('[data-testid="sidebar-subtab-parents"]').click();
     await expect(page).toHaveURL(/.*#parents/);
 
-    // In sidebar, Eltern sub-item is active
+    // In sidebar, Eltern sub-item is active, and top sub-tabs bar remains hidden
     await expect(mgaSubTree.locator('[data-testid="sidebar-subtab-parents"]')).toHaveAttribute('data-active', 'true');
-    // Top tab also reflects Eltern active
+    await expect(subtabsBar).toHaveCount(0);
+
+    // Collapsing the desktop sidebar hides sidebar sub-items and shows top sub-tabs; expanding hides top sub-tabs again
+    const collapseSidebarBtn = page.locator('.sidebar-collapse-btn');
+    await collapseSidebarBtn.click();
+    await expect(mgaSubTree).toHaveCount(0);
+    await expect(subtabsBar).toBeVisible();
     await expect(subtabsBar.getByRole('button', { name: 'Eltern(MGA)' })).toHaveAttribute('data-active', 'true');
+    await collapseSidebarBtn.click();
+    await expect(mgaSubTree).toBeVisible();
+    await expect(subtabsBar).toHaveCount(0);
 
     // Requirement 2: Clicking the category header "MGA" navigates to landing page
     const mgaHeader = page.getByRole('button', { name: 'MGA', exact: true });
@@ -235,11 +245,12 @@ test.describe('Test Case 29: Navigation Improvements, Category Landing Pages, an
     await kochenHeader.click();
     await expect(page).toHaveURL(/.*#kochen/);
 
-    // Kochen is now active and auto-expanded, MGA automatically collapsed (accordion)
+    // Kochen is now active and auto-expanded, MGA automatically collapsed (accordion), top sub-tabs hidden
     await expect(kochenSubTree).toBeVisible();
     await expect(kochenSubTree.locator('[data-testid="sidebar-subtab-mealAllergens"]')).toBeVisible();
     await expect(kochenSubTree.locator('[data-testid="sidebar-subtab-mealPlan"]')).toBeVisible();
     await expect(mgaSubTree).toHaveCount(0);
+    await expect(subtabsBar).toHaveCount(0);
 
     // Toggle chevron on MGA manually
     const mgaChevron = page.getByRole('button', { name: 'Toggle MGA subtabs' });
@@ -252,23 +263,42 @@ test.describe('Test Case 29: Navigation Improvements, Category Landing Pages, an
     await mgaChevron.click();
     await expect(mgaSubTree).toHaveCount(0);
 
-    // 2. Mobile viewport (<= 768px): tabs do NOT display as sub-items in menu
+    // 2. Mobile viewport (<= 768px): nav list disappears, so top sub-tabs ARE shown
     await page.setViewportSize({ width: 600, height: 800 });
+    await expect(subtabsBar).toBeVisible();
+    await expect(subtabsBar.getByRole('button', { name: 'Essen/Allergene' })).toBeVisible();
+    await expect(subtabsBar.getByRole('button', { name: 'Essen/Wochenplan' })).toBeVisible();
+
     // Open mobile sidebar drawer
     const hamburgerBtn = page.locator('.sidebar-toggle-btn');
     await hamburgerBtn.click();
     await expect(page.locator('.app-sidebar.mobile-open')).toBeVisible();
 
-    // On mobile, multi-tab categories (MGA, Kochen, PA, Gebühren) do NOT have sub-item trees or chevrons
-    await expect(page.locator('[data-testid="sidebar-subtree-mga"]')).toHaveCount(0);
-    await expect(page.locator('[data-testid="sidebar-subtree-kochen"]')).toHaveCount(0);
+    // On mobile, the active category (Kochen) auto-expands in the drawer while inactive categories start collapsed
+    await expect(kochenSubTree).toBeVisible();
+    await expect(kochenSubTree.locator('[data-testid="sidebar-subtab-mealAllergens"]')).toBeVisible();
+    await expect(kochenSubTree.locator('[data-testid="sidebar-subtab-mealPlan"]')).toBeVisible();
+    await expect(mgaSubTree).toHaveCount(0);
     await expect(page.locator('[data-testid="sidebar-subtree-pa"]')).toHaveCount(0);
     await expect(page.locator('[data-testid="sidebar-subtree-fees"]')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Toggle MGA subtabs' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Toggle Kochen subtabs' })).toHaveCount(0);
+    await expect(mgaChevron).toBeVisible();
+    const kochenChevron = page.getByRole('button', { name: 'Toggle Kochen subtabs' });
+    await expect(kochenChevron).toBeVisible();
 
-    // But category buttons themselves are visible in mobile drawer
-    await expect(page.getByRole('button', { name: 'MGA', exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Kochen', exact: true })).toBeVisible();
+    // Tapping chevron on active category collapses it without closing drawer; tapping MGA chevron expands MGA inline
+    await kochenChevron.click();
+    await expect(kochenSubTree).toHaveCount(0);
+    await expect(page.locator('.app-sidebar.mobile-open')).toBeVisible();
+
+    await mgaChevron.click();
+    await expect(mgaSubTree).toBeVisible();
+    await expect(page.locator('.app-sidebar.mobile-open')).toBeVisible();
+
+    // Tapping a sub-item in the mobile drawer navigates directly and closes the drawer, while top sub-tabs remain visible
+    await mgaSubTree.locator('[data-testid="sidebar-subtab-parents"]').click();
+    await expect(page).toHaveURL(/.*#parents/);
+    await expect(page.locator('.app-sidebar.mobile-open')).toHaveCount(0);
+    await expect(subtabsBar).toBeVisible();
+    await expect(subtabsBar.getByRole('button', { name: 'Eltern(MGA)' })).toHaveAttribute('data-active', 'true');
   });
 });

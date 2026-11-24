@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ChevronDown,
   ChevronRight,
@@ -28,9 +28,12 @@ export interface SidebarProps {
   onToggleCollapse: () => void;
   isMobileOpen: boolean;
   onCloseMobile: () => void;
+  perms?: UserPermissionsContext;
   canReadOverview: boolean;
   canReadFamiliesAll: boolean;
   canReadFees: boolean;
+  canReadFeesAll?: boolean;
+  hasFamily?: boolean;
   canReadMembers: boolean;
   canReadJobs?: boolean;
   canReadEmployees: boolean;
@@ -57,9 +60,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onToggleCollapse,
   isMobileOpen,
   onCloseMobile,
+  perms: permsProp,
   canReadOverview,
   canReadFamiliesAll,
   canReadFees,
+  canReadFeesAll = false,
+  hasFamily,
   canReadMembers,
   canReadJobs = false,
   canReadEmployees,
@@ -81,10 +87,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const isMobile = useIsMobile();
   const currentCategory = getCategoryForTab(activeTab);
 
-  const perms: UserPermissionsContext = {
+  const perms: UserPermissionsContext = permsProp || {
     canReadOverview,
     canReadFamiliesAll,
     canReadFees,
+    canReadFeesAll,
+    hasFamily,
     canReadMembers,
     canReadJobs,
     canReadEmployees,
@@ -109,16 +117,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
     more: true,
   });
 
+  const prevCategoryRef = useRef(currentCategory);
+
   // Automatically expand active category when it changes (Requirement 1: A)
   useEffect(() => {
-    if (currentCategory && expandedOverrides[currentCategory] === false) {
-      setExpandedOverrides((prev) => {
-        const next = { ...prev };
-        delete next[currentCategory];
-        return next;
-      });
+    if (prevCategoryRef.current !== currentCategory) {
+      prevCategoryRef.current = currentCategory;
+      if (currentCategory) {
+        setExpandedOverrides((prev) => {
+          if (prev[currentCategory] === false) {
+            const next = { ...prev };
+            delete next[currentCategory];
+            return next;
+          }
+          return prev;
+        });
+      }
     }
-  }, [currentCategory, expandedOverrides]);
+  }, [currentCategory]);
 
   const isCategoryExpanded = (catId: string, isCatActive: boolean): boolean => {
     if (expandedOverrides[catId] !== undefined) {
@@ -218,8 +234,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           const CatIcon = cat.icon;
           const catLabel = getCategoryLabel(cat);
           const isCatActive = currentCategory === cat.id;
-          const isCollapsible = cat.collapsibleInSidebar || (!isMobile && cat.visibleItems.length > 1);
+          const isCollapsible = Boolean(cat.collapsibleInSidebar || cat.visibleItems.length > 1);
           const isExpanded = isCategoryExpanded(cat.id, isCatActive);
+          const shouldRenderSubTree =
+            !isEffectiveCollapsed &&
+            isExpanded &&
+            (!isMobile || isMobileOpen || isMoreCategory);
 
           return (
             <React.Fragment key={cat.id}>
@@ -262,7 +282,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       )}
                     </div>
 
-                    {!isEffectiveCollapsed && isExpanded && (
+                    {shouldRenderSubTree && (
                       <div className="sidebar-sub-tree" data-testid={`sidebar-subtree-${cat.id}`}>
                         {cat.visibleItems.map((sub) => {
                           const SubIcon = sub.icon;
@@ -275,7 +295,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                               type="button"
                               className={`sidebar-sub-item tab-btn ${isSubActive ? 'active' : ''}`}
                               onClick={() => handleTabClick(sub.id)}
-                              aria-label={cat.id === 'more' ? (sub.accessibleName || subLabel) : `${subLabel} (Menü)`}
+                              aria-label={sub.accessibleName || subLabel}
                               data-active={isSubActive ? 'true' : 'false'}
                               data-testid={`sidebar-subtab-${sub.id}`}
                               title={subLabel}
