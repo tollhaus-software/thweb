@@ -864,21 +864,21 @@ func TestHandleListFamiliesOverview_DateFiltering(t *testing.T) {
 	_, _ = appStore.CreateChildGroupChange(ctx, testUserID, models.ChildGroupChange{Child: childBId, ChangeDate: now.AddDate(-2, 0, 0), TargetGroup: 1})
 	_, _ = appStore.CreateChildGroupChange(ctx, testUserID, models.ChildGroupChange{Child: childBId, ChangeDate: now.AddDate(0, -6, 0), TargetGroup: 0})
 
-	// Family C: New family, child planned to start in 5 months (> 4 months, should be excluded from overview)
+	// Family C: New family, child planned to start in 6 weeks (> 4 weeks, should be excluded from overview)
 	famCId := uuid.New()
 	_ = appStore.UpdateFamilyParents(ctx, testUserID, famCId, []models.Parent{{ID: uuid.New(), FamilyID: famCId, FirstName: "ParentC", LastName: "FamC"}})
 	defer func() { _ = appStore.DeleteFamily(ctx, testUserID, famCId) }()
 	childCId := uuid.New()
 	_ = appStore.UpdateChild(ctx, testUserID, childCId, models.Child{ID: childCId, FamilyID: famCId, FirstName: "ChildC", LastName: "FamC", BirthDate: now.AddDate(-3, 0, 0)})
-	_, _ = appStore.CreateChildGroupChange(ctx, testUserID, models.ChildGroupChange{Child: childCId, ChangeDate: now.AddDate(0, 5, 0), TargetGroup: 1})
+	_, _ = appStore.CreateChildGroupChange(ctx, testUserID, models.ChildGroupChange{Child: childCId, ChangeDate: now.AddDate(0, 0, 42), TargetGroup: 1})
 
-	// Family D: New family, child planned to start in 2 months (<= 4 months, should be included in overview)
+	// Family D: New family, child planned to start in 3 weeks (<= 4 weeks, should be included in overview)
 	famDId := uuid.New()
 	_ = appStore.UpdateFamilyParents(ctx, testUserID, famDId, []models.Parent{{ID: uuid.New(), FamilyID: famDId, FirstName: "ParentD", LastName: "FamD"}})
 	defer func() { _ = appStore.DeleteFamily(ctx, testUserID, famDId) }()
 	childDId := uuid.New()
 	_ = appStore.UpdateChild(ctx, testUserID, childDId, models.Child{ID: childDId, FamilyID: famDId, FirstName: "ChildD", LastName: "FamD", BirthDate: now.AddDate(-3, 0, 0)})
-	_, _ = appStore.CreateChildGroupChange(ctx, testUserID, models.ChildGroupChange{Child: childDId, ChangeDate: now.AddDate(0, 2, 0), TargetGroup: 1})
+	_, _ = appStore.CreateChildGroupChange(ctx, testUserID, models.ChildGroupChange{Child: childDId, ChangeDate: now.AddDate(0, 0, 21), TargetGroup: 1})
 
 	// Family E: Active child enrolled 2 months ago (should be included in overview)
 	famEId := uuid.New()
@@ -928,10 +928,10 @@ func TestHandleListFamiliesOverview_DateFiltering(t *testing.T) {
 		t.Errorf("Family B (child exited 6 months ago) should BE in overview")
 	}
 	if overviewMap[famCId] {
-		t.Errorf("Family C (planned start > 4 months away) should NOT be in overview")
+		t.Errorf("Family C (planned start > 4 weeks away) should NOT be in overview")
 	}
 	if !overviewMap[famDId] {
-		t.Errorf("Family D (planned start <= 4 months away) should BE in overview")
+		t.Errorf("Family D (planned start <= 4 weeks away) should BE in overview")
 	}
 	if !overviewMap[famEId] {
 		t.Errorf("Family E (active child) should BE in overview")
@@ -1370,38 +1370,23 @@ func TestShouldIncludeFamilyInOverview(t *testing.T) {
 		t.Errorf("expected family with active child to be included even if older child exited")
 	}
 
-	// 10. New family: planned start in 5 months (> 4 months) -> excluded
-	// now = 2026-10-28; 4 months is 2027-02-28; 5 months is 2027-03-28
+	// 10. New family: planned start in 29 days (> 4 weeks) -> excluded
+	// now = 2026-10-28; 4 weeks (28 days) is 2026-11-25; 29 days is 2026-11-26
 	if shouldIncludeFamilyInOverview(models.Family{
 		ID: uuid.New(),
 		Children: []models.Child{
 			{
 				ID: uuid.New(),
 				GroupChanges: []models.ChildGroupChange{
-					{ChangeDate: time.Date(2027, 3, 28, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+					{ChangeDate: time.Date(2026, 11, 26, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
 				},
 			},
 		},
 	}, now) {
-		t.Errorf("expected new family with planned start > 4 months away to be excluded")
+		t.Errorf("expected new family with planned start > 4 weeks away to be excluded")
 	}
 
-	// 11. New family: planned start exactly 4 months away (2027-02-28) -> included
-	if !shouldIncludeFamilyInOverview(models.Family{
-		ID: uuid.New(),
-		Children: []models.Child{
-			{
-				ID: uuid.New(),
-				GroupChanges: []models.ChildGroupChange{
-					{ChangeDate: time.Date(2027, 2, 28, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
-				},
-			},
-		},
-	}, now) {
-		t.Errorf("expected new family with planned start exactly 4 months away to be included")
-	}
-
-	// 12. New family: planned start in 4 weeks (2026-11-25) -> included
+	// 11. New family: planned start exactly 4 weeks away (2026-11-25) -> included
 	if !shouldIncludeFamilyInOverview(models.Family{
 		ID: uuid.New(),
 		Children: []models.Child{
@@ -1413,31 +1398,46 @@ func TestShouldIncludeFamilyInOverview(t *testing.T) {
 			},
 		},
 	}, now) {
-		t.Errorf("expected new family with planned start in 4 weeks to be included")
+		t.Errorf("expected new family with planned start exactly 4 weeks away to be included")
 	}
 
-	// 13. New family with 2 children: child 1 planned in 6 months, child 2 planned in 6 weeks -> included
+	// 12. New family: planned start in 2 weeks (2026-11-11) -> included
 	if !shouldIncludeFamilyInOverview(models.Family{
 		ID: uuid.New(),
 		Children: []models.Child{
 			{
 				ID: uuid.New(),
 				GroupChanges: []models.ChildGroupChange{
-					{ChangeDate: time.Date(2027, 4, 28, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+					{ChangeDate: time.Date(2026, 11, 11, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+				},
+			},
+		},
+	}, now) {
+		t.Errorf("expected new family with planned start in 2 weeks to be included")
+	}
+
+	// 13. New family with 2 children: child 1 planned in 8 weeks, child 2 planned in 3 weeks -> included
+	if !shouldIncludeFamilyInOverview(models.Family{
+		ID: uuid.New(),
+		Children: []models.Child{
+			{
+				ID: uuid.New(),
+				GroupChanges: []models.ChildGroupChange{
+					{ChangeDate: time.Date(2026, 12, 23, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
 				},
 			},
 			{
 				ID: uuid.New(),
 				GroupChanges: []models.ChildGroupChange{
-					{ChangeDate: time.Date(2026, 12, 9, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+					{ChangeDate: time.Date(2026, 11, 18, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
 				},
 			},
 		},
 	}, now) {
-		t.Errorf("expected new family with earliest child starting in 6 weeks to be included")
+		t.Errorf("expected new family with earliest child starting in 3 weeks to be included")
 	}
 
-	// 14. Former family (left > 1 year ago) with new child planned in 6 weeks -> included
+	// 14. Former family (left > 1 year ago) with new child planned in 3 weeks -> included
 	if !shouldIncludeFamilyInOverview(models.Family{
 		ID: uuid.New(),
 		Children: []models.Child{
@@ -1451,15 +1451,15 @@ func TestShouldIncludeFamilyInOverview(t *testing.T) {
 			{
 				ID: uuid.New(),
 				GroupChanges: []models.ChildGroupChange{
-					{ChangeDate: time.Date(2026, 12, 9, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+					{ChangeDate: time.Date(2026, 11, 18, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
 				},
 			},
 		},
 	}, now) {
-		t.Errorf("expected family with new child starting in 6 weeks to be included")
+		t.Errorf("expected family with new child starting in 3 weeks to be included")
 	}
 
-	// 15. Former family (left > 1 year ago) with new child planned in 5 months -> excluded
+	// 15. Former family (left > 1 year ago) with new child planned in 6 weeks -> excluded
 	if shouldIncludeFamilyInOverview(models.Family{
 		ID: uuid.New(),
 		Children: []models.Child{
@@ -1473,12 +1473,12 @@ func TestShouldIncludeFamilyInOverview(t *testing.T) {
 			{
 				ID: uuid.New(),
 				GroupChanges: []models.ChildGroupChange{
-					{ChangeDate: time.Date(2027, 3, 28, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
+					{ChangeDate: time.Date(2026, 12, 9, 0, 0, 0, 0, time.UTC), TargetGroup: 1},
 				},
 			},
 		},
 	}, now) {
-		t.Errorf("expected family with child exited > 1 year ago and new child starting > 4 months away to be excluded")
+		t.Errorf("expected family with child exited > 1 year ago and new child starting > 4 weeks away to be excluded")
 	}
 }
 

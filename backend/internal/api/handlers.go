@@ -492,7 +492,7 @@ func parseDateOnly(t time.Time) time.Time {
 // Rules:
 // 1. If child is actively enrolled in a group today (TargetGroup > 0): included.
 // 2. If child exited (TargetGroup == 0 after prior enrollment): included if exit date was within the last 1 year.
-// 3. For children that have not started yet: only show them if they start in the next 4 months.
+// 3. For children that have not started yet: only show them if they start in the next 4 weeks (28 days).
 // 4. If no group start date is configured yet (no changes or no TargetGroup > 0): excluded.
 func shouldIncludeChildInOverview(c models.Child, now time.Time) bool {
 	changes := make([]models.ChildGroupChange, len(c.GroupChanges))
@@ -551,8 +551,8 @@ func shouldIncludeChildInOverview(c models.Child, now time.Time) bool {
 	}
 
 	if hasPlannedStart {
-		fourMonthsBefore := earliestPlannedStart.AddDate(0, -4, 0)
-		return !today.Before(fourMonthsBefore)
+		fourWeeksBefore := earliestPlannedStart.AddDate(0, 0, -28)
+		return !today.Before(fourWeeksBefore)
 	}
 
 	return false

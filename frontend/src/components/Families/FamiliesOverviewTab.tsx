@@ -90,8 +90,16 @@ export const FamiliesOverviewTab: React.FC<FamiliesOverviewTabProps> = ({
             const groupStatus = getChildGroupStatus(item);
             const displayGroup = groupStatus.groupLabel;
             const hasGroupBadge = isMobile && groupStatus.currentGroup !== null && displayGroup && displayGroup !== '-';
+            const isGroupMode = overviewGroupBy === 'group';
+            const nameStyle: React.CSSProperties | undefined =
+              isIndented || isGroupMode
+                ? {
+                    ...(isIndented ? { paddingLeft: '1.25rem', display: 'inline-block' } : {}),
+                    ...(isGroupMode ? { fontWeight: 700 } : {}),
+                  }
+                : undefined;
             return (
-              <span className="overview-person-name" style={isIndented ? { paddingLeft: '1.25rem', display: 'inline-block' } : undefined}>
+              <span className="overview-person-name" style={nameStyle}>
                 {displayName}
                 {hasGroupBadge && (
                   <span className="overview-child-group-badge">
@@ -401,7 +409,7 @@ export const FamiliesOverviewTab: React.FC<FamiliesOverviewTabProps> = ({
         },
       },
     ],
-    [canReadFamiliesAll, currentFamilyId, canSelfService, onOpenSelfService, onJumpToChild, onJumpToParent, isMobile, getChildGroupStatus]
+    [canReadFamiliesAll, currentFamilyId, canSelfService, onOpenSelfService, onJumpToChild, onJumpToParent, isMobile, getChildGroupStatus, overviewGroupBy]
   );
 
   return (

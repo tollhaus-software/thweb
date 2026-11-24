@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Test Case 24: Families Overview Date-based Filtering', () => {
-  test('filters out families whose children left > 1 year ago and new families planned > 12 weeks ahead', async ({ request, page }) => {
+  test('filters out families whose children left > 1 year ago and new families planned > 4 weeks ahead', async ({ request, page }) => {
     // 1. Reset DB
     const resetRes = await request.post('/api/test/reset');
     expect(resetRes.ok()).toBeTruthy();
@@ -20,8 +20,8 @@ test.describe('Test Case 24: Families Overview Date-based Filtering', () => {
     const date500DaysAgo = formatDate(addDays(now, -500));
     const date180DaysAgo = formatDate(addDays(now, -180));
     const date300DaysAgo = formatDate(addDays(now, -300));
-    const date140DaysFuture = formatDate(addDays(now, 140)); // 20 weeks
-    const date28DaysFuture = formatDate(addDays(now, 28));   // 4 weeks
+    const date42DaysFuture = formatDate(addDays(now, 42)); // 6 weeks (> 4 weeks)
+    const date21DaysFuture = formatDate(addDays(now, 21)); // 3 weeks (<= 4 weeks)
     const date60DaysAgo = formatDate(addDays(now, -60));
 
     // Seed Family 1: Exited > 1 year ago (should NOT be in familiesOverview)
@@ -70,7 +70,7 @@ test.describe('Test Case 24: Families Overview Date-based Filtering', () => {
       data: { child_id: child2Id, change_date: date180DaysAgo, target_group: 0 },
     });
 
-    // Seed Family 3: New family, planned start in 20 weeks (> 12 weeks, should NOT be in familiesOverview)
+    // Seed Family 3: New family, planned start in 6 weeks (> 4 weeks, should NOT be in familiesOverview)
     const fam3Res = await request.post('/api/families', {
       headers: { Authorization: 'Bearer developer@example.com' },
       data: {
@@ -86,10 +86,10 @@ test.describe('Test Case 24: Families Overview Date-based Filtering', () => {
     });
     await request.post(`/api/children/${child3Id}/group_changes`, {
       headers: { Authorization: 'Bearer developer@example.com' },
-      data: { child_id: child3Id, change_date: date140DaysFuture, target_group: 1 },
+      data: { child_id: child3Id, change_date: date42DaysFuture, target_group: 1 },
     });
 
-    // Seed Family 4: New family, planned start in 4 weeks (<= 12 weeks, SHOULD be in familiesOverview)
+    // Seed Family 4: New family, planned start in 3 weeks (<= 4 weeks, SHOULD be in familiesOverview)
     const fam4Res = await request.post('/api/families', {
       headers: { Authorization: 'Bearer developer@example.com' },
       data: {
@@ -105,7 +105,7 @@ test.describe('Test Case 24: Families Overview Date-based Filtering', () => {
     });
     await request.post(`/api/children/${child4Id}/group_changes`, {
       headers: { Authorization: 'Bearer developer@example.com' },
-      data: { child_id: child4Id, change_date: date28DaysFuture, target_group: 1 },
+      data: { child_id: child4Id, change_date: date21DaysFuture, target_group: 1 },
     });
 
     // Seed Family 5: Active child (enrolled 60 days ago, SHOULD be in familiesOverview)
@@ -192,10 +192,10 @@ test.describe('Test Case 24: Families Overview Date-based Filtering', () => {
     // Family 2 (Neunexited: left 6 months ago) MUST be visible
     await expect(page.locator('tr.family-group-row', { hasText: 'Neunexited' })).toBeVisible();
 
-    // Family 3 (Weitgeplant: planned in 20 weeks) MUST NOT be visible
+    // Family 3 (Weitgeplant: planned in 6 weeks) MUST NOT be visible
     await expect(page.locator('tr.family-group-row', { hasText: 'Weitgeplant' })).toHaveCount(0);
 
-    // Family 4 (Baldstart: planned in 4 weeks) MUST be visible
+    // Family 4 (Baldstart: planned in 3 weeks) MUST be visible
     await expect(page.locator('tr.family-group-row', { hasText: 'Baldstart' })).toBeVisible();
 
     // Family 5 (Aktivfam: currently active) MUST be visible

@@ -396,9 +396,16 @@ test.describe('Test Case 8: Adaptive Card Layout for familiesOverview Tab', () =
     // 5. Resize to desktop viewport (> 768px)
     await page.setViewportSize({ width: 1200, height: 800 });
 
-    // On desktop in "Nach Gruppe": parent rows are visible as table rows
+    // On desktop in "Nach Gruppe": parent rows are visible as table rows, and child names are bold
+    const desktopMiaGroupRow = page.locator('tr.overview-child-row', { hasText: 'Mia Schmidt' });
+    await expect(desktopMiaGroupRow).toBeVisible();
+    const miaGroupWeight = await desktopMiaGroupRow.locator('.overview-person-name').evaluate((el) => parseInt(getComputedStyle(el).fontWeight, 10));
+    expect(miaGroupWeight).toBeGreaterThanOrEqual(700);
+
     const desktopHansRow = page.locator('tr.overview-parent-row', { hasText: 'Hans Schmidt' });
     await expect(desktopHansRow).toBeVisible();
+    const hansGroupWeight = await desktopHansRow.locator('.overview-person-name').evaluate((el) => parseInt(getComputedStyle(el).fontWeight, 10));
+    expect(miaGroupWeight).toBeGreaterThan(hansGroupWeight);
     const desktopHansDisplay = await desktopHansRow.evaluate((el) => getComputedStyle(el).display);
     expect(desktopHansDisplay).toBe('table-row');
 
