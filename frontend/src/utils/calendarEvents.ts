@@ -58,9 +58,9 @@ export const EVENT_TYPE_LIST: EventTypeMeta[] = [
     labelEn: 'Tollhaus Closed',
     shortDe: 'Schließzeit',
     shortEn: 'Closed',
-    color: '#334155',
-    bgColor: '#e2e8f0',
-    borderColor: '#94a3b8',
+    color: '#0f172a',
+    bgColor: '#92cddc',
+    borderColor: '#5baec4',
   },
   {
     type: 'schliesszeit_halbtags',
@@ -70,9 +70,9 @@ export const EVENT_TYPE_LIST: EventTypeMeta[] = [
     labelEn: 'Half-Day Closing',
     shortDe: 'Schließzeit (½)',
     shortEn: 'Half-Day Closed',
-    color: '#475569',
-    bgColor: '#f1f5f9',
-    borderColor: '#94a3b8',
+    color: '#0f172a',
+    bgColor: '#b8dfe9',
+    borderColor: '#7bc0d2',
   },
   {
     type: 'ferien',
@@ -82,9 +82,9 @@ export const EVENT_TYPE_LIST: EventTypeMeta[] = [
     labelEn: 'School Holidays',
     shortDe: 'Ferien',
     shortEn: 'Holidays',
-    color: '#9f1239',
-    bgColor: '#ffe4e6',
-    borderColor: '#fda4af',
+    color: '#3f1d1d',
+    bgColor: '#e5b8b7',
+    borderColor: '#c98e8d',
   },
   {
     type: 'paedagogischer_tag',
@@ -94,9 +94,9 @@ export const EVENT_TYPE_LIST: EventTypeMeta[] = [
     labelEn: 'Pedagogical Day',
     shortDe: 'Päd. Tag',
     shortEn: 'Ped. Day',
-    color: '#0f766e',
-    bgColor: '#ccfbf1',
-    borderColor: '#5eead4',
+    color: '#0f172a',
+    bgColor: '#92cddc',
+    borderColor: '#5baec4',
   },
   {
     type: 'teamausflug',
@@ -106,9 +106,9 @@ export const EVENT_TYPE_LIST: EventTypeMeta[] = [
     labelEn: 'Team Outing',
     shortDe: 'Teamausflug',
     shortEn: 'Team Outing',
-    color: '#0369a1',
-    bgColor: '#e0f2fe',
-    borderColor: '#7dd3fc',
+    color: '#1e293b',
+    bgColor: '#dce6f1',
+    borderColor: '#a6bfd9',
   },
   {
     type: 'ea_kleine_gruppe',
@@ -118,9 +118,9 @@ export const EVENT_TYPE_LIST: EventTypeMeta[] = [
     labelEn: "Parents' Evening (Small Group)",
     shortDe: 'EA Kleine Gr.',
     shortEn: 'PE Small Gr.',
-    color: '#1d4ed8',
-    bgColor: '#dbeafe',
-    borderColor: '#93c5fd',
+    color: '#1e2e10',
+    bgColor: '#d6e3bc',
+    borderColor: '#a8c07a',
   },
   {
     type: 'ea_grosse_gruppe',
@@ -130,9 +130,9 @@ export const EVENT_TYPE_LIST: EventTypeMeta[] = [
     labelEn: "Parents' Evening (Large Group)",
     shortDe: 'EA Große Gr.',
     shortEn: 'PE Large Gr.',
-    color: '#6d28d9',
-    bgColor: '#ede9fe',
-    borderColor: '#c4b5fd',
+    color: '#251b33',
+    bgColor: '#ccc0d9',
+    borderColor: '#a693bd',
   },
   {
     type: 'ea_hort',
@@ -142,9 +142,9 @@ export const EVENT_TYPE_LIST: EventTypeMeta[] = [
     labelEn: "Parents' Evening (Hort)",
     shortDe: 'EA Hort',
     shortEn: 'PE Hort',
-    color: '#15803d',
-    bgColor: '#dcfce7',
-    borderColor: '#86efac',
+    color: '#ffffff',
+    bgColor: '#748c42',
+    borderColor: '#5c7033',
   },
   {
     type: 'ea_gesamt',
@@ -154,9 +154,9 @@ export const EVENT_TYPE_LIST: EventTypeMeta[] = [
     labelEn: "General Parents' Evening",
     shortDe: 'EA Gesamt',
     shortEn: 'PE All',
-    color: '#991b1b',
-    bgColor: '#fee2e2',
-    borderColor: '#fca5a5',
+    color: '#ffffff',
+    bgColor: '#c0504d',
+    borderColor: '#9e3c39',
   },
   {
     type: 'ea_gesamt_and_mgv',
@@ -166,9 +166,9 @@ export const EVENT_TYPE_LIST: EventTypeMeta[] = [
     labelEn: "General Parents' Evening & AGM",
     shortDe: 'EA Gesamt & MGV',
     shortEn: 'PE All & AGM',
-    color: '#991b1b',
-    bgColor: '#fee2e2',
-    borderColor: '#f87171',
+    color: '#ffffff',
+    bgColor: '#c0504d',
+    borderColor: '#9e3c39',
   },
   {
     type: 'putz_we',
@@ -178,9 +178,9 @@ export const EVENT_TYPE_LIST: EventTypeMeta[] = [
     labelEn: 'Cleaning Weekend',
     shortDe: 'Putz-WE',
     shortEn: 'Clean WE',
-    color: '#92400e',
-    bgColor: '#fef3c7',
-    borderColor: '#fcd34d',
+    color: '#1f2937',
+    bgColor: '#ffff00',
+    borderColor: '#d4b106',
   },
   {
     type: 'bau_we',
@@ -190,9 +190,9 @@ export const EVENT_TYPE_LIST: EventTypeMeta[] = [
     labelEn: 'Construction Weekend',
     shortDe: 'Bau-WE',
     shortEn: 'Build WE',
-    color: '#92400e',
-    bgColor: '#fef3c7',
-    borderColor: '#fcd34d',
+    color: '#1f2937',
+    bgColor: '#ffff00',
+    borderColor: '#d4b106',
   },
   {
     type: 'garten_we',
@@ -202,9 +202,9 @@ export const EVENT_TYPE_LIST: EventTypeMeta[] = [
     labelEn: 'Garden Weekend',
     shortDe: 'Garten-WE',
     shortEn: 'Garden WE',
-    color: '#3f6212',
-    bgColor: '#ecfccb',
-    borderColor: '#bef264',
+    color: '#1f2937',
+    bgColor: '#ffff00',
+    borderColor: '#d4b106',
   },
   {
     type: 'laternenfest',
@@ -214,9 +214,9 @@ export const EVENT_TYPE_LIST: EventTypeMeta[] = [
     labelEn: 'Lantern Festival',
     shortDe: 'Laternenfest',
     shortEn: 'Lantern Fest',
-    color: '#9a3412',
-    bgColor: '#ffedd5',
-    borderColor: '#fdba74',
+    color: '#1f2937',
+    bgColor: '#ffff00',
+    borderColor: '#d4b106',
   },
   {
     type: 'weihnachtsfeier',
@@ -226,9 +226,9 @@ export const EVENT_TYPE_LIST: EventTypeMeta[] = [
     labelEn: 'Christmas Party',
     shortDe: 'Weihnachtsfeier',
     shortEn: 'Xmas Party',
-    color: '#9f1239',
-    bgColor: '#ffe4e6',
-    borderColor: '#fda4af',
+    color: '#1f2937',
+    bgColor: '#ffff00',
+    borderColor: '#d4b106',
   },
   {
     type: 'sommerfest',
@@ -238,9 +238,9 @@ export const EVENT_TYPE_LIST: EventTypeMeta[] = [
     labelEn: 'Summer Festival',
     shortDe: 'Sommerfest',
     shortEn: 'Summer Fest',
-    color: '#854d0e',
-    bgColor: '#fef9c3',
-    borderColor: '#fde047',
+    color: '#1f2937',
+    bgColor: '#ffff00',
+    borderColor: '#d4b106',
   },
   {
     type: 'custom',
@@ -250,9 +250,9 @@ export const EVENT_TYPE_LIST: EventTypeMeta[] = [
     labelEn: 'Custom (own title)',
     shortDe: 'Sonstiges',
     shortEn: 'Custom',
-    color: '#3730a3',
-    bgColor: '#e0e7ff',
-    borderColor: '#a5b4fc',
+    color: '#1f2937',
+    bgColor: '#ffff00',
+    borderColor: '#d4b106',
   },
 ];
 
@@ -366,8 +366,8 @@ export function getWeek7Days(monday: Date): Date[] {
 export function format7DayWeekRange(monday: Date): string {
   const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6);
   const fmt = (d: Date) =>
-    `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.`;
-  return `${fmt(monday)} – ${fmt(sunday)}${sunday.getFullYear()}`;
+    `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
+  return `${fmt(monday)} – ${fmt(sunday)}`;
 }
 
 export function doesCalendarEventMatchSearch(ev: CalendarEvent, query: string): boolean {
@@ -388,10 +388,11 @@ export function getDayEventsBgClass(dayEvents: CalendarEvent[]): string {
     (e) =>
       e.event_type === 'schliesszeit' ||
       e.event_type === 'schliesszeit_halbtags' ||
-      e.event_type === 'paedagogischer_tag' ||
-      e.event_type === 'teamausflug'
+      e.event_type === 'paedagogischer_tag'
   );
   if (hasClosing) return 'bg-closing';
+  const hasTeamausflug = dayEvents.some((e) => e.event_type === 'teamausflug');
+  if (hasTeamausflug) return 'bg-teamausflug';
   const hasFerien = dayEvents.some((e) => e.event_type === 'ferien');
   if (hasFerien) return 'bg-ferien';
   return 'bg-default';
@@ -465,8 +466,13 @@ export function validateImportPreviewRow(
 
   if (!isValidCalendarEventType(et)) {
     errors.push(`${t('eventsImportErrType') || 'Unbekannter Typ'}: "${et || '–'}"`);
-  } else if (et === 'custom' && !title) {
-    errors.push(t('eventsImportErrCustomTitle') || 'Titel ist bei Typ "custom" erforderlich');
+  } else {
+    if (et === 'custom' && !title) {
+      errors.push(t('eventsImportErrCustomTitle') || 'Titel ist bei Typ "custom" erforderlich');
+    }
+    if (doesEventExpectSpecificTime(et) && isValidIsoDate(sd) && isValidIsoDate(ed) && ed !== sd) {
+      errors.push(t('eventsImportErrMultiDayNotAllowed') || 'Dieser Termintyp darf nicht mehrtägig sein');
+    }
   }
 
   if (st && !TIME_HHMM_RE.test(st)) {

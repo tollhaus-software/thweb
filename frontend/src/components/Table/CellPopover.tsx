@@ -166,8 +166,8 @@ export const CellPopover: React.FC<CellPopoverProps> = ({
       if (!target || !document.contains(target)) {
         return;
       }
-      // Do not close CellPopover if the user clicked inside an easy-edit dropdown
-      if ((target as Element)?.closest?.('.easy-edit-calendar-dropdown, .easy-edit-select-dropdown')) {
+      // Do not close CellPopover if the user clicked inside an easy-edit dropdown or a sibling popover on top
+      if ((target as Element)?.closest?.('.easy-edit-calendar-dropdown, .easy-edit-select-dropdown, .event-detail-popover')) {
         return;
       }
       const el = getTargetEl();

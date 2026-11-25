@@ -21,7 +21,8 @@ func isValidationErr(err error) bool {
 	return strings.Contains(msg, "invalid") ||
 		strings.Contains(msg, "must be") ||
 		strings.Contains(msg, "required") ||
-		strings.Contains(msg, "cannot be set")
+		strings.Contains(msg, "cannot be set") ||
+		strings.Contains(msg, "cannot be multi-day")
 }
 
 func (s *Server) broadcastCalendarEventsUpdated(action string, id string) {

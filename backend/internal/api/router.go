@@ -169,7 +169,7 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		// Calendar Events CRUD & Import
 		r.With(auth.RequirePermission("events.all.read")).Get("/api/events", server.HandleListCalendarEvents)
 		r.With(auth.RequirePermission("events.all.write")).Post("/api/events", server.HandleCreateCalendarEvent)
-		r.With(auth.RequirePermission("events.all.write")).Post("/api/events/import", server.HandleImportCalendarEvents)
+		r.With(auth.RequirePermission("events.all.import")).Post("/api/events/import", server.HandleImportCalendarEvents)
 		r.With(auth.RequirePermission("events.all.write")).Put("/api/events/{id}", server.HandleUpdateCalendarEvent)
 		r.With(auth.RequirePermission("events.all.write")).Delete("/api/events/{id}", server.HandleDeleteCalendarEvent)
 

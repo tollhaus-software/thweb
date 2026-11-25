@@ -55,6 +55,7 @@ export const SegmentedSubNav: React.FC<SegmentedSubNavProps> = ({
 
   // Categories that use page-level segmented sub-navigation
   if (
+    effectiveCategory !== 'events' &&
     effectiveCategory !== 'mga' &&
     effectiveCategory !== 'kochen' &&
     effectiveCategory !== 'pa' &&

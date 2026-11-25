@@ -1,35 +1,38 @@
-import React, { useState } from 'react';
-import { CalendarDays, ChefHat, Calendar, ChevronDown, ChevronUp, type LucideIcon } from 'lucide-react';
+import React from 'react';
+import { CalendarDays, ArrowRight } from 'lucide-react';
 import { t } from '../../utils/i18n';
 import { daysUntil } from '../../utils/hygieneMessage';
-import { formatUpcomingEventText, type UpcomingEvent } from '../../utils/upcomingEvents';
+import { formatUpcomingEventParts, type UpcomingEvent } from '../../utils/upcomingEvents';
 
 export interface UpcomingEventsCardProps {
   events: UpcomingEvent[];
   today: Date;
+  onNavigateToCalendar?: () => void;
+  onSelectEvent?: (event: UpcomingEvent) => void;
 }
 
-const INITIAL_VISIBLE_COUNT = 4;
+const MAX_VISIBLE_COUNT = 3;
 
-const EVENT_TYPE_ICONS: Record<string, LucideIcon> = {
-  cooking_duty: ChefHat,
-};
-
-export const UpcomingEventsCard: React.FC<UpcomingEventsCardProps> = ({ events, today }) => {
-  const [expanded, setExpanded] = useState<boolean>(false);
-
+export const UpcomingEventsCard: React.FC<UpcomingEventsCardProps> = ({
+  events,
+  today,
+  onNavigateToCalendar,
+  onSelectEvent,
+}) => {
   if (!events || events.length === 0) {
     return null;
   }
 
-  const hasOverflow = events.length > INITIAL_VISIBLE_COUNT;
-  const visibleEvents = hasOverflow && !expanded ? events.slice(0, INITIAL_VISIBLE_COUNT) : events;
+  const visibleEvents = events.slice(0, MAX_VISIBLE_COUNT);
+  const toCalendarLabel = t('upcomingEventsToCalendar') || 'Zum Kalender';
 
-  const expandLabel = (t('upcomingEventsShowMore') || 'Alle {count} Termine anzeigen').replace(
-    '{count}',
-    String(events.length)
-  );
-  const collapseLabel = t('upcomingEventsShowLess') || 'Weniger anzeigen';
+  const handleEventClick = (event: UpcomingEvent) => {
+    if (onSelectEvent) {
+      onSelectEvent(event);
+    } else if (onNavigateToCalendar) {
+      onNavigateToCalendar();
+    }
+  };
 
   return (
     <section
@@ -45,10 +48,9 @@ export const UpcomingEventsCard: React.FC<UpcomingEventsCardProps> = ({ events, 
       <div className="main-page-card-body">
         <ul className="main-page-events-list" data-testid="main-page-upcoming-events-list">
           {visibleEvents.map((event, idx) => {
-            const Icon = EVENT_TYPE_ICONS[event.type] || Calendar;
             const diff = daysUntil(event.date, today);
             const isTodayOrOngoing = diff <= 0;
-            const text = formatUpcomingEventText(event, today);
+            const { header, title } = formatUpcomingEventParts(event, today);
             const itemTestId =
               event.type === 'calendar_event' && event.event_type
                 ? `main-page-event-item-${event.event_type}`
@@ -57,30 +59,37 @@ export const UpcomingEventsCard: React.FC<UpcomingEventsCardProps> = ({ events, 
             return (
               <li
                 key={event.id || `${event.type}-${event.date}-${idx}`}
-                className={`main-page-event-item${isTodayOrOngoing ? ' is-today' : ''}`}
+                className={`main-page-event-item is-clickable${isTodayOrOngoing ? ' is-today' : ''}`}
                 data-testid={itemTestId}
                 data-event-type={event.event_type || event.type}
                 data-event-date={event.date}
+                data-event-id={event.id || ''}
+                role="button"
+                tabIndex={0}
+                onClick={() => handleEventClick(event)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleEventClick(event);
+                  }
+                }}
               >
-                <span className="main-page-event-icon-wrapper" aria-hidden="true">
-                  <Icon size={18} className="main-page-event-item-icon" />
-                </span>
-                <span className="main-page-event-text">{text}</span>
+                <span className="main-page-event-date-header">{header}</span>
+                <span className="main-page-event-text">{title}</span>
               </li>
             );
           })}
         </ul>
 
-        {hasOverflow && (
+        {onNavigateToCalendar && (
           <button
             type="button"
             className="main-page-events-expand-btn"
-            onClick={() => setExpanded((prev) => !prev)}
-            aria-expanded={expanded}
-            data-testid="main-page-upcoming-events-expand-btn"
+            onClick={onNavigateToCalendar}
+            data-testid="main-page-upcoming-events-calendar-btn"
           >
-            {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            <span>{expanded ? collapseLabel : expandLabel}</span>
+            <span>{toCalendarLabel}</span>
+            <ArrowRight size={16} />
           </button>
         )}
       </div>

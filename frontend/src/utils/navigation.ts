@@ -16,6 +16,7 @@ import {
   ShieldAlert,
   Calendar,
   CalendarDays,
+  Upload,
   Activity,
   Home,
   FileText,
@@ -25,6 +26,7 @@ import { t } from './i18n';
 export type TabId =
   | 'main'
   | 'events'
+  | 'eventsImport'
   | 'familiesOverview'
   | 'families'
   | 'parents'
@@ -52,6 +54,7 @@ export type NavigationCategory = 'main' | 'events' | 'families' | 'mga' | 'fees'
 export interface UserPermissionsContext {
   canReadOverview: boolean;
   canReadEvents?: boolean;
+  canImportEvents?: boolean;
   canReadFamiliesAll: boolean;
   canReadFees: boolean;
   canReadFeesAll?: boolean;
@@ -136,6 +139,16 @@ export const NAVIGATION_CATEGORIES: NavCategory[] = [
         defaultDescription: 'Kita-Kalender, Schließzeiten, Elternabende und Feste.',
         icon: CalendarDays,
         isVisible: (ctx) => Boolean(ctx.canReadEvents),
+      },
+      {
+        id: 'eventsImport',
+        labelKey: 'subtabEventsImport',
+        defaultLabel: 'TSV Import',
+        accessibleName: 'TSV Import',
+        descriptionKey: 'subtabDescEventsImport',
+        defaultDescription: 'Termine per TSV-Tabelle und KI-Prompt in den Kalender importieren.',
+        icon: Upload,
+        isVisible: (ctx) => Boolean(ctx.canImportEvents),
       },
     ],
   },
@@ -454,8 +467,8 @@ export const categoryHasLandingPage = (
   catId: NavigationCategory | string,
   perms: UserPermissionsContext
 ): boolean => {
-  // fees and pa categories land directly on their primary page and use subtabs
-  if (catId === 'fees' || catId === 'pa') return false;
+  // events, fees and pa categories land directly on their primary page and use subtabs
+  if (catId === 'events' || catId === 'fees' || catId === 'pa') return false;
   const visible = getVisibleSubTabsForCategory(catId, perms);
   return visible.length > 1;
 };

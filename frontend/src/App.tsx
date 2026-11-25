@@ -26,6 +26,7 @@ import { MealPlanTab } from './components/MealPlan/MealPlanTab';
 import { MealPlanPrintView } from './components/MealPlan/MealPlanPrintView';
 import { MealAllergensTab } from './components/MealAllergens/MealAllergensTab';
 import { EventsTab } from './components/Events/EventsTab';
+import { EventsImportTab } from './components/Events/EventsImportTab';
 import { getCalendarEventDisplayTitle } from './utils/calendarEvents';
 import { PersonalHygieneTab } from './components/Hygiene/PersonalHygieneTab';
 import { HygieneDocumentTab } from './components/Hygiene/HygieneDocumentTab';
@@ -1217,7 +1218,8 @@ const ALL_AVAILABLE_PERMISSIONS = [
   'volunteers.absences.read',
   'volunteers.absences.write',
   'events.all.read',
-  'events.all.write'
+  'events.all.write',
+  'events.all.import'
 ];
 
 interface AdminViewProps {
@@ -1863,7 +1865,8 @@ const Dashboard: React.FC = () => {
   const canReadJobRoles = hasPermission('job.role_assignment.read') || hasPermission('job.role_assignment.write');
   const canWriteJobRoles = hasPermission('job.role_assignment.write');
   const canReadVolunteerAbsences = hasPermission('volunteers.absences.read') || hasPermission('volunteers.absences.write');
-  const canReadEvents = hasPermission('events.all.read') || hasPermission('events.all.write');
+  const canReadEvents = hasPermission('events.all.read') || hasPermission('events.all.write') || hasPermission('events.all.import');
+  const canImportEvents = hasPermission('events.all.import');
   const canSelfService = hasPermission('families.self.selfservice') && Boolean(user?.family_id);
 
   const openSelfService = React.useCallback((parent?: any) => {
@@ -1951,6 +1954,7 @@ const Dashboard: React.FC = () => {
   const navPerms: UserPermissionsContext = React.useMemo(() => ({
     canReadOverview,
     canReadEvents,
+    canImportEvents,
     canReadFamiliesAll,
     canReadFees,
     canReadFeesAll,
@@ -1973,6 +1977,7 @@ const Dashboard: React.FC = () => {
   }), [
     canReadOverview,
     canReadEvents,
+    canImportEvents,
     canReadFamiliesAll,
     canReadFees,
     canReadFeesAll,
@@ -2006,6 +2011,7 @@ const Dashboard: React.FC = () => {
     const initialPerms: UserPermissionsContext = {
       canReadOverview,
       canReadEvents,
+      canImportEvents,
       canReadFamiliesAll,
       canReadFees,
       canReadFeesAll,
@@ -2038,6 +2044,7 @@ const Dashboard: React.FC = () => {
     if (
       (hash === 'main' && isMainPageActiveInitial) ||
       (hash === 'events' && canReadEvents) ||
+      (hash === 'eventsImport' && canImportEvents) ||
       (hash === 'familiesOverview' && canReadOverview) ||
       (hash === 'families' && canReadFamiliesAll) ||
       (hash === 'parents' && canReadFamiliesAll) ||
@@ -2069,6 +2076,7 @@ const Dashboard: React.FC = () => {
     if (
       (saved === 'main' && isMainPageActiveInitial) ||
       (saved === 'events' && canReadEvents) ||
+      (saved === 'eventsImport' && canImportEvents) ||
       (saved === 'familiesOverview' && canReadOverview) ||
       (saved === 'families' && canReadFamiliesAll) ||
       (saved === 'parents' && canReadFamiliesAll) ||
@@ -2208,6 +2216,16 @@ const Dashboard: React.FC = () => {
       } else if (canReadFamiliesAll) {
         fallback = 'families';
       }
+    } else if (activeTab === 'eventsImport' && !canImportEvents) {
+      if (canReadEvents) {
+        fallback = 'events';
+      } else if (canReadOverview) {
+        fallback = 'familiesOverview';
+      } else if (canReadFees) {
+        fallback = 'childcareFees';
+      } else if (canReadFamiliesAll) {
+        fallback = 'families';
+      }
     } else if (activeTab === 'mealPlan' && !canViewMealPlan) {
       if (canReadOverview) {
         fallback = 'familiesOverview';
@@ -2250,7 +2268,7 @@ const Dashboard: React.FC = () => {
       localStorage.setItem('thweb_active_tab', fallback);
       window.location.hash = fallback;
     }
-  }, [activeTab, canReadEvents, canReadFamiliesAll, canReadOverview, canReadFees, canReadFeesAll, canReadMembers, canReadJobs, canReadEmployees, canReadVolunteerAbsences, canViewMealPlan, canReadMealAllergens, canManageHygiene, canAccessPersonalHygiene, hasPermission, navPerms, isMainPageActive]);
+  }, [activeTab, canReadEvents, canImportEvents, canReadFamiliesAll, canReadOverview, canReadFees, canReadFeesAll, canReadMembers, canReadJobs, canReadEmployees, canReadVolunteerAbsences, canViewMealPlan, canReadMealAllergens, canManageHygiene, canAccessPersonalHygiene, hasPermission, navPerms, isMainPageActive]);
 
   // Navigation & Highlighting state (Patterns 2 & 3)
   const [highlightTarget, setHighlightTarget] = React.useState<{ id: string; key: number } | null>(null);
@@ -2385,7 +2403,10 @@ const Dashboard: React.FC = () => {
     setHighlightTarget(null);
     setActiveTab(tab);
     localStorage.setItem('thweb_active_tab', tab);
-    window.location.hash = tab;
+    const currentHashBase = window.location.hash.replace('#', '').split('?')[0];
+    if (currentHashBase !== tab) {
+      window.location.hash = tab;
+    }
   }, []);
 
   // Audit states
@@ -5835,6 +5856,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
         canReadOverview={canReadOverview}
         canReadEvents={canReadEvents}
+        canImportEvents={canImportEvents}
         canReadFamiliesAll={canReadFamiliesAll}
         canReadFees={canReadFees}
         canReadMembers={canReadMembers}
@@ -6116,7 +6138,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
             );
           };
 
-          return !isLandingActive && activeTab !== 'main' && activeTab !== 'childcareFees' && activeTab !== 'childcareFeesAll' && activeTab !== 'audit' && activeTab !== 'admin' && activeTab !== 'kiosk' && activeTab !== 'dashboard' && activeTab !== 'mealPlan' && activeTab !== 'mealAllergens' && activeTab !== 'hygieneDocument' && activeTab !== 'kochenHygiene' && activeTab !== 'volunteerAbsences' && (
+          return !isLandingActive && activeTab !== 'main' && activeTab !== 'events' && activeTab !== 'eventsImport' && activeTab !== 'childcareFees' && activeTab !== 'childcareFeesAll' && activeTab !== 'audit' && activeTab !== 'admin' && activeTab !== 'kiosk' && activeTab !== 'dashboard' && activeTab !== 'mealPlan' && activeTab !== 'mealAllergens' && activeTab !== 'hygieneDocument' && activeTab !== 'kochenHygiene' && activeTab !== 'volunteerAbsences' && (
             (activeTab === 'families' || activeTab === 'parents' || activeTab === 'children') ? (
               <div className="mga-controls-container">
                 {/* Row 1: Search, Sort, Filter, Zoom (desktop), and Impfstatus (desktop far right) */}
@@ -7068,6 +7090,8 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
               <VolunteerAbsencesTab />
             ) : activeTab === 'events' && canReadEvents ? (
               <EventsTab />
+            ) : activeTab === 'eventsImport' && canImportEvents ? (
+              <EventsImportTab />
             ) : activeTab === 'admin' && canManageUsers ? (
               <AdminView onOpenSimulator={() => setSimulatorModalOpen(true)} />
             ) : activeTab === 'activity' && canViewActivity ? (

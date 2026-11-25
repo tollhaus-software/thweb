@@ -31,6 +31,7 @@ export interface SidebarProps {
   perms?: UserPermissionsContext;
   canReadOverview: boolean;
   canReadEvents?: boolean;
+  canImportEvents?: boolean;
   canReadFamiliesAll: boolean;
   canReadFees: boolean;
   canReadFeesAll?: boolean;
@@ -64,6 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   perms: permsProp,
   canReadOverview,
   canReadEvents = false,
+  canImportEvents = false,
   canReadFamiliesAll,
   canReadFees,
   canReadFeesAll = false,
@@ -92,6 +94,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const perms: UserPermissionsContext = permsProp || {
     canReadOverview,
     canReadEvents,
+    canImportEvents,
     canReadFamiliesAll,
     canReadFees,
     canReadFeesAll,

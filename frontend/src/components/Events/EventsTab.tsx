@@ -1,27 +1,70 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useRealtime, type RealtimeMessage } from '../../hooks/useRealtime';
 import { parseDateKey } from '../../utils/mealPlan';
 import { type CalendarEvent } from '../../utils/calendarEvents';
 import { EventsCalendarView } from './EventsCalendarView';
-import { EventsDayView } from './EventsDayView';
 import { EventFormModal } from './EventFormModal';
-import { EventsImportModal } from './EventsImportModal';
 import './Events.css';
+
+function parseEventsHashParams(): { date?: string; highlight?: string } {
+  if (typeof window === 'undefined') return {};
+  const raw = window.location.hash.replace(/^#/, '');
+  const qIdx = raw.indexOf('?');
+  if (qIdx === -1) return {};
+  const params = new URLSearchParams(raw.slice(qIdx + 1));
+  return {
+    date: params.get('date') || undefined,
+    highlight: params.get('highlight') || undefined,
+  };
+}
 
 export const EventsTab: React.FC = () => {
   const { hasPermission } = useAuth();
   const canWrite = hasPermission('events.all.write');
 
-  const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
-  const [anchorDate, setAnchorDate] = useState<Date>(() => new Date());
+  const [anchorDate, setAnchorDate] = useState<Date>(() => {
+    const { date } = parseEventsHashParams();
+    if (date) {
+      const parsed = parseDateKey(date);
+      if (!isNaN(parsed.getTime())) return parsed;
+    }
+    return new Date();
+  });
+  const [highlightedEventId, setHighlightedEventId] = useState<string | null>(() => {
+    return parseEventsHashParams().highlight || null;
+  });
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
 
   const [formModalOpen, setFormModalOpen] = useState<boolean>(false);
   const [formInitialDate, setFormInitialDate] = useState<string | undefined>(undefined);
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+  const [popoverAnchorEl, setPopoverAnchorEl] = useState<HTMLElement | null>(null);
 
-  const [importModalOpen, setImportModalOpen] = useState<boolean>(false);
+  useEffect(() => {
+    const handleHashChange = () => {
+      const { date, highlight } = parseEventsHashParams();
+      if (date) {
+        const parsed = parseDateKey(date);
+        if (!isNaN(parsed.getTime())) {
+          setAnchorDate(parsed);
+        }
+      }
+      if (highlight) {
+        setHighlightedEventId(highlight);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  useEffect(() => {
+    if (!highlightedEventId) return;
+    const timer = setTimeout(() => {
+      setHighlightedEventId(null);
+    }, 4500);
+    return () => clearTimeout(timer);
+  }, [highlightedEventId]);
 
   const handleRealtimeMessage = useCallback((msg: RealtimeMessage) => {
     if (msg.type === 'CALENDAR_EVENTS_UPDATED' || msg.type === 'DATA_REFRESH') {
@@ -31,77 +74,59 @@ export const EventsTab: React.FC = () => {
 
   useRealtime(handleRealtimeMessage);
 
-  const handleSelectDate = useCallback((dateKey: string) => {
-    setAnchorDate(parseDateKey(dateKey));
-    setSelectedDateKey(dateKey);
-  }, []);
-
-  const handleBackToCalendar = useCallback(() => {
-    setSelectedDateKey(null);
-    setRefreshTrigger((prev) => prev + 1);
-  }, []);
-
-  const handleOpenCreateModal = useCallback((defaultDate?: string) => {
+  const handleOpenCreateModal = useCallback((defaultDate?: string, anchorEl?: HTMLElement | null) => {
+    if (!canWrite) return;
     setEditingEvent(null);
     setFormInitialDate(defaultDate);
+    setPopoverAnchorEl(anchorEl || null);
     setFormModalOpen(true);
-  }, []);
+  }, [canWrite]);
 
-  const handleOpenEditModal = useCallback((ev: CalendarEvent) => {
+  const handleOpenEventPopover = useCallback((ev: CalendarEvent, anchorEl?: HTMLElement | null) => {
     setEditingEvent(ev);
     setFormInitialDate(ev.start_date);
+    setPopoverAnchorEl(anchorEl || null);
     setFormModalOpen(true);
   }, []);
 
   const handleEventSaved = useCallback(() => {
     setFormModalOpen(false);
     setEditingEvent(null);
+    setPopoverAnchorEl(null);
     setRefreshTrigger((prev) => prev + 1);
   }, []);
 
-  const handleImported = useCallback(() => {
+  const handleEventDeleted = useCallback(() => {
+    setFormModalOpen(false);
+    setEditingEvent(null);
+    setPopoverAnchorEl(null);
     setRefreshTrigger((prev) => prev + 1);
   }, []);
 
   return (
     <div className="events-tab" data-testid="events-tab">
-      {selectedDateKey ? (
-        <EventsDayView
-          dateKey={selectedDateKey}
-          canWrite={canWrite}
-          refreshTrigger={refreshTrigger}
-          onBack={handleBackToCalendar}
-          onChangeDate={handleSelectDate}
-          onOpenCreateForDate={handleOpenCreateModal}
-          onOpenEditEvent={handleOpenEditModal}
-          onEventDeleted={() => setRefreshTrigger((prev) => prev + 1)}
-        />
-      ) : (
-        <EventsCalendarView
-          initialDate={anchorDate}
-          refreshTrigger={refreshTrigger}
-          canWrite={canWrite}
-          onSelectDate={handleSelectDate}
-          onOpenCreateModal={handleOpenCreateModal}
-          onOpenImportModal={() => setImportModalOpen(true)}
-        />
-      )}
+      <EventsCalendarView
+        initialDate={anchorDate}
+        highlightedEventId={highlightedEventId}
+        refreshTrigger={refreshTrigger}
+        canWrite={canWrite}
+        onOpenCreateModal={handleOpenCreateModal}
+        onOpenEvent={handleOpenEventPopover}
+      />
 
       <EventFormModal
         isOpen={formModalOpen}
         initialDate={formInitialDate}
         editingEvent={editingEvent}
+        canWrite={canWrite}
+        anchorEl={popoverAnchorEl}
         onClose={() => {
           setFormModalOpen(false);
           setEditingEvent(null);
+          setPopoverAnchorEl(null);
         }}
         onSaved={handleEventSaved}
-      />
-
-      <EventsImportModal
-        isOpen={importModalOpen}
-        onClose={() => setImportModalOpen(false)}
-        onImported={handleImported}
+        onDeleted={handleEventDeleted}
       />
     </div>
   );

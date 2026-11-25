@@ -1,4 +1,4 @@
-import { CURRENT_LOCALE, formatDisplayDate, t, type Locale } from './i18n';
+import { CURRENT_LOCALE, formatDisplayDate, type Locale } from './i18n';
 import { daysUntil } from './hygieneMessage';
 import { parseDateKey } from './mealPlan';
 import {
@@ -37,33 +37,30 @@ export function formatWeekdayWithDate(dateStr: string, locale: Locale = CURRENT_
 }
 
 /**
- * Formats an upcoming personal event for display in the Start Page events box:
- * - Today (diff === 0): "Heute (<dd.mm.yyyy>) Kochdienst."
- * - Tomorrow (diff === 1): "Kochdienst: <weekday, dd.mm.yyyy> (morgen)"
- * - Day after tomorrow (diff === 2): "Kochdienst: <weekday, dd.mm.yyyy> (übermorgen)"
- * - 3+ days out: "Kochdienst: <weekday, dd.mm.yyyy>"
+ * Formats an upcoming event into a two-line display structure for the Start Page:
+ * - header: "Heute", "Morgen (<weekday>, <dd.mm.yyyy>)", or "<weekday>, <dd.mm.yyyy>" (with optional time or multi-day range)
+ * - title: The event name (e.g. "Kochdienst" or "Elternabend Kleine Gruppe")
  */
-export function formatUpcomingEventText(
+export function formatUpcomingEventParts(
   event: UpcomingEvent,
   today: Date = new Date(),
   locale: Locale = CURRENT_LOCALE
-): string {
+): { header: string; title: string } {
   const diff = daysUntil(event.date, today);
   const shortDate = formatDisplayDate(event.date);
   const weekdayDate = formatWeekdayWithDate(event.date, locale);
+  const todayWord = locale === 'en' ? 'Today' : 'Heute';
+  const tomorrowWord = locale === 'en' ? 'Tomorrow' : 'Morgen';
 
   if (event.type === 'cooking_duty') {
-    if (diff === 0) {
-      return (t('upcomingCookingDutyToday') || 'Heute ({date}) Kochdienst.').replace('{date}', shortDate);
+    const title = locale === 'en' ? 'Cooking duty' : 'Kochdienst';
+    if (diff <= 0) {
+      return { header: todayWord, title };
     }
-    let suffix = '';
     if (diff === 1) {
-      suffix = ` (${t('tomorrowLower') || 'morgen'})`;
-    } else if (diff === 2) {
-      suffix = ` (${t('dayAfterTomorrowLower') || 'übermorgen'})`;
+      return { header: `${tomorrowWord} (${weekdayDate})`, title };
     }
-    const prefix = t('nextCookingDutyPrefix') || 'Kochdienst:';
-    return `${prefix} ${weekdayDate}${suffix}`;
+    return { header: weekdayDate, title };
   }
 
   if (event.type === 'calendar_event') {
@@ -80,41 +77,39 @@ export function formatUpcomingEventText(
     if (isMultiDay && event.end_date) {
       const endShort = formatDisplayDate(event.end_date);
       if (diff <= 0) {
-        const ongoingPrefix = t('upcomingEventOngoingPrefix') || (locale === 'en' ? 'Ongoing' : 'Aktuell');
-        return `${ongoingPrefix} (${shortDate} – ${endShort}): ${label}`;
+        return { header: `${todayWord} (${shortDate} – ${endShort})`, title: label };
       }
-      let suffix = '';
       if (diff === 1) {
-        suffix = ` (${t('tomorrowLower') || 'morgen'})`;
-      } else if (diff === 2) {
-        suffix = ` (${t('dayAfterTomorrowLower') || 'übermorgen'})`;
+        return { header: `${tomorrowWord} (${weekdayDate} – ${endShort})`, title: label };
       }
-      return `${label}: ${weekdayDate} – ${endShort}${suffix}`;
+      return { header: `${weekdayDate} – ${endShort}`, title: label };
     }
 
-    if (diff === 0) {
-      const todayWord = locale === 'en' ? 'Today' : 'Heute';
-      return `${todayWord} (${shortDate}${timeStr ? `, ${timeStr}` : ''}): ${label}`;
+    const timeSuffix = timeStr ? `, ${timeStr}` : '';
+    if (diff <= 0) {
+      return { header: `${todayWord}${timeSuffix}`, title: label };
     }
-    let suffix = '';
     if (diff === 1) {
-      suffix = ` (${t('tomorrowLower') || 'morgen'})`;
-    } else if (diff === 2) {
-      suffix = ` (${t('dayAfterTomorrowLower') || 'übermorgen'})`;
+      return { header: `${tomorrowWord} (${weekdayDate})${timeSuffix}`, title: label };
     }
-    return `${label}: ${weekdayDate}${timeStr ? `, ${timeStr}` : ''}${suffix}`;
+    return { header: `${weekdayDate}${timeSuffix}`, title: label };
   }
 
-  // Extensible fallback for future event types
   const label = event.title || event.type;
-  if (diff === 0) {
-    return locale === 'en' ? `Today (${shortDate}) ${label}.` : `Heute (${shortDate}) ${label}.`;
+  if (diff <= 0) {
+    return { header: todayWord, title: label };
   }
-  let suffix = '';
   if (diff === 1) {
-    suffix = ` (${t('tomorrowLower') || 'morgen'})`;
-  } else if (diff === 2) {
-    suffix = ` (${t('dayAfterTomorrowLower') || 'übermorgen'})`;
+    return { header: `${tomorrowWord} (${weekdayDate})`, title: label };
   }
-  return `${label}: ${weekdayDate}${suffix}`;
+  return { header: weekdayDate, title: label };
+}
+
+export function formatUpcomingEventText(
+  event: UpcomingEvent,
+  today: Date = new Date(),
+  locale: Locale = CURRENT_LOCALE
+): string {
+  const { header, title } = formatUpcomingEventParts(event, today, locale);
+  return `${header}: ${title}`;
 }

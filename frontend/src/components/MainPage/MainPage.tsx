@@ -495,9 +495,31 @@ export const MainPage: React.FC<MainPageProps> = ({
       </section>
     ) : null;
 
+  const handleSelectUpcomingEvent = useCallback(
+    (event: UpcomingEvent) => {
+      if (event.type === 'cooking_duty' && canViewMealPlan) {
+        onNavigate('mealPlan');
+        return;
+      }
+      const params = new URLSearchParams();
+      if (event.date) params.set('date', event.date);
+      if (event.id) params.set('highlight', event.id);
+      const query = params.toString();
+      window.location.hash = query ? `events?${query}` : 'events';
+      onNavigate('events');
+    },
+    [canViewMealPlan, onNavigate]
+  );
+
   const upcomingEventsCardElement =
     upcomingEvents.length > 0 ? (
-      <UpcomingEventsCard key="upcoming-events" events={upcomingEvents} today={todayObj} />
+      <UpcomingEventsCard
+        key="upcoming-events"
+        events={upcomingEvents}
+        today={todayObj}
+        onNavigateToCalendar={() => onNavigate('events')}
+        onSelectEvent={handleSelectUpcomingEvent}
+      />
     ) : null;
 
   const foodCardElement = (

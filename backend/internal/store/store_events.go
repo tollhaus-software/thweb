@@ -66,6 +66,9 @@ func normalizeAndValidateCalendarEvent(ev *models.CalendarEvent) error {
 	if endDate.Before(startDate) {
 		return fmt.Errorf("end_date must be on or after start_date")
 	}
+	if models.CalendarEventTypesExpectingSpecificTime[ev.EventType] && ev.EndDate != ev.StartDate {
+		return fmt.Errorf("event_type %s cannot be multi-day (end_date must equal start_date)", ev.EventType)
+	}
 
 	startTime, err := normalizeTimePtr(ev.StartTime)
 	if err != nil {

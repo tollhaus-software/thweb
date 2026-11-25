@@ -249,7 +249,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (perm === 'volunteers.absences.read' && user.effective_permissions.includes('volunteers.absences.write')) {
       return true;
     }
-    if (perm === 'events.all.read' && user.effective_permissions.includes('events.all.write')) {
+    if (
+      perm === 'events.all.read' &&
+      (user.effective_permissions.includes('events.all.write') || user.effective_permissions.includes('events.all.import'))
+    ) {
       return true;
     }
     if (

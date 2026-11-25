@@ -49,7 +49,7 @@ func TestCalendarEvents_CRUD_Import_And_UpcomingFiltering(t *testing.T) {
 	r.Get("/api/me/upcoming-events", server.HandleGetMyUpcomingEvents)
 	r.With(auth.RequirePermission("events.all.read")).Get("/api/events", server.HandleListCalendarEvents)
 	r.With(auth.RequirePermission("events.all.write")).Post("/api/events", server.HandleCreateCalendarEvent)
-	r.With(auth.RequirePermission("events.all.write")).Post("/api/events/import", server.HandleImportCalendarEvents)
+	r.With(auth.RequirePermission("events.all.import")).Post("/api/events/import", server.HandleImportCalendarEvents)
 	r.With(auth.RequirePermission("events.all.write")).Put("/api/events/{id}", server.HandleUpdateCalendarEvent)
 	r.With(auth.RequirePermission("events.all.write")).Delete("/api/events/{id}", server.HandleDeleteCalendarEvent)
 
@@ -66,9 +66,15 @@ func TestCalendarEvents_CRUD_Import_And_UpcomingFiltering(t *testing.T) {
 	uWriter := &models.UserWithPermissions{
 		ID:                   uuid.New(),
 		Email:                fmt.Sprintf("writer-events-%s@example.com", uuid.New().String()[:8]),
-		EffectivePermissions: []string{"events.all.write"},
+		EffectivePermissions: []string{"events.all.write", "events.all.import"},
 	}
 	uWriter.EnsureImpliedPermissions()
+	uWriterNoImport := &models.UserWithPermissions{
+		ID:                   uuid.New(),
+		Email:                "writer-no-import@example.com",
+		EffectivePermissions: []string{"events.all.write"},
+	}
+	uWriterNoImport.EnsureImpliedPermissions()
 
 	if _, err := pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, $2, $2)", uWriter.ID, uWriter.Email); err != nil {
 		t.Fatalf("failed to insert test writer user: %v", err)
@@ -113,6 +119,13 @@ func TestCalendarEvents_CRUD_Import_And_UpcomingFiltering(t *testing.T) {
 		t.Fatalf("expected 403 for reader posting event, got %d", recPostNoPerm.Code)
 	}
 
+	reqImportNoPerm := httptest.NewRequest("POST", "/api/events/import", strings.NewReader(`{"mode":"skip_duplicates","events":[]}`))
+	recImportNoPerm := httptest.NewRecorder()
+	r.ServeHTTP(recImportNoPerm, reqImportNoPerm.WithContext(context.WithValue(reqImportNoPerm.Context(), auth.UserContextKey, uWriterNoImport)))
+	if recImportNoPerm.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for writer without events.all.import importing events, got %d", recImportNoPerm.Code)
+	}
+
 	// 2. Validation checks: custom without title -> 400, end_time without start_time -> 400
 	reqInvalidCustom := httptest.NewRequest("POST", "/api/events", strings.NewReader(`{"event_type":"custom","start_date":"2097-10-10","end_date":"2097-10-10","title":""}`))
 	recInvalidCustom := httptest.NewRecorder()
@@ -126,6 +139,13 @@ func TestCalendarEvents_CRUD_Import_And_UpcomingFiltering(t *testing.T) {
 	r.ServeHTTP(recInvalidTime, reqInvalidTime.WithContext(context.WithValue(reqInvalidTime.Context(), auth.UserContextKey, uWriter)))
 	if recInvalidTime.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for end_time without start_time, got %d", recInvalidTime.Code)
+	}
+
+	reqInvalidMultiDay := httptest.NewRequest("POST", "/api/events", strings.NewReader(`{"event_type":"ea_gesamt","start_date":"2097-10-10","end_date":"2097-10-11"}`))
+	recInvalidMultiDay := httptest.NewRecorder()
+	r.ServeHTTP(recInvalidMultiDay, reqInvalidMultiDay.WithContext(context.WithValue(reqInvalidMultiDay.Context(), auth.UserContextKey, uWriter)))
+	if recInvalidMultiDay.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for multi-day event of type expecting specific time, got %d: %s", recInvalidMultiDay.Code, recInvalidMultiDay.Body.String())
 	}
 
 	// 3. Create timed event + update + delete

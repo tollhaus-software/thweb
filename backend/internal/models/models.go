@@ -81,7 +81,7 @@ func (s *UserWithPermissions) HasPermission(perm string) bool {
 		if perm == "volunteers.absences.read" && (p == "volunteers.absences.write" || p == "*") {
 			return true
 		}
-		if perm == "events.all.read" && (p == "events.all.write" || p == "*") {
+		if perm == "events.all.read" && (p == "events.all.write" || p == "events.all.import" || p == "*") {
 			return true
 		}
 		if (perm == "hygiene.all.read" || perm == "hygiene.all.write") && (p == "hygiene.infektionsschutz.management" || p == "*") {
@@ -140,7 +140,7 @@ func (s *UserWithPermissions) EnsureImpliedPermissions() {
 		if p == "*" || p == "volunteers.absences.write" {
 			hasVolunteerAbsencesWrite = true
 		}
-		if p == "*" || p == "events.all.write" {
+		if p == "*" || p == "events.all.write" || p == "events.all.import" {
 			hasEventsWrite = true
 		}
 	}
@@ -292,6 +292,9 @@ var AllKnownPermissions = []string{
 	"job.role_assignment.write",
 	"volunteers.absences.read",
 	"volunteers.absences.write",
+	"events.all.read",
+	"events.all.write",
+	"events.all.import",
 }
 
 // IntersectPermissions returns the intersection of effective permissions between actual and simulated.
@@ -1023,6 +1026,20 @@ var ValidCalendarEventTypes = map[string]bool{
 	"laternenfest":          true,
 	"weihnachtsfeier":       true,
 	"sommerfest":            true,
+}
+
+var CalendarEventTypesExpectingSpecificTime = map[string]bool{
+	"ea_kleine_gruppe":  true,
+	"ea_grosse_gruppe":  true,
+	"ea_hort":           true,
+	"ea_gesamt":         true,
+	"ea_gesamt_and_mgv": true,
+	"putz_we":           true,
+	"bau_we":            true,
+	"garten_we":         true,
+	"laternenfest":      true,
+	"weihnachtsfeier":   true,
+	"sommerfest":        true,
 }
 
 type CalendarEvent struct {

@@ -101,7 +101,7 @@ export const EventsDayView: React.FC<EventsDayViewProps> = ({
         <div className="events-day-view-nav">
           <button
             type="button"
-            className="events-secondary-btn"
+            className="events-secondary-btn events-day-back-btn"
             onClick={onBack}
             data-testid="events-day-back-btn"
           >
@@ -109,42 +109,32 @@ export const EventsDayView: React.FC<EventsDayViewProps> = ({
             <span>{t('back') || 'Zurück'}</span>
           </button>
 
-          <button
-            type="button"
-            className="events-nav-arrow"
-            onClick={() => handleStepDay(-1)}
-            aria-label="Vorheriger Tag"
-            data-testid="events-day-prev-btn"
-          >
-            <ChevronLeft size={17} />
-          </button>
+          <div className="events-selector events-day-selector">
+            <button
+              type="button"
+              className="events-nav-arrow"
+              onClick={() => handleStepDay(-1)}
+              aria-label="Vorheriger Tag"
+              data-testid="events-day-prev-btn"
+            >
+              <ChevronLeft size={18} />
+            </button>
 
-          <h2 className="events-day-view-title" data-testid="events-day-heading">
-            {formatWeekdayWithDate(dateKey)}
-          </h2>
+            <h2 className="events-day-view-title" data-testid="events-day-heading">
+              {formatWeekdayWithDate(dateKey)}
+            </h2>
 
-          <button
-            type="button"
-            className="events-nav-arrow"
-            onClick={() => handleStepDay(1)}
-            aria-label="Nächster Tag"
-            data-testid="events-day-next-btn"
-          >
-            <ChevronRight size={17} />
-          </button>
+            <button
+              type="button"
+              className="events-nav-arrow"
+              onClick={() => handleStepDay(1)}
+              aria-label="Nächster Tag"
+              data-testid="events-day-next-btn"
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
         </div>
-
-        {canWrite && (
-          <button
-            type="button"
-            className="events-primary-btn"
-            onClick={() => onOpenCreateForDate(dateKey)}
-            data-testid="events-day-add-btn"
-          >
-            <Plus size={16} />
-            <span>{t('eventsAddForDayBtn')}</span>
-          </button>
-        )}
       </div>
 
       {loading ? (
@@ -249,6 +239,20 @@ export const EventsDayView: React.FC<EventsDayViewProps> = ({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {canWrite && (
+        <div className="events-day-footer">
+          <button
+            type="button"
+            className="events-primary-btn"
+            onClick={() => onOpenCreateForDate(dateKey)}
+            data-testid="events-day-add-btn"
+          >
+            <Plus size={16} />
+            <span>{t('eventsAddForDayBtn')}</span>
+          </button>
         </div>
       )}
 
