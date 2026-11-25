@@ -237,6 +237,20 @@
   font-weight: 800;
 }
 
+/* Signed-in user's own cooking day highlight */
+.meal-allergen-day-box.is-user-cooking {
+  box-shadow: inset 0 0 0 2.5px var(--text-h, #1e293b);
+}
+
+.meal-allergen-day-box.is-user-cooking:hover {
+  box-shadow: inset 0 0 0 2.5px var(--text-h, #1e293b);
+}
+
+.meal-allergen-day-box.is-user-cooking .meal-allergen-day-cook {
+  color: var(--text-h);
+  font-weight: 700;
+}
+
 .meal-allergen-day-header {
   display: flex;
   align-items: center;

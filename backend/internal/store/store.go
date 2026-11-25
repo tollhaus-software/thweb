@@ -3488,8 +3488,10 @@ func (s *Store) ListCookOptions(ctx context.Context) ([]models.CookOption, error
 }
 
 type planRow struct {
-	cookName   string
-	components []string
+	cookName         string
+	cooks            models.MealAllergenCookList
+	resolutionStatus string
+	components       []string
 }
 
 type allergenRow struct {
@@ -3640,6 +3642,9 @@ func buildMealAllergenDay(
 
 	if pRow != nil {
 		day.PlanCookName = pRow.cookName
+		if pRow.resolutionStatus == "resolved" && len(pRow.cooks) > 0 {
+			day.PlanCooks = pRow.cooks
+		}
 		if pRow.components != nil {
 			day.PlanMealComponents = pRow.components
 		}
@@ -3696,7 +3701,7 @@ func (s *Store) GetMealAllergenDaysRange(ctx context.Context, startDate, endDate
 
 	planMap := make(map[string]*planRow)
 	pRows, err := s.db.Query(ctx, `
-		SELECT TO_CHAR(date, 'YYYY-MM-DD'), cook_name, food_component_1, food_component_2, food_component_3
+		SELECT TO_CHAR(date, 'YYYY-MM-DD'), cook_name, COALESCE(cooks, '[]'::jsonb), COALESCE(cook_resolution_status, 'empty'), food_component_1, food_component_2, food_component_3
 		FROM meal_plan_from_sheets
 		WHERE date >= $1 AND date <= $2
 	`, startStr, endStr)
@@ -3706,8 +3711,9 @@ func (s *Store) GetMealAllergenDaysRange(ctx context.Context, startDate, endDate
 	defer pRows.Close()
 
 	for pRows.Next() {
-		var dStr, cookName, c1, c2, c3 string
-		if err := pRows.Scan(&dStr, &cookName, &c1, &c2, &c3); err != nil {
+		var dStr, cookName, resStatus, c1, c2, c3 string
+		var planCooks models.MealAllergenCookList
+		if err := pRows.Scan(&dStr, &cookName, &planCooks, &resStatus, &c1, &c2, &c3); err != nil {
 			return nil, err
 		}
 		comps := make([]string, 0, 3)
@@ -3718,8 +3724,10 @@ func (s *Store) GetMealAllergenDaysRange(ctx context.Context, startDate, endDate
 			}
 		}
 		planMap[dStr] = &planRow{
-			cookName:   strings.TrimSpace(cookName),
-			components: comps,
+			cookName:         strings.TrimSpace(cookName),
+			cooks:            planCooks,
+			resolutionStatus: resStatus,
+			components:       comps,
 		}
 	}
 	if err := pRows.Err(); err != nil {
@@ -3809,12 +3817,46 @@ func (s *Store) GetMealAllergenDay(ctx context.Context, targetDate time.Time) (*
 	return &days[0], nil
 }
 
+func IsUserCookingOnMealAllergenDay(day models.MealAllergenDay, parentID, employeeID *uuid.UUID) bool {
+	if (parentID == nil || *parentID == uuid.Nil) && (employeeID == nil || *employeeID == uuid.Nil) {
+		return false
+	}
+	matchesList := func(list models.MealAllergenCookList) bool {
+		for _, c := range list {
+			cType := strings.ToLower(strings.TrimSpace(c.Type))
+			if parentID != nil && *parentID != uuid.Nil && cType == "parent" && c.ID == *parentID {
+				return true
+			}
+			if employeeID != nil && *employeeID != uuid.Nil && cType == "employee" && c.ID == *employeeID {
+				return true
+			}
+		}
+		return false
+	}
+	if day.HasAllergenRecord && (len(day.Cooks) > 0 || strings.TrimSpace(day.CookCustomName) != "") {
+		return matchesList(day.Cooks)
+	}
+	if len(day.Cooks) > 0 && matchesList(day.Cooks) {
+		return true
+	}
+	return matchesList(day.PlanCooks)
+}
+
+func MarkMealAllergenDaysForUser(days []models.MealAllergenDay, parentID, employeeID *uuid.UUID) {
+	if (parentID == nil || *parentID == uuid.Nil) && (employeeID == nil || *employeeID == uuid.Nil) {
+		return
+	}
+	for i := range days {
+		days[i].IsCurrentUserCooking = IsUserCookingOnMealAllergenDay(days[i], parentID, employeeID)
+	}
+}
+
 func (s *Store) GetAllMealAllergenEntries(ctx context.Context) ([]models.MealAllergenDay, error) {
 	planMap := make(map[string]*planRow)
 	dateSet := make(map[string]bool)
 
 	pRows, err := s.db.Query(ctx, `
-		SELECT TO_CHAR(date, 'YYYY-MM-DD'), cook_name, food_component_1, food_component_2, food_component_3
+		SELECT TO_CHAR(date, 'YYYY-MM-DD'), cook_name, COALESCE(cooks, '[]'::jsonb), COALESCE(cook_resolution_status, 'empty'), food_component_1, food_component_2, food_component_3
 		FROM meal_plan_from_sheets
 	`)
 	if err != nil {
@@ -3823,8 +3865,9 @@ func (s *Store) GetAllMealAllergenEntries(ctx context.Context) ([]models.MealAll
 	defer pRows.Close()
 
 	for pRows.Next() {
-		var dStr, cookName, c1, c2, c3 string
-		if err := pRows.Scan(&dStr, &cookName, &c1, &c2, &c3); err != nil {
+		var dStr, cookName, resStatus, c1, c2, c3 string
+		var planCooks models.MealAllergenCookList
+		if err := pRows.Scan(&dStr, &cookName, &planCooks, &resStatus, &c1, &c2, &c3); err != nil {
 			return nil, err
 		}
 		comps := make([]string, 0, 3)
@@ -3837,8 +3880,10 @@ func (s *Store) GetAllMealAllergenEntries(ctx context.Context) ([]models.MealAll
 		trimmedCook := strings.TrimSpace(cookName)
 		if trimmedCook != "" || len(comps) > 0 {
 			planMap[dStr] = &planRow{
-				cookName:   trimmedCook,
-				components: comps,
+				cookName:         trimmedCook,
+				cooks:            planCooks,
+				resolutionStatus: resStatus,
+				components:       comps,
 			}
 			dateSet[dStr] = true
 		}

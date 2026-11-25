@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, AlertCircle, Calendar, Trash2, Clock, CalendarRange } from 'lucide-react';
+import { X, AlertCircle, Calendar, Trash2, Clock, CalendarRange, ExternalLink } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { t, CURRENT_LOCALE, formatDisplayDate, parseInputDate } from '../../utils/i18n';
 import { formatDateKey, parseDateKey } from '../../utils/mealPlan';
@@ -81,7 +81,8 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
   onSaved,
   onDeleted,
 }) => {
-  const { token } = useAuth();
+  const { token, hasPermission } = useAuth();
+  const canReadAllergens = hasPermission('meal_allergens.read');
   const startPickerRef = useRef<HTMLInputElement>(null);
   const endPickerRef = useRef<HTMLInputElement>(null);
 
@@ -470,6 +471,20 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
         </div>
 
         <div className="events-modal-footer">
+          {ev.event_type === 'cooking_duty' && canReadAllergens && (
+            <button
+              type="button"
+              className="events-primary-btn"
+              onClick={() => {
+                onClose();
+                window.location.hash = `#mealAllergens?date=${encodeURIComponent(ev.start_date)}&open=1`;
+              }}
+              data-testid="event-viewer-open-allergens-btn"
+            >
+              <ExternalLink size={15} />
+              <span>{t('eventsOpenAllergensBtn')}</span>
+            </button>
+          )}
           <button
             type="button"
             className="events-secondary-btn"

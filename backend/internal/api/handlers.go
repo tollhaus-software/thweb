@@ -3333,12 +3333,15 @@ func (s *Server) HandleListMealAllergenCooks(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *Server) HandleListMealAllergens(w http.ResponseWriter, r *http.Request) {
+	user, _ := r.Context().Value(auth.UserContextKey).(*models.UserWithPermissions)
+	scope := s.Store.ResolveUserEventScope(r.Context(), user)
 	if r.URL.Query().Get("all") == "true" {
 		entries, err := s.Store.GetAllMealAllergenEntries(r.Context())
 		if err != nil {
 			httpErrorLog(w, r, "Failed to list all meal allergen entries", http.StatusInternalServerError, err)
 			return
 		}
+		store.MarkMealAllergenDaysForUser(entries, scope.ParentID, scope.EmployeeID)
 		jsonResponse(w, entries)
 		return
 	}
@@ -3374,6 +3377,7 @@ func (s *Server) HandleListMealAllergens(w http.ResponseWriter, r *http.Request)
 		httpErrorLog(w, r, "Failed to get meal allergen days", http.StatusInternalServerError, err)
 		return
 	}
+	store.MarkMealAllergenDaysForUser(days, scope.ParentID, scope.EmployeeID)
 
 	jsonResponse(w, days)
 }
@@ -3390,6 +3394,11 @@ func (s *Server) HandleGetMealAllergenDay(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		httpErrorLog(w, r, "Failed to get meal allergen day", http.StatusInternalServerError, err)
 		return
+	}
+	if day != nil {
+		user, _ := r.Context().Value(auth.UserContextKey).(*models.UserWithPermissions)
+		scope := s.Store.ResolveUserEventScope(r.Context(), user)
+		day.IsCurrentUserCooking = store.IsUserCookingOnMealAllergenDay(*day, scope.ParentID, scope.EmployeeID)
 	}
 
 	jsonResponse(w, day)

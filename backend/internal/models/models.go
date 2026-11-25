@@ -1475,21 +1475,23 @@ func FormatCooksDisplayName(cooks []MealAllergenCook) string {
 }
 
 type MealAllergenDay struct {
-	Date               string                    `json:"date"`
-	HasAllergenRecord  bool                      `json:"has_allergen_record"`
-	Cooks              MealAllergenCookList      `json:"cooks"`
-	CookParentID       *uuid.UUID                `json:"cook_parent_id,omitempty"`
-	CookEmployeeID     *uuid.UUID                `json:"cook_employee_id,omitempty"`
-	CookCustomName     string                    `json:"cook_custom_name"`
-	CookDisplayName    string                    `json:"cook_display_name"`
-	MealComponents     MealAllergenComponentList `json:"meal_components"`
-	Status             MealAllergenStatus        `json:"status"`
-	Documentation      MealAllergenDocumentation `json:"documentation"`
-	PlanCookName       string                    `json:"plan_cook_name"`
-	PlanMealComponents []string                  `json:"plan_meal_components"`
-	HasPlanMeal        bool                      `json:"has_plan_meal"`
-	CreatedAt          *time.Time                `json:"created_at,omitempty"`
-	UpdatedAt          *time.Time                `json:"updated_at,omitempty"`
+	Date                 string                    `json:"date"`
+	HasAllergenRecord    bool                      `json:"has_allergen_record"`
+	Cooks                MealAllergenCookList      `json:"cooks"`
+	CookParentID         *uuid.UUID                `json:"cook_parent_id,omitempty"`
+	CookEmployeeID       *uuid.UUID                `json:"cook_employee_id,omitempty"`
+	CookCustomName       string                    `json:"cook_custom_name"`
+	CookDisplayName      string                    `json:"cook_display_name"`
+	MealComponents       MealAllergenComponentList `json:"meal_components"`
+	Status               MealAllergenStatus        `json:"status"`
+	Documentation        MealAllergenDocumentation `json:"documentation"`
+	PlanCookName         string                    `json:"plan_cook_name"`
+	PlanCooks            MealAllergenCookList      `json:"plan_cooks,omitempty"`
+	PlanMealComponents   []string                  `json:"plan_meal_components"`
+	HasPlanMeal          bool                      `json:"has_plan_meal"`
+	IsCurrentUserCooking bool                      `json:"is_current_user_cooking,omitempty"`
+	CreatedAt            *time.Time                `json:"created_at,omitempty"`
+	UpdatedAt            *time.Time                `json:"updated_at,omitempty"`
 }
 
 type CookOption struct {

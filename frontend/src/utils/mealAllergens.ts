@@ -32,8 +32,10 @@ export interface MealAllergenDay {
   status: MealAllergenStatus;
   documentation: MealAllergenDocumentation;
   plan_cook_name: string;
+  plan_cooks?: MealAllergenCook[];
   plan_meal_components: string[];
   has_plan_meal: boolean;
+  is_current_user_cooking?: boolean;
   created_at?: string;
   updated_at?: string;
 }

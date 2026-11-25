@@ -29,6 +29,7 @@ interface MealAllergensCalendarViewProps {
   onSelectDay: (day: MealAllergenDay) => void;
   initialDate?: Date;
   todayDate?: Date;
+  highlightedDate?: string | null;
   enableSearch?: boolean;
   allEntries?: MealAllergenDay[];
   excludeDateFromSearchJump?: string;
@@ -40,6 +41,7 @@ export const MealAllergensCalendarView: React.FC<MealAllergensCalendarViewProps>
   onSelectDay,
   initialDate,
   todayDate,
+  highlightedDate = null,
   enableSearch = false,
   allEntries = [],
   excludeDateFromSearchJump,
@@ -58,6 +60,12 @@ export const MealAllergensCalendarView: React.FC<MealAllergensCalendarViewProps>
     const base = initialDate || new Date();
     return getMondayOfWeek(base);
   });
+
+  useEffect(() => {
+    if (!initialDate) return;
+    setSelectedYearMonth(getMonthForDateIn5WeekGrid(initialDate));
+    setSelectedMonday(getMondayOfWeek(initialDate));
+  }, [initialDate]);
 
   const [daysMap, setDaysMap] = useState<Record<string, MealAllergenDay>>({});
   const [loading, setLoading] = useState<boolean>(true);
@@ -300,9 +308,10 @@ export const MealAllergensCalendarView: React.FC<MealAllergensCalendarViewProps>
           const bgVariant = getDayBgVariant(dayData, todayKey);
           const { dayName, dateStr } = formatDayHeader(dateObj);
           const isMatched = enableSearch && doesDayMatchSearch(dayData, searchQuery);
-          const isActiveJump = activeJumpedDate === dateKey;
+          const isActiveJump = activeJumpedDate === dateKey || highlightedDate === dateKey;
           const isOutsideMonth = !isMobile && dateObj.getMonth() !== selectedYearMonth.month;
           const isToday = dateKey === todayKey;
+          const isUserCooking = Boolean(dayData.is_current_user_cooking);
 
           const cookName = dayData.plan_cook_name || dayData.cook_display_name || '';
           const kochplanComponents =
@@ -322,6 +331,7 @@ export const MealAllergensCalendarView: React.FC<MealAllergensCalendarViewProps>
                 'meal-allergen-day-box',
                 `bg-${bgVariant}`,
                 isToday ? 'is-today' : '',
+                isUserCooking ? 'is-user-cooking' : '',
                 isMatched ? 'search-match' : '',
                 isActiveJump ? 'search-active-match' : '',
                 isOutsideMonth ? 'outside-month' : '',
@@ -333,6 +343,7 @@ export const MealAllergensCalendarView: React.FC<MealAllergensCalendarViewProps>
               data-bg-variant={bgVariant}
               data-status={dayData.status}
               data-is-today={isToday ? 'true' : 'false'}
+              data-is-user-cooking={isUserCooking ? 'true' : 'false'}
               data-search-match={isMatched ? 'true' : 'false'}
               data-search-active-match={isActiveJump ? 'true' : 'false'}
               aria-current={isToday ? 'date' : undefined}
