@@ -218,3 +218,96 @@ func TestFilterAuditLogsForUser(t *testing.T) {
 		t.Errorf("Notes should be scrubbed in filtered log, got %v", after["notes"])
 	}
 }
+
+func TestSanitizeNicknamesInAuditLogs(t *testing.T) {
+	famID := uuid.New()
+
+	selfServiceUser := &models.UserWithPermissions{
+		ID:                   uuid.New(),
+		FamilyID:             &famID,
+		EffectivePermissions: []string{"families.self.selfservice"},
+	}
+	mgaReader := &models.UserWithPermissions{
+		ID:                   uuid.New(),
+		EffectivePermissions: []string{"families.all.read"},
+	}
+	allergyOnlyEmpReader := &models.UserWithPermissions{
+		ID:                   uuid.New(),
+		EffectivePermissions: []string{"allergies.employees.read"},
+	}
+	paReader := &models.UserWithPermissions{
+		ID:                   uuid.New(),
+		EffectivePermissions: []string{"employees.all.read"},
+	}
+
+	parentSnap, _ := json.Marshal(map[string]interface{}{
+		"first_name": "Eva-Maria",
+		"nicknames":  []string{"Mimi"},
+		"notes":      "secret",
+	})
+	empSnap, _ := json.Marshal(map[string]interface{}{
+		"first_name": "Rosalia",
+		"nicknames":  []string{"Rosi"},
+	})
+
+	logs := []models.AuditLog{
+		{
+			ID:            uuid.New(),
+			EntityType:    "parent",
+			FamilyID:      &famID,
+			Operation:     "UPDATE",
+			AfterSnapshot: parentSnap,
+		},
+		{
+			ID:            uuid.New(),
+			EntityType:    "employee",
+			Operation:     "UPDATE",
+			AfterSnapshot: empSnap,
+		},
+	}
+
+	// Self-service parent should NOT see nicknames
+	selfFiltered := FilterAuditLogsForUser(selfServiceUser, logs)
+	if len(selfFiltered) != 1 {
+		t.Fatalf("expected 1 log for self-service user, got %d", len(selfFiltered))
+	}
+	var selfAfter map[string]interface{}
+	_ = json.Unmarshal(selfFiltered[0].AfterSnapshot, &selfAfter)
+	if _, exists := selfAfter["nicknames"]; exists {
+		t.Errorf("expected nicknames to be stripped for self-service user, got %v", selfAfter["nicknames"])
+	}
+
+	// MGA reader SHOULD see parent nicknames
+	mgaFiltered := FilterAuditLogsForUser(mgaReader, logs)
+	if len(mgaFiltered) != 1 {
+		t.Fatalf("expected 1 log for MGA reader, got %d", len(mgaFiltered))
+	}
+	var mgaAfter map[string]interface{}
+	_ = json.Unmarshal(mgaFiltered[0].AfterSnapshot, &mgaAfter)
+	if _, exists := mgaAfter["nicknames"]; !exists {
+		t.Errorf("expected nicknames to be visible for families.all.read user")
+	}
+
+	// Allergy-only employee reader should NOT see employee nicknames
+	allergyFiltered := FilterAuditLogsForUser(allergyOnlyEmpReader, logs)
+	if len(allergyFiltered) != 1 {
+		t.Fatalf("expected 1 log for allergy-only reader, got %d", len(allergyFiltered))
+	}
+	var allergyAfter map[string]interface{}
+	_ = json.Unmarshal(allergyFiltered[0].AfterSnapshot, &allergyAfter)
+	if _, exists := allergyAfter["nicknames"]; exists {
+		t.Errorf("expected employee nicknames to be stripped without employees.all.read, got %v", allergyAfter["nicknames"])
+	}
+
+	// PA reader SHOULD see employee nicknames
+	paFiltered := FilterAuditLogsForUser(paReader, logs)
+	if len(paFiltered) != 1 {
+		t.Fatalf("expected 1 log for PA reader, got %d", len(paFiltered))
+	}
+	var paAfter map[string]interface{}
+	_ = json.Unmarshal(paFiltered[0].AfterSnapshot, &paAfter)
+	if _, exists := paAfter["nicknames"]; !exists {
+		t.Errorf("expected employee nicknames to be visible for employees.all.read user")
+	}
+}
+

@@ -82,12 +82,13 @@ func (s *Store) CreateFamilyWithParents(ctx context.Context, userID uuid.UUID, p
 			}
 			p.ID = uuid.New()
 			p.FamilyID = family.ID
+			p.Nicknames = models.SanitizeNicknames(p.Nicknames)
 			p.Emails = sanitizeSlice(p.Emails)
 			p.Phones = sanitizePhones(p.Phones)
 
 			_, err = tx.Exec(ctx,
-				"INSERT INTO parents (id, family_id, first_name, first_name_for_address_list, last_name, emails, phones, address, notes, vaccination_status_protected) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
-				p.ID, p.FamilyID, p.FirstName, p.FirstNameForAddressList, p.LastName, p.Emails, p.Phones, p.Address, p.Notes, p.VaccinationStatusProtected)
+				"INSERT INTO parents (id, family_id, first_name, first_name_for_address_list, nicknames, last_name, emails, phones, address, notes, vaccination_status_protected) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+				p.ID, p.FamilyID, p.FirstName, p.FirstNameForAddressList, p.Nicknames, p.LastName, p.Emails, p.Phones, p.Address, p.Notes, p.VaccinationStatusProtected)
 			if err != nil {
 				return err
 			}
@@ -150,6 +151,7 @@ func multiValueListEqual(a, b models.MultiValueList) bool {
 func parentNonVaccinationChanged(old, new models.Parent) bool {
 	return old.FirstName != new.FirstName ||
 		old.FirstNameForAddressList != new.FirstNameForAddressList ||
+		!models.NicknamesEqual(old.Nicknames, new.Nicknames) ||
 		old.LastName != new.LastName ||
 		old.Address != new.Address ||
 		old.Notes != new.Notes ||
@@ -319,6 +321,7 @@ func (s *Store) ListFamilies(ctx context.Context) ([]models.Family, error) {
 					   'family_id', p.family_id,
 					   'first_name', p.first_name,
 					   'first_name_for_address_list', p.first_name_for_address_list,
+					   'nicknames', COALESCE(p.nicknames, '[]'::jsonb),
 					   'last_name', p.last_name,
 					   'emails', p.emails,
 					   'phones', p.phones,
@@ -493,7 +496,7 @@ func (s *Store) GetHistoryForUser(ctx context.Context, entityID uuid.UUID, user 
 
 func (s *Store) GetParentsByFamilyID(ctx context.Context, familyID uuid.UUID) ([]models.Parent, error) {
 	rows, err := s.db.Query(ctx,
-		"SELECT id, family_id, first_name, first_name_for_address_list, last_name, emails, phones, address, notes, vaccination_status_protected, created_at, updated_at FROM parents WHERE family_id = $1",
+		"SELECT id, family_id, first_name, first_name_for_address_list, nicknames, last_name, emails, phones, address, notes, vaccination_status_protected, created_at, updated_at FROM parents WHERE family_id = $1",
 		familyID,
 	)
 	if err != nil {
@@ -504,7 +507,7 @@ func (s *Store) GetParentsByFamilyID(ctx context.Context, familyID uuid.UUID) ([
 	var parents []models.Parent
 	for rows.Next() {
 		var p models.Parent
-		if err := rows.Scan(&p.ID, &p.FamilyID, &p.FirstName, &p.FirstNameForAddressList, &p.LastName, &p.Emails, &p.Phones, &p.Address, &p.Notes, &p.VaccinationStatusProtected, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.FamilyID, &p.FirstName, &p.FirstNameForAddressList, &p.Nicknames, &p.LastName, &p.Emails, &p.Phones, &p.Address, &p.Notes, &p.VaccinationStatusProtected, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
 		p.Phones = sanitizePhones(p.Phones)
@@ -872,18 +875,23 @@ func (s *Store) UpdateFamilyParents(ctx context.Context, userID uuid.UUID, famil
 			p.Emails = sanitizeSlice(p.Emails)
 			p.Phones = sanitizePhones(p.Phones)
 			var oldParent models.Parent
-			err := tx.QueryRow(ctx, "SELECT id, family_id, first_name, first_name_for_address_list, last_name, emails, phones, address, notes, vaccination_status_protected FROM parents WHERE id = $1 AND family_id = $2", p.ID, familyID).Scan(
-				&oldParent.ID, &oldParent.FamilyID, &oldParent.FirstName, &oldParent.FirstNameForAddressList, &oldParent.LastName, &oldParent.Emails, &oldParent.Phones, &oldParent.Address, &oldParent.Notes, &oldParent.VaccinationStatusProtected,
+			err := tx.QueryRow(ctx, "SELECT id, family_id, first_name, first_name_for_address_list, nicknames, last_name, emails, phones, address, notes, vaccination_status_protected FROM parents WHERE id = $1 AND family_id = $2", p.ID, familyID).Scan(
+				&oldParent.ID, &oldParent.FamilyID, &oldParent.FirstName, &oldParent.FirstNameForAddressList, &oldParent.Nicknames, &oldParent.LastName, &oldParent.Emails, &oldParent.Phones, &oldParent.Address, &oldParent.Notes, &oldParent.VaccinationStatusProtected,
 			)
 			isNew := (err == pgx.ErrNoRows)
 
 			if p.VaccinationStatusProtected == nil && p.VaccinationChecks == nil && len(oldParent.VaccinationStatusProtected) > 0 {
 				p.VaccinationStatusProtected = oldParent.VaccinationStatusProtected
 			}
+			if p.Nicknames == nil && oldParent.Nicknames != nil {
+				p.Nicknames = oldParent.Nicknames
+			} else {
+				p.Nicknames = models.SanitizeNicknames(p.Nicknames)
+			}
 
 			res, err := tx.Exec(ctx,
-				"UPDATE parents SET first_name = $1, first_name_for_address_list = $2, last_name = $3, emails = $4, phones = $5, address = $6, notes = $7, vaccination_status_protected = $8, updated_at = NOW() WHERE id = $9 AND family_id = $10",
-				p.FirstName, p.FirstNameForAddressList, p.LastName, p.Emails, p.Phones, p.Address, p.Notes, p.VaccinationStatusProtected, p.ID, familyID)
+				"UPDATE parents SET first_name = $1, first_name_for_address_list = $2, nicknames = $3, last_name = $4, emails = $5, phones = $6, address = $7, notes = $8, vaccination_status_protected = $9, updated_at = NOW() WHERE id = $10 AND family_id = $11",
+				p.FirstName, p.FirstNameForAddressList, p.Nicknames, p.LastName, p.Emails, p.Phones, p.Address, p.Notes, p.VaccinationStatusProtected, p.ID, familyID)
 			if err != nil {
 				return err
 			}
@@ -894,8 +902,8 @@ func (s *Store) UpdateFamilyParents(ctx context.Context, userID uuid.UUID, famil
 				}
 				p.FamilyID = familyID
 				_, err = tx.Exec(ctx,
-					"INSERT INTO parents (id, family_id, first_name, first_name_for_address_list, last_name, emails, phones, address, notes, vaccination_status_protected) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
-					p.ID, p.FamilyID, p.FirstName, p.FirstNameForAddressList, p.LastName, p.Emails, p.Phones, p.Address, p.Notes, p.VaccinationStatusProtected)
+					"INSERT INTO parents (id, family_id, first_name, first_name_for_address_list, nicknames, last_name, emails, phones, address, notes, vaccination_status_protected) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+					p.ID, p.FamilyID, p.FirstName, p.FirstNameForAddressList, p.Nicknames, p.LastName, p.Emails, p.Phones, p.Address, p.Notes, p.VaccinationStatusProtected)
 				if err != nil {
 					return err
 				}
@@ -1345,8 +1353,8 @@ func (s *Store) DeleteParent(ctx context.Context, userID uuid.UUID, parentID uui
 	transactionID := uuid.New()
 	return s.WithTx(ctx, func(tx pgx.Tx) error {
 		var oldParent models.Parent
-		err := tx.QueryRow(ctx, "SELECT id, family_id, first_name, first_name_for_address_list, last_name, emails, phones, address, notes, vaccination_status_protected FROM parents WHERE id = $1", parentID).Scan(
-			&oldParent.ID, &oldParent.FamilyID, &oldParent.FirstName, &oldParent.FirstNameForAddressList, &oldParent.LastName, &oldParent.Emails, &oldParent.Phones, &oldParent.Address, &oldParent.Notes, &oldParent.VaccinationStatusProtected,
+		err := tx.QueryRow(ctx, "SELECT id, family_id, first_name, first_name_for_address_list, nicknames, last_name, emails, phones, address, notes, vaccination_status_protected FROM parents WHERE id = $1", parentID).Scan(
+			&oldParent.ID, &oldParent.FamilyID, &oldParent.FirstName, &oldParent.FirstNameForAddressList, &oldParent.Nicknames, &oldParent.LastName, &oldParent.Emails, &oldParent.Phones, &oldParent.Address, &oldParent.Notes, &oldParent.VaccinationStatusProtected,
 		)
 		if err != nil {
 			return err
@@ -2889,7 +2897,7 @@ func (s *Store) GetCompletedTasks(ctx context.Context, targetDate time.Time) ([]
 
 func (s *Store) ListEmployees(ctx context.Context) ([]models.Employee, error) {
 	query := `
-		SELECT e.id, e.first_name, e.last_name, e.employee_type, e.emails, e.phones, e.address, e.is_kinderschutzbeauftragter, e.allergies_protected, e.created_at, e.updated_at,
+		SELECT e.id, e.first_name, e.nicknames, e.last_name, e.employee_type, e.emails, e.phones, e.address, e.is_kinderschutzbeauftragter, e.allergies_protected, e.created_at, e.updated_at,
 			COALESCE((
 				SELECT json_agg(json_build_object(
 					'id', j.id,
@@ -2920,6 +2928,7 @@ func (s *Store) ListEmployees(ctx context.Context) ([]models.Employee, error) {
 		if err := rows.Scan(
 			&emp.ID,
 			&emp.FirstName,
+			&emp.Nicknames,
 			&emp.LastName,
 			&emp.EmployeeType,
 			&emailsRaw,
@@ -2951,7 +2960,7 @@ func (s *Store) ListEmployees(ctx context.Context) ([]models.Employee, error) {
 
 func (s *Store) GetEmployeeByID(ctx context.Context, id uuid.UUID) (*models.Employee, error) {
 	query := `
-		SELECT e.id, e.first_name, e.last_name, e.employee_type, e.emails, e.phones, e.address, e.is_kinderschutzbeauftragter, e.allergies_protected, e.created_at, e.updated_at,
+		SELECT e.id, e.first_name, e.nicknames, e.last_name, e.employee_type, e.emails, e.phones, e.address, e.is_kinderschutzbeauftragter, e.allergies_protected, e.created_at, e.updated_at,
 			COALESCE((
 				SELECT json_agg(json_build_object(
 					'id', j.id,
@@ -2974,6 +2983,7 @@ func (s *Store) GetEmployeeByID(ctx context.Context, id uuid.UUID) (*models.Empl
 	err := s.db.QueryRow(ctx, query, id).Scan(
 		&emp.ID,
 		&emp.FirstName,
+		&emp.Nicknames,
 		&emp.LastName,
 		&emp.EmployeeType,
 		&emailsRaw,
@@ -3021,6 +3031,7 @@ func (s *Store) CreateEmployee(ctx context.Context, userID uuid.UUID, emp models
 		emp.IsKinderschutzbeauftragter = false
 	}
 
+	emp.Nicknames = models.SanitizeNicknames(emp.Nicknames)
 	emp.Emails = sanitizeSlice(emp.Emails)
 	emp.Phones = sanitizePhones(emp.Phones)
 	emailsJSON, _ := json.Marshal(emp.Emails)
@@ -3032,12 +3043,13 @@ func (s *Store) CreateEmployee(ctx context.Context, userID uuid.UUID, emp models
 	err := s.WithTx(ctx, func(tx pgx.Tx) error {
 		var emailsRaw, phonesRaw []byte
 		err := tx.QueryRow(ctx, `
-			INSERT INTO employees (first_name, last_name, employee_type, emails, phones, address, is_kinderschutzbeauftragter, allergies_protected)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-			RETURNING id, first_name, last_name, employee_type, emails, phones, address, is_kinderschutzbeauftragter, allergies_protected, created_at, updated_at
-		`, emp.FirstName, emp.LastName, emp.EmployeeType, emailsJSON, phonesJSON, emp.Address, emp.IsKinderschutzbeauftragter, emp.AllergiesProtected).Scan(
+			INSERT INTO employees (first_name, nicknames, last_name, employee_type, emails, phones, address, is_kinderschutzbeauftragter, allergies_protected)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			RETURNING id, first_name, nicknames, last_name, employee_type, emails, phones, address, is_kinderschutzbeauftragter, allergies_protected, created_at, updated_at
+		`, emp.FirstName, emp.Nicknames, emp.LastName, emp.EmployeeType, emailsJSON, phonesJSON, emp.Address, emp.IsKinderschutzbeauftragter, emp.AllergiesProtected).Scan(
 			&created.ID,
 			&created.FirstName,
+			&created.Nicknames,
 			&created.LastName,
 			&created.EmployeeType,
 			&emailsRaw,
@@ -3105,24 +3117,31 @@ func (s *Store) UpdateEmployee(ctx context.Context, userID uuid.UUID, emp models
 		} else if emp.AllergiesProtected == nil && len(oldEmp.AllergiesProtected) > 0 {
 			emp.AllergiesProtected = oldEmp.AllergiesProtected
 		}
+		if emp.Nicknames == nil && oldEmp.Nicknames != nil {
+			emp.Nicknames = oldEmp.Nicknames
+		} else {
+			emp.Nicknames = models.SanitizeNicknames(emp.Nicknames)
+		}
 
 		var emailsRaw, phonesRaw []byte
 		err = tx.QueryRow(ctx, `
 			UPDATE employees
 			SET first_name = $1,
-			    last_name = $2,
-			    employee_type = $3,
-			    emails = $4,
-			    phones = $5,
-			    address = $6,
-			    is_kinderschutzbeauftragter = $7,
-			    allergies_protected = $8,
+			    nicknames = $2,
+			    last_name = $3,
+			    employee_type = $4,
+			    emails = $5,
+			    phones = $6,
+			    address = $7,
+			    is_kinderschutzbeauftragter = $8,
+			    allergies_protected = $9,
 			    updated_at = NOW()
-			WHERE id = $9
-			RETURNING id, first_name, last_name, employee_type, emails, phones, address, is_kinderschutzbeauftragter, allergies_protected, created_at, updated_at
-		`, emp.FirstName, emp.LastName, emp.EmployeeType, emailsJSON, phonesJSON, emp.Address, emp.IsKinderschutzbeauftragter, emp.AllergiesProtected, emp.ID).Scan(
+			WHERE id = $10
+			RETURNING id, first_name, nicknames, last_name, employee_type, emails, phones, address, is_kinderschutzbeauftragter, allergies_protected, created_at, updated_at
+		`, emp.FirstName, emp.Nicknames, emp.LastName, emp.EmployeeType, emailsJSON, phonesJSON, emp.Address, emp.IsKinderschutzbeauftragter, emp.AllergiesProtected, emp.ID).Scan(
 			&updated.ID,
 			&updated.FirstName,
+			&updated.Nicknames,
 			&updated.LastName,
 			&updated.EmployeeType,
 			&emailsRaw,

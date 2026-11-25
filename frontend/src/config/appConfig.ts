@@ -23,3 +23,17 @@ export function getAppConfig(): AppConfig {
   const faviconUrl = env?.APP_FAVICON_URL || (import.meta.env.VITE_APP_FAVICON_URL as string | undefined) || undefined;
   return { title, logoUrl, faviconUrl };
 }
+
+export function isMockAuthMode(): boolean {
+  const env = typeof window !== 'undefined' ? window.ENV : undefined;
+  const clientId = env?.GOOGLE_CLIENT_ID || (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined);
+  if (clientId) {
+    return clientId === 'mock';
+  }
+  // In production builds, if /env-config.js has not populated GOOGLE_CLIENT_ID (e.g. blocked before gateway reload),
+  // real OAuth proxy authentication is active rather than developer mock login.
+  if (!import.meta.env.DEV) {
+    return false;
+  }
+  return true;
+}

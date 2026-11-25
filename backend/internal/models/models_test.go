@@ -596,6 +596,50 @@ func TestChild_SchoolEnrollmentSerialization(t *testing.T) {
 	}
 }
 
+func TestSanitizeNicknamesAndJSON(t *testing.T) {
+	got := SanitizeNicknames([]string{"  Mimi ", "", "mimi", "Basti", "  BASTI  ", "   "})
+	want := NicknameList{"Mimi", "Basti"}
+	if !NicknamesEqual(got, want) {
+		t.Fatalf("SanitizeNicknames mismatch: got %v, want %v", got, want)
+	}
+
+	// Verify nil vs empty [] JSON unmarshaling distinction for Parent and Employee
+	var pOmitted Parent
+	if err := json.Unmarshal([]byte(`{"first_name":"Eva-Maria","last_name":"Beispiel"}`), &pOmitted); err != nil {
+		t.Fatalf("Unmarshal omitted parent nicknames failed: %v", err)
+	}
+	if pOmitted.Nicknames != nil {
+		t.Errorf("expected nil Nicknames when omitted in JSON, got %v", pOmitted.Nicknames)
+	}
+
+	var pCleared Parent
+	if err := json.Unmarshal([]byte(`{"first_name":"Eva-Maria","last_name":"Beispiel","nicknames":[]}`), &pCleared); err != nil {
+		t.Fatalf("Unmarshal empty parent nicknames failed: %v", err)
+	}
+	if pCleared.Nicknames == nil || len(pCleared.Nicknames) != 0 {
+		t.Errorf("expected non-nil empty Nicknames when [] passed in JSON, got %#v", pCleared.Nicknames)
+	}
+
+	emp := Employee{
+		FirstName:    "Rosalia",
+		LastName:     "Küche",
+		EmployeeType: "cook",
+		Nicknames:    NicknameList{"Rosi"},
+	}
+	rawEmp, err := json.Marshal(emp)
+	if err != nil {
+		t.Fatalf("Marshal employee failed: %v", err)
+	}
+	var parsedEmp Employee
+	if err := json.Unmarshal(rawEmp, &parsedEmp); err != nil {
+		t.Fatalf("Unmarshal employee failed: %v", err)
+	}
+	if !NicknamesEqual(parsedEmp.Nicknames, NicknameList{"Rosi"}) {
+		t.Errorf("expected employee nicknames [Rosi], got %v", parsedEmp.Nicknames)
+	}
+}
+
+
 
 
 

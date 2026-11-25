@@ -360,6 +360,44 @@ func TestApplySchemaMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected meal_allergen_pdf_exports table to exist after migrations: %v", err)
 	}
+
+	for _, table := range []string{"parents", "employees"} {
+		var nicknamesType string
+		err = testDB.QueryRow(`
+			SELECT data_type
+			FROM information_schema.columns
+			WHERE table_name = $1 AND column_name = 'nicknames';
+		`, table).Scan(&nicknamesType)
+		if err != nil {
+			t.Fatalf("expected nicknames column to exist in %s: %v", table, err)
+		}
+		if nicknamesType != "jsonb" {
+			t.Errorf("expected %s.nicknames data_type 'jsonb', got %q", table, nicknamesType)
+		}
+	}
+
+	for _, col := range []struct {
+		name     string
+		wantType string
+	}{
+		{"cooks", "jsonb"},
+		{"cook_resolution_status", "text"},
+		{"cook_resolution_details", "jsonb"},
+		{"unresolved_notified_cook_name", "text"},
+	} {
+		var gotType string
+		err = testDB.QueryRow(`
+			SELECT data_type
+			FROM information_schema.columns
+			WHERE table_name = 'meal_plan_from_sheets' AND column_name = $1;
+		`, col.name).Scan(&gotType)
+		if err != nil {
+			t.Fatalf("expected meal_plan_from_sheets.%s column to exist: %v", col.name, err)
+		}
+		if gotType != col.wantType {
+			t.Errorf("expected meal_plan_from_sheets.%s data_type %q, got %q", col.name, col.wantType, gotType)
+		}
+	}
 }
 
 func TestSQLCanonicalEmailParityWithGo(t *testing.T) {

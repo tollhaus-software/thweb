@@ -43,7 +43,7 @@ export interface ParentsTabProps {
   activePersonForJobs?: { id: string } | null;
   mentorPopoverAnchor?: HTMLElement | string | null;
   activeFamilyForMentor?: Family | null;
-  onSaveParentNames: (parent: Parent, firstName: string, firstNameForAddressList: string) => Promise<void>;
+  onSaveParentNames: (parent: Parent, firstName: string, firstNameForAddressList: string, nicknames: string[]) => Promise<void>;
   onSaveParentField: (parent: Parent, field: keyof Parent, val: any) => Promise<any>;
   onSaveFamilyParents: (familyId: string, updatedParents: Parent[]) => void | Promise<any>;
   onDeleteParent: (id: string) => void | Promise<void>;
@@ -98,6 +98,38 @@ export const ParentsTab: React.FC<ParentsTabProps> = ({
   onOpenFamilyNotes,
   onRequestKmsAuth,
 }) => {
+  const canManageVaccination = hasPermission('vaccination.status.manage');
+  const callbacksRef = React.useRef({
+    onSaveParentNames,
+    onSaveParentField,
+    onSaveFamilyParents,
+    onDeleteParent,
+    onRequestKmsAuth,
+    onOpenManageMemberships,
+    onOpenManageConsent,
+    onOpenManageMultiValue,
+    onOpenManageVaccination,
+    onOpenManageJobs,
+    onOpenManageMentor,
+    onJumpToFamilyTab,
+    onOpenFamilyNotes,
+  });
+  callbacksRef.current = {
+    onSaveParentNames,
+    onSaveParentField,
+    onSaveFamilyParents,
+    onDeleteParent,
+    onRequestKmsAuth,
+    onOpenManageMemberships,
+    onOpenManageConsent,
+    onOpenManageMultiValue,
+    onOpenManageVaccination,
+    onOpenManageJobs,
+    onOpenManageMentor,
+    onJumpToFamilyTab,
+    onOpenFamilyNotes,
+  };
+
   const parentColumns = React.useMemo<ColumnDef<any>[]>(
     () => [
       {
@@ -112,7 +144,9 @@ export const ParentsTab: React.FC<ParentsTabProps> = ({
               id={`parent-${parent.id}`}
               firstName={parent.first_name}
               firstNameForAddressList={parent.first_name_for_address_list || ''}
-              onSave={(fn, fnAddr) => onSaveParentNames(parent, fn, fnAddr)}
+              showNicknames={true}
+              nicknames={parent.nicknames || []}
+              onSave={(fn, fnAddr, nicks) => callbacksRef.current.onSaveParentNames(parent, fn, fnAddr, nicks)}
               disabled={!canWriteParents}
             />
           );
@@ -128,7 +162,7 @@ export const ParentsTab: React.FC<ParentsTabProps> = ({
             <EasyEditComponent
               type={EasyEditTypes.TEXT}
               value={parent.last_name}
-              onSave={(val: string) => onSaveParentField(parent, 'last_name', val)}
+              onSave={(val: string) => callbacksRef.current.onSaveParentField(parent, 'last_name', val)}
               editButtonLabel={<Pencil size={13} />}
               instructions={t('editLastName')}
               viewAttributes={{}}
@@ -156,7 +190,7 @@ export const ParentsTab: React.FC<ParentsTabProps> = ({
               field="emails"
               placeholder={t('addEmail')}
               isActive={isActive}
-              onOpenManage={onOpenManageMultiValue}
+              onOpenManage={(p, field, anchor) => callbacksRef.current.onOpenManageMultiValue(p, field, anchor)}
             />
           );
         },
@@ -178,7 +212,7 @@ export const ParentsTab: React.FC<ParentsTabProps> = ({
               field="phones"
               placeholder={t('addPhone')}
               isActive={isActive}
-              onOpenManage={onOpenManageMultiValue}
+              onOpenManage={(p, field, anchor) => callbacksRef.current.onOpenManageMultiValue(p, field, anchor)}
             />
           );
         },
@@ -195,7 +229,7 @@ export const ParentsTab: React.FC<ParentsTabProps> = ({
             <AddressEditor
               parent={parent}
               familyParents={familyParents}
-              onSave={(updatedParents) => onSaveFamilyParents(parent.family_id, updatedParents)}
+              onSave={(updatedParents) => callbacksRef.current.onSaveFamilyParents(parent.family_id, updatedParents)}
             />
           );
         },
@@ -213,7 +247,7 @@ export const ParentsTab: React.FC<ParentsTabProps> = ({
               readOnly={!canWriteParents}
               onOpen={(anchor) => {
                 if (family) {
-                  onOpenFamilyNotes(family, { type: 'parent', id: parent.id }, anchor);
+                  callbacksRef.current.onOpenFamilyNotes(family, { type: 'parent', id: parent.id }, anchor);
                 }
               }}
             />
@@ -232,7 +266,7 @@ export const ParentsTab: React.FC<ParentsTabProps> = ({
             <JobsCell
               person={{ id: parent.id, first_name: parent.first_name, last_name: parent.last_name, jobs: parent.jobs, type: 'parent' }}
               isActive={isCurrentActive}
-              onOpenManage={onOpenManageJobs}
+              onOpenManage={(person, anchor) => callbacksRef.current.onOpenManageJobs(person, anchor)}
               readOnly={!(canWriteParents || canWriteJobs)}
             />
           );
@@ -250,12 +284,12 @@ export const ParentsTab: React.FC<ParentsTabProps> = ({
             <ParentMembershipCell
               parent={parent}
               isActive={isCurrentActive}
-              onOpenManage={onOpenManageMemberships}
+              onOpenManage={(p, anchor) => callbacksRef.current.onOpenManageMemberships(p, anchor)}
             />
           );
         },
       },
-      ...(hasPermission('vaccination.status.manage') ? [
+      ...(canManageVaccination ? [
         {
           id: 'vaccination_status',
           header: t('vaccinationStatus'),
@@ -273,9 +307,9 @@ export const ParentsTab: React.FC<ParentsTabProps> = ({
                 id={`cell-vaccination-parent-${parent.id}`}
                 checks={parent.vaccination_checks}
                 isActive={isCurrentActive}
-                onOpenManage={(anchor) => onOpenManageVaccination(parent.id, 'parent', anchor)}
+                onOpenManage={(anchor) => callbacksRef.current.onOpenManageVaccination(parent.id, 'parent', anchor)}
                 isUnlocked={isVaccinationUnlocked}
-                onUnlock={onRequestKmsAuth}
+                onUnlock={() => callbacksRef.current.onRequestKmsAuth()}
               />
             );
           },
@@ -298,8 +332,8 @@ export const ParentsTab: React.FC<ParentsTabProps> = ({
               families={families}
               isActive={isPopActive}
               canWriteFamilies={canWriteFamilies}
-              onJumpToFamily={onJumpToFamilyTab}
-              onOpenManageMentor={onOpenManageMentor}
+              onJumpToFamily={(famId, tab) => callbacksRef.current.onJumpToFamilyTab?.(famId, tab)}
+              onOpenManageMentor={(fam, anchor) => callbacksRef.current.onOpenManageMentor(fam, anchor)}
             />
           );
         },
@@ -315,7 +349,7 @@ export const ParentsTab: React.FC<ParentsTabProps> = ({
             <ParentMentorsOfCell
               parent={parent}
               families={families}
-              onJumpToFamily={onJumpToFamilyTab}
+              onJumpToFamily={(famId, tab) => callbacksRef.current.onJumpToFamilyTab?.(famId, tab)}
             />
           );
         },
@@ -333,7 +367,7 @@ export const ParentsTab: React.FC<ParentsTabProps> = ({
             <ParentConsentCell
               parent={parent}
               isActive={isCurrentActive}
-              onOpenManage={onOpenManageConsent}
+              onOpenManage={(p, anchor) => callbacksRef.current.onOpenManageConsent(p, anchor)}
               canEdit={canWriteParents}
             />
           );
@@ -349,7 +383,7 @@ export const ParentsTab: React.FC<ParentsTabProps> = ({
           return (
             <div style={{ display: 'flex', justifyContent: 'flex-end', paddingRight: '0.25rem' }}>
               <RowActionsMenu
-                onDelete={() => onDeleteParent(parent.id)}
+                onDelete={() => callbacksRef.current.onDeleteParent(parent.id)}
                 deleteLabel={t('deleteParent')}
                 disabled={!canWriteParents}
                 disabledTooltip={!canWriteParents ? t('permissionRequired') : undefined}
@@ -362,37 +396,24 @@ export const ParentsTab: React.FC<ParentsTabProps> = ({
     ],
     [
       families,
-      onSaveParentNames,
-      onSaveParentField,
-      onSaveFamilyParents,
-      onDeleteParent,
       canWriteParents,
       canWriteJobs,
       canWriteFamilies,
+      canManageVaccination,
       isVaccinationUnlocked,
-      onRequestKmsAuth,
-      hasPermission,
       membershipPopoverAnchor,
       targetParentMemberships,
-      onOpenManageMemberships,
       contactConsentPopoverAnchor,
       activeParentForConsent,
-      onOpenManageConsent,
       multiValuePopoverAnchor,
       activeParentForMultiValue,
       activeMultiValueField,
-      onOpenManageMultiValue,
       vaccinationPopoverAnchor,
       targetVaccinationPerson,
-      onOpenManageVaccination,
       jobsPopoverAnchor,
       activePersonForJobs,
-      onOpenManageJobs,
       mentorPopoverAnchor,
       activeFamilyForMentor,
-      onOpenManageMentor,
-      onJumpToFamilyTab,
-      onOpenFamilyNotes,
     ]
   );
 

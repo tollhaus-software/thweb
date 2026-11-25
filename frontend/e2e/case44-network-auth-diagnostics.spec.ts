@@ -104,4 +104,55 @@ test.describe('Test Case 44: Network & Auth Reachability Diagnostics', () => {
     await expect(sessionExpiredHeading).toBeVisible();
     await expect(page.locator('button:has-text("Als Entwickler erneut anmelden")')).toBeVisible();
   });
+
+  test('cold-start 401 in OAuth mode automatically redirects to /oauth2/start preserving hash without showing Access Restricted', async ({ page }) => {
+    await page.addInitScript(() => {
+      window.ENV = {
+        GOOGLE_CLIENT_ID: 'test-prod-client-id.apps.googleusercontent.com',
+        GOOGLE_PROTECTED_DATA_CLIENT_ID: 'test-kms-client-id.apps.googleusercontent.com',
+      };
+    });
+
+    let redirectedUrl = '';
+    await page.route('**/api/me', (route) => {
+      route.fulfill({ status: 401, contentType: 'application/json', body: '{"error":"Unauthorized"}' });
+    });
+    await page.route('**/oauth2/start**', (route) => {
+      redirectedUrl = route.request().url();
+      route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: '<html><body><h1 data-testid="oauth-start-reached">OAuth Redirect Reached</h1></body></html>',
+      });
+    });
+
+    await page.goto('/#mealPlan');
+    await expect(page.getByTestId('oauth-start-reached')).toBeVisible();
+    expect(redirectedUrl).toContain('/oauth2/start?rd=%2F%23mealPlan');
+    await expect(page.locator('h1:has-text("Access Restricted")')).toHaveCount(0);
+  });
+
+  test('cold-start 401 loop guard prevents infinite redirects and shows clean sign-in page instead of Access Restricted', async ({ page }) => {
+    await page.addInitScript(() => {
+      window.ENV = {
+        GOOGLE_CLIENT_ID: 'test-prod-client-id.apps.googleusercontent.com',
+        GOOGLE_PROTECTED_DATA_CLIENT_ID: 'test-kms-client-id.apps.googleusercontent.com',
+      };
+      sessionStorage.setItem('thweb_cold_reauth_ts', String(Date.now()));
+    });
+
+    let oauthStartHit = false;
+    await page.route('**/api/me', (route) => {
+      route.fulfill({ status: 401, contentType: 'application/json', body: '{"error":"Unauthorized"}' });
+    });
+    await page.route('**/oauth2/start**', (route) => {
+      oauthStartHit = true;
+      route.fulfill({ status: 200, contentType: 'text/html', body: 'unexpected redirect' });
+    });
+
+    await page.goto('/');
+    await expect(page.locator('a:has-text("Sign in with Google")')).toBeVisible();
+    await expect(page.locator('h1:has-text("Access Restricted")')).toHaveCount(0);
+    expect(oauthStartHit).toBe(false);
+  });
 });

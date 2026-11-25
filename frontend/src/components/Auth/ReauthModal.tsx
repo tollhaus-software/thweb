@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { isMockAuthMode } from '../../config/appConfig';
 import { reauthManager, type ReauthState } from '../../utils/reauthManager';
 import { t } from '../../utils/i18n';
 import { Lock, AlertCircle, AlertTriangle, WifiOff, MessageSquare } from 'lucide-react';
@@ -18,8 +19,7 @@ export const ReauthModal: React.FC = () => {
     return null;
   }
 
-  const clientId = window.ENV?.GOOGLE_CLIENT_ID || import.meta.env.VITE_GOOGLE_CLIENT_ID || 'mock';
-  const isMock = !clientId || clientId === 'mock';
+  const isMock = isMockAuthMode();
 
   const isBusy = state.status === 'opening_popup' || state.status === 'popup_active';
 

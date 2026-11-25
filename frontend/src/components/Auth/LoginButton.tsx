@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { isMockAuthMode } from '../../config/appConfig';
 
 export const LoginButton: React.FC = () => {
   const { login } = useAuth();
   const [email, setEmail] = useState('developer@example.com');
 
-  const clientId = window.ENV?.GOOGLE_CLIENT_ID || import.meta.env.VITE_GOOGLE_CLIENT_ID || 'mock';
-  const isMock = !clientId || clientId === 'mock';
+  const isMock = isMockAuthMode();
 
   if (isMock) {
     return (

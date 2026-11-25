@@ -485,11 +485,70 @@ func (l *MultiValueList) Scan(src interface{}) error {
 	}
 }
 
+type NicknameList []string
+
+func (l NicknameList) Value() (driver.Value, error) {
+	if l == nil {
+		return "[]", nil
+	}
+	b, err := json.Marshal(l)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
+}
+
+func (l *NicknameList) Scan(src interface{}) error {
+	if src == nil {
+		*l = NicknameList{}
+		return nil
+	}
+	var raw []byte
+	switch s := src.(type) {
+	case []byte:
+		raw = s
+	case string:
+		raw = []byte(s)
+	default:
+		return fmt.Errorf("cannot scan %T into NicknameList", src)
+	}
+	if len(raw) == 0 {
+		*l = NicknameList{}
+		return nil
+	}
+	return json.Unmarshal(raw, l)
+}
+
+// SanitizeNicknames trims whitespace, discards empty values, and deduplicates case-insensitively.
+func SanitizeNicknames(items []string) NicknameList {
+	out := make(NicknameList, 0, len(items))
+	seen := make(map[string]bool, len(items))
+	for _, item := range items {
+		trimmed := strings.TrimSpace(item)
+		if trimmed == "" {
+			continue
+		}
+		key := strings.ToLower(trimmed)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, trimmed)
+	}
+	return out
+}
+
+// NicknamesEqual returns true if two NicknameList slices contain identical elements in order.
+func NicknamesEqual(a, b NicknameList) bool {
+	return StringSlicesEqual([]string(a), []string(b))
+}
+
 type Parent struct {
 	ID                         uuid.UUID               `json:"id"`
 	FamilyID                   uuid.UUID               `json:"family_id"`
 	FirstName                  string                  `json:"first_name"`
 	FirstNameForAddressList    string                  `json:"first_name_for_address_list"`
+	Nicknames                  NicknameList            `json:"nicknames,omitempty"`
 	LastName                   string                  `json:"last_name"`
 	Emails                     MultiValueList          `json:"emails"`
 	Phones                     MultiValueList          `json:"phones"`
@@ -946,6 +1005,7 @@ type MemberRow struct {
 type Employee struct {
 	ID                         uuid.UUID      `json:"id"`
 	FirstName                  string         `json:"first_name"`
+	Nicknames                  NicknameList   `json:"nicknames,omitempty"`
 	LastName                   string         `json:"last_name"`
 	EmployeeType               string         `json:"employee_type"` // "caregiver", "cook", "bufdi"
 	Emails                     MultiValueList `json:"emails"`

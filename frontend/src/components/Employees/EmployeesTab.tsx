@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Pencil } from 'lucide-react';
 import { DataTable } from '../Table/DataTable';
+import { FirstNameEditor } from '../Table/FirstNameEditor';
 import EasyEdit, { Types as EasyEditTypes } from '../InlineEdit';
 import { MultiValueCell } from '../Table/MultiValueCell';
 import { AddressEditor } from '../Table/AddressEditor';
@@ -15,6 +16,7 @@ const EasyEditComponent = EasyEdit;
 export interface Employee {
   id: string;
   first_name: string;
+  nicknames?: string[];
   last_name: string;
   employee_type: 'caregiver' | 'cook' | 'bufdi';
   emails?: MultiValueEntry[];
@@ -39,6 +41,7 @@ export interface EmployeesTabProps {
   onCloseCreateModal?: () => void;
   onCreateEmployee?: (payload: Partial<Employee>) => Promise<void>;
   onSaveEmployeeField: (employee: Employee, field: keyof Employee, value: any) => Promise<void>;
+  onSaveEmployeeNames?: (employee: Employee, firstName: string, nicknames: string[]) => Promise<void>;
   onDeleteEmployee: (employee: Employee) => void;
   // MultiValue management
   activeEmployeeForMultiValue?: Employee | null;
@@ -62,6 +65,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({
   onCloseCreateModal,
   onCreateEmployee,
   onSaveEmployeeField,
+  onSaveEmployeeNames,
   onDeleteEmployee,
   activeEmployeeForMultiValue,
   activeMultiValueField,
@@ -110,6 +114,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({
     const q = searchQuery.toLowerCase();
     return employees.filter((emp) => {
       const name = `${emp.first_name || ''} ${emp.last_name || ''}`.toLowerCase();
+      const nicknames = (emp.nicknames || []).map((n) => String(n || '').toLowerCase()).join(' ');
       const type = (emp.employee_type || '').toLowerCase();
       const addr = (emp.address || '').toLowerCase();
       const emails = (emp.emails || []).map((e) => getEntryValue(e).toLowerCase()).join(' ');
@@ -117,6 +122,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({
       const allergies = (emp.allergies || []).map((a) => String(a || '').toLowerCase()).join(' ');
       return (
         name.includes(q) ||
+        nicknames.includes(q) ||
         type.includes(q) ||
         addr.includes(q) ||
         emails.includes(q) ||
@@ -126,6 +132,21 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({
     });
   }, [employees, searchQuery]);
 
+  const callbacksRef = React.useRef({
+    onSaveEmployeeField,
+    onSaveEmployeeNames,
+    onDeleteEmployee,
+    onOpenManageMultiValue,
+    onOpenManageJobs,
+  });
+  callbacksRef.current = {
+    onSaveEmployeeField,
+    onSaveEmployeeNames,
+    onDeleteEmployee,
+    onOpenManageMultiValue,
+    onOpenManageJobs,
+  };
+
   const employeeColumns = useMemo<ColumnDef<Employee>[]>(
     () => [
       {
@@ -134,20 +155,21 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({
         size: 180,
         cell: (info) => {
           const emp = info.row.original;
-          if (!canWriteEmployees) {
-            return <span>{emp.first_name}</span>;
-          }
           return (
-            <EasyEditComponent
-              type={EasyEditTypes.TEXT}
-              value={emp.first_name}
-              onSave={(val: string) => onSaveEmployeeField(emp, 'first_name', val)}
-              editButtonLabel={<Pencil size={13} />}
-              instructions={t('editFirstName')}
-              viewAttributes={{}}
-              inputAttributes={{}}
-              onCancel={() => {}}
-              onValidate={() => true}
+            <FirstNameEditor
+              id={`employee-${emp.id}`}
+              firstName={emp.first_name}
+              showAddressListName={false}
+              showNicknames={true}
+              nicknames={emp.nicknames || []}
+              onSave={async (fn, _fnAddr, nicks) => {
+                if (callbacksRef.current.onSaveEmployeeNames) {
+                  await callbacksRef.current.onSaveEmployeeNames(emp, fn, nicks);
+                } else {
+                  await callbacksRef.current.onSaveEmployeeField(emp, 'first_name', fn);
+                }
+              }}
+              disabled={!canWriteEmployees}
             />
           );
         },
@@ -165,7 +187,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({
             <EasyEditComponent
               type={EasyEditTypes.TEXT}
               value={emp.last_name}
-              onSave={(val: string) => onSaveEmployeeField(emp, 'last_name', val)}
+              onSave={(val: string) => callbacksRef.current.onSaveEmployeeField(emp, 'last_name', val)}
               editButtonLabel={<Pencil size={13} />}
               instructions={t('editLastName')}
               viewAttributes={{}}
@@ -205,7 +227,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({
               type={EasyEditTypes.SELECT}
               options={options}
               value={emp.employee_type}
-              onSave={(val: string) => onSaveEmployeeField(emp, 'employee_type', val)}
+              onSave={(val: string) => callbacksRef.current.onSaveEmployeeField(emp, 'employee_type', val)}
               editButtonLabel={<Pencil size={13} />}
               displayComponent={<span>{displayLabel}</span>}
               viewAttributes={{}}
@@ -231,7 +253,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({
               values={emp.emails || []}
               placeholder={t('addEmail')}
               isActive={isPopActive}
-              onOpenManage={(field, anchor) => onOpenManageMultiValue?.(emp, field, anchor)}
+              onOpenManage={(field, anchor) => callbacksRef.current.onOpenManageMultiValue?.(emp, field, anchor)}
               canEdit={canWriteEmployees}
             />
           );
@@ -252,7 +274,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({
               values={emp.phones || []}
               placeholder={t('addPhone')}
               isActive={isPopActive}
-              onOpenManage={(field, anchor) => onOpenManageMultiValue?.(emp, field, anchor)}
+              onOpenManage={(field, anchor) => callbacksRef.current.onOpenManageMultiValue?.(emp, field, anchor)}
               canEdit={canWriteEmployees}
             />
           );
@@ -270,7 +292,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({
               familyParents={[emp as any]}
               canEdit={canWriteEmployees}
               onSave={([updatedEmp]) =>
-                onSaveEmployeeField(emp, 'address', updatedEmp.address || '')
+                callbacksRef.current.onSaveEmployeeField(emp, 'address', updatedEmp.address || '')
               }
             />
           );
@@ -303,7 +325,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({
               options={options}
               value={isOfficer ? 'yes' : 'no'}
               onSave={(val: string) =>
-                onSaveEmployeeField(
+                callbacksRef.current.onSaveEmployeeField(
                   emp,
                   'is_kinderschutzbeauftragter',
                   val === 'yes'
@@ -337,7 +359,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({
                 values={emp.allergies || []}
                 placeholder={canWriteEmployeeAllergies ? t('addAllergy') : t('noAllergiesOrDiet')}
                 isActive={isPopActive}
-                onOpenManage={(field, anchor) => onOpenManageMultiValue?.(emp, field, anchor)}
+                onOpenManage={(field, anchor) => callbacksRef.current.onOpenManageMultiValue?.(emp, field, anchor)}
                 canEdit={canWriteEmployeeAllergies}
               />
             );
@@ -356,7 +378,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({
             <JobsCell
               person={{ id: emp.id, first_name: emp.first_name, last_name: emp.last_name, jobs: emp.jobs, type: 'employee' }}
               isActive={isCurrentActive}
-              onOpenManage={(person: PersonWithJobs, anchor: HTMLElement | string) => onOpenManageJobs?.(person, anchor)}
+              onOpenManage={(person: PersonWithJobs, anchor: HTMLElement | string) => callbacksRef.current.onOpenManageJobs?.(person, anchor)}
               readOnly={!(canWriteEmployees || canWriteJobs)}
             />
           );
@@ -372,7 +394,7 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({
           const fullName = `${emp.first_name} ${emp.last_name}`.trim();
           return (
             <RowActionsMenu
-              onDelete={() => onDeleteEmployee(emp)}
+              onDelete={() => callbacksRef.current.onDeleteEmployee(emp)}
               deleteLabel={t('deleteEmployee') || 'Mitarbeiter löschen'}
               disabled={!canWriteEmployees}
               disabledTooltip={!canWriteEmployees ? t('permissionRequired') : undefined}
@@ -389,12 +411,8 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({
       canWriteJobs,
       jobsPopoverAnchor,
       activePersonForJobs,
-      onOpenManageJobs,
       activeEmployeeForMultiValue,
       activeMultiValueField,
-      onOpenManageMultiValue,
-      onSaveEmployeeField,
-      onDeleteEmployee,
     ]
   );
 

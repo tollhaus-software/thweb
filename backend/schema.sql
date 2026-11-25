@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS parents (
     family_id UUID NOT NULL REFERENCES families(id) ON DELETE CASCADE,
     first_name TEXT NOT NULL,
     first_name_for_address_list TEXT NOT NULL DEFAULT '',
+    nicknames JSONB NOT NULL DEFAULT '[]'::jsonb,
     last_name TEXT NOT NULL,
     emails JSONB NOT NULL DEFAULT '[]'::jsonb,
     -- phones: JSONB array of objects [{ "value": "...", "type": "mobile"|"landline"|"work", "address_list": bool }]
@@ -231,6 +232,10 @@ CREATE TABLE IF NOT EXISTS meal_plan_from_sheets (
     date DATE PRIMARY KEY,
     fetched_at TIMESTAMPTZ NOT NULL,
     cook_name TEXT NOT NULL DEFAULT '',
+    cooks JSONB NOT NULL DEFAULT '[]'::jsonb,
+    cook_resolution_status TEXT NOT NULL DEFAULT 'empty' CHECK (cook_resolution_status IN ('empty', 'ignored', 'resolved', 'ambiguous', 'unrecognized')),
+    cook_resolution_details JSONB NOT NULL DEFAULT '{}'::jsonb,
+    unresolved_notified_cook_name TEXT NOT NULL DEFAULT '',
     food_component_1 TEXT NOT NULL DEFAULT '',
     food_component_2 TEXT NOT NULL DEFAULT '',
     food_component_3 TEXT NOT NULL DEFAULT ''
@@ -242,6 +247,7 @@ CREATE INDEX IF NOT EXISTS idx_meal_plan_from_sheets_date ON meal_plan_from_shee
 CREATE TABLE IF NOT EXISTS employees (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     first_name TEXT NOT NULL,
+    nicknames JSONB NOT NULL DEFAULT '[]'::jsonb,
     last_name TEXT NOT NULL,
     employee_type TEXT NOT NULL CHECK (employee_type IN ('caregiver', 'cook', 'bufdi')),
     emails JSONB NOT NULL DEFAULT '[]'::jsonb,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Pencil, Check, X } from 'lucide-react';
+import { Pencil, Check, X, Plus } from 'lucide-react';
 import { t } from '../../utils/i18n';
 import { CellPopover } from './CellPopover';
 import { useIsMobile } from '../../hooks/useIsMobile';
@@ -8,15 +8,40 @@ export interface FirstNameEditorProps {
   id?: string;
   firstName?: string;
   firstNameForAddressList?: string;
-  onSave: (firstName: string, firstNameForAddressList: string) => void | Promise<void>;
+  showAddressListName?: boolean;
+  showNicknames?: boolean;
+  nicknames?: string[];
+  onSave: (
+    firstName: string,
+    firstNameForAddressList: string,
+    nicknames: string[]
+  ) => void | Promise<void>;
   disabled?: boolean;
   placeholder?: string;
+}
+
+function mergeSanitizedNicknames(existing: string[], rawInput: string): string[] {
+  const combined = [...existing, ...rawInput.split(',')];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of combined) {
+    const trimmed = item.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(trimmed);
+  }
+  return out;
 }
 
 export const FirstNameEditor: React.FC<FirstNameEditorProps> = ({
   id,
   firstName = '',
   firstNameForAddressList = '',
+  showAddressListName = true,
+  showNicknames = false,
+  nicknames = [],
   onSave,
   disabled = false,
   placeholder = '-',
@@ -24,16 +49,21 @@ export const FirstNameEditor: React.FC<FirstNameEditorProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [tempFirstName, setTempFirstName] = useState(firstName);
   const [tempAddressListName, setTempAddressListName] = useState(firstNameForAddressList);
+  const [tempNicknames, setTempNicknames] = useState<string[]>(nicknames);
+  const [pendingNickname, setPendingNickname] = useState('');
 
   const isMobile = useIsMobile();
   const triggerRef = useRef<HTMLDivElement>(null);
   const firstNameInputRef = useRef<HTMLInputElement>(null);
   const addressListInputRef = useRef<HTMLInputElement>(null);
+  const nicknameInputRef = useRef<HTMLInputElement>(null);
 
   const startEditing = () => {
     if (disabled) return;
     setTempFirstName(firstName);
     setTempAddressListName(firstNameForAddressList);
+    setTempNicknames(nicknames || []);
+    setPendingNickname('');
     setIsEditing(true);
   };
 
@@ -49,21 +79,51 @@ export const FirstNameEditor: React.FC<FirstNameEditorProps> = ({
     }
   }, [isEditing]);
 
+  const handleAddPendingNickname = () => {
+    if (!pendingNickname.trim()) return;
+    setTempNicknames((prev) => mergeSanitizedNicknames(prev, pendingNickname));
+    setPendingNickname('');
+    nicknameInputRef.current?.focus();
+  };
+
+  const handleRemoveNickname = (idx: number) => {
+    setTempNicknames((prev) => prev.filter((_, i) => i !== idx));
+  };
+
   const handleSave = () => {
     const finalFirstName = tempFirstName.trim();
     const finalAddressListName = tempAddressListName.trim();
+    const finalNicknames = showNicknames
+      ? mergeSanitizedNicknames(tempNicknames, pendingNickname)
+      : nicknames || [];
+    setPendingNickname('');
     setIsEditing(false);
-    onSave(finalFirstName, finalAddressListName);
+    onSave(finalFirstName, finalAddressListName, finalNicknames);
   };
 
   const handleCancel = () => {
     setTempFirstName(firstName);
     setTempAddressListName(firstNameForAddressList);
+    setTempNicknames(nicknames || []);
+    setPendingNickname('');
     setIsEditing(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSave();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      handleCancel();
+    }
+  };
+
+  const handleNicknameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === ',') {
+      e.preventDefault();
+      handleAddPendingNickname();
+    } else if (e.key === 'Enter') {
       e.preventDefault();
       handleSave();
     } else if (e.key === 'Escape') {
@@ -111,7 +171,7 @@ export const FirstNameEditor: React.FC<FirstNameEditorProps> = ({
         {firstName || placeholder}
       </span>
 
-      {firstNameForAddressList ? (
+      {showAddressListName && firstNameForAddressList ? (
         <span
           className="address-list-name-badge"
           title={`${t('addressListGivenNameLabel') || 'Abweichend für Addressliste:'} ${firstNameForAddressList}`}
@@ -133,6 +193,32 @@ export const FirstNameEditor: React.FC<FirstNameEditorProps> = ({
           }}
         >
           📋 {firstNameForAddressList}
+        </span>
+      ) : null}
+
+      {showNicknames && nicknames && nicknames.length > 0 ? (
+        <span
+          className="nicknames-badge"
+          data-testid="nicknames-badge"
+          title={`${t('nicknamesBadgeTooltip') || 'Spitznamen:'} ${nicknames.join(', ')}`}
+          style={{
+            fontSize: '0.75rem',
+            padding: '1px 5px',
+            borderRadius: '3px',
+            backgroundColor: 'var(--bg-subtle, #f1f5f9)',
+            border: '1px solid var(--border, #cbd5e1)',
+            color: 'var(--text-muted, #64748b)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '2px',
+            flexShrink: 0,
+            maxWidth: '140px',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          🏷️ {nicknames.join(', ')}
         </span>
       ) : null}
 
@@ -244,41 +330,163 @@ export const FirstNameEditor: React.FC<FirstNameEditorProps> = ({
         </div>
 
         {/* Row 2: Abweichend für Addressliste */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <label
-            htmlFor={`input-address-list-name-${inputId}`}
-            style={{
-              fontSize: '0.825rem',
-              fontWeight: 600,
-              color: 'var(--text-h)',
-              textAlign: 'left',
-            }}
-          >
-            {t('addressListGivenNameLabel') || 'Abweichend für Addressliste:'}
-          </label>
-          <input
-            id={`input-address-list-name-${inputId}`}
-            ref={addressListInputRef}
-            type="text"
-            className="form-control address-list-name-input"
-            value={tempAddressListName}
-            onChange={(e) => setTempAddressListName(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={t('firstNameForAddressList')}
-            style={{
-              width: '100%',
-              minHeight: isMobile ? '38px' : '30px',
-              padding: isMobile ? '8px 10px' : '5px 8px',
-              borderRadius: '4px',
-              border: '1px solid var(--input-border, #cbd5e1)',
-              background: 'var(--input-bg, #ffffff)',
-              color: 'var(--input-text, inherit)',
-              fontSize: isMobile ? '16px' : '0.875rem',
-              boxSizing: 'border-box',
-              outline: 'none',
-            }}
-          />
-        </div>
+        {showAddressListName && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <label
+              htmlFor={`input-address-list-name-${inputId}`}
+              style={{
+                fontSize: '0.825rem',
+                fontWeight: 600,
+                color: 'var(--text-h)',
+                textAlign: 'left',
+              }}
+            >
+              {t('addressListGivenNameLabel') || 'Abweichend für Addressliste:'}
+            </label>
+            <input
+              id={`input-address-list-name-${inputId}`}
+              ref={addressListInputRef}
+              type="text"
+              className="form-control address-list-name-input"
+              value={tempAddressListName}
+              onChange={(e) => setTempAddressListName(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={t('firstNameForAddressList')}
+              style={{
+                width: '100%',
+                minHeight: isMobile ? '38px' : '30px',
+                padding: isMobile ? '8px 10px' : '5px 8px',
+                borderRadius: '4px',
+                border: '1px solid var(--input-border, #cbd5e1)',
+                background: 'var(--input-bg, #ffffff)',
+                color: 'var(--input-text, inherit)',
+                fontSize: isMobile ? '16px' : '0.875rem',
+                boxSizing: 'border-box',
+                outline: 'none',
+              }}
+            />
+          </div>
+        )}
+
+        {/* Row 3: Spitznamen */}
+        {showNicknames && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <label
+              htmlFor={`input-nicknames-${inputId}`}
+              style={{
+                fontSize: '0.825rem',
+                fontWeight: 600,
+                color: 'var(--text-h)',
+                textAlign: 'left',
+              }}
+            >
+              {t('nicknamesLabel') || 'Spitznamen:'}
+            </label>
+            {tempNicknames.length > 0 && (
+              <div
+                className="nicknames-chips-list"
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '4px',
+                  marginBottom: '2px',
+                }}
+              >
+                {tempNicknames.map((nn, idx) => (
+                  <span
+                    key={`${nn}-${idx}`}
+                    className="nickname-chip"
+                    data-testid={`nickname-chip-${idx}`}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      fontSize: '0.78rem',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      backgroundColor: 'var(--bg-subtle, #f1f5f9)',
+                      border: '1px solid var(--border, #cbd5e1)',
+                      color: 'var(--text-h)',
+                    }}
+                  >
+                    <span>{nn}</span>
+                    <button
+                      type="button"
+                      className="nickname-chip-remove"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemoveNickname(idx);
+                      }}
+                      title={`${t('removeNickname') || 'Spitzname entfernen'}: ${nn}`}
+                      aria-label={`${t('removeNickname') || 'Spitzname entfernen'}: ${nn}`}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: 0,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        color: 'var(--text-muted, #64748b)',
+                      }}
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+              <input
+                id={`input-nicknames-${inputId}`}
+                ref={nicknameInputRef}
+                type="text"
+                className="form-control nicknames-input"
+                value={pendingNickname}
+                onChange={(e) => setPendingNickname(e.target.value)}
+                onKeyDown={handleNicknameKeyDown}
+                placeholder={t('nicknamesPlaceholder') || 'Spitzname hinzufügen...'}
+                style={{
+                  flex: 1,
+                  minHeight: isMobile ? '38px' : '30px',
+                  padding: isMobile ? '8px 10px' : '5px 8px',
+                  borderRadius: '4px',
+                  border: '1px solid var(--input-border, #cbd5e1)',
+                  background: 'var(--input-bg, #ffffff)',
+                  color: 'var(--input-text, inherit)',
+                  fontSize: isMobile ? '16px' : '0.875rem',
+                  boxSizing: 'border-box',
+                  outline: 'none',
+                }}
+              />
+              <button
+                type="button"
+                className="btn-add-nickname"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleAddPendingNickname();
+                }}
+                disabled={!pendingNickname.trim()}
+                title={t('addNickname') || 'Spitzname hinzufügen'}
+                aria-label={t('addNickname') || 'Spitzname hinzufügen'}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minHeight: isMobile ? '38px' : '30px',
+                  minWidth: isMobile ? '38px' : '30px',
+                  padding: '0 6px',
+                  borderRadius: '4px',
+                  border: '1px solid var(--border, #cbd5e1)',
+                  background: 'var(--bg-surface, #ffffff)',
+                  color: pendingNickname.trim() ? 'var(--text-h)' : 'var(--text-muted, #94a3b8)',
+                  cursor: pendingNickname.trim() ? 'pointer' : 'default',
+                }}
+              >
+                <Plus size={14} />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Buttons */}
         <div

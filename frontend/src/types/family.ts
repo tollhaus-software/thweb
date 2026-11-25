@@ -29,6 +29,7 @@ export interface Parent {
   family_id: string;
   first_name: string;
   first_name_for_address_list?: string;
+  nicknames?: string[];
   last_name: string;
   emails?: MultiValueEntry[];
   phones?: MultiValueEntry[];

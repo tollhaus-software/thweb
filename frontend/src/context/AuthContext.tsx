@@ -1,5 +1,32 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { reauthManager } from '../utils/reauthManager';
+import { isMockAuthMode } from '../config/appConfig';
+
+const COLD_START_REAUTH_KEY = 'thweb_cold_reauth_ts';
+const COLD_START_REAUTH_COOLDOWN_MS = 15_000;
+
+function tryAutoRedirectToOAuth(): boolean {
+  if (typeof window === 'undefined') return false;
+  if (isMockAuthMode()) return false;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
+
+  try {
+    const lastAttempt = sessionStorage.getItem(COLD_START_REAUTH_KEY);
+    if (lastAttempt) {
+      const elapsed = Date.now() - Number(lastAttempt);
+      if (!Number.isNaN(elapsed) && elapsed >= 0 && elapsed < COLD_START_REAUTH_COOLDOWN_MS) {
+        return false;
+      }
+    }
+    sessionStorage.setItem(COLD_START_REAUTH_KEY, String(Date.now()));
+  } catch {
+    // Ignore sessionStorage errors and proceed with redirect
+  }
+
+  const rd = `${window.location.pathname}${window.location.search}${window.location.hash}` || '/';
+  window.location.replace(`/oauth2/start?rd=${encodeURIComponent(rd)}`);
+  return true;
+}
 
 export interface SimulationInfo {
   active: boolean;
@@ -123,9 +150,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       headers['Authorization'] = `Bearer ${token}`;
     }
 
+    let redirecting = false;
     try {
       const res = await fetch('/api/me', { headers });
       if (res.ok) {
+        try {
+          sessionStorage.removeItem(COLD_START_REAUTH_KEY);
+        } catch {
+          // ignore
+        }
         const data = await res.json();
         setUser(data);
         setAuthError(null);
@@ -133,11 +166,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // If user was already authenticated, do NOT unmount Dashboard! Keep state and trigger re-auth.
         if (userRef.current) {
           reauthManager.promptReauth();
+        } else if (tryAutoRedirectToOAuth()) {
+          // Keep loading=true while navigating to /oauth2/start to avoid flashing LandingPage
+          redirecting = true;
+          return;
         } else {
           setUser(null);
-          setAuthError({
-            message: 'Session expired',
-          });
+          setAuthError(null);
         }
       } else {
         const errData = await res.json().catch(() => ({}));
@@ -154,7 +189,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setAuthError({ message: errorMsg });
       }
     } finally {
-      setLoading(false);
+      if (!redirecting) {
+        setLoading(false);
+      }
     }
   }, [kiosk, token]);
 

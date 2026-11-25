@@ -914,6 +914,7 @@ func (s *Server) HandleCreateFamily(w http.ResponseWriter, r *http.Request) {
 		FamilyType              string                `json:"family_type"`
 		FirstName               string                `json:"first_name"`
 		FirstNameForAddressList string                `json:"first_name_for_address_list"`
+		Nicknames               models.NicknameList   `json:"nicknames"`
 		LastName                string                `json:"last_name"`
 		Emails                  models.MultiValueList `json:"emails"`
 		Phones                  models.MultiValueList `json:"phones"`
@@ -922,6 +923,7 @@ func (s *Server) HandleCreateFamily(w http.ResponseWriter, r *http.Request) {
 		Parents                 []struct {
 			FirstName               string                `json:"first_name"`
 			FirstNameForAddressList string                `json:"first_name_for_address_list"`
+			Nicknames               models.NicknameList   `json:"nicknames"`
 			LastName                string                `json:"last_name"`
 			Emails                  models.MultiValueList `json:"emails"`
 			Phones                  models.MultiValueList `json:"phones"`
@@ -941,6 +943,7 @@ func (s *Server) HandleCreateFamily(w http.ResponseWriter, r *http.Request) {
 			parents = append(parents, models.Parent{
 				FirstName:               p.FirstName,
 				FirstNameForAddressList: p.FirstNameForAddressList,
+				Nicknames:               p.Nicknames,
 				LastName:                p.LastName,
 				Emails:                  p.Emails,
 				Phones:                  p.Phones,
@@ -952,6 +955,7 @@ func (s *Server) HandleCreateFamily(w http.ResponseWriter, r *http.Request) {
 		parents = append(parents, models.Parent{
 			FirstName:               req.FirstName,
 			FirstNameForAddressList: req.FirstNameForAddressList,
+			Nicknames:               req.Nicknames,
 			LastName:                req.LastName,
 			Emails:                  req.Emails,
 			Phones:                  req.Phones,
@@ -1069,6 +1073,17 @@ func (s *Server) HandleUpdateFamilyParents(w http.ResponseWriter, r *http.Reques
 		// 2. Verify that no new or non-identifier email in req.Parents has been assigned IdentifierEmail = true
 		for _, reqParent := range req.Parents {
 			ep, exists := existingParentsMap[reqParent.ID]
+			if reqParent.Nicknames != nil {
+				sanitizedReq := models.SanitizeNicknames(reqParent.Nicknames)
+				if (!exists && len(sanitizedReq) > 0) || (exists && !models.NicknamesEqual(sanitizedReq, ep.Nicknames)) {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusForbidden)
+					json.NewEncoder(w).Encode(map[string]string{
+						"error": "Forbidden: families.all.write permission required to modify nicknames",
+					})
+					return
+				}
+			}
 			for _, newEmail := range reqParent.Emails {
 				if !newEmail.IdentifierEmail {
 					continue
@@ -1173,6 +1188,7 @@ func (s *Server) HandleGetSelfServiceParents(w http.ResponseWriter, r *http.Requ
 
 	for i := range parents {
 		parents[i].Notes = ""
+		parents[i].Nicknames = nil
 		parents[i].VaccinationStatusProtected = nil
 		parents[i].VaccinationChecks = nil
 		if parents[i].Emails == nil {
@@ -1302,6 +1318,7 @@ func (s *Server) HandleUpdateSelfServiceParents(w http.ResponseWriter, r *http.R
 
 	for i := range allParentsToSave {
 		allParentsToSave[i].Notes = ""
+		allParentsToSave[i].Nicknames = nil
 		allParentsToSave[i].VaccinationStatusProtected = nil
 		allParentsToSave[i].VaccinationChecks = nil
 	}
@@ -2609,6 +2626,7 @@ func (s *Server) HandleListEmployees(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := auth.GetUser(r.Context())
+	canViewEmployees := user != nil && user.HasPermission("employees.all.read")
 	canViewAllergies := user != nil && user.HasPermission("allergies.employees.read")
 
 	var allergiesCipher *crypto.CachedCipherContext
@@ -2617,6 +2635,9 @@ func (s *Server) HandleListEmployees(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for i := range employees {
+		if !canViewEmployees {
+			employees[i].Nicknames = nil
+		}
 		if canViewAllergies && len(employees[i].AllergiesProtected) > 0 && allergiesCipher != nil {
 			if plainJSON, err := allergiesCipher.Decrypt(r.Context(), employees[i].AllergiesProtected); err == nil && len(plainJSON) > 0 {
 				if items, err := models.DecodeAllergiesPayloadItems(plainJSON); err == nil {
@@ -2731,11 +2752,13 @@ func (s *Server) HandleUpdateEmployee(w http.ResponseWriter, r *http.Request) {
 		if (emp.FirstName != "" && emp.FirstName != existingEmp.FirstName) ||
 			(emp.LastName != "" && emp.LastName != existingEmp.LastName) ||
 			(emp.EmployeeType != "" && emp.EmployeeType != existingEmp.EmployeeType) ||
-			(emp.Address != "" && emp.Address != existingEmp.Address) {
+			(emp.Address != "" && emp.Address != existingEmp.Address) ||
+			(emp.Nicknames != nil && !models.NicknamesEqual(models.SanitizeNicknames(emp.Nicknames), existingEmp.Nicknames)) {
 			httpErrorLog(w, r, "Forbidden: employees.all.write permission required", http.StatusForbidden, nil)
 			return
 		}
 		emp.FirstName = existingEmp.FirstName
+		emp.Nicknames = existingEmp.Nicknames
 		emp.LastName = existingEmp.LastName
 		emp.EmployeeType = existingEmp.EmployeeType
 		emp.Emails = existingEmp.Emails
@@ -2820,6 +2843,9 @@ func (s *Server) HandleUpdateEmployee(w http.ResponseWriter, r *http.Request) {
 
 	updated.AllergiesProtected = nil
 	updated.AllergiesUpdated = false
+	if user == nil || !user.HasPermission("employees.all.read") {
+		updated.Nicknames = nil
+	}
 	if user != nil && user.HasPermission("allergies.employees.read") && len(finalAllergies) > 0 {
 		updated.Allergies = finalAllergies
 	} else {

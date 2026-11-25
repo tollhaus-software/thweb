@@ -4600,13 +4600,20 @@ const Dashboard: React.FC = () => {
       .catch((err) => alert(err.message));
   };
 
-  const handleSaveParentNames = (parent: Parent, firstName: string, firstNameForAddressList: string) => {
+  const handleSaveParentNames = (
+    parent: Parent,
+    firstName: string,
+    firstNameForAddressList: string,
+    nicknames: string[] = parent.nicknames || []
+  ) => {
     const family = families.find(f => f.id === parent.family_id);
     if (!family) return Promise.resolve();
 
     const originalParents = family.parents || [];
     const updatedParents = originalParents.map(p => 
-      p.id === parent.id ? { ...p, first_name: firstName, first_name_for_address_list: firstNameForAddressList } : p
+      p.id === parent.id
+        ? { ...p, first_name: firstName, first_name_for_address_list: firstNameForAddressList, nicknames }
+        : p
     );
 
     return fetch(`/api/families/${family.id}`, {
@@ -4966,13 +4973,15 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
       const filteredParents = allParents.filter(p => {
         if (!query) return true;
         const fnMatch = (p.first_name || '').toLowerCase().includes(query);
+        const addrFnMatch = (p.first_name_for_address_list || '').toLowerCase().includes(query);
+        const nickMatch = (p.nicknames || []).some(n => String(n || '').toLowerCase().includes(query));
         const lnMatch = (p.last_name || '').toLowerCase().includes(query);
         const emailMatch = (p.emails || []).some(e => getEntryValue(e).toLowerCase().includes(query));
         const phoneMatch = (p.phones || []).some(ph => getEntryValue(ph).toLowerCase().includes(query));
         const addressMatch = (p.address || '').toLowerCase().includes(query);
         const mentored = getMentoredFamiliesForParent(p, families);
         const mentorMatch = mentored.some(m => m.canonicalName.toLowerCase().includes(query) || m.displayName.toLowerCase().includes(query));
-        return fnMatch || lnMatch || emailMatch || phoneMatch || addressMatch || mentorMatch;
+        return fnMatch || addrFnMatch || nickMatch || lnMatch || emailMatch || phoneMatch || addressMatch || mentorMatch;
       });
 
       return {
@@ -5644,6 +5653,46 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
       }
     },
     [getAuthHeaders]
+  );
+
+  const handleSaveEmployeeNames = React.useCallback(
+    async (employee: Employee, firstName: string, nicknames: string[]) => {
+      const originalEmployee = { ...employee };
+      const updated: any = {
+        ...employee,
+        first_name: firstName,
+        nicknames,
+        type: employee.employee_type,
+        is_child_protection_officer: employee.is_kinderschutzbeauftragter,
+      };
+      try {
+        const res = await fetch(`/api/employees/${employee.id}`, {
+          method: 'PUT',
+          credentials: 'include',
+          headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(updated),
+        });
+        if (res.ok) {
+          const saved = await res.json();
+          setEmployees((prev) => prev.map((e) => (e.id === saved.id ? saved : e)));
+          pushAction({
+            type: 'UPDATE_EMPLOYEE',
+            payload: {
+              tab: 'employees',
+              employeeId: employee.id,
+              before: originalEmployee,
+              after: saved,
+            },
+          });
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          alert(errData.error || 'Failed to update employee');
+        }
+      } catch (err) {
+        console.error('Failed to update employee names:', err);
+      }
+    },
+    [getAuthHeaders, pushAction]
   );
 
   const handleDeleteEmployee = React.useCallback(
@@ -6931,6 +6980,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
             onCloseCreateModal={() => setAddEmployeeOpen(false)}
             onCreateEmployee={handleCreateEmployee}
             onSaveEmployeeField={handleSaveEmployeeField}
+            onSaveEmployeeNames={handleSaveEmployeeNames}
             onDeleteEmployee={handleDeleteEmployee}
             activeEmployeeForMultiValue={activeEmployeeForMultiValue}
             activeMultiValueField={activeMultiValueField}

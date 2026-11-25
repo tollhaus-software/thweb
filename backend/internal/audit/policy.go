@@ -53,6 +53,7 @@ var AuditRegistry = map[string]EntityPolicy{
 						stripSensitiveHealthFields(pMap)
 						if !user.HasPermission("families.all.read") {
 							pMap["notes"] = ""
+							delete(pMap, "nicknames")
 						}
 					}
 				}
@@ -83,9 +84,10 @@ var AuditRegistry = map[string]EntityPolicy{
 		SanitizeSnapshot: func(user *models.UserWithPermissions, snapshot map[string]interface{}) map[string]interface{} {
 			stripSensitiveHealthFields(snapshot)
 
-			// Non-staff users (e.g. self-service or restricted) cannot see staff notes
+			// Non-staff users (e.g. self-service or restricted) cannot see staff notes or internal nicknames
 			if !user.HasPermission("families.all.read") {
 				snapshot["notes"] = ""
+				delete(snapshot, "nicknames")
 
 				// Filter emails to address_list only
 				if emailsRaw, ok := snapshot["emails"].([]interface{}); ok {
@@ -183,6 +185,9 @@ var AuditRegistry = map[string]EntityPolicy{
 		},
 		SanitizeSnapshot: func(user *models.UserWithPermissions, snapshot map[string]interface{}) map[string]interface{} {
 			stripSensitiveHealthFields(snapshot)
+			if user == nil || !user.HasPermission("employees.all.read") {
+				delete(snapshot, "nicknames")
+			}
 			return snapshot
 		},
 	},
