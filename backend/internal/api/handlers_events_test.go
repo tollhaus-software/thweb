@@ -228,8 +228,23 @@ func TestCalendarEvents_CRUD_Import_And_UpcomingFiltering(t *testing.T) {
 		t.Fatalf("expected 0 created, 5 skipped on re-import, got %+v", impResp2)
 	}
 
+	// Seed a cooking duty for uKleineParent (parentID) on 2097-11-08 -> should appear in both upcoming-events (sorted chronologically) and /api/events!
+	if err := appStore.SeedTestMealPlanWithCooks(
+		ctx,
+		"2097-11-08",
+		"Anna Test",
+		models.MealAllergenCookList{{ID: parentID, Type: "parent", FirstName: "Anna", LastName: "Test"}},
+		"resolved",
+		"Gemüsesuppe", "Brot", "",
+	); err != nil {
+		t.Fatalf("failed to seed cooking duty: %v", err)
+	}
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM meal_plan_from_sheets WHERE date = '2097-11-08'")
+	}()
+
 	// Parent with child in Kleine Gruppe (group 1) on 2097-11-03:
-	// Should see ongoing schliesszeit (2097-11-01..05), ea_kleine_gruppe (2097-11-10), custom Hortfreizeit (2097-11-20..22)
+	// Should see ongoing schliesszeit (2097-11-01..05), cooking_duty (2097-11-08), ea_kleine_gruppe (2097-11-10), custom Hortfreizeit (2097-11-20..22)
 	// Should NOT see ferien or ea_hort!
 	uKleineParent := &models.UserWithPermissions{
 		ID:                   uuid.New(),
@@ -246,13 +261,41 @@ func TestCalendarEvents_CRUD_Import_And_UpcomingFiltering(t *testing.T) {
 	}
 	var upResp models.MyUpcomingEventsResponse
 	_ = json.Unmarshal(recUpcoming.Body.Bytes(), &upResp)
-	if len(upResp.Events) != 3 {
-		t.Fatalf("expected 3 filtered upcoming events for Kleine Gruppe parent, got %d: %+v", len(upResp.Events), upResp.Events)
+	if len(upResp.Events) != 4 {
+		t.Fatalf("expected 4 filtered upcoming events for Kleine Gruppe parent, got %d: %+v", len(upResp.Events), upResp.Events)
 	}
-	if upResp.Events[0].EventType != "schliesszeit" ||
-		upResp.Events[1].EventType != "ea_kleine_gruppe" ||
-		upResp.Events[2].EventType != "custom" ||
-		upResp.Events[2].Title != "Hortfreizeit" {
+	if upResp.Events[0].EventType != "schliesszeit" || !upResp.Events[0].Editable ||
+		upResp.Events[1].Type != "cooking_duty" || upResp.Events[1].Editable ||
+		upResp.Events[1].Date != "2097-11-08" ||
+		upResp.Events[2].EventType != "ea_kleine_gruppe" || !upResp.Events[2].Editable ||
+		upResp.Events[3].EventType != "custom" || !upResp.Events[3].Editable ||
+		upResp.Events[3].Title != "Hortfreizeit" {
 		t.Fatalf("unexpected upcoming events order/content: %+v", upResp.Events)
+	}
+
+	// Verify GET /api/events for uKleineParent includes her personal cooking_duty on 2097-11-08 with matching ID and Editable=false
+	reqCalParent := httptest.NewRequest("GET", "/api/events?start_date=2097-11-01&end_date=2097-11-30", nil)
+	recCalParent := httptest.NewRecorder()
+	r.ServeHTTP(recCalParent, reqCalParent.WithContext(context.WithValue(reqCalParent.Context(), auth.UserContextKey, uKleineParent)))
+	if recCalParent.Code != http.StatusOK {
+		t.Fatalf("expected 200 on GET /api/events for parent, got %d", recCalParent.Code)
+	}
+	var calList []models.CalendarEvent
+	_ = json.Unmarshal(recCalParent.Body.Bytes(), &calList)
+	foundCookingInCal := false
+	for _, ce := range calList {
+		if ce.EventType == "cooking_duty" {
+			if ce.Editable {
+				t.Fatalf("expected cooking_duty CalendarEvent to have Editable=false, got true")
+			}
+			if ce.StartDate == "2097-11-08" && ce.ID.String() == upResp.Events[1].ID {
+				foundCookingInCal = true
+			}
+		} else if !ce.Editable {
+			t.Fatalf("expected persisted CalendarEvent %s (%s) to have Editable=true", ce.ID, ce.EventType)
+		}
+	}
+	if !foundCookingInCal {
+		t.Fatalf("expected personal cooking_duty on 2097-11-08 in /api/events with ID %s, got %+v", upResp.Events[1].ID, calList)
 	}
 }

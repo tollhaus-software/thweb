@@ -18,6 +18,7 @@ export type CalendarEventType =
   | 'laternenfest'
   | 'weihnachtsfeier'
   | 'sommerfest'
+  | 'cooking_duty'
   | 'custom';
 
 export interface CalendarEvent {
@@ -30,6 +31,7 @@ export interface CalendarEvent {
   end_date: string;   // YYYY-MM-DD
   start_time?: string | null; // HH:MM or null/undefined
   end_time?: string | null;   // HH:MM or null/undefined
+  editable?: boolean;
   created_by_email?: string;
   updated_by_email?: string;
   created_at?: string;
@@ -40,6 +42,7 @@ export interface EventTypeMeta {
   type: CalendarEventType;
   group: 'closing' | 'ea' | 'community' | 'custom';
   expectsSpecificTime: boolean;
+  editable?: boolean;
   labelDe: string;
   labelEn: string;
   shortDe: string;
@@ -256,16 +259,38 @@ export const EVENT_TYPE_LIST: EventTypeMeta[] = [
   },
 ];
 
-export const EVENT_TYPE_MAP: Record<string, EventTypeMeta> = Object.fromEntries(
-  EVENT_TYPE_LIST.map((m) => [m.type, m])
-);
+const COOKING_DUTY_META: EventTypeMeta = {
+  type: 'cooking_duty',
+  group: 'custom',
+  expectsSpecificTime: false,
+  editable: false,
+  labelDe: 'Kochdienst',
+  labelEn: 'Cooking duty',
+  shortDe: 'Kochdienst',
+  shortEn: 'Cooking duty',
+  color: '#7c2d12',
+  bgColor: '#ffcc99',
+  borderColor: '#f59e0b',
+};
+
+export const EVENT_TYPE_MAP: Record<string, EventTypeMeta> = {
+  ...Object.fromEntries(EVENT_TYPE_LIST.map((m) => [m.type, m])),
+  cooking_duty: COOKING_DUTY_META,
+};
 
 export function isValidCalendarEventType(val: string): val is CalendarEventType {
-  return Boolean(EVENT_TYPE_MAP[val]);
+  const meta = EVENT_TYPE_MAP[val];
+  return Boolean(meta && meta.editable !== false);
 }
 
 export function getEventTypeMeta(eventType: string): EventTypeMeta {
   return EVENT_TYPE_MAP[eventType] || EVENT_TYPE_MAP.custom;
+}
+
+export function isCalendarEventEditable(ev?: Pick<CalendarEvent, 'event_type' | 'editable'> | null): boolean {
+  if (!ev) return true;
+  if (typeof ev.editable === 'boolean') return ev.editable;
+  return getEventTypeMeta(ev.event_type).editable !== false;
 }
 
 export function doesEventExpectSpecificTime(eventType: string): boolean {

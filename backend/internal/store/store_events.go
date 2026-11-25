@@ -169,12 +169,115 @@ func (s *Store) ListCalendarEvents(ctx context.Context, startDate, endDate strin
 		); err != nil {
 			return nil, err
 		}
+		ev.Editable = true
 		events = append(events, ev)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	return events, nil
+}
+
+func (s *Store) ListMyCookingDutyCalendarEvents(
+	ctx context.Context,
+	startDate, endDate string,
+	parentID, employeeID *uuid.UUID,
+) ([]models.CalendarEvent, error) {
+	if s == nil || s.db == nil {
+		return []models.CalendarEvent{}, nil
+	}
+	var parentIDStr, empIDStr string
+	if parentID != nil && *parentID != uuid.Nil {
+		parentIDStr = parentID.String()
+	}
+	if employeeID != nil && *employeeID != uuid.Nil {
+		empIDStr = employeeID.String()
+	}
+	if parentIDStr == "" && empIDStr == "" {
+		return []models.CalendarEvent{}, nil
+	}
+
+	startDate = strings.TrimSpace(startDate)
+	endDate = strings.TrimSpace(endDate)
+
+	var (
+		rows pgx.Rows
+		err  error
+	)
+
+	const baseCond = `
+		cook_resolution_status NOT IN ('ambiguous', 'unrecognized', 'ignored')
+		AND jsonb_typeof(cooks) = 'array'
+		AND EXISTS (
+			SELECT 1
+			FROM jsonb_array_elements(cooks) AS c
+			WHERE (
+				($1::text <> '' AND LOWER(COALESCE(c->>'type', '')) = 'parent' AND LOWER(COALESCE(c->>'id', '')) = LOWER($1))
+				OR ($2::text <> '' AND LOWER(COALESCE(c->>'type', '')) = 'employee' AND LOWER(COALESCE(c->>'id', '')) = LOWER($2))
+			)
+		)
+	`
+
+	if startDate != "" && endDate != "" {
+		rows, err = s.db.Query(ctx, `
+			SELECT
+				TO_CHAR(date, 'YYYY-MM-DD'),
+				COALESCE(cook_name, ''),
+				COALESCE(food_component_1, ''),
+				COALESCE(food_component_2, ''),
+				COALESCE(food_component_3, '')
+			FROM meal_plan_from_sheets
+			WHERE date >= $3::date AND date <= $4::date
+			  AND `+baseCond+`
+			ORDER BY date ASC
+		`, parentIDStr, empIDStr, startDate, endDate)
+	} else {
+		rows, err = s.db.Query(ctx, `
+			SELECT
+				TO_CHAR(date, 'YYYY-MM-DD'),
+				COALESCE(cook_name, ''),
+				COALESCE(food_component_1, ''),
+				COALESCE(food_component_2, ''),
+				COALESCE(food_component_3, '')
+			FROM meal_plan_from_sheets
+			WHERE `+baseCond+`
+			ORDER BY date ASC
+		`, parentIDStr, empIDStr)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]models.CalendarEvent, 0)
+	for rows.Next() {
+		var dStr, cookName, c1, c2, c3 string
+		if err := rows.Scan(&dStr, &cookName, &c1, &c2, &c3); err != nil {
+			return nil, err
+		}
+		var descParts []string
+		for _, c := range []string{c1, c2, c3} {
+			trimmed := strings.TrimSpace(c)
+			if trimmed != "" {
+				descParts = append(descParts, trimmed)
+			}
+		}
+		desc := strings.Join(descParts, ", ")
+		detID := uuid.NewSHA1(uuid.NameSpaceOID, []byte("cooking_duty:"+dStr))
+		out = append(out, models.CalendarEvent{
+			ID:          detID,
+			EventType:   string(models.UpcomingEventCookingDuty),
+			Title:       "Kochdienst",
+			Description: desc,
+			StartDate:   dStr,
+			EndDate:     dStr,
+			Editable:    false,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (s *Store) GetCalendarEventByID(ctx context.Context, id uuid.UUID) (*models.CalendarEvent, error) {
@@ -217,7 +320,104 @@ func (s *Store) GetCalendarEventByID(ctx context.Context, id uuid.UUID) (*models
 		}
 		return nil, err
 	}
+	ev.Editable = true
 	return &ev, nil
+}
+
+// UserEventScope encapsulates the resolved identity and permissions of a user
+// for querying both persisted calendar events and personal derived events (e.g. cooking duties).
+type UserEventScope struct {
+	ParentID           *uuid.UUID
+	EmployeeID         *uuid.UUID
+	FamilyID           *uuid.UUID
+	CanReadEvents      bool
+	IncludeAllGroupEAs bool
+}
+
+func (s *Store) ResolveUserEventScope(ctx context.Context, user *models.UserWithPermissions) UserEventScope {
+	if user == nil || user.IsKiosk || s == nil || (user.Simulation != nil && user.Simulation.Active && user.Simulation.Mode == "custom") {
+		return UserEventScope{}
+	}
+	parentID := user.ParentID
+	employeeID := user.EmployeeID
+	familyID := user.FamilyID
+	if parentID == nil && employeeID == nil {
+		lookupEmail := user.Email
+		if user.Simulation != nil && user.Simulation.Active && user.Simulation.Mode == "user" && user.Simulation.SimulatedUser != "" {
+			lookupEmail = user.Simulation.SimulatedUser
+		}
+		if lookupEmail != "" {
+			if pID, fID, err := s.GetParentInfoByIdentifierEmail(ctx, lookupEmail); err == nil && pID != nil {
+				parentID = pID
+				if familyID == nil {
+					familyID = fID
+				}
+			}
+			if eID, _, err := s.GetEmployeeInfoByIdentifierEmail(ctx, lookupEmail); err == nil && eID != nil {
+				employeeID = eID
+			}
+		}
+	}
+	if familyID == nil && parentID != nil && *parentID != uuid.Nil {
+		if fID, err := s.GetFamilyIDByParentID(ctx, *parentID); err == nil && fID != nil {
+			familyID = fID
+		}
+	}
+
+	canReadEvents := user.HasPermission("events.all.read")
+	includeAllGroupEAs := employeeID != nil || (familyID == nil && (user.HasPermission("events.all.write") || user.HasPermission("families.all.read")))
+
+	return UserEventScope{
+		ParentID:           parentID,
+		EmployeeID:         employeeID,
+		FamilyID:           familyID,
+		CanReadEvents:      canReadEvents,
+		IncludeAllGroupEAs: includeAllGroupEAs,
+	}
+}
+
+// SortCalendarEvents sorts a combined slice of persisted and derived CalendarEvents chronologically.
+func SortCalendarEvents(events []models.CalendarEvent) {
+	sort.SliceStable(events, func(i, j int) bool {
+		if events[i].StartDate != events[j].StartDate {
+			return events[i].StartDate < events[j].StartDate
+		}
+		ti := ""
+		if events[i].StartTime != nil {
+			ti = *events[i].StartTime
+		}
+		tj := ""
+		if events[j].StartTime != nil {
+			tj = *events[j].StartTime
+		}
+		if ti != tj {
+			return ti < tj
+		}
+		if events[i].EndDate != events[j].EndDate {
+			return events[i].EndDate > events[j].EndDate
+		}
+		return events[i].EventType < events[j].EventType
+	})
+}
+
+// ListCalendarEventsForUser returns all persisted calendar events and personal derived events
+// (such as cooking duties) in [startDate, endDate] for the given user scope, sorted consistently.
+func (s *Store) ListCalendarEventsForUser(
+	ctx context.Context,
+	startDate, endDate string,
+	scope UserEventScope,
+) ([]models.CalendarEvent, error) {
+	events, err := s.ListCalendarEvents(ctx, startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+	if scope.ParentID != nil || scope.EmployeeID != nil {
+		if cookingEvents, err := s.ListMyCookingDutyCalendarEvents(ctx, startDate, endDate, scope.ParentID, scope.EmployeeID); err == nil && len(cookingEvents) > 0 {
+			events = append(events, cookingEvents...)
+			SortCalendarEvents(events)
+		}
+	}
+	return events, nil
 }
 
 func insertCalendarEventTx(ctx context.Context, tx pgx.Tx, ev models.CalendarEvent, email string) (models.CalendarEvent, error) {
@@ -272,6 +472,7 @@ func insertCalendarEventTx(ctx context.Context, tx pgx.Tx, ev models.CalendarEve
 		&created.CreatedAt,
 		&created.UpdatedAt,
 	)
+	created.Editable = true
 	return created, err
 }
 
@@ -378,6 +579,7 @@ func (s *Store) UpdateCalendarEvent(ctx context.Context, userID uuid.UUID, ev mo
 		if err != nil {
 			return err
 		}
+		updated.Editable = true
 		return s.recordAudit(ctx, tx, transactionID, nil, "calendar_event", updated.ID, "UPDATE", *existing, updated, userID, userEmail...)
 	})
 	if err != nil {
@@ -742,6 +944,7 @@ func (s *Store) GetMyUpcomingEventsWithCalendar(
 			EndTime:     ev.EndTime,
 			Title:       ev.Title,
 			Description: ev.Description,
+			Editable:    true,
 		})
 	}
 
@@ -757,9 +960,6 @@ func (s *Store) GetMyUpcomingEventsWithCalendar(
 		if effI != effJ {
 			return effI < effJ
 		}
-		if events[i].Date != events[j].Date {
-			return events[i].Date < events[j].Date
-		}
 		ti := ""
 		if events[i].StartTime != nil {
 			ti = *events[i].StartTime
@@ -770,6 +970,9 @@ func (s *Store) GetMyUpcomingEventsWithCalendar(
 		}
 		if ti != tj {
 			return ti < tj
+		}
+		if events[i].Date != events[j].Date {
+			return events[i].Date < events[j].Date
 		}
 		return events[i].Type < events[j].Type
 	})

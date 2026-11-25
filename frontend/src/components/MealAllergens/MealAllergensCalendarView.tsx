@@ -167,7 +167,10 @@ export const MealAllergensCalendarView: React.FC<MealAllergensCalendarViewProps>
     }
   }, [searchQuery, allEntries, daysMap, excludeDateFromSearchJump]);
 
-  const todayKey = formatDateKey(todayDate || new Date());
+  const todayObj = todayDate || new Date();
+  const todayKey = formatDateKey(todayObj);
+  const isTodayInVisibleRange = visibleDates.some((d) => formatDateKey(d) === todayKey);
+  const todayWeekdayIndex = (todayObj.getDay() + 6) % 7; // 0 = Mon .. 6 = Sun
   const { week: weekNo } = getISOWeekNumber(selectedMonday);
   const weekRangeStr = formatWeekRange(selectedMonday);
   const monthYearLabel = formatMonthYearLabel(selectedYearMonth.year, selectedYearMonth.month);
@@ -272,11 +275,17 @@ export const MealAllergensCalendarView: React.FC<MealAllergensCalendarViewProps>
       <div className="meal-allergens-calendar-sheet" data-testid={`${testIdPrefix}-calendar-sheet`}>
         {!isMobile && (
           <div className="meal-allergens-weekday-headers" data-testid={`${testIdPrefix}-weekday-headers`}>
-            {weekdayHeaders.map((dayLabel) => (
-              <div key={dayLabel} className="meal-allergens-weekday-header">
-                {dayLabel}
-              </div>
-            ))}
+            {weekdayHeaders.map((dayLabel, idx) => {
+              const isTodayWeekday = isTodayInVisibleRange && idx === todayWeekdayIndex;
+              return (
+                <div
+                  key={dayLabel}
+                  className={`meal-allergens-weekday-header${isTodayWeekday ? ' is-today-weekday' : ''}`}
+                >
+                  {dayLabel}
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -332,14 +341,6 @@ export const MealAllergensCalendarView: React.FC<MealAllergensCalendarViewProps>
               <div className="meal-allergen-day-header">
                 <span className="meal-allergen-day-date">
                   {isMobile ? `${dayName}, ${dateStr}` : dateStr}
-                  {isToday && (
-                    <span
-                      className="meal-allergen-today-badge"
-                      data-testid={`${testIdPrefix}-today-badge`}
-                    >
-                      {t('today')}
-                    </span>
-                  )}
                 </span>
                 <span className="meal-allergen-day-cook" data-testid={`${testIdPrefix}-day-cook-${dateKey}`}>
                   {cookName || '–'}

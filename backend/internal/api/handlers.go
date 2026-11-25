@@ -149,36 +149,16 @@ func (s *Server) HandleGetMyUpcomingEvents(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	parentID := user.ParentID
-	employeeID := user.EmployeeID
-	familyID := user.FamilyID
-	if parentID == nil && employeeID == nil {
-		lookupEmail := user.Email
-		if user.Simulation != nil && user.Simulation.Active && user.Simulation.Mode == "user" && user.Simulation.SimulatedUser != "" {
-			lookupEmail = user.Simulation.SimulatedUser
-		}
-		if lookupEmail != "" {
-			if pID, fID, err := s.Store.GetParentInfoByIdentifierEmail(r.Context(), lookupEmail); err == nil && pID != nil {
-				parentID = pID
-				if familyID == nil {
-					familyID = fID
-				}
-			}
-			if eID, _, err := s.Store.GetEmployeeInfoByIdentifierEmail(r.Context(), lookupEmail); err == nil && eID != nil {
-				employeeID = eID
-			}
-		}
-	}
-	if familyID == nil && parentID != nil && *parentID != uuid.Nil {
-		if fID, err := s.Store.GetFamilyIDByParentID(r.Context(), *parentID); err == nil && fID != nil {
-			familyID = fID
-		}
-	}
-
-	canReadEvents := user.HasPermission("events.all.read")
-	includeAllGroupEAs := employeeID != nil || (familyID == nil && (user.HasPermission("events.all.write") || user.HasPermission("families.all.read")))
-
-	events, err := s.Store.GetMyUpcomingEventsWithCalendar(r.Context(), targetDate, parentID, employeeID, familyID, canReadEvents, includeAllGroupEAs)
+	scope := s.Store.ResolveUserEventScope(r.Context(), user)
+	events, err := s.Store.GetMyUpcomingEventsWithCalendar(
+		r.Context(),
+		targetDate,
+		scope.ParentID,
+		scope.EmployeeID,
+		scope.FamilyID,
+		scope.CanReadEvents,
+		scope.IncludeAllGroupEAs,
+	)
 	if err != nil {
 		httpErrorLog(w, r, "Failed to get upcoming events", http.StatusInternalServerError, err)
 		return

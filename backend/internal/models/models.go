@@ -1002,6 +1002,7 @@ type UpcomingEvent struct {
 	EndTime     *string `json:"end_time,omitempty"`
 	Title       string  `json:"title,omitempty"`
 	Description string  `json:"description,omitempty"`
+	Editable    bool    `json:"editable"`
 }
 
 type MyUpcomingEventsResponse struct {
@@ -1052,6 +1053,7 @@ type CalendarEvent struct {
 	EndDate        string    `json:"end_date"`
 	StartTime      *string   `json:"start_time,omitempty"`
 	EndTime        *string   `json:"end_time,omitempty"`
+	Editable       bool      `json:"editable"`
 	CreatedByEmail string    `json:"created_by_email,omitempty"`
 	UpdatedByEmail string    `json:"updated_by_email,omitempty"`
 	CreatedAt      time.Time `json:"created_at"`

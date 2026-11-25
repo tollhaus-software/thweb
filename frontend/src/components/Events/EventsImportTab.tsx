@@ -36,7 +36,9 @@ export const EventsImportTab: React.FC = () => {
       const res = await fetch('/api/events', { headers });
       if (res.ok) {
         const data: CalendarEvent[] = await res.json();
-        setExistingEvents(Array.isArray(data) ? data : []);
+        setExistingEvents(
+          Array.isArray(data) ? data.filter((ev) => ev.editable !== false) : []
+        );
       }
     } catch (err) {
       console.error('Error fetching existing events for duplicate check:', err);

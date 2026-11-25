@@ -2695,9 +2695,14 @@ func (s *Store) GetMyUpcomingEvents(ctx context.Context, fromDate time.Time, par
 		return nil, fmt.Errorf("failed to query upcoming cooking duty: %w", err)
 	}
 	if err == nil && nextCookingDate != "" {
+		detID := uuid.NewSHA1(uuid.NameSpaceOID, []byte("cooking_duty:"+nextCookingDate)).String()
 		events = append(events, models.UpcomingEvent{
-			Type: string(models.UpcomingEventCookingDuty),
-			Date: nextCookingDate,
+			Type:      string(models.UpcomingEventCookingDuty),
+			Date:      nextCookingDate,
+			ID:        detID,
+			EventType: string(models.UpcomingEventCookingDuty),
+			EndDate:   nextCookingDate,
+			Editable:  false,
 		})
 	}
 

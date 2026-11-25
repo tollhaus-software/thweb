@@ -8,6 +8,7 @@ import {
   type CalendarEventType,
   EVENT_TYPE_LIST,
   doesEventExpectSpecificTime,
+  isCalendarEventEditable,
   getEventTypeMeta,
   getEventTypeLabel,
   getCalendarEventDisplayTitle,
@@ -157,7 +158,7 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
 
   if (!isOpen) return null;
 
-  const isViewerOnly = !canWrite;
+  const isViewerOnly = !canWrite || !isCalendarEventEditable(editingEvent);
   const closingTypes = EVENT_TYPE_LIST.filter((m) => m.group === 'closing');
   const eaTypes = EVENT_TYPE_LIST.filter((m) => m.group === 'ea');
   const communityTypes = EVENT_TYPE_LIST.filter((m) => m.group === 'community');

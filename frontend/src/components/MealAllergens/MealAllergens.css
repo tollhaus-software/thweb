@@ -124,6 +124,11 @@
   padding: 0.55rem 0.35rem;
 }
 
+.meal-allergens-weekday-header.is-today-weekday {
+  color: var(--primary, #2563eb);
+  font-weight: 800;
+}
+
 .meal-allergens-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -227,42 +232,9 @@
 }
 
 /* Today (Current Day) highlight */
-.meal-allergen-day-box.is-today {
-  box-shadow: inset 0 0 0 2px var(--primary);
-}
-
-.meal-allergen-day-box.is-today:hover {
-  box-shadow: inset 0 0 0 2px var(--primary);
-}
-
-.meal-allergen-day-box.is-today.search-match {
-  box-shadow: inset 0 0 0 3px var(--primary);
-}
-
-.meal-allergen-day-box.is-today.search-active-match {
-  box-shadow: inset 0 0 0 3.5px var(--primary-hover);
-}
-
 .meal-allergen-day-box.is-today .meal-allergen-day-date {
-  color: var(--primary);
+  color: var(--primary, #2563eb);
   font-weight: 800;
-}
-
-.meal-allergen-today-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 0.1rem 0.45rem;
-  border-radius: 9999px;
-  background-color: var(--primary);
-  color: var(--primary-contrast, #ffffff);
-  line-height: 1.1;
-  white-space: nowrap;
-  user-select: none;
 }
 
 .meal-allergen-day-header {

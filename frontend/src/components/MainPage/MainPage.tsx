@@ -497,7 +497,7 @@ export const MainPage: React.FC<MainPageProps> = ({
 
   const handleSelectUpcomingEvent = useCallback(
     (event: UpcomingEvent) => {
-      if (event.type === 'cooking_duty' && canViewMealPlan) {
+      if (!hasPermission('events.all.read') && event.type === 'cooking_duty' && canViewMealPlan) {
         onNavigate('mealPlan');
         return;
       }
@@ -508,7 +508,7 @@ export const MainPage: React.FC<MainPageProps> = ({
       window.location.hash = query ? `events?${query}` : 'events';
       onNavigate('events');
     },
-    [canViewMealPlan, onNavigate]
+    [canViewMealPlan, hasPermission, onNavigate]
   );
 
   const upcomingEventsCardElement =
@@ -517,7 +517,7 @@ export const MainPage: React.FC<MainPageProps> = ({
         key="upcoming-events"
         events={upcomingEvents}
         today={todayObj}
-        onNavigateToCalendar={() => onNavigate('events')}
+        onNavigateToCalendar={hasPermission('events.all.read') ? () => onNavigate('events') : undefined}
         onSelectEvent={handleSelectUpcomingEvent}
       />
     ) : null;

@@ -475,8 +475,8 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
       await expect(todayBox).toHaveClass(/is-today/);
       await expect(todayBox).toHaveAttribute('data-is-today', 'true');
       await expect(todayBox).toHaveAttribute('aria-current', 'date');
-      await expect(todayBox.locator('[data-testid="meal-allergens-today-badge"]')).toBeVisible();
-      await expect(todayBox.locator('[data-testid="meal-allergens-today-badge"]')).toHaveText('Heute');
+      await expect(page.locator('.meal-allergens-weekday-header.is-today-weekday')).toHaveCount(1);
+      await expect(todayBox.locator('[data-testid="meal-allergens-today-badge"]')).toHaveCount(0);
     }
 
     // Verify dark theme styling for month selector and default day boxes
@@ -503,7 +503,7 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
       await expect(mobileTodayBox).toBeVisible();
       await expect(mobileTodayBox).toHaveClass(/is-today/);
       await expect(mobileTodayBox).toHaveAttribute('data-is-today', 'true');
-      await expect(mobileTodayBox.locator('[data-testid="meal-allergens-today-badge"]')).toBeVisible();
+      await expect(mobileTodayBox.locator('[data-testid="meal-allergens-today-badge"]')).toHaveCount(0);
     }
 
     // Switch back to Desktop viewport (1200x800)

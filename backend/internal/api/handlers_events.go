@@ -43,7 +43,8 @@ func (s *Server) HandleListCalendarEvents(w http.ResponseWriter, r *http.Request
 	startDate := strings.TrimSpace(r.URL.Query().Get("start_date"))
 	endDate := strings.TrimSpace(r.URL.Query().Get("end_date"))
 
-	events, err := s.Store.ListCalendarEvents(r.Context(), startDate, endDate)
+	scope := s.Store.ResolveUserEventScope(r.Context(), auth.GetUser(r.Context()))
+	events, err := s.Store.ListCalendarEventsForUser(r.Context(), startDate, endDate, scope)
 	if err != nil {
 		if isValidationErr(err) {
 			httpErrorLog(w, r, err.Error(), http.StatusBadRequest, err)
@@ -52,6 +53,7 @@ func (s *Server) HandleListCalendarEvents(w http.ResponseWriter, r *http.Request
 		httpErrorLog(w, r, "Failed to list calendar events", http.StatusInternalServerError, err)
 		return
 	}
+
 	jsonResponse(w, events)
 }
 
