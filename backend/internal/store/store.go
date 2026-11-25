@@ -2655,6 +2655,59 @@ func (s *Store) GetMealPlanDay(ctx context.Context, targetDate time.Time) (*mode
 	return resp, nil
 }
 
+func (s *Store) GetMyUpcomingEvents(ctx context.Context, fromDate time.Time, parentID, employeeID *uuid.UUID) ([]models.UpcomingEvent, error) {
+	events := []models.UpcomingEvent{}
+	if s == nil || s.db == nil {
+		return events, nil
+	}
+
+	var parentIDStr, empIDStr string
+	if parentID != nil && *parentID != uuid.Nil {
+		parentIDStr = parentID.String()
+	}
+	if employeeID != nil && *employeeID != uuid.Nil {
+		empIDStr = employeeID.String()
+	}
+	if parentIDStr == "" && empIDStr == "" {
+		return events, nil
+	}
+
+	dateStr := fromDate.Format("2006-01-02")
+	var nextCookingDate string
+	err := s.db.QueryRow(ctx, `
+		SELECT TO_CHAR(date, 'YYYY-MM-DD')
+		FROM meal_plan_from_sheets
+		WHERE date >= $1
+		  AND cook_resolution_status NOT IN ('ambiguous', 'unrecognized', 'ignored')
+		  AND jsonb_typeof(cooks) = 'array'
+		  AND EXISTS (
+		    SELECT 1
+		    FROM jsonb_array_elements(cooks) AS c
+		    WHERE (
+		      ($2::text <> '' AND LOWER(COALESCE(c->>'type', '')) = 'parent' AND LOWER(COALESCE(c->>'id', '')) = LOWER($2))
+		      OR ($3::text <> '' AND LOWER(COALESCE(c->>'type', '')) = 'employee' AND LOWER(COALESCE(c->>'id', '')) = LOWER($3))
+		    )
+		  )
+		ORDER BY date ASC
+		LIMIT 1
+	`, dateStr, parentIDStr, empIDStr).Scan(&nextCookingDate)
+	if err != nil && err != pgx.ErrNoRows {
+		return nil, fmt.Errorf("failed to query upcoming cooking duty: %w", err)
+	}
+	if err == nil && nextCookingDate != "" {
+		events = append(events, models.UpcomingEvent{
+			Type: string(models.UpcomingEventCookingDuty),
+			Date: nextCookingDate,
+		})
+	}
+
+	sort.SliceStable(events, func(i, j int) bool {
+		return events[i].Date < events[j].Date
+	})
+
+	return events, nil
+}
+
 func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*models.DailyBriefResponse, error) {
 	dateStr := targetDate.Format("2006-01-02")
 	nextDateStr := targetDate.AddDate(0, 0, 1).Format("2006-01-02")
@@ -3293,16 +3346,45 @@ func (s *Store) ResetTestData(ctx context.Context) error {
 }
 
 func (s *Store) SeedTestMealPlan(ctx context.Context, dateStr, cookName, comp1, comp2, comp3 string) error {
-	_, err := s.db.Exec(ctx, `
-		INSERT INTO meal_plan_from_sheets (date, fetched_at, cook_name, food_component_1, food_component_2, food_component_3)
-		VALUES ($1, NOW(), $2, $3, $4, $5)
+	return s.SeedTestMealPlanWithCooks(ctx, dateStr, cookName, nil, "", comp1, comp2, comp3)
+}
+
+func (s *Store) SeedTestMealPlanWithCooks(
+	ctx context.Context,
+	dateStr, cookName string,
+	cooks models.MealAllergenCookList,
+	resolutionStatus, comp1, comp2, comp3 string,
+) error {
+	if cooks == nil {
+		cooks = models.MealAllergenCookList{}
+	}
+	status := strings.TrimSpace(resolutionStatus)
+	if status == "" {
+		if len(cooks) > 0 {
+			status = "resolved"
+		} else {
+			status = "empty"
+		}
+	}
+	cooksVal, err := cooks.Value()
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(ctx, `
+		INSERT INTO meal_plan_from_sheets (
+			date, fetched_at, cook_name, cooks, cook_resolution_status,
+			food_component_1, food_component_2, food_component_3
+		)
+		VALUES ($1, NOW(), $2, $3::jsonb, $4, $5, $6, $7)
 		ON CONFLICT (date) DO UPDATE SET
 			fetched_at = NOW(),
 			cook_name = EXCLUDED.cook_name,
+			cooks = EXCLUDED.cooks,
+			cook_resolution_status = EXCLUDED.cook_resolution_status,
 			food_component_1 = EXCLUDED.food_component_1,
 			food_component_2 = EXCLUDED.food_component_2,
 			food_component_3 = EXCLUDED.food_component_3
-	`, dateStr, cookName, comp1, comp2, comp3)
+	`, dateStr, cookName, cooksVal, status, comp1, comp2, comp3)
 	return err
 }
 

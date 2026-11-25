@@ -4085,6 +4085,92 @@ func TestHandleVolunteerAbsences_ValidationAndLifecycle(t *testing.T) {
 	}
 }
 
+func TestHandleGetMyUpcomingEvents(t *testing.T) {
+	ctx := context.Background()
+	pool := getTestDBPool(t)
+	if pool == nil {
+		t.Skip("PostgreSQL not available for integration tests")
+	}
+	defer pool.Close()
+
+	appStore := store.NewStore(pool)
+	s := &Server{Store: appStore}
+
+	// 1. Unauthenticated -> 401
+	reqUnauth := httptest.NewRequest("GET", "/api/me/upcoming-events?date=2098-06-01", nil)
+	recUnauth := httptest.NewRecorder()
+	s.HandleGetMyUpcomingEvents(recUnauth, reqUnauth)
+	if recUnauth.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for unauthenticated request, got %d", recUnauth.Code)
+	}
+
+	// 2. Invalid date -> 400
+	parentID := uuid.New()
+	parentUser := &models.UserWithPermissions{
+		Email:    "cookparent@example.com",
+		ParentID: &parentID,
+	}
+	reqBadDate := httptest.NewRequest("GET", "/api/me/upcoming-events?date=not-a-date", nil)
+	recBadDate := httptest.NewRecorder()
+	s.HandleGetMyUpcomingEvents(recBadDate, reqBadDate.WithContext(context.WithValue(ctx, auth.UserContextKey, parentUser)))
+	if recBadDate.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid date, got %d", recBadDate.Code)
+	}
+
+	// Seed a resolved meal plan entry for parentID on 2098-06-03
+	const testDate = "2098-06-03"
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM meal_plan_from_sheets WHERE date = $1", testDate)
+	}()
+	if err := appStore.SeedTestMealPlanWithCooks(
+		ctx,
+		testDate,
+		"Cook Parent",
+		models.MealAllergenCookList{{ID: parentID, Type: "parent", FirstName: "Cook", LastName: "Parent"}},
+		"resolved",
+		"Gemüsepfanne", "", "",
+	); err != nil {
+		t.Fatalf("failed to seed meal plan: %v", err)
+	}
+
+	// 3. Parent user receives upcoming cooking_duty event
+	reqParent := httptest.NewRequest("GET", "/api/me/upcoming-events?date=2098-06-01", nil)
+	recParent := httptest.NewRecorder()
+	s.HandleGetMyUpcomingEvents(recParent, reqParent.WithContext(context.WithValue(ctx, auth.UserContextKey, parentUser)))
+	if recParent.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", recParent.Code, recParent.Body.String())
+	}
+	var resp models.MyUpcomingEventsResponse
+	if err := json.Unmarshal(recParent.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if len(resp.Events) != 1 || resp.Events[0].Type != "cooking_duty" || resp.Events[0].Date != testDate {
+		t.Fatalf("expected 1 cooking_duty event on %s, got %+v", testDate, resp.Events)
+	}
+
+	// 4. Custom role simulation returns empty events
+	customSimUser := &models.UserWithPermissions{
+		Email: "developer@example.com",
+		Simulation: &models.SimulationInfo{
+			Active: true,
+			Mode:   "custom",
+		},
+	}
+	reqSim := httptest.NewRequest("GET", "/api/me/upcoming-events?date=2098-06-01", nil)
+	recSim := httptest.NewRecorder()
+	s.HandleGetMyUpcomingEvents(recSim, reqSim.WithContext(context.WithValue(ctx, auth.UserContextKey, customSimUser)))
+	if recSim.Code != http.StatusOK {
+		t.Fatalf("expected 200 for custom simulation, got %d", recSim.Code)
+	}
+	var simResp models.MyUpcomingEventsResponse
+	if err := json.Unmarshal(recSim.Body.Bytes(), &simResp); err != nil {
+		t.Fatalf("failed to unmarshal sim response: %v", err)
+	}
+	if len(simResp.Events) != 0 {
+		t.Fatalf("expected 0 events in custom simulation, got %+v", simResp.Events)
+	}
+}
+
 
 
 

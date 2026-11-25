@@ -58,6 +58,7 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 		r.Handle("/api/ws", hub)
 
 		r.Get("/api/me", server.HandleGetMe)
+		r.Get("/api/me/upcoming-events", server.HandleGetMyUpcomingEvents)
 		r.Post("/api/activity", func(w http.ResponseWriter, r *http.Request) {
 			var ar *metrics.ActivityRecorder
 			if authenticator != nil {

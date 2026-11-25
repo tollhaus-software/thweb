@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth, isKioskMode } from '../../context/AuthContext';
 import {
   Soup,
   ChevronDown,
@@ -17,7 +17,10 @@ import {
 } from 'lucide-react';
 import { HygieneCertificationModal } from '../Hygiene/HygieneCertificationModal';
 import { PwaInstallCard } from './PwaInstallCard';
+import { UpcomingEventsCard } from './UpcomingEventsCard';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { getHygieneMessage } from '../../utils/hygieneMessage';
+import { type UpcomingEvent } from '../../utils/upcomingEvents';
 import { t } from '../../utils/i18n';
 import {
   formatDateKey,
@@ -59,6 +62,7 @@ export const MainPage: React.FC<MainPageProps> = ({
   userName,
 }) => {
   const { user, token, hasPermission } = useAuth();
+  const isSingleColumn = useIsMobile(1024);
 
   const [mainMealData, setMainMealData] = useState<DailyMealInfo | null>(null);
   const [weekData, setWeekData] = useState<DailyMealInfo[]>([]);
@@ -68,6 +72,7 @@ export const MainPage: React.FC<MainPageProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [hygieneStatus, setHygieneStatus] = useState<any>(null);
   const [certModalOpen, setCertModalOpen] = useState(false);
+  const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>([]);
 
   const hygieneMessage = getHygieneMessage(hygieneStatus);
   const canAccessHygieneSelf = hasPermission('hygiene.infektionsschutz.self');
@@ -96,6 +101,38 @@ export const MainPage: React.FC<MainPageProps> = ({
   // Determine today date string (in local time)
   const todayDateStr = useMemo(() => todayDate || formatDateKey(new Date()), [todayDate]);
   const todayObj = useMemo(() => parseDateKey(todayDateStr), [todayDateStr]);
+
+  const fetchUpcomingEvents = useCallback(async () => {
+    if (isKioskMode() || !user) {
+      setUpcomingEvents([]);
+      return;
+    }
+    try {
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const res = await fetch(`/api/me/upcoming-events?date=${encodeURIComponent(todayDateStr)}`, {
+        headers,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUpcomingEvents(Array.isArray(data.events) ? data.events : []);
+      } else {
+        setUpcomingEvents([]);
+      }
+    } catch (err) {
+      console.error('Error fetching upcoming events:', err);
+    }
+  }, [
+    token,
+    todayDateStr,
+    user,
+  ]);
+
+  useEffect(() => {
+    void fetchUpcomingEvents();
+  }, [fetchUpcomingEvents]);
 
   // Day of week: 0 = Sun, 1 = Mon, ..., 5 = Fri, 6 = Sat
   const dayOfWeek = useMemo(() => todayObj.getDay(), [todayObj]);
@@ -388,6 +425,251 @@ export const MainPage: React.FC<MainPageProps> = ({
     effectiveTargetMgaTab,
   ]);
 
+  const hygieneCardElement =
+    hygieneStatus?.needs_instruction && hygieneStatus?.document_available ? (
+      <section
+        key="hygiene-task"
+        className="main-page-card main-page-hygiene-task-card"
+        data-testid="main-page-hygiene-task-card"
+      >
+        <div className="main-page-card-header">
+          {hygieneMessage?.kind === 'upcoming' ? (
+            <AlertCircle
+              size={22}
+              className="main-page-card-icon hygiene-icon"
+              data-testid="main-page-hygiene-task-icon"
+              style={{ color: 'var(--primary, #2563eb)' }}
+            />
+          ) : (
+            <ShieldAlert
+              size={22}
+              className="main-page-card-icon hygiene-icon"
+              data-testid="main-page-hygiene-task-icon"
+              style={{ color: 'var(--primary, #2563eb)' }}
+            />
+          )}
+          <h2 className="main-page-card-title hygiene-task-title" data-testid="main-page-hygiene-task-title" style={{ color: 'var(--primary, #2563eb)' }}>
+            {t('hygieneTaskTitle')}
+          </h2>
+        </div>
+        <div className="main-page-card-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <p style={{ margin: 0, fontSize: '0.95rem', lineHeight: '1.5', color: 'var(--text)' }} data-testid="main-page-hygiene-task-desc" data-kind={hygieneMessage?.kind}>
+            {hygieneMessage?.text}
+          </p>
+          <div>
+            <button
+              type="button"
+              className="personal-hygiene-certify-btn"
+              onClick={() => setCertModalOpen(true)}
+              data-testid="main-page-hygiene-task-start-btn"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.65rem 1.25rem',
+                background: 'var(--primary, #2563eb)',
+                color: 'var(--primary-contrast, #ffffff)',
+                border: 'none',
+                borderRadius: '6px',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              <FileText size={16} />
+              <span>{t('hygieneTaskStartBtn')}</span>
+            </button>
+          </div>
+        </div>
+      </section>
+    ) : null;
+
+  const upcomingEventsCardElement =
+    upcomingEvents.length > 0 ? (
+      <UpcomingEventsCard key="upcoming-events" events={upcomingEvents} today={todayObj} />
+    ) : null;
+
+  const foodCardElement = (
+    <section key="food" className="main-page-card main-page-food-card" data-testid="main-page-food-card">
+      <div className="main-page-card-header">
+        <Soup size={22} className="main-page-card-icon meal-icon" />
+        <h2 className="main-page-card-title" data-testid="main-page-food-title">
+          {foodCardTitle}
+        </h2>
+      </div>
+      <div className="main-page-card-body">
+        {loading ? (
+          <div className="main-page-loading-skeleton">Wird geladen...</div>
+        ) : (
+          <div className="main-page-food-content">
+            {mainMealData?.meal_components && mainMealData.meal_components.length > 0 ? (
+              <ul className="main-page-meal-components-list" data-testid="main-page-meal-components">
+                {mainMealData.meal_components.map((component, idx) => (
+                  <li key={idx} className="main-page-meal-component-item">
+                    <span className="main-page-meal-bullet">•</span>
+                    <span className="main-page-meal-text">{component}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="main-page-empty-placeholder" data-testid="main-page-no-food">
+                {t('noFoodToday') || 'Kein Essen eingetragen'}
+              </div>
+            )}
+
+            <div className="main-page-cook-row" data-testid="main-page-cook-row">
+              <span className="main-page-cook-name" data-testid="main-page-cook-name">
+                {cookNameFormatted}
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Expand / Collapse Section for Rest of the Week / Upcoming Week */}
+      <div className="main-page-week-section">
+        <button
+          type="button"
+          className="main-page-expand-btn"
+          onClick={toggleExpand}
+          data-testid="main-page-expand-week-btn"
+          aria-expanded={isExpanded}
+        >
+          <span>{expandBtnLabel}</span>
+          {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+        </button>
+
+        {isExpanded && (
+          <div className="main-page-week-expanded-content" data-testid="main-page-week-expanded">
+            <h3 className="main-page-week-title">{weekSectionTitle}</h3>
+
+            {weekLoading ? (
+              <div className="main-page-loading-week">Wochentage werden geladen...</div>
+            ) : weekData.length > 0 ? (
+              <div className="main-page-week-cards-grid">
+                {weekData.map((dayItem) => {
+                  const dayTitle = formatDayHeading(dayItem.date);
+                  const cookFormatted = dayItem.who_is_cooking?.trim()
+                    ? `(${dayItem.who_is_cooking.trim()})`
+                    : `(${t('noCookToday') || 'Niemand eingetragen'})`;
+
+                  return (
+                    <div
+                      key={dayItem.date}
+                      className="main-page-week-day-card"
+                      data-testid={`main-page-week-day-${dayItem.date}`}
+                    >
+                      <div className="main-page-week-day-header">
+                        <span className="main-page-week-day-name">{dayTitle}</span>
+                      </div>
+                      <div className="main-page-week-day-body">
+                        {dayItem.meal_components && dayItem.meal_components.length > 0 ? (
+                          <ul className="main-page-week-components-list">
+                            {dayItem.meal_components.map((c, cIdx) => (
+                              <li key={cIdx} className="main-page-week-component-item">
+                                <span className="main-page-week-bullet">•</span>
+                                <span className="main-page-week-component-text">{c}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <div className="main-page-week-empty">
+                            {t('noFoodToday') || 'Kein Essen eingetragen'}
+                          </div>
+                        )}
+
+                        <div className="main-page-week-cook-row">
+                          <span className="main-page-week-cook-name">
+                            {cookFormatted}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="main-page-empty-week">
+                {t('noMoreCookingDaysThisWeek') || 'Keine weiteren Kochtage in dieser Woche'}
+              </p>
+            )}
+
+            {/* Link to Meal Plan if user has permission */}
+            {canViewMealPlan && (
+              <div className="main-page-mealplan-link-row">
+                <button
+                  type="button"
+                  className="main-page-mealplan-nav-btn"
+                  onClick={() => onNavigate('mealPlan')}
+                  data-testid="main-page-mealplan-link"
+                >
+                  <Calendar size={18} />
+                  <span>{t('linkToMealPlan') || 'Zum Wochenplan'}</span>
+                  <ArrowRight size={16} />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+
+  const quickStartCardElement =
+    quickStartLinks.length > 0 ? (
+      <section
+        key="quickstart"
+        className="main-page-card main-page-quickstart-card"
+        data-testid="main-page-quickstart-card"
+      >
+        <div data-testid="main-page-quickstart-box" className="sr-only" />
+        <div className="main-page-card-header">
+          <Zap size={22} className="main-page-card-icon quickstart-icon" />
+          <h2 className="main-page-card-title" data-testid="main-page-quickstart-title">
+            {t('quickStart') || 'Schnellstart'}
+          </h2>
+        </div>
+        <div className="main-page-card-body main-page-quickstart-body">
+          <div className="main-page-quickstart-grid" role="list">
+            {quickStartLinks.map((link) => {
+              const Icon = link.icon;
+              return (
+                <button
+                  key={link.id}
+                  type="button"
+                  className="main-page-quickstart-btn"
+                  onClick={() => onNavigate(link.tab)}
+                  data-testid={link.testId}
+                  data-tab={link.tab}
+                  role="listitem"
+                  aria-label={link.label}
+                >
+                  <div className="main-page-quickstart-btn-content">
+                    <span className="main-page-quickstart-icon-wrapper">
+                      <Icon size={20} className="main-page-quickstart-btn-icon" />
+                    </span>
+                    <span className="main-page-quickstart-btn-label">{link.label}</span>
+                    {link.altTestId && (
+                      <span data-testid={link.altTestId} className="sr-only">
+                        {link.label}
+                      </span>
+                    )}
+                  </div>
+                  <ArrowRight size={18} className="main-page-quickstart-arrow" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+    ) : null;
+
+  const visibleDesktopCards = [
+    hygieneCardElement,
+    upcomingEventsCardElement,
+    foodCardElement,
+    quickStartCardElement,
+  ].filter((el): el is React.ReactElement => el !== null);
+
   return (
     <div className="main-page-container" data-testid="main-page">
       {/* Welcome / Header Section */}
@@ -418,241 +700,26 @@ export const MainPage: React.FC<MainPageProps> = ({
         </div>
       )}
 
-      {/* Grid of dashboard cards - prepared for multiple boxes */}
-      <div className="main-page-cards-grid">
-        {/* Hygiene Task Box */}
-        {hygieneStatus?.needs_instruction && hygieneStatus?.document_available && (
-          <section
-            className="main-page-card main-page-hygiene-task-card"
-            data-testid="main-page-hygiene-task-card"
-          >
-            <div className="main-page-card-header">
-              {hygieneMessage?.kind === 'upcoming' ? (
-                <AlertCircle
-                  size={22}
-                  className="main-page-card-icon hygiene-icon"
-                  data-testid="main-page-hygiene-task-icon"
-                  style={{ color: 'var(--primary, #2563eb)' }}
-                />
-              ) : (
-                <ShieldAlert
-                  size={22}
-                  className="main-page-card-icon hygiene-icon"
-                  data-testid="main-page-hygiene-task-icon"
-                  style={{ color: 'var(--primary, #2563eb)' }}
-                />
-              )}
-              <h2 className="main-page-card-title hygiene-task-title" data-testid="main-page-hygiene-task-title" style={{ color: 'var(--primary, #2563eb)' }}>
-                {t('hygieneTaskTitle')}
-              </h2>
-            </div>
-            <div className="main-page-card-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <p style={{ margin: 0, fontSize: '0.95rem', lineHeight: '1.5', color: 'var(--text)' }} data-testid="main-page-hygiene-task-desc" data-kind={hygieneMessage?.kind}>
-                {hygieneMessage?.text}
-              </p>
-              <div>
-                <button
-                  type="button"
-                  className="personal-hygiene-certify-btn"
-                  onClick={() => setCertModalOpen(true)}
-                  data-testid="main-page-hygiene-task-start-btn"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    padding: '0.65rem 1.25rem',
-                    background: 'var(--primary, #2563eb)',
-                    color: 'var(--primary-contrast, #ffffff)',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  <FileText size={16} />
-                  <span>{t('hygieneTaskStartBtn')}</span>
-                </button>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* Main Box: Essen heute / Essen am Montag */}
-        <section className="main-page-card main-page-food-card" data-testid="main-page-food-card">
-          <div className="main-page-card-header">
-            <Soup size={22} className="main-page-card-icon meal-icon" />
-            <h2 className="main-page-card-title" data-testid="main-page-food-title">
-              {foodCardTitle}
-            </h2>
+      {/* Independent two-column card stacks on desktop; single ordered stack on tablet/mobile */}
+      {!isSingleColumn && visibleDesktopCards.length > 1 ? (
+        <div className="main-page-cards-grid main-page-cards-two-col" data-testid="main-page-cards-grid">
+          <div className="main-page-cards-column" data-testid="main-page-cards-col-left">
+            {visibleDesktopCards.filter((_, idx) => idx % 2 === 0)}
           </div>
-          <div className="main-page-card-body">
-            {loading ? (
-              <div className="main-page-loading-skeleton">Wird geladen...</div>
-            ) : (
-              <div className="main-page-food-content">
-                {mainMealData?.meal_components && mainMealData.meal_components.length > 0 ? (
-                  <ul className="main-page-meal-components-list" data-testid="main-page-meal-components">
-                    {mainMealData.meal_components.map((component, idx) => (
-                      <li key={idx} className="main-page-meal-component-item">
-                        <span className="main-page-meal-bullet">•</span>
-                        <span className="main-page-meal-text">{component}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <div className="main-page-empty-placeholder" data-testid="main-page-no-food">
-                    {t('noFoodToday') || 'Kein Essen eingetragen'}
-                  </div>
-                )}
-
-                <div className="main-page-cook-row" data-testid="main-page-cook-row">
-                  <span className="main-page-cook-name" data-testid="main-page-cook-name">
-                    {cookNameFormatted}
-                  </span>
-                </div>
-              </div>
-            )}
+          <div className="main-page-cards-column" data-testid="main-page-cards-col-right">
+            {visibleDesktopCards.filter((_, idx) => idx % 2 === 1)}
+            <PwaInstallCard />
           </div>
-
-          {/* Expand / Collapse Section for Rest of the Week / Upcoming Week */}
-          <div className="main-page-week-section">
-            <button
-              type="button"
-              className="main-page-expand-btn"
-              onClick={toggleExpand}
-              data-testid="main-page-expand-week-btn"
-              aria-expanded={isExpanded}
-            >
-              <span>{expandBtnLabel}</span>
-              {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-            </button>
-
-            {isExpanded && (
-              <div className="main-page-week-expanded-content" data-testid="main-page-week-expanded">
-                <h3 className="main-page-week-title">{weekSectionTitle}</h3>
-
-                {weekLoading ? (
-                  <div className="main-page-loading-week">Wochentage werden geladen...</div>
-                ) : weekData.length > 0 ? (
-                  <div className="main-page-week-cards-grid">
-                    {weekData.map((dayItem) => {
-                      const dayTitle = formatDayHeading(dayItem.date);
-                      const cookFormatted = dayItem.who_is_cooking?.trim()
-                        ? `(${dayItem.who_is_cooking.trim()})`
-                        : `(${t('noCookToday') || 'Niemand eingetragen'})`;
-
-                      return (
-                        <div
-                          key={dayItem.date}
-                          className="main-page-week-day-card"
-                          data-testid={`main-page-week-day-${dayItem.date}`}
-                        >
-                          <div className="main-page-week-day-header">
-                            <span className="main-page-week-day-name">{dayTitle}</span>
-                          </div>
-                          <div className="main-page-week-day-body">
-                            {dayItem.meal_components && dayItem.meal_components.length > 0 ? (
-                              <ul className="main-page-week-components-list">
-                                {dayItem.meal_components.map((c, cIdx) => (
-                                  <li key={cIdx} className="main-page-week-component-item">
-                                    <span className="main-page-week-bullet">•</span>
-                                    <span className="main-page-week-component-text">{c}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            ) : (
-                              <div className="main-page-week-empty">
-                                {t('noFoodToday') || 'Kein Essen eingetragen'}
-                              </div>
-                            )}
-
-                            <div className="main-page-week-cook-row">
-                              <span className="main-page-week-cook-name">
-                                {cookFormatted}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="main-page-empty-week">
-                    {t('noMoreCookingDaysThisWeek') || 'Keine weiteren Kochtage in dieser Woche'}
-                  </p>
-                )}
-
-                {/* Link to Meal Plan if user has permission */}
-                {canViewMealPlan && (
-                  <div className="main-page-mealplan-link-row">
-                    <button
-                      type="button"
-                      className="main-page-mealplan-nav-btn"
-                      onClick={() => onNavigate('mealPlan')}
-                      data-testid="main-page-mealplan-link"
-                    >
-                      <Calendar size={18} />
-                      <span>{t('linkToMealPlan') || 'Zum Wochenplan'}</span>
-                      <ArrowRight size={16} />
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* PWA App Installation Box */}
-        <PwaInstallCard />
-
-        {/* Quick Start Box */}
-        {quickStartLinks.length > 0 && (
-          <section
-            className="main-page-card main-page-quickstart-card"
-            data-testid="main-page-quickstart-card"
-          >
-            <div data-testid="main-page-quickstart-box" className="sr-only" />
-            <div className="main-page-card-header">
-              <Zap size={22} className="main-page-card-icon quickstart-icon" />
-              <h2 className="main-page-card-title" data-testid="main-page-quickstart-title">
-                {t('quickStart') || 'Schnellstart'}
-              </h2>
-            </div>
-            <div className="main-page-card-body main-page-quickstart-body">
-              <div className="main-page-quickstart-grid" role="list">
-                {quickStartLinks.map((link) => {
-                  const Icon = link.icon;
-                  return (
-                    <button
-                      key={link.id}
-                      type="button"
-                      className="main-page-quickstart-btn"
-                      onClick={() => onNavigate(link.tab)}
-                      data-testid={link.testId}
-                      data-tab={link.tab}
-                      role="listitem"
-                      aria-label={link.label}
-                    >
-                      <div className="main-page-quickstart-btn-content">
-                        <span className="main-page-quickstart-icon-wrapper">
-                          <Icon size={20} className="main-page-quickstart-btn-icon" />
-                        </span>
-                        <span className="main-page-quickstart-btn-label">{link.label}</span>
-                        {link.altTestId && (
-                          <span data-testid={link.altTestId} className="sr-only">
-                            {link.label}
-                          </span>
-                        )}
-                      </div>
-                      <ArrowRight size={18} className="main-page-quickstart-arrow" />
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </section>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="main-page-cards-grid main-page-cards-single-col" data-testid="main-page-cards-grid">
+          {hygieneCardElement}
+          {upcomingEventsCardElement}
+          {foodCardElement}
+          <PwaInstallCard />
+          {quickStartCardElement}
+        </div>
+      )}
 
       {/* Certification Modal */}
       <HygieneCertificationModal

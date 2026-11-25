@@ -2579,6 +2579,160 @@ func TestAuditLog_ChangedByEmail_IdentifierEmailParent(t *testing.T) {
 	}
 }
 
+func TestGetMyUpcomingEvents(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := NewStore(pool)
+
+	parentID := uuid.New()
+	coParentID := uuid.New()
+	otherParentID := uuid.New()
+	employeeID := uuid.New()
+
+	dates := []string{
+		"2098-05-10", // past
+		"2098-05-12", // ambiguous
+		"2098-05-14", // upcoming co-cook (earliest valid for parentID & coParentID)
+		"2098-05-20", // later upcoming for parentID
+		"2098-05-18", // upcoming for employeeID
+	}
+	defer func() {
+		for _, d := range dates {
+			_, _ = pool.Exec(ctx, "DELETE FROM meal_plan_from_sheets WHERE date = $1", d)
+		}
+	}()
+
+	// Past date for parentID -> should be ignored
+	if err := appStore.SeedTestMealPlanWithCooks(
+		ctx,
+		"2098-05-10",
+		"Maria",
+		models.MealAllergenCookList{{ID: parentID, Type: "parent", FirstName: "Maria", LastName: "Muster"}},
+		"resolved",
+		"Suppe", "", "",
+	); err != nil {
+		t.Fatalf("failed to seed past meal plan: %v", err)
+	}
+
+	// Ambiguous entry -> should be ignored even if cooks array had anything
+	if err := appStore.SeedTestMealPlanWithCooks(
+		ctx,
+		"2098-05-12",
+		"Maria",
+		models.MealAllergenCookList{},
+		"ambiguous",
+		"Nudeln", "", "",
+	); err != nil {
+		t.Fatalf("failed to seed ambiguous meal plan: %v", err)
+	}
+
+	// Co-cook upcoming entry on 2098-05-14
+	if err := appStore.SeedTestMealPlanWithCooks(
+		ctx,
+		"2098-05-14",
+		"Maria & Peter",
+		models.MealAllergenCookList{
+			{ID: parentID, Type: "parent", FirstName: "Maria", LastName: "Muster"},
+			{ID: coParentID, Type: "parent", FirstName: "Peter", LastName: "Muster"},
+		},
+		"resolved",
+		"Lasagne", "Salat", "",
+	); err != nil {
+		t.Fatalf("failed to seed co-cook meal plan: %v", err)
+	}
+
+	// Later upcoming entry for parentID on 2098-05-20
+	if err := appStore.SeedTestMealPlanWithCooks(
+		ctx,
+		"2098-05-20",
+		"Maria",
+		models.MealAllergenCookList{{ID: parentID, Type: "parent", FirstName: "Maria", LastName: "Muster"}},
+		"resolved",
+		"Reis", "", "",
+	); err != nil {
+		t.Fatalf("failed to seed later meal plan: %v", err)
+	}
+
+	// Upcoming entry for employeeID on 2098-05-18
+	if err := appStore.SeedTestMealPlanWithCooks(
+		ctx,
+		"2098-05-18",
+		"Alex",
+		models.MealAllergenCookList{{ID: employeeID, Type: "employee", FirstName: "Alex", LastName: "Koch"}},
+		"resolved",
+		"Eintopf", "", "",
+	); err != nil {
+		t.Fatalf("failed to seed employee meal plan: %v", err)
+	}
+
+	fromDate := time.Date(2098, 5, 11, 0, 0, 0, 0, time.UTC)
+
+	// 1. parentID gets earliest upcoming >= 2098-05-11 -> 2098-05-14
+	eventsParent, err := appStore.GetMyUpcomingEvents(ctx, fromDate, &parentID, nil)
+	if err != nil {
+		t.Fatalf("GetMyUpcomingEvents for parent failed: %v", err)
+	}
+	if len(eventsParent) != 1 || eventsParent[0].Type != "cooking_duty" || eventsParent[0].Date != "2098-05-14" {
+		t.Fatalf("expected [cooking_duty 2098-05-14] for parentID, got %+v", eventsParent)
+	}
+
+	// 2. On exact day 2098-05-14, still returns 2098-05-14 (today's cooking duty)
+	eventsToday, err := appStore.GetMyUpcomingEvents(ctx, time.Date(2098, 5, 14, 0, 0, 0, 0, time.UTC), &parentID, nil)
+	if err != nil {
+		t.Fatalf("GetMyUpcomingEvents on exact day failed: %v", err)
+	}
+	if len(eventsToday) != 1 || eventsToday[0].Date != "2098-05-14" {
+		t.Fatalf("expected [2098-05-14] on exact cooking day, got %+v", eventsToday)
+	}
+
+	// 3. Day after 2098-05-14 -> advances to 2098-05-20
+	eventsAfter, err := appStore.GetMyUpcomingEvents(ctx, time.Date(2098, 5, 15, 0, 0, 0, 0, time.UTC), &parentID, nil)
+	if err != nil {
+		t.Fatalf("GetMyUpcomingEvents after first duty failed: %v", err)
+	}
+	if len(eventsAfter) != 1 || eventsAfter[0].Date != "2098-05-20" {
+		t.Fatalf("expected [2098-05-20] after first cooking day passed, got %+v", eventsAfter)
+	}
+
+	// 4. coParentID also sees 2098-05-14
+	eventsCoParent, err := appStore.GetMyUpcomingEvents(ctx, fromDate, &coParentID, nil)
+	if err != nil {
+		t.Fatalf("GetMyUpcomingEvents for coParent failed: %v", err)
+	}
+	if len(eventsCoParent) != 1 || eventsCoParent[0].Date != "2098-05-14" {
+		t.Fatalf("expected [2098-05-14] for coParentID, got %+v", eventsCoParent)
+	}
+
+	// 5. employeeID sees 2098-05-18
+	eventsEmp, err := appStore.GetMyUpcomingEvents(ctx, fromDate, nil, &employeeID)
+	if err != nil {
+		t.Fatalf("GetMyUpcomingEvents for employee failed: %v", err)
+	}
+	if len(eventsEmp) != 1 || eventsEmp[0].Date != "2098-05-18" {
+		t.Fatalf("expected [2098-05-18] for employeeID, got %+v", eventsEmp)
+	}
+
+	// 6. Unrelated parent gets empty slice
+	eventsOther, err := appStore.GetMyUpcomingEvents(ctx, fromDate, &otherParentID, nil)
+	if err != nil {
+		t.Fatalf("GetMyUpcomingEvents for unrelated parent failed: %v", err)
+	}
+	if len(eventsOther) != 0 {
+		t.Fatalf("expected 0 events for unrelated parent, got %+v", eventsOther)
+	}
+}
+
 
 
 

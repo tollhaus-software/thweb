@@ -108,10 +108,71 @@ func (s *Server) HandleGetMe(w http.ResponseWriter, r *http.Request) {
 	if user.ParentID != nil {
 		resp["parent_id"] = user.ParentID.String()
 	}
+	if user.EmployeeID != nil {
+		resp["employee_id"] = user.EmployeeID.String()
+	}
 	if user.Simulation != nil {
 		resp["simulation"] = user.Simulation
 	}
 	jsonResponse(w, resp)
+}
+
+func (s *Server) HandleGetMyUpcomingEvents(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	dateParam := strings.TrimSpace(r.URL.Query().Get("date"))
+	var targetDate time.Time
+	if dateParam == "" {
+		loc, err := time.LoadLocation("Europe/Berlin")
+		var now time.Time
+		if err == nil {
+			now = time.Now().In(loc)
+		} else {
+			now = time.Now()
+		}
+		targetDate = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	} else {
+		parsed, err := time.Parse("2006-01-02", dateParam)
+		if err != nil {
+			httpErrorLog(w, r, "Invalid date format, expected YYYY-MM-DD", http.StatusBadRequest, err)
+			return
+		}
+		targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 0, 0, 0, 0, time.UTC)
+	}
+
+	if user.IsKiosk || s.Store == nil || (user.Simulation != nil && user.Simulation.Active && user.Simulation.Mode == "custom") {
+		jsonResponse(w, models.MyUpcomingEventsResponse{Events: []models.UpcomingEvent{}})
+		return
+	}
+
+	parentID := user.ParentID
+	employeeID := user.EmployeeID
+	if parentID == nil && employeeID == nil {
+		lookupEmail := user.Email
+		if user.Simulation != nil && user.Simulation.Active && user.Simulation.Mode == "user" && user.Simulation.SimulatedUser != "" {
+			lookupEmail = user.Simulation.SimulatedUser
+		}
+		if lookupEmail != "" {
+			if pID, _, err := s.Store.GetParentInfoByIdentifierEmail(r.Context(), lookupEmail); err == nil && pID != nil {
+				parentID = pID
+			}
+			if eID, _, err := s.Store.GetEmployeeInfoByIdentifierEmail(r.Context(), lookupEmail); err == nil && eID != nil {
+				employeeID = eID
+			}
+		}
+	}
+
+	events, err := s.Store.GetMyUpcomingEvents(r.Context(), targetDate, parentID, employeeID)
+	if err != nil {
+		httpErrorLog(w, r, "Failed to get upcoming events", http.StatusInternalServerError, err)
+		return
+	}
+
+	jsonResponse(w, models.MyUpcomingEventsResponse{Events: events})
 }
 
 func (s *Server) HandleGetSimulationOptions(w http.ResponseWriter, r *http.Request) {
@@ -3193,12 +3254,14 @@ func (s *Server) HandleTestReset(w http.ResponseWriter, r *http.Request) {
 }
 
 type SeedMealPlanEntry struct {
-	Date           string   `json:"date"`
-	CookName       string   `json:"cook_name"`
-	MealComponents []string `json:"meal_components"`
-	FoodComponent1 string   `json:"food_component_1"`
-	FoodComponent2 string   `json:"food_component_2"`
-	FoodComponent3 string   `json:"food_component_3"`
+	Date                 string                      `json:"date"`
+	CookName             string                      `json:"cook_name"`
+	Cooks                models.MealAllergenCookList `json:"cooks,omitempty"`
+	CookResolutionStatus string                      `json:"cook_resolution_status,omitempty"`
+	MealComponents       []string                    `json:"meal_components"`
+	FoodComponent1       string                      `json:"food_component_1"`
+	FoodComponent2       string                      `json:"food_component_2"`
+	FoodComponent3       string                      `json:"food_component_3"`
 }
 
 func (s *Server) HandleTestSeedMealPlan(w http.ResponseWriter, r *http.Request) {
@@ -3240,7 +3303,7 @@ func (s *Server) HandleTestSeedMealPlan(w http.ResponseWriter, r *http.Request) 
 				c3 = entry.MealComponents[2]
 			}
 		}
-		if err := s.Store.SeedTestMealPlan(r.Context(), entry.Date, entry.CookName, c1, c2, c3); err != nil {
+		if err := s.Store.SeedTestMealPlanWithCooks(r.Context(), entry.Date, entry.CookName, entry.Cooks, entry.CookResolutionStatus, c1, c2, c3); err != nil {
 			httpErrorLog(w, r, "Failed to seed meal plan", http.StatusInternalServerError, err)
 			return
 		}

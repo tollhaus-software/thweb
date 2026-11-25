@@ -33,6 +33,7 @@ type UserWithPermissions struct {
 	EffectivePermissions []string              `json:"effective_permissions"`
 	FamilyID             *uuid.UUID            `json:"family_id,omitempty"`
 	ParentID             *uuid.UUID            `json:"parent_id,omitempty"`
+	EmployeeID           *uuid.UUID            `json:"employee_id,omitempty"`
 	LastLogin            *time.Time            `json:"last_login,omitempty"`
 	CreatedAt            time.Time             `json:"created_at"`
 	UpdatedAt            time.Time             `json:"updated_at"`
@@ -969,6 +970,21 @@ type MealPlanDayResponse struct {
 	Date           string   `json:"date"`
 	WhoIsCooking   string   `json:"who_is_cooking"`
 	MealComponents []string `json:"meal_components"`
+}
+
+type UpcomingEventType string
+
+const (
+	UpcomingEventCookingDuty UpcomingEventType = "cooking_duty"
+)
+
+type UpcomingEvent struct {
+	Type string `json:"type"`
+	Date string `json:"date"`
+}
+
+type MyUpcomingEventsResponse struct {
+	Events []UpcomingEvent `json:"events"`
 }
 
 type DailyBriefResponse struct {

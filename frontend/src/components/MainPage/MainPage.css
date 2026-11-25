@@ -93,13 +93,30 @@
   opacity: 0.8;
 }
 
-/* Dashboard Cards Grid - prepared for peer cards (Essen, Activities, Events) */
+/* Dashboard Cards Layout - two independent vertical stacks on desktop, single stack on tablet/mobile */
 .main-page-cards-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(440px, 580px));
-  gap: 1.75rem;
   width: 100%;
+}
+
+.main-page-cards-two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 580px));
+  gap: 1.75rem;
   align-items: start;
+}
+
+.main-page-cards-single-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  max-width: 580px;
+}
+
+.main-page-cards-column {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  min-width: 0;
 }
 
 /* Main Page Card */
@@ -133,6 +150,62 @@
 
 .main-page-card-icon.quickstart-icon {
   color: #f59e0b;
+}
+
+.main-page-card-icon.events-icon {
+  color: var(--primary, #2563eb);
+}
+
+/* Upcoming Events Card */
+.main-page-events-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  width: 100%;
+}
+
+.main-page-event-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0.95rem;
+  background-color: var(--bg-subtle, #f8fafc);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+
+.main-page-event-item.is-today {
+  border-color: var(--primary, #2563eb);
+}
+
+.main-page-event-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  background-color: var(--bg-surface, #ffffff);
+  color: var(--primary, #2563eb);
+  border: 1px solid var(--border, #e2e8f0);
+  flex-shrink: 0;
+}
+
+.main-page-event-item.is-today .main-page-event-icon-wrapper {
+  background-color: var(--primary, #2563eb);
+  color: var(--primary-contrast, #ffffff);
+  border-color: var(--primary, #2563eb);
+}
+
+.main-page-event-text {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text, #1e293b);
+  line-height: 1.4;
 }
 
 /* Hygiene Task Card */
@@ -532,8 +605,18 @@
     font-size: 1rem;
   }
 
-  .main-page-cards-grid {
+  .main-page-cards-single-col {
+    max-width: none;
+    gap: 1.25rem;
+  }
+
+  .main-page-cards-two-col {
     grid-template-columns: 1fr;
+    gap: 1.25rem;
+  }
+
+  .main-page-cards-column {
+    gap: 1.25rem;
   }
 
   .main-page-card {
