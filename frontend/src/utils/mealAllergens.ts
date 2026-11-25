@@ -409,25 +409,29 @@ export function getAllergenBgColor(allergenKey: string): string {
 }
 
 /**
- * Generates the 5x5 (5 weeks, Mon-Fri) calendar grid for a given year and month (0-indexed).
- * Anchored at the Monday of the week containing the 1st of the month.
+ * Generates the Mon-Fri week rows for a given year and month (0-indexed).
+ * Includes every Mon-Fri week that contains at least one weekday (Mon-Fri) in the target month:
+ * - Omits a leading week if its Mon-Fri falls entirely in the previous month (when the 1st is Sat or Sun).
+ * - Continues through the last week whose Monday is on or before the last day of the month.
  */
 export function getMonth5WeeksDays(year: number, month: number): Date[][] {
   const firstOfMonth = new Date(year, month, 1);
-  const firstMonday = getMondayOfWeek(firstOfMonth);
+  const lastOfMonth = new Date(year, month + 1, 0);
+
+  let monday = getMondayOfWeek(firstOfMonth);
+  const firstFriday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 4);
+  if (firstFriday < firstOfMonth) {
+    monday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 7);
+  }
 
   const weeks: Date[][] = [];
-  for (let w = 0; w < 5; w++) {
+  while (monday <= lastOfMonth) {
     const weekDays: Date[] = [];
     for (let d = 0; d < 5; d++) {
-      const date = new Date(
-        firstMonday.getFullYear(),
-        firstMonday.getMonth(),
-        firstMonday.getDate() + w * 7 + d
-      );
-      weekDays.push(date);
+      weekDays.push(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + d));
     }
     weeks.push(weekDays);
+    monday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 7);
   }
   return weeks;
 }

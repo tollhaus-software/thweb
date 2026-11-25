@@ -24,13 +24,25 @@ import {
 
 test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, and Copy Allergens', () => {
   test('unit tests: 5x5 calendar grid, day background colors, similarity suggestions, combine/replace, and search', () => {
-    // 1. 5x5 = 25 boxes, Mon-Fri, Monday on top-left
+    // 1. Mon-Fri month grid: only includes Mon-Fri rows that have at least one weekday in the month
     const oct2026Days = getMonth5WeeksFlatDays(2026, 9); // October 2026
     expect(oct2026Days).toHaveLength(25);
     expect(oct2026Days[0].getDay()).toBe(1); // Monday on top-left
     expect(oct2026Days[4].getDay()).toBe(5); // Friday on top-right
     expect(formatDateKey(oct2026Days[0])).toBe('2026-09-28');
     expect(formatDateKey(oct2026Days[24])).toBe('2026-10-30');
+
+    // November 2026: Nov 1 is Sunday (omits Oct 26-30 week) and Nov 30 is Monday (includes Nov 30-Dec 4 week)
+    const nov2026Days = getMonth5WeeksFlatDays(2026, 10);
+    expect(nov2026Days).toHaveLength(25);
+    expect(formatDateKey(nov2026Days[0])).toBe('2026-11-02');
+    expect(formatDateKey(nov2026Days[24])).toBe('2026-12-04');
+
+    // February 2026: Feb 1 is Sunday and Feb 28 is Saturday -> 4 Mon-Fri rows (Feb 2-27)
+    const feb2026Days = getMonth5WeeksFlatDays(2026, 1);
+    expect(feb2026Days).toHaveLength(20);
+    expect(formatDateKey(feb2026Days[0])).toBe('2026-02-02');
+    expect(formatDateKey(feb2026Days[19])).toBe('2026-02-27');
 
     // 2. Day background color rules
     const todayKey = '2026-10-22';
@@ -450,10 +462,10 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
     await expect(tabBtn).toHaveAttribute('data-active', 'true');
     expect(page.url()).toContain('#mealAllergens');
 
-    // 4. Desktop view: verify month selector and 25 boxes (5x5)
+    // 4. Desktop view: verify month selector and 4 or 5 full Mon-Fri rows (20 or 25 boxes)
     await expect(page.getByTestId('meal-allergens-month-selector')).toBeVisible();
     const desktopBoxes = page.locator('[data-testid^="meal-allergens-day-box-"]');
-    await expect(desktopBoxes).toHaveCount(25);
+    expect([20, 25]).toContain(await desktopBoxes.count());
 
     // Verify current day (today) is marked in the calendar
     const todayKey = formatDateKey(now);
