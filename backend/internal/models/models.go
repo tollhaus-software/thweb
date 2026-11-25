@@ -81,6 +81,9 @@ func (s *UserWithPermissions) HasPermission(perm string) bool {
 		if perm == "volunteers.absences.read" && (p == "volunteers.absences.write" || p == "*") {
 			return true
 		}
+		if perm == "events.all.read" && (p == "events.all.write" || p == "*") {
+			return true
+		}
 		if (perm == "hygiene.all.read" || perm == "hygiene.all.write") && (p == "hygiene.infektionsschutz.management" || p == "*") {
 			return true
 		}
@@ -103,6 +106,7 @@ func (s *UserWithPermissions) EnsureImpliedPermissions() {
 	hasMealAllergensWrite := false
 	hasJobRoleAssignmentWrite := false
 	hasVolunteerAbsencesWrite := false
+	hasEventsWrite := false
 	permSet := make(map[string]bool)
 	for _, p := range s.EffectivePermissions {
 		permSet[p] = true
@@ -136,6 +140,9 @@ func (s *UserWithPermissions) EnsureImpliedPermissions() {
 		if p == "*" || p == "volunteers.absences.write" {
 			hasVolunteerAbsencesWrite = true
 		}
+		if p == "*" || p == "events.all.write" {
+			hasEventsWrite = true
+		}
 	}
 	if hasFamiliesAll {
 		permSet["families.all.restrictedread"] = true
@@ -167,6 +174,9 @@ func (s *UserWithPermissions) EnsureImpliedPermissions() {
 	}
 	if hasVolunteerAbsencesWrite {
 		permSet["volunteers.absences.read"] = true
+	}
+	if hasEventsWrite {
+		permSet["events.all.read"] = true
 	}
 	s.EffectivePermissions = make([]string, 0, len(permSet))
 	for p := range permSet {
@@ -975,16 +985,74 @@ type MealPlanDayResponse struct {
 type UpcomingEventType string
 
 const (
-	UpcomingEventCookingDuty UpcomingEventType = "cooking_duty"
+	UpcomingEventCookingDuty   UpcomingEventType = "cooking_duty"
+	UpcomingEventCalendarEvent UpcomingEventType = "calendar_event"
 )
 
 type UpcomingEvent struct {
-	Type string `json:"type"`
-	Date string `json:"date"`
+	Type        string  `json:"type"`
+	Date        string  `json:"date"`
+	ID          string  `json:"id,omitempty"`
+	EventType   string  `json:"event_type,omitempty"`
+	EndDate     string  `json:"end_date,omitempty"`
+	StartTime   *string `json:"start_time,omitempty"`
+	EndTime     *string `json:"end_time,omitempty"`
+	Title       string  `json:"title,omitempty"`
+	Description string  `json:"description,omitempty"`
 }
 
 type MyUpcomingEventsResponse struct {
 	Events []UpcomingEvent `json:"events"`
+}
+
+var ValidCalendarEventTypes = map[string]bool{
+	"custom":                true,
+	"schliesszeit":          true,
+	"schliesszeit_halbtags": true,
+	"ferien":                true,
+	"paedagogischer_tag":    true,
+	"teamausflug":           true,
+	"ea_kleine_gruppe":      true,
+	"ea_grosse_gruppe":      true,
+	"ea_hort":               true,
+	"ea_gesamt":             true,
+	"ea_gesamt_and_mgv":     true,
+	"putz_we":               true,
+	"bau_we":                true,
+	"garten_we":             true,
+	"laternenfest":          true,
+	"weihnachtsfeier":       true,
+	"sommerfest":            true,
+}
+
+type CalendarEvent struct {
+	ID             uuid.UUID `json:"id"`
+	EventType      string    `json:"event_type"`
+	Title          string    `json:"title"`
+	Description    string    `json:"description"`
+	Location       string    `json:"location"`
+	StartDate      string    `json:"start_date"`
+	EndDate        string    `json:"end_date"`
+	StartTime      *string   `json:"start_time,omitempty"`
+	EndTime        *string   `json:"end_time,omitempty"`
+	CreatedByEmail string    `json:"created_by_email,omitempty"`
+	UpdatedByEmail string    `json:"updated_by_email,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+type ImportCalendarEventsRequest struct {
+	Events           []CalendarEvent `json:"events"`
+	Mode             string          `json:"mode"` // "skip_duplicates" (default) or "replace_range"
+	ReplaceStartDate string          `json:"replace_start_date,omitempty"`
+	ReplaceEndDate   string          `json:"replace_end_date,omitempty"`
+}
+
+type ImportCalendarEventsResponse struct {
+	CreatedCount int             `json:"created_count"`
+	SkippedCount int             `json:"skipped_count"`
+	DeletedCount int             `json:"deleted_count"`
+	Events       []CalendarEvent `json:"events"`
 }
 
 type DailyBriefResponse struct {

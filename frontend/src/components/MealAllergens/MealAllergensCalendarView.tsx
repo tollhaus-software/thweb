@@ -269,21 +269,22 @@ export const MealAllergensCalendarView: React.FC<MealAllergensCalendarViewProps>
         )}
       </div>
 
-      {!isMobile && (
-        <div className="meal-allergens-weekday-headers" data-testid={`${testIdPrefix}-weekday-headers`}>
-          {weekdayHeaders.map((dayLabel) => (
-            <div key={dayLabel} className="meal-allergens-weekday-header">
-              {dayLabel}
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="meal-allergens-calendar-sheet" data-testid={`${testIdPrefix}-calendar-sheet`}>
+        {!isMobile && (
+          <div className="meal-allergens-weekday-headers" data-testid={`${testIdPrefix}-weekday-headers`}>
+            {weekdayHeaders.map((dayLabel) => (
+              <div key={dayLabel} className="meal-allergens-weekday-header">
+                {dayLabel}
+              </div>
+            ))}
+          </div>
+        )}
 
-      <div
-        className={`meal-allergens-grid ${isMobile ? 'mobile-week-stack' : ''}`}
-        data-testid={`${testIdPrefix}-grid`}
-        data-loading={loading}
-      >
+        <div
+          className={`meal-allergens-grid ${isMobile ? 'mobile-week-stack' : ''}`}
+          data-testid={`${testIdPrefix}-grid`}
+          data-loading={loading}
+        >
         {visibleDates.map((dateObj) => {
           const dateKey = formatDateKey(dateObj);
           const dayData = daysMap[dateKey] || createEmptyMealAllergenDay(dateKey);
@@ -376,6 +377,7 @@ export const MealAllergensCalendarView: React.FC<MealAllergensCalendarViewProps>
             </button>
           );
         })}
+        </div>
       </div>
     </div>
   );

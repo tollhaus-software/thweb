@@ -17,6 +17,7 @@ A user can only access an application feature or API endpoint if their effective
    - `employees.all.write` implies `employees.all.read`.
    - `jobs.all.write` implies `jobs.all.read`.
    - `volunteers.absences.write` implies `volunteers.absences.read`.
+   - `events.all.write` implies `events.all.read`.
 3. **Dynamic Roles**: Roles are defined declaratively in a YAML file (`local_dev_roles.yaml` for local development, or `roles.yaml` on deployment side) and loaded via `ROLES_FILE` (falling back to built-in `default_roles.yaml`).
 4. **Explicit Denials (`deny_permissions`)**: Roles can define `deny_permissions` to explicitly strip specific permissions from a user's effective permissions. This takes precedence over additive permissions (such as auto-granted parent self-service permissions), allowing educators who are also parents to retain self-service access without gaining access to fee calculation.
 5. **Database Synchronization**: Upon startup, the Go backend reads `ROLES_FILE` (or falls back to built-in defaults) and performs an idempotent upsert into the PostgreSQL `roles` table.
@@ -137,4 +138,6 @@ roles:
 | `jobs.all.write` | Create, edit, and delete jobs, and manage job assignments (implies `jobs.all.read`) | MGA, Board, Administrators |
 | `volunteers.absences.read` | Access the "Abwesenheit Freiwillige" tab and calendar overview | Staff, Board, Management |
 | `volunteers.absences.write` | Create, edit, and delete volunteer absences (implies `volunteers.absences.read`) | Staff, Board, Management |
+| `events.all.read` | View Tollhaus calendar events in the "Termine" tab and upcoming events card | Parents, Staff, Board |
+| `events.all.write` | Create, edit, delete, and import Tollhaus calendar events (implies `events.all.read`) | Board, MGA, Educators, Administrators |
 | `permissions.simulate` | Access the role & permissions simulator to test view and API scoping | Administrators |

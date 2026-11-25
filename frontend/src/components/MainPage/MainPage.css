@@ -559,6 +559,28 @@
   border-color: var(--primary-hover, #0369a1);
 }
 
+.main-page-events-expand-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  margin-top: 0.65rem;
+  padding: 0.42rem 0.8rem;
+  border-radius: 7px;
+  border: 1px solid var(--border, #e2e8f0);
+  background: var(--bg-subtle, #f8fafc);
+  color: var(--text, #334155);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.main-page-events-expand-btn:hover {
+  background: var(--bg-hover, #f1f5f9);
+  border-color: var(--border-strong, #cbd5e1);
+}
+
 /* Dark mode specific accents */
 :root[data-theme="dark"] .main-page-card-icon.meal-icon,
 :root[data-theme="dark"] .main-page-meal-bullet,

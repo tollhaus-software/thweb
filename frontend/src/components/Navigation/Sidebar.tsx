@@ -30,6 +30,7 @@ export interface SidebarProps {
   onCloseMobile: () => void;
   perms?: UserPermissionsContext;
   canReadOverview: boolean;
+  canReadEvents?: boolean;
   canReadFamiliesAll: boolean;
   canReadFees: boolean;
   canReadFeesAll?: boolean;
@@ -62,6 +63,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
   perms: permsProp,
   canReadOverview,
+  canReadEvents = false,
   canReadFamiliesAll,
   canReadFees,
   canReadFeesAll = false,
@@ -89,6 +91,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const perms: UserPermissionsContext = permsProp || {
     canReadOverview,
+    canReadEvents,
     canReadFamiliesAll,
     canReadFees,
     canReadFeesAll,

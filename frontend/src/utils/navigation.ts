@@ -15,6 +15,7 @@ import {
   Hammer,
   ShieldAlert,
   Calendar,
+  CalendarDays,
   Activity,
   Home,
   FileText,
@@ -23,6 +24,7 @@ import { t } from './i18n';
 
 export type TabId =
   | 'main'
+  | 'events'
   | 'familiesOverview'
   | 'families'
   | 'parents'
@@ -45,10 +47,11 @@ export type TabId =
   | 'kiosk'
   | 'dashboard';
 
-export type NavigationCategory = 'main' | 'families' | 'mga' | 'fees' | 'pa' | 'kochen' | 'hygiene' | 'more';
+export type NavigationCategory = 'main' | 'events' | 'families' | 'mga' | 'fees' | 'pa' | 'kochen' | 'hygiene' | 'more';
 
 export interface UserPermissionsContext {
   canReadOverview: boolean;
+  canReadEvents?: boolean;
   canReadFamiliesAll: boolean;
   canReadFees: boolean;
   canReadFeesAll?: boolean;
@@ -112,6 +115,27 @@ export const NAVIGATION_CATEGORIES: NavCategory[] = [
         defaultDescription: 'Tagesübersicht über Kochen, Essen und wichtige Kita-Infos.',
         icon: Home,
         isVisible: (ctx) => Boolean(ctx.canViewMainPage),
+      },
+    ],
+  },
+  {
+    id: 'events',
+    labelKey: 'navEvents',
+    defaultLabel: 'Termine',
+    accessibleName: 'Termine',
+    descriptionKey: 'catDescEvents',
+    defaultDescription: 'Kita-Kalender, Schließzeiten, Elternabende und Feste.',
+    icon: CalendarDays,
+    items: [
+      {
+        id: 'events',
+        labelKey: 'subtabEvents',
+        defaultLabel: 'Termine',
+        accessibleName: 'Termine',
+        descriptionKey: 'subtabDescEvents',
+        defaultDescription: 'Kita-Kalender, Schließzeiten, Elternabende und Feste.',
+        icon: CalendarDays,
+        isVisible: (ctx) => Boolean(ctx.canReadEvents),
       },
     ],
   },

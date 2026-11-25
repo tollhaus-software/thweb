@@ -19,6 +19,7 @@ import { HygieneCertificationModal } from '../Hygiene/HygieneCertificationModal'
 import { PwaInstallCard } from './PwaInstallCard';
 import { UpcomingEventsCard } from './UpcomingEventsCard';
 import { useIsMobile } from '../../hooks/useIsMobile';
+import { useRealtime, type RealtimeMessage } from '../../hooks/useRealtime';
 import { getHygieneMessage } from '../../utils/hygieneMessage';
 import { type UpcomingEvent } from '../../utils/upcomingEvents';
 import { t } from '../../utils/i18n';
@@ -133,6 +134,17 @@ export const MainPage: React.FC<MainPageProps> = ({
   useEffect(() => {
     void fetchUpcomingEvents();
   }, [fetchUpcomingEvents]);
+
+  const handleRealtimeMessage = useCallback(
+    (msg: RealtimeMessage) => {
+      if (msg.type === 'CALENDAR_EVENTS_UPDATED' || msg.type === 'DATA_REFRESH') {
+        void fetchUpcomingEvents();
+      }
+    },
+    [fetchUpcomingEvents]
+  );
+
+  useRealtime(handleRealtimeMessage);
 
   // Day of week: 0 = Sun, 1 = Mon, ..., 5 = Fri, 6 = Sat
   const dayOfWeek = useMemo(() => todayObj.getDay(), [todayObj]);

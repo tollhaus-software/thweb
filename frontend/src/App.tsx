@@ -25,6 +25,8 @@ import { isExperimentActive } from './utils/experiments';
 import { MealPlanTab } from './components/MealPlan/MealPlanTab';
 import { MealPlanPrintView } from './components/MealPlan/MealPlanPrintView';
 import { MealAllergensTab } from './components/MealAllergens/MealAllergensTab';
+import { EventsTab } from './components/Events/EventsTab';
+import { getCalendarEventDisplayTitle } from './utils/calendarEvents';
 import { PersonalHygieneTab } from './components/Hygiene/PersonalHygieneTab';
 import { HygieneDocumentTab } from './components/Hygiene/HygieneDocumentTab';
 import { VolunteerAbsencesTab } from './components/VolunteerAbsences/VolunteerAbsencesTab';
@@ -708,6 +710,24 @@ const formatSnapshotDetails = (log: AuditLog, families: Family[] = []) => {
     }
   }
 
+  if (log.entity_type === 'calendar_event') {
+    const label = getCalendarEventDisplayTitle({
+      event_type: data.event_type || 'custom',
+      title: data.title || '',
+    });
+    if (label) parts.push(label);
+    if (data.start_date) {
+      const datePart =
+        data.end_date && data.end_date !== data.start_date
+          ? `${formatDisplayDate(data.start_date)} – ${formatDisplayDate(data.end_date)}`
+          : formatDisplayDate(data.start_date);
+      parts.push(datePart);
+    }
+    if (data.start_time) {
+      parts.push(data.end_time ? `${data.start_time}–${data.end_time}` : data.start_time);
+    }
+  }
+
   return parts.join(' | ');
 };
 
@@ -876,6 +896,8 @@ const AuditLogView: React.FC<AuditLogViewProps> = ({
         return t('job') || 'Job';
       case 'volunteer_absence':
         return t('subtabVolunteerAbsences') || 'Abwesenheit Freiwillige';
+      case 'calendar_event':
+        return t('calendar_event') || 'Kalendertermin';
       default:
         return etype;
     }
@@ -1193,7 +1215,9 @@ const ALL_AVAILABLE_PERMISSIONS = [
   'job.role_assignment.read',
   'job.role_assignment.write',
   'volunteers.absences.read',
-  'volunteers.absences.write'
+  'volunteers.absences.write',
+  'events.all.read',
+  'events.all.write'
 ];
 
 interface AdminViewProps {
@@ -1839,6 +1863,7 @@ const Dashboard: React.FC = () => {
   const canReadJobRoles = hasPermission('job.role_assignment.read') || hasPermission('job.role_assignment.write');
   const canWriteJobRoles = hasPermission('job.role_assignment.write');
   const canReadVolunteerAbsences = hasPermission('volunteers.absences.read') || hasPermission('volunteers.absences.write');
+  const canReadEvents = hasPermission('events.all.read') || hasPermission('events.all.write');
   const canSelfService = hasPermission('families.self.selfservice') && Boolean(user?.family_id);
 
   const openSelfService = React.useCallback((parent?: any) => {
@@ -1925,6 +1950,7 @@ const Dashboard: React.FC = () => {
 
   const navPerms: UserPermissionsContext = React.useMemo(() => ({
     canReadOverview,
+    canReadEvents,
     canReadFamiliesAll,
     canReadFees,
     canReadFeesAll,
@@ -1946,6 +1972,7 @@ const Dashboard: React.FC = () => {
     canViewMainPage: isMainPageActive,
   }), [
     canReadOverview,
+    canReadEvents,
     canReadFamiliesAll,
     canReadFees,
     canReadFeesAll,
@@ -1978,6 +2005,7 @@ const Dashboard: React.FC = () => {
     const isMainPageActiveInitial = isExperimentActive('main_page', { user });
     const initialPerms: UserPermissionsContext = {
       canReadOverview,
+      canReadEvents,
       canReadFamiliesAll,
       canReadFees,
       canReadFeesAll,
@@ -2009,6 +2037,7 @@ const Dashboard: React.FC = () => {
     }
     if (
       (hash === 'main' && isMainPageActiveInitial) ||
+      (hash === 'events' && canReadEvents) ||
       (hash === 'familiesOverview' && canReadOverview) ||
       (hash === 'families' && canReadFamiliesAll) ||
       (hash === 'parents' && canReadFamiliesAll) ||
@@ -2039,6 +2068,7 @@ const Dashboard: React.FC = () => {
     }
     if (
       (saved === 'main' && isMainPageActiveInitial) ||
+      (saved === 'events' && canReadEvents) ||
       (saved === 'familiesOverview' && canReadOverview) ||
       (saved === 'families' && canReadFamiliesAll) ||
       (saved === 'parents' && canReadFamiliesAll) ||
@@ -2170,6 +2200,14 @@ const Dashboard: React.FC = () => {
       } else if (canReadFamiliesAll) {
         fallback = 'families';
       }
+    } else if (activeTab === 'events' && !canReadEvents) {
+      if (canReadOverview) {
+        fallback = 'familiesOverview';
+      } else if (canReadFees) {
+        fallback = 'childcareFees';
+      } else if (canReadFamiliesAll) {
+        fallback = 'families';
+      }
     } else if (activeTab === 'mealPlan' && !canViewMealPlan) {
       if (canReadOverview) {
         fallback = 'familiesOverview';
@@ -2212,7 +2250,7 @@ const Dashboard: React.FC = () => {
       localStorage.setItem('thweb_active_tab', fallback);
       window.location.hash = fallback;
     }
-  }, [activeTab, canReadFamiliesAll, canReadOverview, canReadFees, canReadFeesAll, canReadMembers, canReadJobs, canReadEmployees, canReadVolunteerAbsences, canViewMealPlan, canReadMealAllergens, canManageHygiene, canAccessPersonalHygiene, hasPermission, navPerms, isMainPageActive]);
+  }, [activeTab, canReadEvents, canReadFamiliesAll, canReadOverview, canReadFees, canReadFeesAll, canReadMembers, canReadJobs, canReadEmployees, canReadVolunteerAbsences, canViewMealPlan, canReadMealAllergens, canManageHygiene, canAccessPersonalHygiene, hasPermission, navPerms, isMainPageActive]);
 
   // Navigation & Highlighting state (Patterns 2 & 3)
   const [highlightTarget, setHighlightTarget] = React.useState<{ id: string; key: number } | null>(null);
@@ -5796,6 +5834,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
         isMobileOpen={isMobileSidebarOpen}
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
         canReadOverview={canReadOverview}
+        canReadEvents={canReadEvents}
         canReadFamiliesAll={canReadFamiliesAll}
         canReadFees={canReadFees}
         canReadMembers={canReadMembers}
@@ -7027,6 +7066,8 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
               />
             ) : activeTab === 'volunteerAbsences' && canReadVolunteerAbsences ? (
               <VolunteerAbsencesTab />
+            ) : activeTab === 'events' && canReadEvents ? (
+              <EventsTab />
             ) : activeTab === 'admin' && canManageUsers ? (
               <AdminView onOpenSimulator={() => setSimulatorModalOpen(true)} />
             ) : activeTab === 'activity' && canViewActivity ? (

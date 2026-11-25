@@ -207,6 +207,11 @@ var AuditRegistry = map[string]EntityPolicy{
 			return user.HasPermission("volunteers.absences.read") || user.HasPermission("volunteers.absences.write")
 		},
 	},
+	"calendar_event": {
+		CanUserView: func(user *models.UserWithPermissions, familyID *uuid.UUID) bool {
+			return user.HasPermission("events.all.read") || user.HasPermission("events.all.write")
+		},
+	},
 }
 
 // AllowedEntityTypesForUser returns a list of entity type strings that the user is potentially authorized to view.
@@ -243,6 +248,9 @@ func AllowedEntityTypesForUser(user *models.UserWithPermissions) []string {
 	}
 	if user.HasPermission("volunteers.absences.read") || user.HasPermission("volunteers.absences.write") {
 		allowed = append(allowed, "volunteer_absence")
+	}
+	if user.HasPermission("events.all.read") || user.HasPermission("events.all.write") {
+		allowed = append(allowed, "calendar_event")
 	}
 
 	return allowed

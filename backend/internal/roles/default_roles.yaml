@@ -28,6 +28,7 @@ roles:
       - families.all.read
       - fees.self.read
       - audit.view
+      - events.all.read
 
   - id: mga
     name: MGA
@@ -47,6 +48,8 @@ roles:
       - audit.view
       - jobs.all.read
       - jobs.all.write
+      - events.all.read
+      - events.all.write
 
   - id: hygieneamt
     name: Hygieneamt
@@ -54,6 +57,7 @@ roles:
     permissions:
       - hygiene.infektionsschutz.management
       - families.all.read
+      - events.all.read
 
   - id: hygiene_pilot
     name: Hygiene Pilot (PoC)
@@ -86,6 +90,7 @@ roles:
       - allergies.summary.read
       - meal_allergens.read
       - meal_allergens.write
+      - events.all.read
 
   - id: caregiver_default
     name: Caregiver (default)
@@ -98,6 +103,7 @@ roles:
       - allergies.summary.read
       - meal_allergens.read
       - meal_allergens.write
+      - events.all.read
 
   - id: cook_default
     name: Cook (default)
@@ -109,4 +115,5 @@ roles:
       - allergies.summary.read
       - meal_allergens.read
       - meal_allergens.write
+      - events.all.read
 

@@ -35,6 +35,8 @@ func TestMapRouteToFeature(t *testing.T) {
 		{"/api/employees/{id}/jobs", "/api/employees/123/jobs", "jobs"},
 		{"/api/parents/{id}/jobs", "/api/parents/123/jobs", "jobs"},
 		{"/api/jobs/{id}/assignees", "/api/jobs/123/assignees", "jobs"},
+		{"/api/events", "/api/events", "events"},
+		{"/api/events/import", "/api/events/import", "events"},
 		{"/api/fees/calculate", "/api/fees/calculate", "fees"},
 		{"/api/admin/users", "/api/admin/users", "admin"},
 		{"/api/audit-logs", "/api/audit-logs", "admin"},

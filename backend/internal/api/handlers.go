@@ -151,22 +151,34 @@ func (s *Server) HandleGetMyUpcomingEvents(w http.ResponseWriter, r *http.Reques
 
 	parentID := user.ParentID
 	employeeID := user.EmployeeID
+	familyID := user.FamilyID
 	if parentID == nil && employeeID == nil {
 		lookupEmail := user.Email
 		if user.Simulation != nil && user.Simulation.Active && user.Simulation.Mode == "user" && user.Simulation.SimulatedUser != "" {
 			lookupEmail = user.Simulation.SimulatedUser
 		}
 		if lookupEmail != "" {
-			if pID, _, err := s.Store.GetParentInfoByIdentifierEmail(r.Context(), lookupEmail); err == nil && pID != nil {
+			if pID, fID, err := s.Store.GetParentInfoByIdentifierEmail(r.Context(), lookupEmail); err == nil && pID != nil {
 				parentID = pID
+				if familyID == nil {
+					familyID = fID
+				}
 			}
 			if eID, _, err := s.Store.GetEmployeeInfoByIdentifierEmail(r.Context(), lookupEmail); err == nil && eID != nil {
 				employeeID = eID
 			}
 		}
 	}
+	if familyID == nil && parentID != nil && *parentID != uuid.Nil {
+		if fID, err := s.Store.GetFamilyIDByParentID(r.Context(), *parentID); err == nil && fID != nil {
+			familyID = fID
+		}
+	}
 
-	events, err := s.Store.GetMyUpcomingEvents(r.Context(), targetDate, parentID, employeeID)
+	canReadEvents := user.HasPermission("events.all.read")
+	includeAllGroupEAs := employeeID != nil || (familyID == nil && (user.HasPermission("events.all.write") || user.HasPermission("families.all.read")))
+
+	events, err := s.Store.GetMyUpcomingEventsWithCalendar(r.Context(), targetDate, parentID, employeeID, familyID, canReadEvents, includeAllGroupEAs)
 	if err != nil {
 		httpErrorLog(w, r, "Failed to get upcoming events", http.StatusInternalServerError, err)
 		return

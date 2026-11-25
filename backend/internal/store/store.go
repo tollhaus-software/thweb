@@ -3314,6 +3314,7 @@ func (s *Store) CreateActiveDEK(ctx context.Context, rec crypto.DEKRecord) (*cry
 func (s *Store) ResetTestData(ctx context.Context) error {
 	_, err := s.db.Exec(ctx, `
 		TRUNCATE TABLE 
+			calendar_events,
 			system_settings,
 			volunteer_absences,
 			email_outbox,

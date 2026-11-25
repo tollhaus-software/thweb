@@ -249,6 +249,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (perm === 'volunteers.absences.read' && user.effective_permissions.includes('volunteers.absences.write')) {
       return true;
     }
+    if (perm === 'events.all.read' && user.effective_permissions.includes('events.all.write')) {
+      return true;
+    }
     if (
       (perm === 'hygiene.all.write' || perm === 'hygiene.all.read') &&
       user.effective_permissions.includes('hygiene.infektionsschutz.management')

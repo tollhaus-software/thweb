@@ -1,13 +1,24 @@
 import { CURRENT_LOCALE, formatDisplayDate, t, type Locale } from './i18n';
 import { daysUntil } from './hygieneMessage';
 import { parseDateKey } from './mealPlan';
+import {
+  type CalendarEventType,
+  formatEventTimeRange,
+  getCalendarEventDisplayTitle,
+} from './calendarEvents';
 
-export type UpcomingEventType = 'cooking_duty' | (string & {});
+export type UpcomingEventType = 'cooking_duty' | 'calendar_event' | (string & {});
 
 export interface UpcomingEvent {
   type: UpcomingEventType;
   date: string; // YYYY-MM-DD
+  id?: string;
+  event_type?: string;
+  end_date?: string;
+  start_time?: string | null;
+  end_time?: string | null;
   title?: string;
+  description?: string;
 }
 
 const WEEKDAYS_DE = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
@@ -53,6 +64,45 @@ export function formatUpcomingEventText(
     }
     const prefix = t('nextCookingDutyPrefix') || 'Kochdienst:';
     return `${prefix} ${weekdayDate}${suffix}`;
+  }
+
+  if (event.type === 'calendar_event') {
+    const label = getCalendarEventDisplayTitle(
+      {
+        event_type: (event.event_type || 'custom') as CalendarEventType,
+        title: event.title || '',
+      },
+      locale
+    );
+    const timeStr = formatEventTimeRange(event.start_time, event.end_time, locale);
+    const isMultiDay = Boolean(event.end_date && event.end_date > event.date);
+
+    if (isMultiDay && event.end_date) {
+      const endShort = formatDisplayDate(event.end_date);
+      if (diff <= 0) {
+        const ongoingPrefix = t('upcomingEventOngoingPrefix') || (locale === 'en' ? 'Ongoing' : 'Aktuell');
+        return `${ongoingPrefix} (${shortDate} – ${endShort}): ${label}`;
+      }
+      let suffix = '';
+      if (diff === 1) {
+        suffix = ` (${t('tomorrowLower') || 'morgen'})`;
+      } else if (diff === 2) {
+        suffix = ` (${t('dayAfterTomorrowLower') || 'übermorgen'})`;
+      }
+      return `${label}: ${weekdayDate} – ${endShort}${suffix}`;
+    }
+
+    if (diff === 0) {
+      const todayWord = locale === 'en' ? 'Today' : 'Heute';
+      return `${todayWord} (${shortDate}${timeStr ? `, ${timeStr}` : ''}): ${label}`;
+    }
+    let suffix = '';
+    if (diff === 1) {
+      suffix = ` (${t('tomorrowLower') || 'morgen'})`;
+    } else if (diff === 2) {
+      suffix = ` (${t('dayAfterTomorrowLower') || 'übermorgen'})`;
+    }
+    return `${label}: ${weekdayDate}${timeStr ? `, ${timeStr}` : ''}${suffix}`;
   }
 
   // Extensible fallback for future event types
