@@ -236,13 +236,13 @@ test.describe('Test Case 4: Childcare Fees Tooltips & Translations', () => {
     await expect(prevBtn).toBeDisabled();
     await expect(nextBtn).toBeEnabled();
 
-    // Select Muster first to verify 0 fees and no fee changes
+    // Select Muster first to verify 0 fees and no fee changes (defaults to this + next year = 24 months on childcareFeesAll)
     await familySelect.selectOption({ label: 'Muster' });
     const verticalTable = page.locator('table.fees-mobile-vertical-table');
     await expect(verticalTable).toBeVisible();
     await expect(verticalTable.locator('thead')).toContainText('Monat');
     await expect(verticalTable.locator('thead')).toContainText('Gebühr (Muster)');
-    await expect(verticalTable.locator('tbody tr')).toHaveCount(12);
+    await expect(verticalTable.locator('tbody tr')).toHaveCount(24);
     await expect(page.locator('text=Keine Gebührenänderungen in diesem Zeitraum')).toBeVisible();
 
     // Now switch to Bauer using dropdown or prev/next

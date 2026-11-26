@@ -322,29 +322,31 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
   const currentYear = new Date().getFullYear();
 
   // Month range state (persisted in browser localStorage)
+  const storagePrefix = isPersonalMode ? 'childcare_fees' : 'childcare_fees_all';
+  const defaultEndYear = isPersonalMode ? currentYear : currentYear + 1;
   const [startYear, setStartYear] = useState<number>(() => {
-    const saved = localStorage.getItem('childcare_fees_start_year');
+    const saved = localStorage.getItem(`${storagePrefix}_start_year`);
     return saved ? parseInt(saved, 10) : currentYear;
   });
   const [startMonth, setStartMonth] = useState<string>(() => {
-    const saved = localStorage.getItem('childcare_fees_start_month');
+    const saved = localStorage.getItem(`${storagePrefix}_start_month`);
     return saved ? saved : '01';
   });
   const [endYear, setEndYear] = useState<number>(() => {
-    const saved = localStorage.getItem('childcare_fees_end_year');
-    return saved ? parseInt(saved, 10) : currentYear;
+    const saved = localStorage.getItem(`${storagePrefix}_end_year`);
+    return saved ? parseInt(saved, 10) : defaultEndYear;
   });
   const [endMonth, setEndMonth] = useState<string>(() => {
-    const saved = localStorage.getItem('childcare_fees_end_month');
+    const saved = localStorage.getItem(`${storagePrefix}_end_month`);
     return saved ? saved : '12';
   });
 
   useEffect(() => {
-    localStorage.setItem('childcare_fees_start_year', String(startYear));
-    localStorage.setItem('childcare_fees_start_month', startMonth);
-    localStorage.setItem('childcare_fees_end_year', String(endYear));
-    localStorage.setItem('childcare_fees_end_month', endMonth);
-  }, [startYear, startMonth, endYear, endMonth]);
+    localStorage.setItem(`${storagePrefix}_start_year`, String(startYear));
+    localStorage.setItem(`${storagePrefix}_start_month`, startMonth);
+    localStorage.setItem(`${storagePrefix}_end_year`, String(endYear));
+    localStorage.setItem(`${storagePrefix}_end_month`, endMonth);
+  }, [storagePrefix, startYear, startMonth, endYear, endMonth]);
 
   const selectableYears = useMemo(() => {
     const years = [];
