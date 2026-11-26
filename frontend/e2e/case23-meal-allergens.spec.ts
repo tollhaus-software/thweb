@@ -697,8 +697,19 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
       expect(Math.abs(cancelBox.height - nextBox.height)).toBeLessThanOrEqual(2);
     }
 
+    // Verify meal component proposal chips are prominently sized (min-height >= 36px, font-size >= 14px)
+    const firstProposalChip = page.getByTestId('take-plan-component-btn-0-0');
+    await expect(firstProposalChip).toBeVisible();
+    const chipBox = await firstProposalChip.boundingBox();
+    expect(chipBox).not.toBeNull();
+    if (chipBox) {
+      expect(chipBox.height).toBeGreaterThanOrEqual(34);
+    }
+    const chipFontSize = await firstProposalChip.evaluate((el) => parseFloat(window.getComputedStyle(el).fontSize));
+    expect(chipFontSize).toBeGreaterThanOrEqual(14);
+
     // Verify taking component from meal plan directly selects name and advances to Step 2
-    await page.getByTestId('take-plan-component-btn-0-0').click();
+    await firstProposalChip.click();
     await expect(popoverEl).toHaveClass(/step-allergens/);
     await expect(page.getByTestId('component-name-static-value')).toHaveText('Spaghetti Bolognese');
     // Header in Step 2 shows only component name + pencil icon (no "Name der Komponente" and no "Name ändern" text)

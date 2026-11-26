@@ -898,15 +898,15 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  padding: 0.35rem 0.55rem;
-  border-radius: 6px;
+  gap: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
   background: var(--bg-subtle);
   border: 1px dashed var(--border);
 }
 
 .meal-allergens-plan-take-label {
-  font-size: 0.8rem;
+  font-size: 0.88rem;
   font-weight: 700;
   color: var(--text-h);
 }
@@ -919,22 +919,24 @@
 .meal-allergens-plan-take-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  gap: 0.5rem;
 }
 
 .meal-allergens-plan-take-chip {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
-  font-size: 0.78rem;
+  gap: 0.4rem;
+  font-size: 0.95rem;
   font-weight: 600;
-  padding: 0.2rem 0.55rem;
+  padding: 0.45rem 0.95rem;
+  min-height: 36px;
   border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--bg-surface);
   color: var(--primary);
   cursor: pointer;
   transition: all 0.15s ease;
+  box-sizing: border-box;
 }
 
 .meal-allergens-plan-take-chip:hover {

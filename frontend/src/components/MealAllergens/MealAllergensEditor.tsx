@@ -1233,7 +1233,7 @@ export const MealAllergensEditor: React.FC<MealAllergensEditorProps> = ({
                               data-testid={`take-plan-component-btn-${editingComponentIdx}-${pIdx}`}
                               data-plan-name={planName}
                             >
-                              <Plus size={13} />
+                              <Plus size={16} />
                               <span>{planName}</span>
                             </button>
                           ))}
