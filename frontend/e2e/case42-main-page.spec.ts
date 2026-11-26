@@ -216,9 +216,9 @@ test.describe('Test Case 42: Main Page (Default Homepage, Cook, Food, and Rest o
     await expect(welcomeGreeting).toBeVisible();
     await expect(welcomeGreeting).toHaveText('Willkommen, Maria!');
 
-    // 6. Parent does NOT have dashboard.use -> Kochansicht is NOT visible
+    // 6. Verify "Zur Kochansicht" is not shown on the main page itself, while "Kochansicht" IS available in the sidebar navigation
     await expect(page.getByTestId('main-page-kochansicht-btn')).toHaveCount(0);
-    await expect(page.locator('.tabs').getByRole('button', { name: 'Kochansicht' })).toHaveCount(0);
+    await expect(page.locator('.tabs').getByRole('button', { name: 'Kochansicht' })).toBeVisible();
 
     // 7. Expand the rest/upcoming of the week
     const expandBtn = page.getByTestId('main-page-expand-week-btn');

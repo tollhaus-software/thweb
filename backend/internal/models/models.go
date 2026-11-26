@@ -1086,6 +1086,8 @@ type DailyBriefResponse struct {
 	ScreensaverExitTimes   []string                `json:"screensaver_exit_times,omitempty"`
 	HasVolunteerAbsence    bool                    `json:"has_volunteer_absence"`
 	VolunteerName          string                  `json:"volunteer_name,omitempty"`
+	IsCurrentUserCooking   bool                    `json:"is_current_user_cooking"`
+	HasCookingDutyToday    bool                    `json:"has_cooking_duty_today"`
 }
 
 type VolunteerAbsenceSettings struct {

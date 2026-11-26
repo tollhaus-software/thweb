@@ -3509,15 +3509,48 @@ func TestDashboardTasks_Handlers(t *testing.T) {
 		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", userID)
 	}()
 
+	cookEmpID := uuid.New()
+	_, _ = pool.Exec(ctx, `
+		INSERT INTO employees (id, first_name, last_name, employee_type, emails, phones, address)
+		VALUES ($1, 'Task', 'Cook', 'cook', '[{"value":"handler-task-user@example.com","identifier_email":true}]'::jsonb, '[]'::jsonb, '')
+	`, cookEmpID)
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM employees WHERE id = $1", cookEmpID)
+	}()
+
+	_ = appStore.SeedTestMealPlanWithCooks(ctx, todayStr, "Task Cook", models.MealAllergenCookList{
+		{ID: cookEmpID, Type: "employee", FirstName: "Task", LastName: "Cook", DisplayName: "Task Cook"},
+	}, "resolved", "Suppe", "", "")
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM meal_plan_from_sheets WHERE date = $1", todayStr)
+	}()
+
 	user := &models.UserWithPermissions{
-		ID:    userID,
-		Email: "handler-task-user@example.com",
+		ID:         userID,
+		Email:      "handler-task-user@example.com",
+		EmployeeID: &cookEmpID,
+	}
+
+	nonCookUser := &models.UserWithPermissions{
+		ID:    uuid.New(),
+		Email: "non-cook-user@example.com",
 	}
 
 	kioskUser := &models.UserWithPermissions{
 		Email:     "kiosk+CN=kiosk-tablet-kitchen@internal",
 		IsKiosk:   true,
 		KioskName: "kiosk-tablet-kitchen",
+	}
+
+	// 0. Mark task as done for today by user WITHOUT cooking duty today -> 403 Forbidden
+	rctxForbidden := chi.NewRouteContext()
+	rctxForbidden.URLParams.Add("taskTypeId", "clean_coffee_machine")
+	reqForbidden := httptest.NewRequest("POST", "/api/dashboard/tasks/clean_coffee_machine/complete?date="+todayStr, nil)
+	reqForbidden = reqForbidden.WithContext(context.WithValue(context.WithValue(reqForbidden.Context(), chi.RouteCtxKey, rctxForbidden), auth.UserContextKey, nonCookUser))
+	recForbidden := httptest.NewRecorder()
+	server.HandleCompleteTask(recForbidden, reqForbidden)
+	if recForbidden.Code != http.StatusForbidden {
+		t.Errorf("expected 403 Forbidden for completing task without cooking duty today, got %d (%s)", recForbidden.Code, recForbidden.Body.String())
 	}
 
 	// 1. Mark task as done for yesterday (not today) -> 400 Bad Request

@@ -68,6 +68,8 @@ interface DailyBriefData {
   screensaver_exit_times?: string[];
   has_volunteer_absence?: boolean;
   volunteer_name?: string;
+  is_current_user_cooking?: boolean;
+  has_cooking_duty_today?: boolean;
 }
 
 interface GroupAllergiesSummary {
@@ -109,12 +111,15 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
   const { token, hasPermission } = useAuth();
   const canViewAllergiesSummary =
     !embedded || hasPermission('allergies.summary.read') || hasPermission('meal_allergens.read');
-  const canEditMealAllergens = !embedded || hasPermission('meal_allergens.write');
 
   // If selectedDate is null, the frontend omits the ?date parameter, requesting "today" from backend
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [todayDateStr, setTodayDateStr] = useState<string>(() => formatDateKey(new Date()));
   const [data, setData] = useState<DailyBriefData | null>(null);
+  const hasCookingDutyToday = Boolean(data?.has_cooking_duty_today);
+  const canEditInDashboard = !embedded || hasCookingDutyToday;
+  const canEditMealAllergens =
+    canEditInDashboard && (!embedded || hasPermission('meal_allergens.write'));
   const [allergiesData, setAllergiesData] = useState<AllergiesSummaryData | null>(null);
   const [activeTab, setActiveTab] = useState<DashboardNavTab>('home');
   const [activeInfoPageId, setActiveInfoPageId] = useState<string | null>(null);
@@ -433,6 +438,9 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     if (e) {
       e.stopPropagation();
     }
+    if (!canEditAllergensOnDashboard) {
+      return;
+    }
     setTaskToConfirm(null);
     setTaskInfoKey(null);
     setIsEditingAllergens(true);
@@ -665,6 +673,9 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
   const handleTaskToggle = async (taskKey: string, e?: React.MouseEvent) => {
     if (e) {
       e.stopPropagation();
+    }
+    if (!canEditInDashboard) {
+      return;
     }
     // Rule: Whole "Allergene eintragen" TODO item opens the allergens editor
     if (taskKey === 'enter_allergens' || taskKey === 'allergene_eintragen') {
@@ -1216,9 +1227,9 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                   sortedTasks.map((task, idx) => {
                     const isDone = isTaskCompleted(task);
                     const isAllergens = task === 'enter_allergens' || task === 'allergene_eintragen';
-                    const isCheckable = isToday;
+                    const isCheckable = isToday && canEditInDashboard;
                     const showCheckbox = isDone || isCheckable;
-                    const isInteractive = isAllergens ? true : isToday;
+                    const isInteractive = isAllergens ? canEditAllergensOnDashboard : isCheckable;
 
                     const normalized = normalizeTaskKey(task);
                     const label = getTaskLabel(task);
@@ -1281,11 +1292,11 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                         {showCheckbox && (
                           <button
                             type="button"
-                            className={`kiosk-todo-checkbox ${isDone ? 'checked' : ''} ${!isToday ? 'disabled' : ''}`}
+                            className={`kiosk-todo-checkbox ${isDone ? 'checked' : ''} ${!isCheckable ? 'disabled' : ''}`}
                             data-testid={`task-checkbox-${normalized}`}
                             aria-label={`${label}: ${isDone ? t('taskDone') : ''}`}
                             onClick={(e) => void handleTaskToggle(task, e)}
-                            disabled={!isToday}
+                            disabled={!isCheckable}
                           >
                             {isDone && (
                               <Check size={embedded ? 14 : 20} strokeWidth={3} className="kiosk-todo-check-icon" />
@@ -1296,7 +1307,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                         <span className="kiosk-todo-label" data-testid={`task-label-${normalized}`}>
                           {label}
                         </span>
-                        {isAllergens && (
+                        {isAllergens && canEditAllergensOnDashboard && (
                           <button
                             type="button"
                             className="kiosk-todo-open-allergens-btn"

@@ -3642,7 +3642,7 @@ func buildMealAllergenDay(
 
 	if pRow != nil {
 		day.PlanCookName = pRow.cookName
-		if pRow.resolutionStatus == "resolved" && len(pRow.cooks) > 0 {
+		if pRow.resolutionStatus != "ambiguous" && pRow.resolutionStatus != "unrecognized" && pRow.resolutionStatus != "ignored" && len(pRow.cooks) > 0 {
 			day.PlanCooks = pRow.cooks
 		}
 		if pRow.components != nil {
@@ -3840,6 +3840,25 @@ func IsUserCookingOnMealAllergenDay(day models.MealAllergenDay, parentID, employ
 		return true
 	}
 	return matchesList(day.PlanCooks)
+}
+
+func (s *Store) HasUserCookingDutyOnDate(ctx context.Context, targetDate time.Time, parentID, employeeID *uuid.UUID) bool {
+	if s == nil || s.db == nil {
+		return false
+	}
+	if (parentID == nil || *parentID == uuid.Nil) && (employeeID == nil || *employeeID == uuid.Nil) {
+		return false
+	}
+	if mealDay, err := s.GetMealAllergenDay(ctx, targetDate); err == nil && mealDay != nil {
+		if IsUserCookingOnMealAllergenDay(*mealDay, parentID, employeeID) {
+			return true
+		}
+	}
+	dateStr := targetDate.Format("2006-01-02")
+	if events, err := s.ListMyCookingDutyCalendarEvents(ctx, dateStr, dateStr, parentID, employeeID); err == nil && len(events) > 0 {
+		return true
+	}
+	return false
 }
 
 func MarkMealAllergenDaysForUser(days []models.MealAllergenDay, parentID, employeeID *uuid.UUID) {

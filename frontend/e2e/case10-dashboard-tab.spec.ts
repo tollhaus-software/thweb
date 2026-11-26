@@ -1,4 +1,62 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type APIRequestContext } from '@playwright/test';
+
+async function seedDeveloperCookingDutyToday(
+  request: APIRequestContext,
+  cookFirstName = 'Sabine',
+  cookLastName = 'Koch',
+  mealComp1 = 'Gemüsesuppe'
+) {
+  const authHeaders = {
+    Authorization: 'Bearer developer@example.com',
+    'Content-Type': 'application/json',
+  };
+  const briefRes = await request.get('/api/dashboard/daily-brief', { headers: authHeaders });
+  expect(briefRes.ok()).toBeTruthy();
+  const briefData = await briefRes.json();
+  const todayStr = briefData.date
+    ? briefData.date.split('T')[0]
+    : new Date().toISOString().split('T')[0];
+
+  const empRes = await request.post('/api/employees', {
+    headers: authHeaders,
+    data: {
+      first_name: cookFirstName,
+      last_name: cookLastName,
+      employee_type: 'cook',
+      emails: [{ value: 'developer@example.com', identifier_email: true, address_list: true }],
+      phones: [],
+      address: '',
+    },
+  });
+  expect(empRes.ok()).toBeTruthy();
+  const emp = await empRes.json();
+
+  const displayName = `${cookFirstName} ${cookLastName}`.trim();
+  const seedPlanRes = await request.post('/api/test/meal-plan', {
+    headers: authHeaders,
+    data: [
+      {
+        date: todayStr,
+        cook_name: displayName,
+        cooks: [
+          {
+            id: emp.id,
+            type: 'employee',
+            first_name: cookFirstName,
+            last_name: cookLastName,
+            display_name: displayName,
+          },
+        ],
+        cook_resolution_status: 'resolved',
+        food_component_1: mealComp1,
+        food_component_2: '',
+        food_component_3: '',
+      },
+    ],
+  });
+  expect(seedPlanRes.ok()).toBeTruthy();
+  return { emp, todayStr };
+}
 
 test.describe('Test Case 10: Embedded Dashboard Tab', () => {
   test('verifies dashboard is embedded as a tab, navigates smoothly, and header link is removed', async ({ request, page }) => {
@@ -95,6 +153,8 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     // 1. Reset database state
     const resetRes = await request.post('/api/test/reset');
     expect(resetRes.ok()).toBeTruthy();
+
+    await seedDeveloperCookingDutyToday(request, 'Sabine', 'Koch', 'Kürbissuppe');
 
     const testDate = '2026-10-22';
 
@@ -218,6 +278,8 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     // 1. Reset database state
     const resetRes = await request.post('/api/test/reset');
     expect(resetRes.ok()).toBeTruthy();
+
+    await seedDeveloperCookingDutyToday(request, 'Sabine', 'Koch', 'Milchreis');
 
     const authHeaders = {
       Authorization: 'Bearer developer@example.com',
@@ -407,6 +469,8 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     });
     expect(seedYellowRes.ok()).toBeTruthy();
 
+    const { emp: devCook } = await seedDeveloperCookingDutyToday(request, 'Küchenchef', 'Anton', 'Gemüsesuppe');
+
     // Seed meal plan with cook for yesterday, today, and tomorrow
     const seedPlanRes = await request.post('/api/test/meal-plan', {
       headers: authHeaders,
@@ -421,6 +485,16 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
         {
           date: todayStr,
           cook_name: 'Küchenchef Anton',
+          cooks: [
+            {
+              id: devCook.id,
+              type: 'employee',
+              first_name: 'Küchenchef',
+              last_name: 'Anton',
+              display_name: 'Küchenchef Anton',
+            },
+          ],
+          cook_resolution_status: 'resolved',
           food_component_1: 'Gemüsesuppe',
           food_component_2: '',
           food_component_3: '',
@@ -701,6 +775,8 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     // 1. Reset database state
     const resetRes = await request.post('/api/test/reset');
     expect(resetRes.ok()).toBeTruthy();
+
+    await seedDeveloperCookingDutyToday(request, 'Sabine', 'Koch', 'Milchreis');
 
     const authHeaders = {
       Authorization: 'Bearer developer@example.com',
@@ -990,7 +1066,8 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await page.waitForLoadState('networkidle');
     await expect(page.locator('.kiosk-tablet-page.embedded')).toHaveCount(0);
 
-    // 7. Verify parents do NOT have dashboard.use permission
+    // 7. Verify parents and cooks have dashboard.use and see Kochansicht,
+    //    which is non-editable by default unless they have a cooking_duty today
     const parentEmail = 'regular.parent@tollhaus-stuttgart.de';
     const famRes = await request.post('/api/families', {
       headers: { Authorization: 'Bearer developer@example.com' },
@@ -1006,6 +1083,27 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
       },
     });
     expect(famRes.ok()).toBeTruthy();
+    const createdFam = await famRes.json();
+    const parentId = createdFam.parents[0].id;
+
+    // Seed today's meal plan cooked by someone else so tasks (including enter_allergens) appear
+    const briefRes = await request.get('/api/dashboard/daily-brief', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+    });
+    expect(briefRes.ok()).toBeTruthy();
+    const briefData = await briefRes.json();
+    const todayStr = briefData.date.split('T')[0];
+
+    await request.post('/api/test/meal-plan', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: [
+        {
+          date: todayStr,
+          cook_name: 'Andere Person',
+          food_component_1: 'Nudelsuppe',
+        },
+      ],
+    });
 
     const parentPage = await page.context().newPage();
     await parentPage.addInitScript((email) => {
@@ -1014,14 +1112,68 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await parentPage.goto('/');
     await parentPage.waitForLoadState('networkidle');
 
-    // Parent does NOT see Kochansicht tab
-    await expect(parentPage.getByRole('button', { name: 'Kochansicht' })).toHaveCount(0);
-    await expect(parentPage.getByTestId('main-page-kochansicht-btn')).toHaveCount(0);
+    // Parent sees Kochansicht tab in sidebar navigation
+    const parentKochansichtBtn = parentPage.locator('.tabs').getByRole('button', { name: 'Kochansicht' });
+    await expect(parentKochansichtBtn).toBeVisible();
+    await parentKochansichtBtn.click();
+    await expect(parentPage.locator('.kiosk-tablet-page.embedded')).toBeVisible();
 
-    // Direct navigation by parent falls back
-    await parentPage.goto('/#dashboard');
+    // Without cooking duty today, Kochansicht is non-editable:
+    // - No edit meal allergens pencil button on Home tab
+    await expect(parentPage.getByTestId('kiosk-edit-meal-allergens-btn')).toHaveCount(0);
+
+    // - Switch to TODOs tab: no checkboxes or open-allergens pencil button, items are disabled
+    await parentPage.getByTestId('kiosk-todos-btn').click();
+    await expect(parentPage.locator('.kiosk-card-todos')).toBeVisible();
+    await expect(parentPage.getByTestId('open-allergens-editor-btn')).toHaveCount(0);
+    await expect(parentPage.locator('[data-testid^="task-checkbox-"]')).toHaveCount(0);
+
+    // Clicking the enter_allergens task does NOT open the editor
+    const parentAllergenTask = parentPage.getByTestId('kiosk-todo-item-enter_allergens');
+    await expect(parentAllergenTask).toBeVisible();
+    await expect(parentAllergenTask).toHaveClass(/kiosk-todo-disabled/);
+    await parentAllergenTask.click();
+    await expect(parentPage.getByTestId('meal-allergens-editor')).toHaveCount(0);
+
+    // Backend also rejects task completion when user has no cooking duty today
+    const forbiddenTaskRes = await request.post(
+      `/api/dashboard/tasks/clean_dishwasher_filter/complete?date=${todayStr}`,
+      { headers: { Authorization: `Bearer ${parentEmail}` } }
+    );
+    expect(forbiddenTaskRes.status()).toBe(403);
+
+    // Now assign cooking_duty today to this parent
+    const assignCookRes = await request.post('/api/test/meal-plan', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: [
+        {
+          date: todayStr,
+          cook_name: 'Regular Parent',
+          cooks: [
+            {
+              id: parentId,
+              type: 'parent',
+              first_name: 'Regular',
+              last_name: 'Parent',
+              display_name: 'Regular Parent',
+            },
+          ],
+          cook_resolution_status: 'resolved',
+          food_component_1: 'Nudelsuppe',
+        },
+      ],
+    });
+    expect(assignCookRes.ok()).toBeTruthy();
+
+    // Reload Kochansicht as the parent who now has cooking_duty today -> dashboard is editable!
+    await parentPage.reload();
     await parentPage.waitForLoadState('networkidle');
-    await expect(parentPage.locator('.kiosk-tablet-page.embedded')).toHaveCount(0);
+    await expect(parentPage.locator('.kiosk-tablet-page.embedded')).toBeVisible();
+    await expect(parentPage.getByTestId('kiosk-edit-meal-allergens-btn')).toBeVisible();
+
+    await parentPage.getByTestId('kiosk-todos-btn').click();
+    await expect(parentPage.getByTestId('open-allergens-editor-btn')).toBeVisible();
+    await expect(parentPage.getByTestId('task-checkbox-enter_allergens')).toBeVisible();
     await parentPage.close();
 
     // 8. Log in as admin (developer@example.com) who has wildcard * including dashboard.use
@@ -1032,10 +1184,11 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
-    // Verify Kochansicht link IS accessible for user with dashboard.use
+    // Verify Kochansicht link IS accessible for user with dashboard.use (read-only when admin has no cooking duty today)
     await page.goto('/#dashboard');
     await page.waitForLoadState('networkidle');
     await expect(page.locator('.kiosk-tablet-page.embedded')).toBeVisible();
+    await expect(page.getByTestId('kiosk-edit-meal-allergens-btn')).toHaveCount(0);
   });
 
   test('navigates between days using left and right swipe gestures, ignoring vertical scrolls and mouse clicks', async ({ request, page }) => {
@@ -1175,6 +1328,8 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     // 1. Reset database state
     const resetRes = await request.post('/api/test/reset');
     expect(resetRes.ok()).toBeTruthy();
+
+    await seedDeveloperCookingDutyToday(request, 'Sabine', 'Koch', 'Milchreis');
 
     const authHeaders = {
       Authorization: 'Bearer developer@example.com',
@@ -1413,6 +1568,33 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await expect(todosList).toBeVisible();
     const todosListOverflow = await todosList.evaluate((el) => window.getComputedStyle(el).overflowY);
     expect(todosListOverflow).toBe('auto');
+
+    // Verify scaled-down font sizes and compact spacing on mobile viewports (<= 768px)
+    await embeddedPage.getByTestId('kiosk-home-btn').click();
+    const desktopHeaderSize = parseFloat(
+      await header.locator('.kiosk-header-date').evaluate((el) => window.getComputedStyle(el).fontSize)
+    );
+    const desktopCookSize = parseFloat(
+      await cookCard.locator('.kiosk-cook-content').evaluate((el) => window.getComputedStyle(el).fontSize)
+    );
+    const desktopClockSize = parseFloat(
+      await footer.getByTestId('kiosk-clock').evaluate((el) => window.getComputedStyle(el).fontSize)
+    );
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    const mobileHeaderSize = parseFloat(
+      await header.locator('.kiosk-header-date').evaluate((el) => window.getComputedStyle(el).fontSize)
+    );
+    const mobileCookSize = parseFloat(
+      await cookCard.locator('.kiosk-cook-content').evaluate((el) => window.getComputedStyle(el).fontSize)
+    );
+    const mobileClockSize = parseFloat(
+      await footer.getByTestId('kiosk-clock').evaluate((el) => window.getComputedStyle(el).fontSize)
+    );
+
+    expect(mobileHeaderSize).toBeLessThan(desktopHeaderSize);
+    expect(mobileCookSize).toBeLessThan(desktopCookSize);
+    expect(mobileClockSize).toBeLessThan(desktopClockSize);
   });
 
   test('displays daily mon-fri task "Spülmaschine - Filter reinigen" on dashboard and allows checking off', async ({ request, page }) => {
@@ -1421,6 +1603,8 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     // 1. Reset database state
     const resetRes = await request.post('/api/test/reset');
     expect(resetRes.ok()).toBeTruthy();
+
+    await seedDeveloperCookingDutyToday(request, 'Sabine', 'Koch', 'Milchreis');
 
     const authHeaders = {
       Authorization: 'Bearer developer@example.com',
@@ -1514,6 +1698,8 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     // 1. Reset database state
     const resetRes = await request.post('/api/test/reset');
     expect(resetRes.ok()).toBeTruthy();
+
+    await seedDeveloperCookingDutyToday(request, 'Sabine', 'Koch', 'Milchreis');
 
     const authHeaders = {
       Authorization: 'Bearer developer@example.com',

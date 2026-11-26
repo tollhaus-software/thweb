@@ -91,6 +91,7 @@ roles:
       - meal_allergens.read
       - meal_allergens.write
       - events.all.read
+      - dashboard.use
 
   - id: caregiver_default
     name: Caregiver (default)
@@ -116,4 +117,5 @@ roles:
       - meal_allergens.read
       - meal_allergens.write
       - events.all.read
+      - dashboard.use
 

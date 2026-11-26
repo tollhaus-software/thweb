@@ -2375,16 +2375,18 @@ func (s *Server) HandleGetMealPlanDay(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) HandleGetDailyBrief(w http.ResponseWriter, r *http.Request) {
 	dateParam := strings.TrimSpace(r.URL.Query().Get("date"))
+	loc, err := time.LoadLocation("Europe/Berlin")
+	var now time.Time
+	if err == nil {
+		now = time.Now().In(loc)
+	} else {
+		now = time.Now()
+	}
+	todayDate := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+
 	var targetDate time.Time
 	if dateParam == "" {
-		loc, err := time.LoadLocation("Europe/Berlin")
-		var now time.Time
-		if err == nil {
-			now = time.Now().In(loc)
-		} else {
-			now = time.Now()
-		}
-		targetDate = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+		targetDate = todayDate
 	} else {
 		parsed, err := time.Parse("2006-01-02", dateParam)
 		if err != nil {
@@ -2398,6 +2400,22 @@ func (s *Server) HandleGetDailyBrief(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		httpErrorLog(w, r, "Failed to get daily brief", http.StatusInternalServerError, err)
 		return
+	}
+
+	user := auth.GetUser(r.Context())
+	if user != nil {
+		if user.IsKiosk {
+			brief.IsCurrentUserCooking = true
+			brief.HasCookingDutyToday = true
+		} else if s.Store != nil {
+			scope := s.Store.ResolveUserEventScope(r.Context(), user)
+			brief.IsCurrentUserCooking = s.Store.HasUserCookingDutyOnDate(r.Context(), targetDate, scope.ParentID, scope.EmployeeID)
+			if targetDate.Equal(todayDate) {
+				brief.HasCookingDutyToday = brief.IsCurrentUserCooking
+			} else {
+				brief.HasCookingDutyToday = s.Store.HasUserCookingDutyOnDate(r.Context(), todayDate, scope.ParentID, scope.EmployeeID)
+			}
+		}
 	}
 
 	jsonResponse(w, brief)
@@ -2461,6 +2479,21 @@ func (s *Server) HandleCompleteTask(w http.ResponseWriter, r *http.Request) {
 	if u == nil {
 		httpErrorLog(w, r, "Unauthorized", http.StatusUnauthorized, nil)
 		return
+	}
+	effUser := auth.GetUser(r.Context())
+	if effUser == nil {
+		effUser = u
+	}
+	if !effUser.IsKiosk {
+		if s.Store == nil {
+			httpErrorLog(w, r, "Forbidden: tasks can only be modified when you have cooking duty today", http.StatusForbidden, nil)
+			return
+		}
+		scope := s.Store.ResolveUserEventScope(r.Context(), effUser)
+		if !s.Store.HasUserCookingDutyOnDate(r.Context(), targetDate, scope.ParentID, scope.EmployeeID) {
+			httpErrorLog(w, r, "Forbidden: tasks can only be modified when you have cooking duty today", http.StatusForbidden, nil)
+			return
+		}
 	}
 	actor := models.ActorFromUser(u)
 
@@ -2534,6 +2567,21 @@ func (s *Server) HandleUncompleteTask(w http.ResponseWriter, r *http.Request) {
 	if u == nil {
 		httpErrorLog(w, r, "Unauthorized", http.StatusUnauthorized, nil)
 		return
+	}
+	effUser := auth.GetUser(r.Context())
+	if effUser == nil {
+		effUser = u
+	}
+	if !effUser.IsKiosk {
+		if s.Store == nil {
+			httpErrorLog(w, r, "Forbidden: tasks can only be modified when you have cooking duty today", http.StatusForbidden, nil)
+			return
+		}
+		scope := s.Store.ResolveUserEventScope(r.Context(), effUser)
+		if !s.Store.HasUserCookingDutyOnDate(r.Context(), targetDate, scope.ParentID, scope.EmployeeID) {
+			httpErrorLog(w, r, "Forbidden: tasks can only be modified when you have cooking duty today", http.StatusForbidden, nil)
+			return
+		}
 	}
 
 	if err := s.Store.UncompleteTask(r.Context(), targetDate, taskTypeID); err != nil {

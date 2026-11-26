@@ -158,11 +158,13 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     await expect(page.getByRole('button', { name: 'Historie' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Dashboard' })).toHaveCount(0);
 
-    // Overflow menu must NOT show Kochansicht (dashboard.use) link
+    // Overflow menu shows Kochansicht (dashboard.use) for parent, but NOT Historie or Admin
     const threeDotsBtn = page.locator('button.header-overflow-btn');
     if (await threeDotsBtn.isVisible()) {
       await threeDotsBtn.click();
-      await expect(page.getByTestId('overflow-dashboard-button')).toHaveCount(0);
+      await expect(page.getByTestId('overflow-dashboard-button')).toBeVisible();
+      await expect(page.getByTestId('overflow-audit-button')).toHaveCount(0);
+      await expect(page.getByTestId('overflow-admin-button')).toHaveCount(0);
       await page.keyboard.press('Escape');
     }
 
