@@ -120,6 +120,12 @@ func TestGetDailyBrief(t *testing.T) {
 			t.Errorf("unexpected meal components: %+v", briefFriday.MealComponents)
 		}
 	}
+	if briefFriday.FoodComponent1 != "Tomatensuppe" || briefFriday.FoodComponent2 != "Pasta Pesto" || briefFriday.FoodComponent3 != "Apfel" {
+		t.Errorf("unexpected food components 1/2/3: %q, %q, %q", briefFriday.FoodComponent1, briefFriday.FoodComponent2, briefFriday.FoodComponent3)
+	}
+	if briefFriday.IsVesperDay {
+		t.Errorf("expected Friday IsVesperDay to be false")
+	}
 	if !briefFriday.HasAllergenRecord {
 		t.Errorf("expected HasAllergenRecord to be true for Friday")
 	}
@@ -183,6 +189,9 @@ func TestGetDailyBrief(t *testing.T) {
 	}
 	if len(briefThursday.MealComponents) != 0 {
 		t.Errorf("expected 0 meal components, got %d", len(briefThursday.MealComponents))
+	}
+	if !briefThursday.IsVesperDay {
+		t.Errorf("expected Thursday IsVesperDay to be true")
 	}
 	if briefThursday.HasAllergenRecord {
 		t.Errorf("expected HasAllergenRecord to be false for Thursday")

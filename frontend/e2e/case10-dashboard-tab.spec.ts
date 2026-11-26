@@ -1856,4 +1856,168 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
       }
     }
   });
+
+  test('prefixes meal component 3 with "Vesper: " when given, and shows "Vesper (<day of week>): Noch keines eingetragen!" when missing on Wednesday and Thursday', async ({
+    request,
+    page,
+  }) => {
+    const resetRes = await request.post('/api/test/reset');
+    expect(resetRes.ok()).toBeTruthy();
+
+    const authHeaders = {
+      Authorization: 'Bearer developer@example.com',
+      'Content-Type': 'application/json',
+    };
+
+    const briefRes = await request.get('/api/dashboard/daily-brief', { headers: authHeaders });
+    expect(briefRes.ok()).toBeTruthy();
+    const briefData = await briefRes.json();
+    const todayStr: string = briefData.date
+      ? briefData.date.split('T')[0]
+      : new Date().toISOString().split('T')[0];
+
+    const parts = todayStr.split('-').map(Number);
+    const todayDate = new Date(parts[0], parts[1] - 1, parts[2]);
+
+    const fmtDate = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+
+    // Find upcoming or current week days starting from today (7 consecutive days)
+    const weekEntries: { date: string; weekday: number }[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(todayDate.getFullYear(), todayDate.getMonth(), todayDate.getDate() + i);
+      weekEntries.push({ date: fmtDate(d), weekday: d.getDay() });
+    }
+
+    // Seed:
+    // - Wednesday: comp1 + comp2, NO comp3 -> should show "Vesper (Mittwoch): Noch keines eingetragen!"
+    // - Thursday: comp1 + comp3 ("Obst & Rohkost"), NO comp2 -> should show "Vesper: Obst & Rohkost"
+    // - Tuesday: comp1 + comp2 + comp3 ("Kräuterquark & Brot") -> should show "Vesper: Kräuterquark & Brot"
+    // - Friday: comp1 + comp2, NO comp3 -> non-vesper day, should NOT show any Vesper line
+    const seedPayload = weekEntries.map((entry) => {
+      if (entry.weekday === 3) {
+        // Wednesday: missing Vesper
+        return {
+          date: entry.date,
+          cook_name: 'Maria',
+          food_component_1: 'Linsensuppe',
+          food_component_2: 'Salat',
+          food_component_3: '',
+        };
+      }
+      if (entry.weekday === 4) {
+        // Thursday: Vesper given (even without comp2)
+        return {
+          date: entry.date,
+          cook_name: 'Stefan',
+          food_component_1: 'Käsespätzle',
+          food_component_2: '',
+          food_component_3: 'Obst & Rohkost',
+        };
+      }
+      if (entry.weekday === 2) {
+        // Tuesday: Vesper given with all 3 components
+        return {
+          date: entry.date,
+          cook_name: 'Anna',
+          food_component_1: 'Kartoffelsuppe',
+          food_component_2: 'Baguette',
+          food_component_3: 'Kräuterquark & Brot',
+        };
+      }
+      return {
+        date: entry.date,
+        cook_name: 'Thomas',
+        food_component_1: 'Gemüsecurry',
+        food_component_2: 'Reis',
+        food_component_3: '',
+      };
+    });
+
+    const seedRes = await request.post('/api/test/meal-plan', {
+      headers: authHeaders,
+      data: seedPayload,
+    });
+    expect(seedRes.ok()).toBeTruthy();
+
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+    });
+
+    await page.goto('/#dashboard');
+    await page.waitForLoadState('networkidle');
+
+    const embeddedPage = page.locator('.kiosk-tablet-page.embedded');
+    await expect(embeddedPage).toBeVisible();
+
+    const mealCard = embeddedPage.locator('.kiosk-card-meal');
+    const nextBtn = embeddedPage.locator('.kiosk-header-nav-btn.right');
+
+    for (let i = 0; i < 7; i++) {
+      const entry = weekEntries[i];
+      if (entry.weekday === 3) {
+        // Wednesday without comp3
+        await expect(mealCard).toContainText('Linsensuppe');
+        await expect(mealCard).toContainText('Salat');
+        await expect(mealCard.getByTestId('kiosk-meal-vesper-line')).toHaveText(
+          'Vesper (Mittwoch): Noch keines eingetragen!'
+        );
+      } else if (entry.weekday === 4) {
+        // Thursday with comp3
+        await expect(mealCard).toContainText('Käsespätzle');
+        await expect(mealCard.getByTestId('kiosk-meal-vesper-line')).toHaveText(
+          'Vesper: Obst & Rohkost'
+        );
+      } else if (entry.weekday === 2) {
+        // Tuesday with comp3
+        await expect(mealCard).toContainText('Kartoffelsuppe');
+        await expect(mealCard).toContainText('Baguette');
+        await expect(mealCard.getByTestId('kiosk-meal-vesper-line')).toHaveText(
+          'Vesper: Kräuterquark & Brot'
+        );
+      } else {
+        // Other days without comp3
+        await expect(mealCard).toContainText('Gemüsecurry');
+        await expect(mealCard).toContainText('Reis');
+        await expect(mealCard.getByTestId('kiosk-meal-vesper-line')).toHaveCount(0);
+        await expect(mealCard).not.toContainText('Vesper');
+      }
+
+      if (i < 6) {
+        await nextBtn.click();
+        await page.waitForTimeout(200);
+      }
+    }
+
+    // Also verify Thursday when NO comp3 is given shows "Vesper (Donnerstag): Noch keines eingetragen!"
+    const thuEntry = weekEntries.find((e) => e.weekday === 4)!;
+    const clearThuVesperRes = await request.post('/api/test/meal-plan', {
+      headers: authHeaders,
+      data: [
+        {
+          date: thuEntry.date,
+          cook_name: 'Stefan',
+          food_component_1: 'Käsespätzle',
+          food_component_2: 'Beilagensalat',
+          food_component_3: '',
+        },
+      ],
+    });
+    expect(clearThuVesperRes.ok()).toBeTruthy();
+
+    await embeddedPage.getByTestId('kiosk-home-btn').click();
+    await page.waitForTimeout(200);
+    const thuOffset = weekEntries.findIndex((e) => e.weekday === 4);
+    for (let j = 0; j < thuOffset; j++) {
+      await nextBtn.click();
+      await page.waitForTimeout(200);
+    }
+    await expect(mealCard.getByTestId('kiosk-meal-vesper-line')).toHaveText(
+      'Vesper (Donnerstag): Noch keines eingetragen!'
+    );
+  });
 });

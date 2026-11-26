@@ -2737,6 +2737,9 @@ func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*model
 
 	if err == nil {
 		resp.WhoIsCooking = strings.TrimSpace(cookName)
+		resp.FoodComponent1 = strings.TrimSpace(comp1)
+		resp.FoodComponent2 = strings.TrimSpace(comp2)
+		resp.FoodComponent3 = strings.TrimSpace(comp3)
 		for _, comp := range []string{comp1, comp2, comp3} {
 			trimmed := strings.TrimSpace(comp)
 			if trimmed != "" {
@@ -2776,6 +2779,15 @@ func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*model
 					resp.MealComponents = append(resp.MealComponents, trimmed)
 				}
 			}
+			if len(resp.MealComponents) > 0 && resp.FoodComponent1 == "" {
+				resp.FoodComponent1 = resp.MealComponents[0]
+			}
+			if len(resp.MealComponents) > 1 && resp.FoodComponent2 == "" {
+				resp.FoodComponent2 = resp.MealComponents[1]
+			}
+			if len(resp.MealComponents) > 2 && resp.FoodComponent3 == "" {
+				resp.FoodComponent3 = resp.MealComponents[2]
+			}
 		}
 		if mealDay.HasAllergenRecord && len(mealDay.MealComponents) > 0 {
 			resp.HasAllergenRecord = true
@@ -2805,6 +2817,7 @@ func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*model
 	isNotRelevant := mealDay != nil && mealDay.Status == models.MealAllergenStatusNotRelevant
 	isWeekday := targetDate.Weekday() >= time.Monday && targetDate.Weekday() <= time.Friday
 	isVesperDay := targetDate.Weekday() == time.Wednesday || targetDate.Weekday() == time.Thursday
+	resp.IsVesperDay = isVesperDay
 	hasCooking := resp.WhoIsCooking != "" || len(resp.MealComponents) > 0 || (mealDay != nil && (mealDay.HasAllergenRecord || len(mealDay.MealComponents) > 0))
 
 	evalCtx := &TaskEvaluationContext{

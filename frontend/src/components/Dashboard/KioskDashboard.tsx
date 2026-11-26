@@ -60,6 +60,10 @@ interface DailyBriefData {
   date: string;
   who_is_cooking: string;
   meal_components: string[];
+  food_component_1?: string;
+  food_component_2?: string;
+  food_component_3?: string;
+  is_vesper_day?: boolean;
   tasks_and_info: string[];
   completed_tasks?: CompletedTaskInfo[];
   completed_task_ids?: string[];
@@ -430,6 +434,52 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
   const isToday = selectedDate === null || displayDateStr === todayDateStr;
   const canEditAllergensOnDashboard = canEditMealAllergens;
   const formattedDate = formatDashboardDate(displayDateStr);
+  const displayDateParts = displayDateStr.split('-').map(Number);
+  const displayDateObj =
+    displayDateParts.length === 3 &&
+    !isNaN(displayDateParts[0]) &&
+    !isNaN(displayDateParts[1]) &&
+    !isNaN(displayDateParts[2])
+      ? new Date(displayDateParts[0], displayDateParts[1] - 1, displayDateParts[2])
+      : new Date(displayDateStr);
+  const displayDayOfWeek = displayDateObj.getDay();
+  const isVesperDay = data?.is_vesper_day ?? (displayDayOfWeek === 3 || displayDayOfWeek === 4);
+  const germanWeekdays = [
+    'Sonntag',
+    'Montag',
+    'Dienstag',
+    'Mittwoch',
+    'Donnerstag',
+    'Freitag',
+    'Samstag',
+  ];
+  const displayWeekdayName = germanWeekdays[displayDayOfWeek] || '';
+  const hasExplicitFoodComponents =
+    data?.food_component_1 !== undefined ||
+    data?.food_component_2 !== undefined ||
+    data?.food_component_3 !== undefined;
+  const mealComp1 = hasExplicitFoodComponents
+    ? (data?.food_component_1 || '').trim()
+    : (data?.meal_components?.[0] || '').trim();
+  const mealComp2 = hasExplicitFoodComponents
+    ? (data?.food_component_2 || '').trim()
+    : (data?.meal_components?.[1] || '').trim();
+  const mealComp3 = hasExplicitFoodComponents
+    ? (data?.food_component_3 || '').trim()
+    : (data?.meal_components?.[2] || '').trim();
+  const nonVesperComponents = [mealComp1, mealComp2].filter((c) => c.length > 0);
+  const vesperPrefixStr = t('vesperPrefix') || 'Vesper: ';
+  const vesperLineText =
+    mealComp3.length > 0
+      ? /^vesper\s*:/i.test(mealComp3)
+        ? mealComp3.replace(/^vesper\s*:\s*/i, vesperPrefixStr)
+        : `${vesperPrefixStr}${mealComp3}`
+      : isVesperDay
+      ? (t('vesperMissingOnDay') || 'Vesper ({day}): Noch keines eingetragen!').replace(
+          '{day}',
+          displayWeekdayName
+        )
+      : '';
   const hours = String(currentTime.getHours()).padStart(2, '0');
   const minutes = String(currentTime.getMinutes()).padStart(2, '0');
   const formattedTime = `${hours}:${minutes}`;
@@ -1130,8 +1180,8 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                 </div>
                 <div className="kiosk-meal-card-content">
                   <div className="kiosk-meal-lines">
-                    {data?.meal_components && data.meal_components.length > 0 ? (
-                      data.meal_components.slice(0, 3).map((component, idx) => (
+                    {nonVesperComponents.length > 0 ? (
+                      nonVesperComponents.map((component, idx) => (
                         <div
                           key={idx}
                           className={`kiosk-meal-line ${idx === 0 ? 'kiosk-meal-line-primary' : 'kiosk-meal-line-secondary'}`}
@@ -1139,8 +1189,16 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                           <span className="kiosk-meal-text">{component}</span>
                         </div>
                       ))
-                    ) : (
+                    ) : mealComp3.length === 0 ? (
                       <div className="kiosk-empty-text">{t('noMeal')}</div>
+                    ) : null}
+                    {vesperLineText && (
+                      <div
+                        className="kiosk-meal-line kiosk-meal-line-secondary"
+                        data-testid="kiosk-meal-vesper-line"
+                      >
+                        <span className="kiosk-meal-text">{vesperLineText}</span>
+                      </div>
                     )}
                   </div>
 

@@ -1078,6 +1078,10 @@ type DailyBriefResponse struct {
 	Date                   string                  `json:"date"`
 	WhoIsCooking           string                  `json:"who_is_cooking"`
 	MealComponents         []string                `json:"meal_components"`
+	FoodComponent1         string                  `json:"food_component_1,omitempty"`
+	FoodComponent2         string                  `json:"food_component_2,omitempty"`
+	FoodComponent3         string                  `json:"food_component_3,omitempty"`
+	IsVesperDay            bool                    `json:"is_vesper_day"`
 	TasksAndInfo           []string                `json:"tasks_and_info"`
 	CompletedTasks         []CompletedTask         `json:"completed_tasks,omitempty"`
 	CompletedTaskIDs       []string                `json:"completed_task_ids,omitempty"`
