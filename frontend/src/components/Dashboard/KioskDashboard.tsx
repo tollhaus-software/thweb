@@ -462,16 +462,6 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
       : new Date(displayDateStr);
   const displayDayOfWeek = displayDateObj.getDay();
   const isVesperDay = data?.is_vesper_day ?? (displayDayOfWeek === 3 || displayDayOfWeek === 4);
-  const germanWeekdays = [
-    'Sonntag',
-    'Montag',
-    'Dienstag',
-    'Mittwoch',
-    'Donnerstag',
-    'Freitag',
-    'Samstag',
-  ];
-  const displayWeekdayName = germanWeekdays[displayDayOfWeek] || '';
   const hasExplicitFoodComponents =
     data?.food_component_1 !== undefined ||
     data?.food_component_2 !== undefined ||
@@ -492,11 +482,8 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
       ? /^vesper\s*:/i.test(mealComp3)
         ? mealComp3.replace(/^vesper\s*:\s*/i, vesperPrefixStr)
         : `${vesperPrefixStr}${mealComp3}`
-      : isVesperDay
-      ? (t('vesperMissingOnDay') || 'Vesper ({day}): Noch keines eingetragen!').replace(
-          '{day}',
-          displayWeekdayName
-        )
+      : isVesperDay && nonVesperComponents.length > 0
+      ? t('vesperMissingOnDay') || 'Vesper: Noch keines eingetragen!'
       : '';
   const hours = String(currentTime.getHours()).padStart(2, '0');
   const minutes = String(currentTime.getMinutes()).padStart(2, '0');

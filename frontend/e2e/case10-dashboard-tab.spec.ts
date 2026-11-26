@@ -1857,7 +1857,7 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     }
   });
 
-  test('prefixes meal component 3 with "Vesper: " when given, and shows "Vesper (<day of week>): Noch keines eingetragen!" when missing on Wednesday and Thursday', async ({
+  test('prefixes meal component 3 with "Vesper: " when given, and shows "Vesper: Noch keines eingetragen!" when missing on Wednesday and Thursday only if another meal plan entry exists', async ({
     request,
     page,
   }) => {
@@ -1894,7 +1894,7 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     }
 
     // Seed:
-    // - Wednesday: comp1 + comp2, NO comp3 -> should show "Vesper (Mittwoch): Noch keines eingetragen!"
+    // - Wednesday: comp1 + comp2, NO comp3 -> should show "Vesper: Noch keines eingetragen!"
     // - Thursday: comp1 + comp3 ("Obst & Rohkost"), NO comp2 -> should show "Vesper: Obst & Rohkost"
     // - Tuesday: comp1 + comp2 + comp3 ("Kräuterquark & Brot") -> should show "Vesper: Kräuterquark & Brot"
     // - Friday: comp1 + comp2, NO comp3 -> non-vesper day, should NOT show any Vesper line
@@ -1964,7 +1964,7 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
         await expect(mealCard).toContainText('Linsensuppe');
         await expect(mealCard).toContainText('Salat');
         await expect(mealCard.getByTestId('kiosk-meal-vesper-line')).toHaveText(
-          'Vesper (Mittwoch): Noch keines eingetragen!'
+          'Vesper: Noch keines eingetragen!'
         );
       } else if (entry.weekday === 4) {
         // Thursday with comp3
@@ -1993,7 +1993,7 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
       }
     }
 
-    // Also verify Thursday when NO comp3 is given shows "Vesper (Donnerstag): Noch keines eingetragen!"
+    // Also verify Thursday when NO comp3 is given shows "Vesper: Noch keines eingetragen!"
     const thuEntry = weekEntries.find((e) => e.weekday === 4)!;
     const clearThuVesperRes = await request.post('/api/test/meal-plan', {
       headers: authHeaders,
@@ -2017,8 +2017,33 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
       await page.waitForTimeout(200);
     }
     await expect(mealCard.getByTestId('kiosk-meal-vesper-line')).toHaveText(
-      'Vesper (Donnerstag): Noch keines eingetragen!'
+      'Vesper: Noch keines eingetragen!'
     );
+
+    // Verify that when NO meal plan entries exist for a Vesper day (Thursday), the Vesper note is NOT shown
+    const clearAllThuMealsRes = await request.post('/api/test/meal-plan', {
+      headers: authHeaders,
+      data: [
+        {
+          date: thuEntry.date,
+          cook_name: '',
+          food_component_1: '',
+          food_component_2: '',
+          food_component_3: '',
+        },
+      ],
+    });
+    expect(clearAllThuMealsRes.ok()).toBeTruthy();
+
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    for (let j = 0; j < thuOffset; j++) {
+      await nextBtn.click();
+      await page.waitForTimeout(200);
+    }
+    await expect(mealCard.getByTestId('kiosk-meal-vesper-line')).toHaveCount(0);
+    await expect(mealCard).not.toContainText('Vesper');
+    await expect(mealCard).toContainText('Kein Speiseplan für heute vorhanden');
   });
 
   test('Kochansicht-TODOs admin page allows editing Markdown info and creating/deleting custom TODOs', async ({
