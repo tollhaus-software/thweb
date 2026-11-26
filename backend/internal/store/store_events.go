@@ -874,7 +874,6 @@ func (s *Store) GetMyUpcomingEventsWithCalendar(
 	}
 
 	fromStr := fromDate.Format("2006-01-02")
-	untilStr := fromDate.AddDate(0, 0, 30).Format("2006-01-02")
 
 	rows, err := s.db.Query(ctx, `
 		SELECT
@@ -888,10 +887,9 @@ func (s *Store) GetMyUpcomingEventsWithCalendar(
 			TO_CHAR(end_time, 'HH24:MI')
 		FROM calendar_events
 		WHERE end_date >= $1::date
-		  AND start_date <= $2::date
 		  AND event_type <> 'ferien'
 		ORDER BY start_date ASC, start_time ASC NULLS FIRST, created_at ASC
-	`, fromStr, untilStr)
+	`, fromStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query upcoming calendar events: %w", err)
 	}

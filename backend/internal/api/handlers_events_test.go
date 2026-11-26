@@ -203,7 +203,8 @@ func TestCalendarEvents_CRUD_Import_And_UpcomingFiltering(t *testing.T) {
 			{"event_type": "ferien", "start_date": "2097-11-01", "end_date": "2097-11-07"},
 			{"event_type": "ea_kleine_gruppe", "start_date": "2097-11-10", "end_date": "2097-11-10", "start_time": "20:00"},
 			{"event_type": "ea_hort", "start_date": "2097-11-11", "end_date": "2097-11-11", "start_time": "20:00"},
-			{"event_type": "custom", "start_date": "2097-11-20", "end_date": "2097-11-22", "title": "Hortfreizeit"}
+			{"event_type": "custom", "start_date": "2097-11-20", "end_date": "2097-11-22", "title": "Hortfreizeit"},
+			{"event_type": "sommerfest", "start_date": "2097-12-20", "end_date": "2097-12-20"}
 		]
 	}`
 	reqImp := httptest.NewRequest("POST", "/api/events/import", strings.NewReader(importPayload))
@@ -214,18 +215,18 @@ func TestCalendarEvents_CRUD_Import_And_UpcomingFiltering(t *testing.T) {
 	}
 	var impResp models.ImportCalendarEventsResponse
 	_ = json.Unmarshal(recImp.Body.Bytes(), &impResp)
-	if impResp.CreatedCount != 5 || impResp.SkippedCount != 0 {
-		t.Fatalf("expected 5 created, 0 skipped, got %+v", impResp)
+	if impResp.CreatedCount != 6 || impResp.SkippedCount != 0 {
+		t.Fatalf("expected 6 created, 0 skipped, got %+v", impResp)
 	}
 
-	// Re-importing identical payload skips all 5
+	// Re-importing identical payload skips all 6
 	reqImp2 := httptest.NewRequest("POST", "/api/events/import", strings.NewReader(importPayload))
 	recImp2 := httptest.NewRecorder()
 	r.ServeHTTP(recImp2, reqImp2.WithContext(context.WithValue(reqImp2.Context(), auth.UserContextKey, uWriter)))
 	var impResp2 models.ImportCalendarEventsResponse
 	_ = json.Unmarshal(recImp2.Body.Bytes(), &impResp2)
-	if impResp2.CreatedCount != 0 || impResp2.SkippedCount != 5 {
-		t.Fatalf("expected 0 created, 5 skipped on re-import, got %+v", impResp2)
+	if impResp2.CreatedCount != 0 || impResp2.SkippedCount != 6 {
+		t.Fatalf("expected 0 created, 6 skipped on re-import, got %+v", impResp2)
 	}
 
 	// Seed a cooking duty for uKleineParent (parentID) on 2097-11-08 -> should appear in both upcoming-events (sorted chronologically) and /api/events!
@@ -244,7 +245,7 @@ func TestCalendarEvents_CRUD_Import_And_UpcomingFiltering(t *testing.T) {
 	}()
 
 	// Parent with child in Kleine Gruppe (group 1) on 2097-11-03:
-	// Should see ongoing schliesszeit (2097-11-01..05), cooking_duty (2097-11-08), ea_kleine_gruppe (2097-11-10), custom Hortfreizeit (2097-11-20..22)
+	// Should see ongoing schliesszeit (2097-11-01..05), cooking_duty (2097-11-08), ea_kleine_gruppe (2097-11-10), custom Hortfreizeit (2097-11-20..22), and sommerfest beyond 30 days (2097-12-20)
 	// Should NOT see ferien or ea_hort!
 	uKleineParent := &models.UserWithPermissions{
 		ID:                   uuid.New(),
@@ -261,15 +262,16 @@ func TestCalendarEvents_CRUD_Import_And_UpcomingFiltering(t *testing.T) {
 	}
 	var upResp models.MyUpcomingEventsResponse
 	_ = json.Unmarshal(recUpcoming.Body.Bytes(), &upResp)
-	if len(upResp.Events) != 4 {
-		t.Fatalf("expected 4 filtered upcoming events for Kleine Gruppe parent, got %d: %+v", len(upResp.Events), upResp.Events)
+	if len(upResp.Events) != 5 {
+		t.Fatalf("expected 5 filtered upcoming events for Kleine Gruppe parent (including beyond 30 days), got %d: %+v", len(upResp.Events), upResp.Events)
 	}
 	if upResp.Events[0].EventType != "schliesszeit" || !upResp.Events[0].Editable ||
 		upResp.Events[1].Type != "cooking_duty" || upResp.Events[1].Editable ||
 		upResp.Events[1].Date != "2097-11-08" ||
 		upResp.Events[2].EventType != "ea_kleine_gruppe" || !upResp.Events[2].Editable ||
 		upResp.Events[3].EventType != "custom" || !upResp.Events[3].Editable ||
-		upResp.Events[3].Title != "Hortfreizeit" {
+		upResp.Events[3].Title != "Hortfreizeit" ||
+		upResp.Events[4].EventType != "sommerfest" || upResp.Events[4].Date != "2097-12-20" {
 		t.Fatalf("unexpected upcoming events order/content: %+v", upResp.Events)
 	}
 

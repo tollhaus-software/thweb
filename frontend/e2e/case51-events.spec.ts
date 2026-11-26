@@ -15,7 +15,7 @@ test.describe('Test Case 51: Events Calendar, Day Editor, TSV Import & Start Pag
     await page.waitForLoadState('networkidle');
 
     // Navigate to Termine tab from sidebar
-    await page.getByRole('button', { name: 'Termine' }).click();
+    await page.getByRole('button', { name: 'Termine', exact: true }).click();
     await expect(page.getByTestId('events-tab')).toBeVisible();
     await expect(page.getByTestId('events-month-label')).toContainText('Oktober 2026');
 
@@ -215,5 +215,114 @@ test.describe('Test Case 51: Events Calendar, Day Editor, TSV Import & Start Pag
     const highlightedPill = page.locator('.events-pill.is-highlighted');
     await expect(highlightedPill).toBeVisible();
     await expect(highlightedPill).toContainText('EA Kleine Gr.');
+  });
+
+  test('shows next 3 non-ferien events even if beyond 30 days, and shows cooking_duty within 30 days as 4th event when preceded by 3+ events', async ({
+    request,
+    page,
+  }) => {
+    const parentEmail = 'vierter.koch@tollhaus-stuttgart.de';
+
+    const famRes = await request.post('/api/families', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        parents: [
+          {
+            first_name: 'Lukas',
+            last_name: 'Keller',
+            emails: [{ value: parentEmail, identifier_email: true, address_list: true }],
+            phones: [],
+          },
+        ],
+      },
+    });
+    expect(famRes.ok()).toBeTruthy();
+    const fam = await famRes.json();
+    const parentId = fam.parents[0].id;
+
+    // 1. Seed 3 non-ferien events where the 2nd and 3rd are >30 days after 2026-11-01, plus a ferien event
+    const impFarRes = await request.post('/api/events/import', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        mode: 'replace_range',
+        replace_start_date: '2026-10-01',
+        replace_end_date: '2027-03-01',
+        events: [
+          { event_type: 'ferien', start_date: '2026-11-02', end_date: '2026-11-06' }, // excluded
+          { event_type: 'putz_we', start_date: '2026-11-14', end_date: '2026-11-14' }, // within 30 days
+          { event_type: 'weihnachtsfeier', start_date: '2026-12-18', end_date: '2026-12-18', start_time: '16:00' }, // >30 days
+          { event_type: 'custom', start_date: '2027-01-15', end_date: '2027-01-15', title: 'Neujahrsempfang' }, // >30 days
+        ],
+      },
+    });
+    expect(impFarRes.ok()).toBeTruthy();
+
+    await page.clock.setFixedTime(new Date('2026-11-01T09:00:00'));
+    await page.addInitScript((email) => {
+      localStorage.setItem('token', email);
+    }, parentEmail);
+
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const card = page.getByTestId('main-page-upcoming-events-card');
+    await expect(card).toBeVisible();
+    const items = page.getByTestId('main-page-upcoming-events-list').locator('li');
+    await expect(items).toHaveCount(3);
+    await expect(items.nth(0)).toContainText('Putz-Wochenende');
+    await expect(items.nth(1)).toContainText('Weihnachtsfeier');
+    await expect(items.nth(2)).toContainText('Neujahrsempfang');
+    await expect(card).not.toContainText('Ferien');
+
+    // 2. Now seed 3 events before 2026-11-20 and a cooking_duty for Lukas on 2026-11-20 (within 30 days of 2026-11-01)
+    const impBeforeCookRes = await request.post('/api/events/import', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        mode: 'replace_range',
+        replace_start_date: '2026-10-01',
+        replace_end_date: '2027-03-01',
+        events: [
+          { event_type: 'ferien', start_date: '2026-11-02', end_date: '2026-11-06' }, // excluded
+          { event_type: 'bau_we', start_date: '2026-11-07', end_date: '2026-11-07' }, // #1
+          { event_type: 'laternenfest', start_date: '2026-11-11', end_date: '2026-11-11', start_time: '17:00' }, // #2
+          { event_type: 'paedagogischer_tag', start_date: '2026-11-16', end_date: '2026-11-16' }, // #3
+          { event_type: 'ea_gesamt_and_mgv', start_date: '2026-11-18', end_date: '2026-11-18', start_time: '20:00' }, // #4 in calendar, skipped on Start page in favor of cooking_duty
+          { event_type: 'weihnachtsfeier', start_date: '2026-12-18', end_date: '2026-12-18' }, // after cooking_duty
+        ],
+      },
+    });
+    expect(impBeforeCookRes.ok()).toBeTruthy();
+
+    const seedCookRes = await request.post('/api/test/meal-plan', {
+      data: [
+        {
+          date: '2026-11-20',
+          cook_name: 'Lukas Keller',
+          cooks: [{ id: parentId, type: 'parent', first_name: 'Lukas', last_name: 'Keller' }],
+          cook_resolution_status: 'resolved',
+          meal_components: ['Spätzle mit Soße'],
+        },
+      ],
+    });
+    expect(seedCookRes.ok()).toBeTruthy();
+
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+
+    // Should show the first 3 events + cooking_duty as the 4th event!
+    await expect(items).toHaveCount(4);
+    await expect(items.nth(0)).toContainText('Bau-Wochenende');
+    await expect(items.nth(1)).toContainText('Laternenfest');
+    await expect(items.nth(2)).toContainText('Pädagogischer Tag');
+    await expect(items.nth(3)).toContainText('Freitag, 20.11.2026');
+    await expect(items.nth(3)).toContainText('Kochdienst');
+    await expect(card).not.toContainText('MGV');
+
+    // 3. If the cooking_duty is >30 days in the future (e.g. on 2026-10-15, 2026-11-20 is 36 days away) and preceded by 3 events, only 3 events are shown
+    await page.clock.setFixedTime(new Date('2026-10-15T09:00:00'));
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    await expect(items).toHaveCount(3);
+    await expect(card).not.toContainText('Kochdienst');
   });
 });

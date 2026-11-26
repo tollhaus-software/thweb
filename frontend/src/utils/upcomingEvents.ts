@@ -24,6 +24,34 @@ export interface UpcomingEvent {
 const WEEKDAYS_DE = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 const WEEKDAYS_EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+const MAX_VISIBLE_COUNT = 3;
+const COOKING_DUTY_BONUS_WINDOW_DAYS = 30;
+
+function isCookingDutyEvent(event: UpcomingEvent): boolean {
+  return event.type === 'cooking_duty' || event.event_type === 'cooking_duty';
+}
+
+export function getVisibleUpcomingEvents(events: UpcomingEvent[], today: Date): UpcomingEvent[] {
+  const nonFerienEvents = events.filter(
+    (event) => event.type !== 'ferien' && event.event_type !== 'ferien'
+  );
+  const topEvents = nonFerienEvents.slice(0, MAX_VISIBLE_COUNT);
+  const hasCookingDutyInTop = topEvents.some(isCookingDutyEvent);
+
+  if (!hasCookingDutyInTop && nonFerienEvents.length > MAX_VISIBLE_COUNT) {
+    const nextCookingDuty = nonFerienEvents.slice(MAX_VISIBLE_COUNT).find((event) => {
+      if (!isCookingDutyEvent(event)) return false;
+      const diff = daysUntil(event.date, today);
+      return diff >= 0 && diff <= COOKING_DUTY_BONUS_WINDOW_DAYS;
+    });
+    if (nextCookingDuty) {
+      return [...topEvents, nextCookingDuty];
+    }
+  }
+
+  return topEvents;
+}
+
 /**
  * Formats a YYYY-MM-DD date string as "<weekday>, <dd.mm.yyyy>" in German
  * (e.g. "Donnerstag, 26.11.2026").

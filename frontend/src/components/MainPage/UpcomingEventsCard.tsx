@@ -2,7 +2,11 @@ import React from 'react';
 import { CalendarDays, ArrowRight } from 'lucide-react';
 import { t } from '../../utils/i18n';
 import { daysUntil } from '../../utils/hygieneMessage';
-import { formatUpcomingEventParts, type UpcomingEvent } from '../../utils/upcomingEvents';
+import {
+  formatUpcomingEventParts,
+  getVisibleUpcomingEvents,
+  type UpcomingEvent,
+} from '../../utils/upcomingEvents';
 
 export interface UpcomingEventsCardProps {
   events: UpcomingEvent[];
@@ -10,8 +14,6 @@ export interface UpcomingEventsCardProps {
   onNavigateToCalendar?: () => void;
   onSelectEvent?: (event: UpcomingEvent) => void;
 }
-
-const MAX_VISIBLE_COUNT = 3;
 
 export const UpcomingEventsCard: React.FC<UpcomingEventsCardProps> = ({
   events,
@@ -23,7 +25,10 @@ export const UpcomingEventsCard: React.FC<UpcomingEventsCardProps> = ({
     return null;
   }
 
-  const visibleEvents = events.slice(0, MAX_VISIBLE_COUNT);
+  const visibleEvents = getVisibleUpcomingEvents(events, today);
+  if (visibleEvents.length === 0) {
+    return null;
+  }
   const toCalendarLabel = t('upcomingEventsToCalendar') || 'Zum Kalender';
 
   const handleEventClick = (event: UpcomingEvent) => {
