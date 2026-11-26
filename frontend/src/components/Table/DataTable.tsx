@@ -113,9 +113,10 @@ export function DataTable<TData>({
     const origFamily = (row.original as any).originalFamily || row.original;
     const isFormer = origFamily ? isFamilyFormer(origFamily) : false;
     const isHistorical = origFamily?.family_type === 'historical_alumni';
+    const isHighlightedGroup = Boolean(highlightedRowId && familyId === highlightedRowId);
     return (
       <Fragment key={row.id}>
-        <tr className={`family-group-row ${familyId === highlightedRowId ? 'highlighted-row' : ''}`} id={`row-${familyId}`}>
+        <tr className={`family-group-row ${isHighlightedGroup ? 'highlighted-row' : ''}`} id={`row-${familyId}`}>
           <td colSpan={table.getVisibleLeafColumns().length}>
             <div className="family-group-row-container">
               <div
@@ -273,8 +274,12 @@ export function DataTable<TData>({
 
     const noSpecialBg = Boolean((row.original as any).no_special_bg);
     const isGroupModeParent = Boolean((row.original as any).isGroupModeParent);
+    const isHighlightedRow = Boolean(
+      highlightedRowId &&
+      (rowId === highlightedRowId || (row.original as any)?.original_id === highlightedRowId)
+    );
     const rowClasses = [
-      rowId === highlightedRowId || (row.original as any)?.original_id === highlightedRowId ? 'highlighted-row' : '',
+      isHighlightedRow ? 'highlighted-row' : '',
       rowType === 'parent' ? 'overview-parent-row' : '',
       rowType === 'child' ? 'overview-child-row' : '',
       noSpecialBg ? 'no-special-bg' : '',

@@ -46,6 +46,7 @@ export interface JobsTabProps {
   canWriteJobRoles?: boolean;
   availableRoles?: Role[];
   searchQuery?: string;
+  highlightedRowId?: string | null;
   isCreateModalOpen?: boolean;
   onOpenCreateModal?: () => void;
   onCloseCreateModal?: () => void;
@@ -65,6 +66,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
   canWriteJobRoles = false,
   availableRoles,
   searchQuery,
+  highlightedRowId,
   isCreateModalOpen,
   onOpenCreateModal,
   onCloseCreateModal,
@@ -850,6 +852,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
         data={filteredJobs}
         columns={columns}
         enableSorting={false}
+        highlightedRowId={highlightedRowId}
       />
 
       {/* Add / Edit Job Modal */}

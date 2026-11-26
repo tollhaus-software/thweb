@@ -3385,7 +3385,7 @@ const Dashboard: React.FC = () => {
       clearInterval(interval);
       clearTimeout(clearTimer);
     };
-  }, [activeTab, highlightTarget, families, overviewFamilies, members, employees]);
+  }, [activeTab, highlightTarget, families, overviewFamilies, members, employees, jobs]);
 
   React.useEffect(() => {
     const handleHashChange = () => {
@@ -7080,6 +7080,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
             availableRoles={availableRoles}
             onUpdateJobRoles={handleUpdateJobRoles}
             searchQuery={globalFilter}
+            highlightedRowId={highlightedRowId}
             isCreateModalOpen={addJobOpen}
             onOpenCreateModal={() => setAddJobOpen(true)}
             onCloseCreateModal={() => setAddJobOpen(false)}

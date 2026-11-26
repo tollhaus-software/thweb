@@ -164,9 +164,10 @@ test.describe('Test Case 28: Jobs and Assignments (MGA)', () => {
     await page.getByRole('button', { name: 'Speichern' }).click();
     await expect(page.locator('.modal-overlay')).toBeHidden();
 
-    // Verify Hygiene appears in table
+    // Verify Hygiene appears in table and does NOT have unexpected highlighted-row class on normal view
     const hygieneRow = page.locator('tr', { hasText: 'Hygiene' });
     await expect(hygieneRow).toBeVisible();
+    await expect(hygieneRow).not.toHaveClass(/highlighted-row/);
     await expect(hygieneRow.locator('td', { hasText: 'Hygienemanagement und Belehrungen' })).toBeVisible();
     await expect(hygieneRow.locator('td', { hasText: 'hygiene@example.com' })).toBeVisible();
 
