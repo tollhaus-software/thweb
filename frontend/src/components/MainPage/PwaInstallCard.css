@@ -59,6 +59,68 @@
   color: var(--primary, #2563eb);
 }
 
+.main-page-pwa-warning-box {
+  border-color: var(--primary, #2563eb);
+}
+
+.main-page-pwa-context-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding-bottom: 0.45rem;
+  margin-bottom: 0.15rem;
+  border-bottom: 1px solid var(--border, #e2e8f0);
+  color: var(--text, #1e293b);
+  line-height: 1.45;
+}
+
+.main-page-pwa-note-icon {
+  color: var(--primary, #2563eb);
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.main-page-pwa-copy-row {
+  padding-left: 1.9rem;
+}
+
+.main-page-pwa-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.85rem;
+  background: var(--primary, #2563eb);
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease-in-out;
+}
+
+.main-page-pwa-copy-btn:hover {
+  background: var(--primary-hover, #1d4ed8);
+}
+
+.main-page-pwa-ios-hint {
+  margin: 0.25rem 0 0;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border, #e2e8f0);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--text-secondary, #475569);
+}
+
+.pwa-install-modal {
+  max-width: 480px;
+  width: 92vw;
+}
+
+.pwa-install-modal-body {
+  padding: 1rem 1.25rem;
+}
+
 /* Android / Desktop Install Button */
 .main-page-pwa-android-section {
   display: flex;

@@ -586,4 +586,95 @@ test.describe('Test Case 42: Main Page (Default Homepage, Cook, Food, and Rest o
       expect(darkDayNameColor).toBe('rgb(241, 243, 244)'); // #f1f3f4 (--text-h)
     }
   });
+
+  test('PWA manifest is served with application/manifest+json MIME type', async ({ request }) => {
+    const res = await request.get('/manifest.webmanifest');
+    expect(res.status()).toBe(200);
+    expect(res.headers()['content-type']).toContain('application/manifest+json');
+    const manifest = await res.json();
+    expect(manifest.display).toBe('standalone');
+    expect(manifest.start_url).toBe('/');
+    expect(Array.isArray(manifest.icons)).toBe(true);
+    expect(manifest.icons.length).toBeGreaterThan(0);
+  });
+
+  test('iOS PWA install UI: adapts to Safari, Chrome on iOS, and in-app WebViews, and can be reopened from header menu after dismissal', async ({ browser }) => {
+    // 1. iOS Safari context
+    const safariContext = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      userAgent:
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1',
+    });
+    const safariPage = await safariContext.newPage();
+    await safariPage.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+    });
+    await safariPage.goto('/');
+    await safariPage.waitForLoadState('networkidle');
+
+    const pwaCard = safariPage.getByTestId('main-page-pwa-card');
+    await expect(pwaCard).toBeVisible();
+    await expect(safariPage.getByTestId('pwa-ios-safari-steps')).toBeVisible();
+    await expect(safariPage.getByTestId('pwa-ios-safari-steps')).toContainText('•••');
+    await expect(safariPage.getByTestId('pwa-ios-safari-steps')).toContainText('Hinzufügen');
+    await expect(safariPage.getByTestId('pwa-ios-safari-hint')).toContainText('Safari-Symbol (Kompass)');
+
+    // Dismiss the card -> disappears from main page
+    await safariPage.getByTestId('main-page-pwa-dismiss-btn').click();
+    await expect(pwaCard).toHaveCount(0);
+
+    // Reopen install instructions from header overflow menu even after dismissal
+    await safariPage.getByTestId('header-overflow-btn').click();
+    const installMenuBtn = safariPage.getByTestId('overflow-install-pwa-button');
+    await expect(installMenuBtn).toBeVisible();
+    await expect(installMenuBtn).toContainText('Als App installieren');
+    await installMenuBtn.click();
+
+    const pwaModal = safariPage.getByTestId('pwa-install-modal');
+    await expect(pwaModal).toBeVisible();
+    await expect(pwaModal.getByTestId('pwa-ios-safari-steps')).toBeVisible();
+
+    await safariPage.getByTestId('pwa-install-modal-close').click();
+    await expect(pwaModal).toHaveCount(0);
+    await safariContext.close();
+
+    // 2. Chrome on iOS (CriOS) context
+    const chromeIosContext = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      userAgent:
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/131.0.6778.73 Mobile/15E148 Safari/604.1',
+    });
+    const chromeIosPage = await chromeIosContext.newPage();
+    await chromeIosPage.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+    });
+    await chromeIosPage.goto('/');
+    await chromeIosPage.waitForLoadState('networkidle');
+
+    await expect(chromeIosPage.getByTestId('pwa-ios-chrome-steps')).toBeVisible();
+    await expect(chromeIosPage.getByTestId('pwa-ios-chrome-steps')).toContainText('oben rechts');
+    await chromeIosContext.close();
+
+    // 3. iOS In-App Browser (WhatsApp / WKWebView) context
+    const inAppContext = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      userAgent:
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 [WhatsApp/2.24.22.78]',
+    });
+    const inAppPage = await inAppContext.newPage();
+    await inAppPage.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+    });
+    await inAppPage.goto('/');
+    await inAppPage.waitForLoadState('networkidle');
+
+    await expect(inAppPage.getByTestId('pwa-ios-inapp-steps')).toBeVisible();
+    await expect(inAppPage.getByTestId('pwa-ios-inapp-steps')).toContainText('In-App-Browser');
+    const copyBtn = inAppPage.getByTestId('pwa-copy-link-btn');
+    await expect(copyBtn).toBeVisible();
+    await expect(copyBtn).toContainText('Link kopieren');
+    await copyBtn.click();
+    await expect(copyBtn).toContainText('Link kopiert!');
+    await inAppContext.close();
+  });
 });

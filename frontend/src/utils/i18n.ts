@@ -1004,6 +1004,9 @@ const translations: Record<Locale, Record<string, string>> = {
     upcomingEventsShowLess: 'Weniger anzeigen',
     upcomingEventsToCalendar: 'Zum Kalender',
     upcomingEventOngoingPrefix: 'Aktuell',
+    installApp: 'Als App installieren',
+    pwaCopyLink: 'Link kopieren',
+    pwaLinkCopied: 'Link kopiert!',
   },
   en: {
     title: 'TH Portal',
@@ -2006,6 +2009,9 @@ const translations: Record<Locale, Record<string, string>> = {
     upcomingEventsShowLess: 'Show fewer',
     upcomingEventsToCalendar: 'To Calendar',
     upcomingEventOngoingPrefix: 'Ongoing',
+    installApp: 'Install as app',
+    pwaCopyLink: 'Copy link',
+    pwaLinkCopied: 'Link copied!',
   },
 };
 

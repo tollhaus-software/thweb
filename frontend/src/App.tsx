@@ -21,6 +21,8 @@ import { HygieneEventsPopover, HygieneCell, type ParentWithHygiene } from './com
 import { ChildcareFeesCalculator } from './components/ChildcareFeesCalculator';
 import { KioskDashboard } from './components/Dashboard/KioskDashboard';
 import { MainPage } from './components/MainPage/MainPage';
+import { PwaInstallModal } from './components/MainPage/PwaInstallCard';
+import { usePwaInstallState } from './utils/pwaInstall';
 import { isExperimentActive } from './utils/experiments';
 import { MealPlanTab } from './components/MealPlan/MealPlanTab';
 import { MealPlanPrintView } from './components/MealPlan/MealPlanPrintView';
@@ -1786,9 +1788,15 @@ import { useIsMobile } from './hooks/useIsMobile';
 const Dashboard: React.FC = () => {
   const { user, token, logout, refreshUser, hasPermission, canSimulate, leaveSimulation } = useAuth();
   const isMobile = useIsMobile();
+  const pwaInstallState = usePwaInstallState();
+  const canInstallPwa =
+    pwaInstallState.platformInfo.isMobile &&
+    !pwaInstallState.isStandalone &&
+    !pwaInstallState.isInstalled;
   const [simulatorModalOpen, setSimulatorModalOpen] = React.useState(false);
   const [viewRolesModalOpen, setViewRolesModalOpen] = React.useState(false);
   const [feedbackModalOpen, setFeedbackModalOpen] = React.useState(false);
+  const [pwaInstallModalOpen, setPwaInstallModalOpen] = React.useState(false);
   const [selfServiceModalOpen, setSelfServiceModalOpen] = React.useState(false);
   const [selfServiceInitialParentId, setSelfServiceInitialParentId] = React.useState<string | null>(null);
   const [feedbackInitialData, setFeedbackInitialData] = React.useState<{
@@ -5995,6 +6003,8 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
               canSimulate={canSimulate}
               onOpenSimulator={() => setSimulatorModalOpen(true)}
               onOpenFeedback={() => setFeedbackModalOpen(true)}
+              canInstallPwa={canInstallPwa}
+              onOpenInstallPwa={() => setPwaInstallModalOpen(true)}
               onLogout={logout}
               onSelectTab={handleTabClick}
               canReadAudit={canReadAudit}
@@ -7619,6 +7629,12 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
           token={token}
           initialType={feedbackInitialData.type}
           initialDescription={feedbackInitialData.description}
+        />
+
+        {/* PWA Install Instructions Modal from Header Overflow Menu */}
+        <PwaInstallModal
+          isOpen={pwaInstallModalOpen}
+          onClose={() => setPwaInstallModalOpen(false)}
         />
 
         {/* Group Overview Print Modal */}

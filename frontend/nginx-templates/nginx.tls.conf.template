@@ -43,6 +43,16 @@ server {
         add_header Cache-Control "no-cache, must-revalidate";
     }
 
+    # Web App Manifest with explicit W3C MIME type
+    location = /manifest.webmanifest {
+        root /usr/share/nginx/html;
+        types {
+            application/manifest+json webmanifest;
+        }
+        default_type application/manifest+json;
+        add_header Cache-Control "no-cache, must-revalidate";
+    }
+
     # Host frontend as static file
     location / {
         root /usr/share/nginx/html;

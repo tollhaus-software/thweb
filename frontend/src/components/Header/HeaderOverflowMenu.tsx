@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MoreVertical, LogOut, Eye, ExternalLink, LayoutDashboard, History, Shield, Key, User, MessageSquare, Activity, UserCheck } from 'lucide-react';
+import { MoreVertical, LogOut, Eye, ExternalLink, LayoutDashboard, History, Shield, Key, User, MessageSquare, Activity, UserCheck, Smartphone } from 'lucide-react';
 import { t } from '../../utils/i18n';
 import type { TabId } from '../../utils/navigation';
 
@@ -12,6 +12,8 @@ export interface HeaderOverflowMenuProps {
   canSimulate?: boolean;
   onOpenSimulator?: () => void;
   onOpenFeedback?: () => void;
+  onOpenInstallPwa?: () => void;
+  canInstallPwa?: boolean;
   onSelectTab?: (tab: TabId) => void;
   canReadAudit?: boolean;
   canManageUsers?: boolean;
@@ -30,6 +32,8 @@ export const HeaderOverflowMenu: React.FC<HeaderOverflowMenuProps> = ({
   canSimulate = false,
   onOpenSimulator,
   onOpenFeedback,
+  onOpenInstallPwa,
+  canInstallPwa = false,
   onSelectTab,
   canReadAudit = false,
   canManageUsers = false,
@@ -252,6 +256,22 @@ export const HeaderOverflowMenu: React.FC<HeaderOverflowMenuProps> = ({
             <ExternalLink size={16} />
             <span>{t('privacy')}</span>
           </a>
+
+          {canInstallPwa && onOpenInstallPwa && (
+            <button
+              type="button"
+              role="menuitem"
+              className="header-overflow-menu-item"
+              data-testid="overflow-install-pwa-button"
+              onClick={() => {
+                setIsOpen(false);
+                onOpenInstallPwa();
+              }}
+            >
+              <Smartphone size={16} />
+              <span>{t('installApp')}</span>
+            </button>
+          )}
 
           {onOpenFeedback && (
             <button
