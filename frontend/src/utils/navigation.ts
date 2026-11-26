@@ -331,6 +331,16 @@ export const NAVIGATION_CATEGORIES: NavCategory[] = [
         icon: Sparkles,
         isVisible: (ctx) => Boolean(ctx.canAccessPersonalHygiene),
       },
+      {
+        id: 'dashboard',
+        labelKey: 'dashboard',
+        defaultLabel: 'Kochansicht',
+        accessibleName: 'Kochansicht',
+        descriptionKey: 'subtabDescDashboard',
+        defaultDescription: 'Tagesübersicht für Kochen und Küche.',
+        icon: LayoutDashboard,
+        isVisible: (ctx) => ctx.canUseDashboard,
+      },
     ],
   },
   {
@@ -372,16 +382,6 @@ export const NAVIGATION_CATEGORIES: NavCategory[] = [
     icon: MoreHorizontal,
     collapsibleInSidebar: true,
     items: [
-      {
-        id: 'dashboard',
-        labelKey: 'dashboard',
-        defaultLabel: 'Kochansicht',
-        accessibleName: 'Kochansicht',
-        descriptionKey: 'subtabDescDashboard',
-        defaultDescription: 'Tagesübersicht für Kochen und Küche.',
-        icon: LayoutDashboard,
-        isVisible: (ctx) => ctx.canUseDashboard,
-      },
       {
         id: 'audit',
         labelKey: 'audit',

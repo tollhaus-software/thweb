@@ -80,12 +80,13 @@ test.describe('Test Case 29: Navigation Improvements, Category Landing Pages, an
     await expect(landing).toBeVisible();
     await expect(landing.locator('.category-landing-title')).toHaveText('Kochen');
 
-    // 3 sub-category cards: Allergene, Wochenplan, and Hygiene
+    // 4 sub-category cards: Allergene, Wochenplan, Hygiene, and Kochansicht
     const cards = landing.locator('.category-landing-card');
-    await expect(cards).toHaveCount(3);
+    await expect(cards).toHaveCount(4);
     await expect(landing.getByRole('listitem', { name: 'Essen/Allergene' })).toBeVisible();
     await expect(landing.getByRole('listitem', { name: 'Essen/Wochenplan' })).toBeVisible();
     await expect(landing.getByRole('listitem', { name: 'Kochen/Hygiene' })).toBeVisible();
+    await expect(landing.getByRole('listitem', { name: 'Kochansicht' })).toBeVisible();
 
     // Click "Wochenplan" card
     await landing.getByRole('listitem', { name: 'Essen/Wochenplan' }).click();

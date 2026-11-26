@@ -79,7 +79,8 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await expect(header.getByRole('button', { name: 'Dashboard' })).toHaveCount(0);
     await expect(header.getByRole('button', { name: 'Kochansicht' })).toHaveCount(0);
 
-    // 5. Verify the "Kochansicht" tab exists in the tab navigation bar
+    // 5. Verify the "Kochansicht" tab exists under "Kochen" in the tab navigation bar
+    await page.locator('.tabs').getByRole('button', { name: 'Kochen', exact: true }).click();
     const dashboardTab = page.locator('.tabs').getByRole('button', { name: 'Kochansicht' });
     await expect(dashboardTab).toBeVisible();
 
@@ -1112,7 +1113,8 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await parentPage.goto('/');
     await parentPage.waitForLoadState('networkidle');
 
-    // Parent sees Kochansicht tab in sidebar navigation
+    // Parent sees Kochansicht tab under Kochen in sidebar navigation
+    await parentPage.locator('.tabs').getByRole('button', { name: 'Kochen', exact: true }).click();
     const parentKochansichtBtn = parentPage.locator('.tabs').getByRole('button', { name: 'Kochansicht' });
     await expect(parentKochansichtBtn).toBeVisible();
     await parentKochansichtBtn.click();

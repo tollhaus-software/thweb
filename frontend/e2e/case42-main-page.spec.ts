@@ -216,8 +216,9 @@ test.describe('Test Case 42: Main Page (Default Homepage, Cook, Food, and Rest o
     await expect(welcomeGreeting).toBeVisible();
     await expect(welcomeGreeting).toHaveText('Willkommen, Maria!');
 
-    // 6. Verify "Zur Kochansicht" is not shown on the main page itself, while "Kochansicht" IS available in the sidebar navigation
+    // 6. Verify "Zur Kochansicht" is not shown on the main page itself, while "Kochansicht" IS available under "Kochen" in the sidebar navigation
     await expect(page.getByTestId('main-page-kochansicht-btn')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Toggle Kochen subtabs' }).click();
     await expect(page.locator('.tabs').getByRole('button', { name: 'Kochansicht' })).toBeVisible();
 
     // 7. Expand the rest/upcoming of the week
