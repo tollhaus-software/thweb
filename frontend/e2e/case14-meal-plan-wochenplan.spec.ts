@@ -227,10 +227,17 @@ test.describe('Test Case 14: Essen/Wochenplan Tab and Print Layout', () => {
     await page.emulateMedia({ media: 'print' });
     const toolbarDisplayPrint = await printToolbar.evaluate((el) => window.getComputedStyle(el).display);
     expect(toolbarDisplayPrint).toBe('none');
+    await expect(printToolbar).toBeHidden();
 
-    // And verify the sheet is visible in print
+    // And verify the sheet and its days are actually visible in print (not hidden by any ancestor like #root)
     const sheetDisplayPrint = await sheet.evaluate((el) => window.getComputedStyle(el).display);
     expect(sheetDisplayPrint).not.toBe('none');
+    await expect(sheet).toBeVisible();
+    await expect(sheet.locator('.meal-plan-day-col').first()).toBeVisible();
+    const sheetBox = await sheet.boundingBox();
+    expect(sheetBox).not.toBeNull();
+    expect(sheetBox!.width).toBeGreaterThan(0);
+    expect(sheetBox!.height).toBeGreaterThan(0);
 
     // Inner meal box has no additional inner border when printing and text is vertically centered
     const innerMealsBoxStyle = await sheet.locator('.meal-plan-meals-box').first().evaluate((el) => {
@@ -299,9 +306,16 @@ test.describe('Test Case 14: Essen/Wochenplan Tab and Print Layout', () => {
     expect(printGrid.display).toBe('grid');
     expect(printGrid.gridTemplateColumns).toBe(5);
 
-    // Sheet itself is visible
+    // Sheet itself and its content must be actually visible in print (not hidden by any ancestor such as #root)
     const sheetPrint = await sheet.evaluate((el) => window.getComputedStyle(el).display);
     expect(sheetPrint).not.toBe('none');
+    await expect(sheet).toBeVisible();
+    await expect(sheet.locator('.meal-plan-sheet-title')).toBeVisible();
+    await expect(sheet.locator('.meal-plan-day-col').first()).toBeVisible();
+    const printSheetBox = await sheet.boundingBox();
+    expect(printSheetBox).not.toBeNull();
+    expect(printSheetBox!.width).toBeGreaterThan(0);
+    expect(printSheetBox!.height).toBeGreaterThan(0);
 
     // Inner meal box has no additional inner border when printing directly from mealPlan tab and is vertically centered
     const mealBoxStyle = await sheet.locator('.meal-plan-meals-box').first().evaluate((el) => {

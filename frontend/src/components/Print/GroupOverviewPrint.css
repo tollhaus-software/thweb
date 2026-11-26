@@ -242,7 +242,7 @@
     overflow: visible !important;
   }
 
-  body > *:not(.print-portal-root) {
+  body:has(> .print-portal-root) > *:not(.print-portal-root) {
     display: none !important;
   }
 

@@ -251,8 +251,22 @@ test.describe('Test Case 47: Print Contact Data Per Group (Gruppenübersicht)', 
     await expect(updatedP2Phones).toHaveCount(1);
     await expect(updatedP2Phones.nth(0)).toHaveText('0171 111111');
 
+    // Verify under @media print when Group Overview preview is open:
+    // #root is hidden, preview toolbar is hidden, and the print page table is visible
+    await page.emulateMedia({ media: 'print' });
+    await expect(page.locator('#root')).toBeHidden();
+    await expect(page.locator('.print-preview-toolbar')).toBeHidden();
+    await expect(filteredPage).toBeVisible();
+    await expect(updatedMaggieRow).toBeVisible();
+    await page.emulateMedia({ media: 'screen' });
+
     // 9. Close preview
     await page.locator('[data-testid="print-preview-close-button"]').click();
     await expect(page.locator('.print-preview-modal-overlay')).toHaveCount(0);
+
+    // Regression check: when Group Overview print modal is closed, #root must remain visible in @media print
+    await page.emulateMedia({ media: 'print' });
+    await expect(page.locator('#root')).toBeVisible();
+    await page.emulateMedia({ media: 'screen' });
   });
 });
