@@ -2020,4 +2020,92 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
       'Vesper (Donnerstag): Noch keines eingetragen!'
     );
   });
+
+  test('Kochansicht-TODOs admin page allows editing Markdown info and creating/deleting custom TODOs', async ({
+    request,
+    page,
+  }) => {
+    const resetRes = await request.post('/api/test/reset');
+    expect(resetRes.ok()).toBeTruthy();
+
+    await seedDeveloperCookingDutyToday(request, 'Sabine', 'Koch', 'Milchreis');
+
+    await page.addInitScript(() => {
+      localStorage.setItem('token', 'developer@example.com');
+    });
+
+    await page.goto('/#dashboardTodos');
+    await page.waitForLoadState('networkidle');
+
+    const adminPage = page.getByTestId('dashboard-todos-admin-page');
+    await expect(adminPage).toBeVisible();
+    await expect(adminPage.getByTestId('admin-todo-row-serve_small_group')).toBeVisible();
+
+    // 1. Edit serve_small_group to update its Markdown description
+    await adminPage.getByTestId('edit-todo-btn-serve_small_group').click();
+    const editModal = page.getByTestId('todo-edit-modal');
+    await expect(editModal).toBeVisible();
+
+    const mdText = '## Servierwagen Kleine Gruppe\n- **Schüsseln** bereitstellen\n- Besteck abzählen';
+    await editModal.getByTestId('todo-description-markdown').fill(mdText);
+    await expect(editModal.getByTestId('todo-markdown-preview')).toContainText('Servierwagen Kleine Gruppe');
+    await editModal.getByTestId('todo-modal-save-btn').click();
+    await expect(editModal).toHaveCount(0);
+
+    // Verify preview info button on admin row opens modal with rendered Markdown
+    await adminPage.getByTestId('admin-todo-preview-info-btn-serve_small_group').click();
+    const infoModal = page.getByTestId('task-info-modal');
+    await expect(infoModal).toBeVisible();
+    await expect(infoModal.getByTestId('task-info-modal-title')).toHaveText('Kleine Gruppe servieren');
+    await expect(infoModal.locator('h4')).toHaveText('Servierwagen Kleine Gruppe');
+    await expect(infoModal.locator('strong')).toHaveText('Schüsseln');
+    await infoModal.getByTestId('task-info-close-btn').click();
+
+    // 2. Create a new daily TODO (no weekday/condition filters => appears every day)
+    await adminPage.getByTestId('create-dashboard-todo-btn').click();
+    await expect(editModal).toBeVisible();
+    await editModal.getByTestId('todo-id-input').fill('kaffeemaschine_ausschalten');
+    await editModal.getByTestId('todo-name-input').fill('Abends: Kaffeemaschine ausschalten');
+    await editModal.getByTestId('todo-short-name-input').fill('Kaffeemaschine ausschalten');
+    await editModal.getByTestId('todo-sort-order-input').fill('900');
+    await editModal.getByTestId('todo-color-option-dishwasher').click();
+    await editModal.getByTestId('todo-icon-option-sparkles').click();
+    await editModal.getByTestId('todo-description-markdown').fill('Bitte **Hauptschalter** drücken.');
+    await editModal.getByTestId('todo-modal-save-btn').click();
+    await expect(editModal).toHaveCount(0);
+
+    const customRow = adminPage.getByTestId('admin-todo-row-kaffeemaschine_ausschalten');
+    await expect(customRow).toBeVisible();
+
+    // 3. Switch to Kochansicht (#dashboard) -> TODOs and verify the new TODO appears with its info icon and short name in confirm modal
+    await page.goto('/#dashboard');
+    await page.waitForLoadState('networkidle');
+    const embeddedPage = page.locator('.kiosk-tablet-page.embedded');
+    await embeddedPage.getByTestId('kiosk-todos-btn').click();
+
+    const customTodoItem = embeddedPage.getByTestId('kiosk-todo-item-kaffeemaschine_ausschalten');
+    await expect(customTodoItem).toBeVisible();
+    await expect(customTodoItem).toHaveClass(/kiosk-todo-dishwasher/);
+    await expect(embeddedPage.getByTestId('task-label-kaffeemaschine_ausschalten')).toHaveText(
+      'Abends: Kaffeemaschine ausschalten'
+    );
+
+    // Click info button on dashboard
+    await embeddedPage.getByTestId('task-info-btn-kaffeemaschine_ausschalten').click();
+    await expect(page.getByTestId('task-info-modal-title')).toHaveText('Kaffeemaschine ausschalten');
+    await expect(page.getByTestId('task-info-modal-body').locator('strong')).toHaveText('Hauptschalter');
+    await page.getByTestId('task-info-close-btn').click();
+
+    // Click item to open confirm modal -> uses short_name!
+    await customTodoItem.click();
+    await expect(page.getByTestId('task-confirm-modal-title')).toHaveText('Kaffeemaschine ausschalten abhaken?');
+    await page.getByTestId('task-confirm-cancel-btn').click();
+
+    // 4. Delete custom TODO on admin page
+    await page.goto('/#dashboardTodos');
+    await page.waitForLoadState('networkidle');
+    await page.getByTestId('delete-todo-btn-kaffeemaschine_ausschalten').click();
+    await page.getByTestId('confirm-delete-todo-btn').click();
+    await expect(page.getByTestId('admin-todo-row-kaffeemaschine_ausschalten')).toHaveCount(0);
+  });
 });

@@ -2468,6 +2468,12 @@ func (s *Server) HandleCompleteTask(w http.ResponseWriter, r *http.Request) {
 		httpErrorLog(w, r, "Task 'Allergene eintragen' must be finalized through the allergens editor", http.StatusBadRequest, nil)
 		return
 	}
+	if s.Store != nil {
+		if todoDef, err := s.Store.GetDashboardTodo(r.Context(), taskTypeID); err == nil && todoDef != nil && todoDef.Action == "fill_allergens" {
+			httpErrorLog(w, r, "Task with fill_allergens action must be finalized through the allergens editor", http.StatusBadRequest, nil)
+			return
+		}
+	}
 
 	// Rule: It should only be possible to mark tasks as done for a day if today is the day
 	if dateParam != todayStr {
@@ -2556,6 +2562,12 @@ func (s *Server) HandleUncompleteTask(w http.ResponseWriter, r *http.Request) {
 	if taskTypeID == "enter_allergens" || taskTypeID == "allergene_eintragen" {
 		httpErrorLog(w, r, "Allergens task cannot be uncompleted directly", http.StatusBadRequest, nil)
 		return
+	}
+	if s.Store != nil {
+		if todoDef, err := s.Store.GetDashboardTodo(r.Context(), taskTypeID); err == nil && todoDef != nil && todoDef.Action == "fill_allergens" {
+			httpErrorLog(w, r, "Allergens task cannot be uncompleted directly", http.StatusBadRequest, nil)
+			return
+		}
 	}
 
 	if dateParam != todayStr {
@@ -4157,6 +4169,144 @@ func (s *Server) HandleDeleteVolunteerAbsence(w http.ResponseWriter, r *http.Req
 		s.Hub.Broadcast(WSMessage{
 			Type:    "VOLUNTEER_ABSENCE_DELETED",
 			Payload: map[string]string{"id": id.String()},
+		})
+		s.Hub.Broadcast(WSMessage{
+			Type:    "DAILY_BRIEF_INVALIDATE",
+			Payload: map[string]string{},
+		})
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) HandleListDashboardTodos(w http.ResponseWriter, r *http.Request) {
+	todos, err := s.Store.ListDashboardTodos(r.Context())
+	if err != nil {
+		httpErrorLog(w, r, "Failed to list dashboard todos", http.StatusInternalServerError, err)
+		return
+	}
+	jsonResponse(w, todos)
+}
+
+func (s *Server) HandleCreateDashboardTodo(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	var payload models.DashboardTodo
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		httpErrorLog(w, r, "Invalid request body", http.StatusBadRequest, err)
+		return
+	}
+
+	var actorID uuid.UUID
+	if user != nil {
+		actorID = user.ID
+	}
+	created, err := s.Store.CreateDashboardTodo(r.Context(), actorID, getActorEmail(r), payload)
+	if err != nil {
+		if strings.Contains(err.Error(), "already exists") {
+			httpErrorLog(w, r, err.Error(), http.StatusConflict, err)
+			return
+		}
+		if strings.Contains(err.Error(), "required") || strings.Contains(err.Error(), "unsupported") {
+			httpErrorLog(w, r, err.Error(), http.StatusBadRequest, err)
+			return
+		}
+		httpErrorLog(w, r, "Failed to create dashboard todo", http.StatusInternalServerError, err)
+		return
+	}
+
+	if s.Hub != nil {
+		s.Hub.Broadcast(WSMessage{
+			Type:    "DASHBOARD_TASKS_UPDATED",
+			Payload: map[string]string{"id": created.ID},
+		})
+		s.Hub.Broadcast(WSMessage{
+			Type:    "DAILY_BRIEF_INVALIDATE",
+			Payload: map[string]string{},
+		})
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	jsonResponse(w, created)
+}
+
+func (s *Server) HandleUpdateDashboardTodo(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	idStr := strings.TrimSpace(chi.URLParam(r, "id"))
+	if unescaped, err := url.PathUnescape(idStr); err == nil && unescaped != "" {
+		idStr = unescaped
+	}
+	if idStr == "" {
+		httpErrorLog(w, r, "Missing dashboard todo ID", http.StatusBadRequest, nil)
+		return
+	}
+
+	var payload models.DashboardTodo
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		httpErrorLog(w, r, "Invalid request body", http.StatusBadRequest, err)
+		return
+	}
+
+	var actorID uuid.UUID
+	if user != nil {
+		actorID = user.ID
+	}
+	updated, err := s.Store.UpdateDashboardTodo(r.Context(), actorID, getActorEmail(r), idStr, payload)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			httpErrorLog(w, r, err.Error(), http.StatusNotFound, err)
+			return
+		}
+		if strings.Contains(err.Error(), "required") || strings.Contains(err.Error(), "unsupported") {
+			httpErrorLog(w, r, err.Error(), http.StatusBadRequest, err)
+			return
+		}
+		httpErrorLog(w, r, "Failed to update dashboard todo", http.StatusInternalServerError, err)
+		return
+	}
+
+	if s.Hub != nil {
+		s.Hub.Broadcast(WSMessage{
+			Type:    "DASHBOARD_TASKS_UPDATED",
+			Payload: map[string]string{"id": updated.ID},
+		})
+		s.Hub.Broadcast(WSMessage{
+			Type:    "DAILY_BRIEF_INVALIDATE",
+			Payload: map[string]string{},
+		})
+	}
+
+	jsonResponse(w, updated)
+}
+
+func (s *Server) HandleDeleteDashboardTodo(w http.ResponseWriter, r *http.Request) {
+	user := auth.GetUser(r.Context())
+	idStr := strings.TrimSpace(chi.URLParam(r, "id"))
+	if unescaped, err := url.PathUnescape(idStr); err == nil && unescaped != "" {
+		idStr = unescaped
+	}
+	if idStr == "" {
+		httpErrorLog(w, r, "Missing dashboard todo ID", http.StatusBadRequest, nil)
+		return
+	}
+
+	var actorID uuid.UUID
+	if user != nil {
+		actorID = user.ID
+	}
+	err := s.Store.DeleteDashboardTodo(r.Context(), actorID, getActorEmail(r), idStr)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			httpErrorLog(w, r, err.Error(), http.StatusNotFound, err)
+			return
+		}
+		httpErrorLog(w, r, "Failed to delete dashboard todo", http.StatusInternalServerError, err)
+		return
+	}
+
+	if s.Hub != nil {
+		s.Hub.Broadcast(WSMessage{
+			Type:    "DASHBOARD_TASKS_UPDATED",
+			Payload: map[string]string{"id": idStr},
 		})
 		s.Hub.Broadcast(WSMessage{
 			Type:    "DAILY_BRIEF_INVALIDATE",

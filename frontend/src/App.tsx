@@ -20,6 +20,7 @@ import { VaccinationStatusPopover, type VaccinationCheck } from './components/Ta
 import { HygieneEventsPopover, HygieneCell, type ParentWithHygiene } from './components/Table/HygieneEventsPopover';
 import { ChildcareFeesCalculator } from './components/ChildcareFeesCalculator';
 import { KioskDashboard } from './components/Dashboard/KioskDashboard';
+import { DashboardTodosAdminTab } from './components/Dashboard/DashboardTodosAdminTab';
 import { MainPage } from './components/MainPage/MainPage';
 import { PwaInstallModal } from './components/MainPage/PwaInstallCard';
 import { usePwaInstallState } from './utils/pwaInstall';
@@ -1212,6 +1213,7 @@ const ALL_AVAILABLE_PERMISSIONS = [
   'vaccination.status.manage',
   'provision.kiosk.cert',
   'dashboard.use',
+  'dashboard.todos.manage',
   'permissions.simulate',
   'jobs.all.read',
   'jobs.all.write',
@@ -1848,6 +1850,7 @@ const Dashboard: React.FC = () => {
   const canViewActivity = canManageUsers || hasPermission('activity.view') || hasPermission('*');
   const canProvisionKiosk = hasPermission('provision.kiosk.cert') || hasPermission('*');
   const canUseDashboard = hasPermission('dashboard.use');
+  const canManageDashboardTodos = hasPermission('dashboard.todos.manage') || hasPermission('*');
   const canReadOverview = hasPermission('families.all.restrictedread');
   const canReadFamiliesAll = hasPermission('families.all.read');
   const canReadFees = hasPermission('fees.all.read') || hasPermission('fees.self.read');
@@ -1981,6 +1984,7 @@ const Dashboard: React.FC = () => {
     canViewActivity,
     canProvisionKiosk,
     canUseDashboard,
+    canManageDashboardTodos,
     canViewMainPage: isMainPageActive,
   }), [
     canReadOverview,
@@ -2005,12 +2009,13 @@ const Dashboard: React.FC = () => {
     canViewActivity,
     canProvisionKiosk,
     canUseDashboard,
+    canManageDashboardTodos,
     isMainPageActive,
   ]);
 
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [activeTab, setActiveTab] = React.useState<
-    'main' | 'familiesOverview' | 'families' | 'parents' | 'children' | 'alumni' | 'members' | 'jobs' | 'employees' | 'childcareFees' | 'childcareFeesAll' | 'hygieneBelehrung' | 'hygieneDocument' | 'kochenHygiene' | 'mealPlan' | 'mealAllergens' | 'audit' | 'admin' | 'activity' | 'kiosk' | 'dashboard' | string
+    'main' | 'familiesOverview' | 'families' | 'parents' | 'children' | 'alumni' | 'members' | 'jobs' | 'employees' | 'childcareFees' | 'childcareFeesAll' | 'hygieneBelehrung' | 'hygieneDocument' | 'kochenHygiene' | 'mealPlan' | 'mealAllergens' | 'audit' | 'admin' | 'activity' | 'kiosk' | 'dashboard' | 'dashboardTodos' | string
   >(() => {
     const rawHash = window.location.hash.replace('#', '');
     const hash = rawHash.split('?')[0];
@@ -2038,6 +2043,7 @@ const Dashboard: React.FC = () => {
       canViewActivity,
       canProvisionKiosk,
       canUseDashboard,
+      canManageDashboardTodos,
       canViewMainPage: isMainPageActiveInitial,
     };
     if (pathname === '/dashboard' && canUseDashboard) {
@@ -2073,7 +2079,8 @@ const Dashboard: React.FC = () => {
       (hash === 'activity' && canViewActivity) ||
       (hash === 'kiosk' && canProvisionKiosk) ||
       categoryHasLandingPage(hash, initialPerms) ||
-      (hash === 'dashboard' && canUseDashboard)
+      (hash === 'dashboard' && canUseDashboard) ||
+      (hash === 'dashboardTodos' && canManageDashboardTodos)
     ) {
       return hash as any;
     }
@@ -2105,7 +2112,8 @@ const Dashboard: React.FC = () => {
       (saved === 'activity' && canViewActivity) ||
       (saved === 'kiosk' && canProvisionKiosk) ||
       (saved && categoryHasLandingPage(saved, initialPerms)) ||
-      (saved === 'dashboard' && canUseDashboard)
+      (saved === 'dashboard' && canUseDashboard) ||
+      (saved === 'dashboardTodos' && canManageDashboardTodos)
     ) {
       return saved as any;
     }
@@ -2262,6 +2270,8 @@ const Dashboard: React.FC = () => {
       fallback = getFirstPermittedTabForCategory('hygiene', navPerms) || 'familiesOverview';
     } else if (activeTab === 'kochenHygiene' && !canAccessPersonalHygiene) {
       fallback = getFirstPermittedTabForCategory('kochen', navPerms) || 'familiesOverview';
+    } else if (activeTab === 'dashboardTodos' && !canManageDashboardTodos) {
+      fallback = getFirstPermittedTabForCategory('kochen', navPerms) || 'familiesOverview';
     } else if (activeTab === 'mga' && !categoryHasLandingPage('mga', navPerms)) {
       fallback = getFirstPermittedTabForCategory('mga', navPerms);
     } else if (activeTab === 'kochen' && !categoryHasLandingPage('kochen', navPerms)) {
@@ -2276,7 +2286,7 @@ const Dashboard: React.FC = () => {
       localStorage.setItem('thweb_active_tab', fallback);
       window.location.hash = fallback;
     }
-  }, [activeTab, canReadEvents, canImportEvents, canReadFamiliesAll, canReadOverview, canReadFees, canReadFeesAll, canReadMembers, canReadJobs, canReadEmployees, canReadVolunteerAbsences, canViewMealPlan, canReadMealAllergens, canManageHygiene, canAccessPersonalHygiene, hasPermission, navPerms, isMainPageActive]);
+  }, [activeTab, canReadEvents, canImportEvents, canReadFamiliesAll, canReadOverview, canReadFees, canReadFeesAll, canReadMembers, canReadJobs, canReadEmployees, canReadVolunteerAbsences, canViewMealPlan, canReadMealAllergens, canManageHygiene, canAccessPersonalHygiene, canManageDashboardTodos, hasPermission, navPerms, isMainPageActive]);
 
   // Navigation & Highlighting state (Patterns 2 & 3)
   const [highlightTarget, setHighlightTarget] = React.useState<{ id: string; key: number } | null>(null);
@@ -3419,7 +3429,8 @@ const Dashboard: React.FC = () => {
         (hash === 'activity' && canViewActivity) ||
         (hash === 'kiosk' && canProvisionKiosk) ||
         categoryHasLandingPage(hash, navPerms) ||
-        (hash === 'dashboard' && canUseDashboard)
+        (hash === 'dashboard' && canUseDashboard) ||
+        (hash === 'dashboardTodos' && canManageDashboardTodos)
       ) {
         const targetTab = (!hash || hash === 'home')
           ? (isMainPageActive ? 'main' : (canReadOverview ? 'familiesOverview' : 'families'))
@@ -3460,7 +3471,7 @@ const Dashboard: React.FC = () => {
         setActiveTab(fallback as any);
         localStorage.setItem('thweb_active_tab', fallback);
         window.location.hash = fallback;
-      } else if (hash === 'audit' || hash === 'admin' || hash === 'activity' || hash === 'kiosk' || hash === 'mealPlan' || hash === 'mealAllergens' || hash === 'dashboard') {
+      } else if (hash === 'audit' || hash === 'admin' || hash === 'activity' || hash === 'kiosk' || hash === 'mealPlan' || hash === 'mealAllergens' || hash === 'dashboard' || hash === 'dashboardTodos') {
         const fallback = canReadFamiliesAll ? 'families' : canReadOverview ? 'familiesOverview' : 'childcareFees';
         setActiveTab(fallback as any);
         localStorage.setItem('thweb_active_tab', fallback);
@@ -3487,7 +3498,7 @@ const Dashboard: React.FC = () => {
       handleHashChange();
     }
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [canReadAudit, canManageUsers, canViewActivity, canProvisionKiosk, canUseDashboard, canReadOverview, canReadFamiliesAll, canReadFees, canReadMembers, canReadJobs, canReadEmployees, canReadVolunteerAbsences, canViewMealPlan, canReadMealAllergens, hasPermission, navPerms, isMainPageActive]);
+  }, [canReadAudit, canManageUsers, canViewActivity, canProvisionKiosk, canUseDashboard, canManageDashboardTodos, canReadOverview, canReadFamiliesAll, canReadFees, canReadMembers, canReadJobs, canReadEmployees, canReadVolunteerAbsences, canViewMealPlan, canReadMealAllergens, hasPermission, navPerms, isMainPageActive]);
 
   useRealtime(React.useCallback((message: any) => {
     if (
@@ -6148,7 +6159,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
             );
           };
 
-          return !isLandingActive && activeTab !== 'main' && activeTab !== 'events' && activeTab !== 'eventsImport' && activeTab !== 'childcareFees' && activeTab !== 'childcareFeesAll' && activeTab !== 'audit' && activeTab !== 'admin' && activeTab !== 'kiosk' && activeTab !== 'dashboard' && activeTab !== 'mealPlan' && activeTab !== 'mealAllergens' && activeTab !== 'hygieneDocument' && activeTab !== 'kochenHygiene' && activeTab !== 'volunteerAbsences' && (
+          return !isLandingActive && activeTab !== 'main' && activeTab !== 'events' && activeTab !== 'eventsImport' && activeTab !== 'childcareFees' && activeTab !== 'childcareFeesAll' && activeTab !== 'audit' && activeTab !== 'admin' && activeTab !== 'kiosk' && activeTab !== 'dashboard' && activeTab !== 'dashboardTodos' && activeTab !== 'mealPlan' && activeTab !== 'mealAllergens' && activeTab !== 'hygieneDocument' && activeTab !== 'kochenHygiene' && activeTab !== 'volunteerAbsences' && (
             (activeTab === 'families' || activeTab === 'parents' || activeTab === 'children') ? (
               <div className="mga-controls-container">
                 {/* Row 1: Search, Sort, Filter, Zoom (desktop), and Impfstatus (desktop far right) */}
@@ -7118,6 +7129,8 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
               <HygieneDocumentTab />
             ) : activeTab === 'dashboard' && canUseDashboard ? (
               <KioskDashboard embedded={true} />
+            ) : activeTab === 'dashboardTodos' && canManageDashboardTodos ? (
+              <DashboardTodosAdminTab />
             ) : activeTab === 'childcareFees' && canReadFees ? (
               <ChildcareFeesCalculator
                 key="personal"

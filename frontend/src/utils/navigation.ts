@@ -20,6 +20,7 @@ import {
   Activity,
   Home,
   FileText,
+  ListTodo,
 } from 'lucide-react';
 import { t } from './i18n';
 
@@ -47,7 +48,8 @@ export type TabId =
   | 'admin'
   | 'activity'
   | 'kiosk'
-  | 'dashboard';
+  | 'dashboard'
+  | 'dashboardTodos';
 
 export type NavigationCategory = 'main' | 'events' | 'families' | 'mga' | 'fees' | 'pa' | 'kochen' | 'hygiene' | 'more';
 
@@ -73,6 +75,7 @@ export interface UserPermissionsContext {
   canViewActivity: boolean;
   canProvisionKiosk: boolean;
   canUseDashboard: boolean;
+  canManageDashboardTodos?: boolean;
   canViewMainPage?: boolean;
 }
 
@@ -340,6 +343,16 @@ export const NAVIGATION_CATEGORIES: NavCategory[] = [
         defaultDescription: 'Tagesübersicht für Kochen und Küche.',
         icon: LayoutDashboard,
         isVisible: (ctx) => ctx.canUseDashboard,
+      },
+      {
+        id: 'dashboardTodos',
+        labelKey: 'subtabDashboardTodos',
+        defaultLabel: 'TODOs verwalten',
+        accessibleName: 'Kochen/TODOs',
+        descriptionKey: 'subtabDescDashboardTodos',
+        defaultDescription: 'Aufgaben und Hinweise der Kochansicht verwalten.',
+        icon: ListTodo,
+        isVisible: (ctx) => Boolean(ctx.canManageDashboardTodos),
       },
     ],
   },

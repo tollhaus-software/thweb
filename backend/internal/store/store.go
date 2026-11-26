@@ -2813,7 +2813,7 @@ func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*model
 		resp.VolunteerName = strings.TrimSpace(bufdiName)
 	}
 
-	// 6. Evaluate tasks via DashboardTasks registry:
+	// 6. Evaluate tasks via dashboard_todos table:
 	isNotRelevant := mealDay != nil && mealDay.Status == models.MealAllergenStatusNotRelevant
 	isWeekday := targetDate.Weekday() >= time.Monday && targetDate.Weekday() <= time.Friday
 	isVesperDay := targetDate.Weekday() == time.Wednesday || targetDate.Weekday() == time.Thursday
@@ -2832,9 +2832,15 @@ func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*model
 		IsMealAllergensNotRelevant: isNotRelevant,
 	}
 
-	for _, taskDef := range DashboardTasks {
-		if taskDef.Applies(evalCtx) {
-			resp.TasksAndInfo = append(resp.TasksAndInfo, taskDef.ID)
+	allTodos, err := s.ListDashboardTodos(ctx)
+	if err != nil {
+		allTodos = []models.DashboardTodo{}
+	}
+
+	for _, todo := range allTodos {
+		if TodoApplies(todo, evalCtx) {
+			resp.TasksAndInfo = append(resp.TasksAndInfo, todo.ID)
+			resp.Todos = append(resp.Todos, todo)
 		}
 	}
 
@@ -2852,20 +2858,29 @@ func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*model
 		}
 	}
 	if mealDay != nil && mealDay.Status == models.MealAllergenStatusFinalized {
-		hasAllergensCompleted := false
-		for _, id := range resp.CompletedTaskIDs {
-			if id == "enter_allergens" || id == "allergene_eintragen" {
-				hasAllergensCompleted = true
-				break
+		// Mark any todo with action == "fill_allergens" (and enter_allergens) as completed
+		allergenTodoIDs := []string{"enter_allergens"}
+		for _, todo := range resp.Todos {
+			if todo.Action == "fill_allergens" && todo.ID != "enter_allergens" {
+				allergenTodoIDs = append(allergenTodoIDs, todo.ID)
 			}
 		}
-		if !hasAllergensCompleted {
-			resp.CompletedTaskIDs = append(resp.CompletedTaskIDs, "enter_allergens")
-			resp.CompletedTasks = append(resp.CompletedTasks, models.CompletedTask{
-				TaskDate:    dateStr,
-				TaskTypeID:  "enter_allergens",
-				CompletedAt: time.Now(),
-			})
+		for _, allergenID := range allergenTodoIDs {
+			alreadyDone := false
+			for _, id := range resp.CompletedTaskIDs {
+				if id == allergenID || (allergenID == "enter_allergens" && id == "allergene_eintragen") {
+					alreadyDone = true
+					break
+				}
+			}
+			if !alreadyDone {
+				resp.CompletedTaskIDs = append(resp.CompletedTaskIDs, allergenID)
+				resp.CompletedTasks = append(resp.CompletedTasks, models.CompletedTask{
+					TaskDate:    dateStr,
+					TaskTypeID:  allergenID,
+					CompletedAt: time.Now(),
+				})
+			}
 		}
 	}
 
@@ -3361,7 +3376,11 @@ func (s *Store) ResetTestData(ctx context.Context) error {
 		VALUES ('bufdi_name', 'BuFDI')
 		ON CONFLICT (key) DO NOTHING;
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+	_, _ = s.db.Exec(ctx, `TRUNCATE TABLE dashboard_todos CASCADE;`)
+	return s.SeedDefaultDashboardTodos(ctx)
 }
 
 func (s *Store) SeedTestMealPlan(ctx context.Context, dateStr, cookName, comp1, comp2, comp3 string) error {

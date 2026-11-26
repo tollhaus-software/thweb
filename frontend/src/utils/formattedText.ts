@@ -29,7 +29,7 @@ export const stripFormatting = (text: string): string => {
 };
 
 const createRegex = () =>
-  /(\[(?<linkLabel>[^\]\n]+)\]\((?<linkUrl>(?:https?:\/\/|mailto:|\/)[^\s)]+)\))|(?<autoUrl>https?:\/\/[^\s<]+[^<.,:;"')\]\s])|(\*\*(?<boldText>[^*\n]+)\*\*)|(<u>(?<underlineText1>[\s\S]*?)<\/u>|~(?<underlineText2>[^~\n]+)~)|(\*(?<italicText1>[^*\n]+)\*|_(?<italicText2>[^_\n]+)_)/g;
+  /(\[(?<linkLabel>[^\]\n]+)\]\((?<linkUrl>(?:https?:\/\/|mailto:|\/)[^\s)]+)\))|(?<autoUrl>https?:\/\/[^\s<]+[^<.,:;"')\]\s])|(`(?<inlineCode>[^`\n]+)`)|(\*\*(?<boldText>[^*\n]+)\*\*)|(<u>(?<underlineText1>[\s\S]*?)<\/u>|~(?<underlineText2>[^~\n]+)~)|(\*(?<italicText1>[^*\n]+)\*|_(?<italicText2>[^_\n]+)_)/g;
 
 export const parseLine = (line: string, depth = 0): React.ReactNode[] => {
   if (!line) return [];
@@ -93,6 +93,17 @@ export const parseLine = (line: string, depth = 0): React.ReactNode[] => {
             },
           },
           url
+        )
+      );
+    } else if (groups.inlineCode) {
+      elements.push(
+        React.createElement(
+          'code',
+          {
+            key,
+            className: 'md-inline-code',
+          },
+          groups.inlineCode
         )
       );
     } else if (groups.boldText) {
@@ -179,4 +190,128 @@ export const FormattedText: React.FC<FormattedTextProps> = ({
     { className, style },
     renderFormattedText(text, { inline })
   );
+};
+
+/**
+ * Renders block-level Markdown (headings, bullet lists, numbered lists, blockquotes,
+ * horizontal rules, and paragraphs) with inline formatting (bold, italic, underline,
+ * inline code, links).
+ */
+export const renderMarkdownBlocks = (markdown: string): React.ReactNode => {
+  if (!markdown) return null;
+
+  const lines = markdown.replace(/\r\n/g, '\n').split('\n');
+  const blocks: React.ReactNode[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const rawLine = lines[i];
+    const trimmed = rawLine.trim();
+
+    if (!trimmed) {
+      i++;
+      continue;
+    }
+
+    // Horizontal rule: --- or ***
+    if (/^(-{3,}|\*{3,})$/.test(trimmed)) {
+      blocks.push(React.createElement('hr', { key: `hr-${i}`, className: 'md-hr' }));
+      i++;
+      continue;
+    }
+
+    // Headings: # to ####
+    const headingMatch = /^(#{1,4})\s+(.+)$/.exec(trimmed);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const content = headingMatch[2];
+      const tag = level === 1 ? 'h3' : level === 2 ? 'h4' : 'h5';
+      blocks.push(
+        React.createElement(
+          tag,
+          { key: `h-${i}`, className: `md-heading md-h${level}` },
+          parseLine(content)
+        )
+      );
+      i++;
+      continue;
+    }
+
+    // Unordered list: - item or * item
+    if (/^[-*+]\s+/.test(trimmed)) {
+      const items: React.ReactNode[] = [];
+      const startKey = i;
+      while (i < lines.length && /^[-*+]\s+/.test(lines[i].trim())) {
+        const itemText = lines[i].trim().replace(/^[-*+]\s+/, '');
+        items.push(
+          React.createElement('li', { key: `ul-li-${i}`, className: 'md-li' }, parseLine(itemText))
+        );
+        i++;
+      }
+      blocks.push(
+        React.createElement('ul', { key: `ul-${startKey}`, className: 'md-ul' }, items)
+      );
+      continue;
+    }
+
+    // Ordered list: 1. item
+    if (/^\d+\.\s+/.test(trimmed)) {
+      const items: React.ReactNode[] = [];
+      const startKey = i;
+      while (i < lines.length && /^\d+\.\s+/.test(lines[i].trim())) {
+        const itemText = lines[i].trim().replace(/^\d+\.\s+/, '');
+        items.push(
+          React.createElement('li', { key: `ol-li-${i}`, className: 'md-li' }, parseLine(itemText))
+        );
+        i++;
+      }
+      blocks.push(
+        React.createElement('ol', { key: `ol-${startKey}`, className: 'md-ol' }, items)
+      );
+      continue;
+    }
+
+    // Blockquote: > text
+    if (/^>\s*/.test(trimmed)) {
+      const quoteLines: string[] = [];
+      const startKey = i;
+      while (i < lines.length && /^>\s*/.test(lines[i].trim())) {
+        quoteLines.push(lines[i].trim().replace(/^>\s*/, ''));
+        i++;
+      }
+      blocks.push(
+        React.createElement(
+          'blockquote',
+          { key: `bq-${startKey}`, className: 'md-blockquote' },
+          renderFormattedText(quoteLines.join('\n'))
+        )
+      );
+      continue;
+    }
+
+    // Paragraph (consecutive non-empty normal lines)
+    const paraLines: string[] = [];
+    const startKey = i;
+    while (
+      i < lines.length &&
+      lines[i].trim() !== '' &&
+      !/^(-{3,}|\*{3,})$/.test(lines[i].trim()) &&
+      !/^(#{1,4})\s+/.test(lines[i].trim()) &&
+      !/^[-*+]\s+/.test(lines[i].trim()) &&
+      !/^\d+\.\s+/.test(lines[i].trim()) &&
+      !/^>\s*/.test(lines[i].trim())
+    ) {
+      paraLines.push(lines[i]);
+      i++;
+    }
+    blocks.push(
+      React.createElement(
+        'p',
+        { key: `p-${startKey}`, className: 'md-paragraph task-info-modal-text' },
+        renderFormattedText(paraLines.join('\n'))
+      )
+    );
+  }
+
+  return React.createElement('div', { className: 'md-content' }, blocks);
 };

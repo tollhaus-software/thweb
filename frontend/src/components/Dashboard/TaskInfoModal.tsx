@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Info } from 'lucide-react';
 import { t } from '../../utils/i18n';
+import { renderMarkdownBlocks } from '../../utils/formattedText';
 import './TaskInfoModal.css';
 
 export interface TaskInfoModalProps {
@@ -61,7 +62,7 @@ export const TaskInfoModal: React.FC<TaskInfoModalProps> = ({
         </div>
 
         <div className="task-info-modal-body" data-testid="task-info-modal-body">
-          <p className="task-info-modal-text">{infoText}</p>
+          {renderMarkdownBlocks(infoText)}
         </div>
 
         <div className="task-info-modal-actions">

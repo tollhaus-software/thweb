@@ -36,6 +36,7 @@ func TestGetDailyBrief(t *testing.T) {
 	}
 
 	appStore := NewStore(pool)
+	_ = appStore.SeedDefaultDashboardTodos(ctx)
 
 	// Clean up any test records
 	cleanupDates := []string{"2099-10-08", "2099-10-09", "2099-10-10"}
@@ -359,9 +360,12 @@ func TestDashboardTasks_Store(t *testing.T) {
 }
 
 func containsTask(tasks []string, taskID string) bool {
+	aliases := GetTaskAliases(taskID)
 	for _, t := range tasks {
-		if t == taskID {
-			return true
+		for _, a := range aliases {
+			if t == a {
+				return true
+			}
 		}
 	}
 	return false
@@ -382,6 +386,7 @@ func TestDishwasherFilterTask_Store(t *testing.T) {
 	}
 
 	appStore := NewStore(pool)
+	_ = appStore.SeedDefaultDashboardTodos(ctx)
 
 	// Test Mon through Fri: 2026-11-16 (Mon) to 2026-11-20 (Fri)
 	// Weekend: 2026-11-21 (Sat), 2026-11-22 (Sun)
@@ -479,6 +484,7 @@ func TestServingTasks_Store(t *testing.T) {
 	}
 
 	appStore := NewStore(pool)
+	_ = appStore.SeedDefaultDashboardTodos(ctx)
 
 	weekdays := []time.Time{
 		time.Date(2026, time.November, 16, 0, 0, 0, 0, time.UTC), // Monday
@@ -581,6 +587,7 @@ func TestBufdiAbsenceTasks_ConditionsAndLifecycle(t *testing.T) {
 	}
 
 	appStore := NewStore(pool)
+	_ = appStore.SeedDefaultDashboardTodos(ctx)
 
 	testDateStr := "2099-05-18" // Monday
 	testDate := time.Date(2099, time.May, 18, 0, 0, 0, 0, time.UTC)
@@ -870,6 +877,20 @@ func TestDashboardTaskConditions(t *testing.T) {
 	}
 	if !taskFriday.Applies(&TaskEvaluationContext{Date: friday}) {
 		t.Errorf("expected friday task to apply on Friday")
+	}
+
+	// Test TodoApplies with models.DashboardTodo
+	dbTodo := models.DashboardTodo{
+		ID:                 "custom_vesper_bufdi",
+		OnVesperDays:       true,
+		OnVolunteerAbsence: true,
+		Weekdays:           []int{3}, // Wednesday
+	}
+	if TodoApplies(dbTodo, &TaskEvaluationContext{Date: wednesday, IsVesperDay: true, HasBufdiAbsence: false}) {
+		t.Errorf("expected dbTodo not to apply without bufdi absence")
+	}
+	if !TodoApplies(dbTodo, &TaskEvaluationContext{Date: wednesday, IsVesperDay: true, HasBufdiAbsence: true}) {
+		t.Errorf("expected dbTodo to apply on Wednesday with vesper and bufdi absence")
 	}
 }
 

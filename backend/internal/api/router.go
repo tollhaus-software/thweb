@@ -181,6 +181,10 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 
 		// Dashboard / Daily Brief & Allergies Summary
 		r.With(auth.RequirePermission("dashboard.use")).Get("/api/dashboard/daily-brief", server.HandleGetDailyBrief)
+		r.With(auth.RequireAnyPermission("dashboard.todos.manage", "dashboard.use")).Get("/api/dashboard/todos", server.HandleListDashboardTodos)
+		r.With(auth.RequirePermission("dashboard.todos.manage")).Post("/api/dashboard/todos", server.HandleCreateDashboardTodo)
+		r.With(auth.RequirePermission("dashboard.todos.manage")).Put("/api/dashboard/todos/{id}", server.HandleUpdateDashboardTodo)
+		r.With(auth.RequirePermission("dashboard.todos.manage")).Delete("/api/dashboard/todos/{id}", server.HandleDeleteDashboardTodo)
 		r.With(auth.RequirePermission("dashboard.use")).Post("/api/dashboard/tasks/{taskTypeId}/complete", server.HandleCompleteTask)
 		r.With(auth.RequirePermission("dashboard.use")).Post("/api/dashboard/tasks/{taskTypeId}/uncomplete", server.HandleUncompleteTask)
 		r.With(auth.RequirePermission("dashboard.use")).Delete("/api/dashboard/tasks/{taskTypeId}", server.HandleUncompleteTask)

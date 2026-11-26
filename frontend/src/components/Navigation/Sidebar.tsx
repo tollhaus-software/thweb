@@ -50,6 +50,7 @@ export interface SidebarProps {
   canViewActivity?: boolean;
   canProvisionKiosk?: boolean;
   canUseDashboard?: boolean;
+  canManageDashboardTodos?: boolean;
   canViewMainPage?: boolean;
   appTitle?: string;
   appLogoUrl?: string;
@@ -84,6 +85,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   canViewActivity = false,
   canProvisionKiosk = false,
   canUseDashboard = false,
+  canManageDashboardTodos = false,
   canViewMainPage = false,
   appTitle = 'TH Portal',
   appLogoUrl,
@@ -113,6 +115,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     canViewActivity: canViewActivity || canManageUsers,
     canProvisionKiosk,
     canUseDashboard,
+    canManageDashboardTodos,
     canViewMainPage,
   };
 

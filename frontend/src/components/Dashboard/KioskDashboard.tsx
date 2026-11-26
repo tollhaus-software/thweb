@@ -40,12 +40,29 @@ import {
   ListTodo,
   Info,
 } from 'lucide-react';
-import { WasherIcon } from './LaundryIcons';
+import { WasherIcon, DryerIcon, LaundryBinIcon, CupboardIcon } from './LaundryIcons';
 import { FeedbackPanel } from './FeedbackModal';
 import { TaskConfirmModal } from './TaskConfirmModal';
 import { TaskInfoModal } from './TaskInfoModal';
 import { InfoPagesView } from './InfoPagesView';
 import './KioskDashboard.css';
+
+export interface DashboardTodoItem {
+  id: string;
+  name: string;
+  short_name: string;
+  sort_order: number;
+  color: string;
+  icon: string;
+  on_cooking_days: boolean;
+  on_volunteer_absence: boolean;
+  on_vesper_days: boolean;
+  on_yellow_bag_day: boolean;
+  on_day_before_yellow_bag_day: boolean;
+  weekdays: number[];
+  action: string;
+  description_markdown: string;
+}
 
 interface CompletedTaskInfo {
   task_type_id: string;
@@ -65,6 +82,7 @@ interface DailyBriefData {
   food_component_3?: string;
   is_vesper_day?: boolean;
   tasks_and_info: string[];
+  todos?: DashboardTodoItem[];
   completed_tasks?: CompletedTaskInfo[];
   completed_task_ids?: string[];
   has_allergen_record?: boolean;
@@ -604,61 +622,83 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
     [data, normalizeTaskKey]
   );
 
-  const getTaskLabel = useCallback((taskKey: string): string => {
-    if (taskKey === 'yellow_bin_retrieve') {
-      return t('yellowBinRetrieve');
-    } else if (taskKey === 'yellow_bin_put_out') {
-      return t('yellowBinPutOut');
-    } else if (taskKey === 'clean_refrigerator') {
-      return t('cleanRefrigerator');
-    } else if (
-      taskKey === 'clean_dishwasher_filter' ||
-      taskKey === 'Spülmaschine - Filter reinigen' ||
-      taskKey === 'Spülmaschine-Filter reinigen'
-    ) {
-      return t('cleanDishwasherFilter');
-    } else if (taskKey === 'enter_allergens' || taskKey === 'allergene_eintragen') {
-      return t('enterAllergens');
-    } else if (taskKey === 'start_dryer' || taskKey === 'Morgens: Wäsche in den Trockner') {
-      return t('taskStartDryer');
-    } else if (taskKey === 'start_washer' || taskKey === 'Nachmittags: Wäsche in die Waschmaschine') {
-      return t('taskStartWasher');
-    } else if (
-      taskKey === 'change_diaper_bag' ||
-      taskKey === 'change_diaper_bin_bag' ||
-      taskKey === 'Möglichst spät: Windeleimer Tüte wechseln'
-    ) {
-      return t('taskChangeDiaperBag');
-    } else if (
-      taskKey === 'fold_laundry' ||
-      taskKey === 'Trockene Wäsche falten und einräumen' ||
-      taskKey === 'Trockene Wäsche falten und einträumen'
-    ) {
-      return t('taskFoldLaundry');
-    } else if (
-      taskKey === 'serve_small_group' ||
-      taskKey === 'Kleine Gruppe servieren' ||
-      taskKey === 'Kleine Gruppe servieren (auf 11:45)'
-    ) {
-      return t('serveSmallGroup');
-    } else if (
-      taskKey === 'serve_large_group' ||
-      taskKey === 'Große Gruppe servieren' ||
-      taskKey === 'Große Gruppe servieren (auf 12:00)'
-    ) {
-      return t('serveLargeGroup');
-    } else if (
-      taskKey === 'serve_hort' ||
-      taskKey === 'Hort servieren' ||
-      taskKey === 'Hort servieren (meist auf 13:00)'
-    ) {
-      return t('serveHort');
-    }
-    return t(taskKey);
-  }, []);
+  const findTodoDef = useCallback(
+    (taskKey: string): DashboardTodoItem | undefined => {
+      if (!data?.todos) return undefined;
+      const normalized = normalizeTaskKey(taskKey);
+      return data.todos.find(
+        (td) => td.id === taskKey || td.id === normalized || normalizeTaskKey(td.id) === normalized
+      );
+    },
+    [data?.todos, normalizeTaskKey]
+  );
+
+  const getTaskLabel = useCallback(
+    (taskKey: string): string => {
+      const todoDef = findTodoDef(taskKey);
+      if (todoDef && todoDef.name) {
+        return todoDef.name;
+      }
+      if (taskKey === 'yellow_bin_retrieve') {
+        return t('yellowBinRetrieve');
+      } else if (taskKey === 'yellow_bin_put_out') {
+        return t('yellowBinPutOut');
+      } else if (taskKey === 'clean_refrigerator') {
+        return t('cleanRefrigerator');
+      } else if (
+        taskKey === 'clean_dishwasher_filter' ||
+        taskKey === 'Spülmaschine - Filter reinigen' ||
+        taskKey === 'Spülmaschine-Filter reinigen'
+      ) {
+        return t('cleanDishwasherFilter');
+      } else if (taskKey === 'enter_allergens' || taskKey === 'allergene_eintragen') {
+        return t('enterAllergens');
+      } else if (taskKey === 'start_dryer' || taskKey === 'Morgens: Wäsche in den Trockner') {
+        return t('taskStartDryer');
+      } else if (taskKey === 'start_washer' || taskKey === 'Nachmittags: Wäsche in die Waschmaschine') {
+        return t('taskStartWasher');
+      } else if (
+        taskKey === 'change_diaper_bag' ||
+        taskKey === 'change_diaper_bin_bag' ||
+        taskKey === 'Möglichst spät: Windeleimer Tüte wechseln'
+      ) {
+        return t('taskChangeDiaperBag');
+      } else if (
+        taskKey === 'fold_laundry' ||
+        taskKey === 'Trockene Wäsche falten und einräumen' ||
+        taskKey === 'Trockene Wäsche falten und einträumen'
+      ) {
+        return t('taskFoldLaundry');
+      } else if (
+        taskKey === 'serve_small_group' ||
+        taskKey === 'Kleine Gruppe servieren' ||
+        taskKey === 'Kleine Gruppe servieren (auf 11:45)'
+      ) {
+        return t('serveSmallGroup');
+      } else if (
+        taskKey === 'serve_large_group' ||
+        taskKey === 'Große Gruppe servieren' ||
+        taskKey === 'Große Gruppe servieren (auf 12:00)'
+      ) {
+        return t('serveLargeGroup');
+      } else if (
+        taskKey === 'serve_hort' ||
+        taskKey === 'Hort servieren' ||
+        taskKey === 'Hort servieren (meist auf 13:00)'
+      ) {
+        return t('serveHort');
+      }
+      return t(taskKey);
+    },
+    [findTodoDef]
+  );
 
   const getTaskName = useCallback(
     (taskKey: string): string => {
+      const todoDef = findTodoDef(taskKey);
+      if (todoDef && (todoDef.short_name || todoDef.name)) {
+        return todoDef.short_name || todoDef.name;
+      }
       const normalized = normalizeTaskKey(taskKey);
       if (normalized === 'start_dryer') {
         return t('taskStartDryerName');
@@ -693,7 +733,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
       }
       return label;
     },
-    [normalizeTaskKey, getTaskLabel]
+    [findTodoDef, normalizeTaskKey, getTaskLabel]
   );
 
   const executeTaskToggle = async (taskKey: string, action: 'complete' | 'uncomplete') => {
@@ -728,7 +768,12 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
       return;
     }
     // Rule: Whole "Allergene eintragen" TODO item opens the allergens editor
-    if (taskKey === 'enter_allergens' || taskKey === 'allergene_eintragen') {
+    const todoDef = findTodoDef(taskKey);
+    const isAllergensAction =
+      todoDef?.action === 'fill_allergens' ||
+      taskKey === 'enter_allergens' ||
+      taskKey === 'allergene_eintragen';
+    if (isAllergensAction) {
       openMealAllergensEditor(e);
       return;
     }
@@ -758,6 +803,10 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
 
   const getTaskInfoContent = useCallback(
     (taskKey: string): string => {
+      const todoDef = findTodoDef(taskKey);
+      if (todoDef && todoDef.description_markdown && todoDef.description_markdown.trim().length > 0) {
+        return todoDef.description_markdown;
+      }
       const normalized = normalizeTaskKey(taskKey);
       if (normalized === 'serve_small_group') {
         return t('serveSmallGroupInfo');
@@ -770,11 +819,15 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
       }
       return t('taskInfoPlaceholder');
     },
-    [normalizeTaskKey]
+    [findTodoDef, normalizeTaskKey]
   );
 
   const getTaskOrderIndex = useCallback(
     (taskKey: string): number => {
+      const todoDef = findTodoDef(taskKey);
+      if (todoDef && typeof todoDef.sort_order === 'number') {
+        return todoDef.sort_order;
+      }
       const normalized = normalizeTaskKey(taskKey);
       switch (normalized) {
         case 'enter_allergens':
@@ -806,7 +859,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
           return 999;
       }
     },
-    [normalizeTaskKey]
+    [findTodoDef, normalizeTaskKey]
   );
 
   const sortedTasks = [...(data?.tasks_and_info || [])].sort((a, b) => {
@@ -1283,8 +1336,11 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
               <div className="kiosk-todos-list">
                 {sortedTasks.length > 0 ? (
                   sortedTasks.map((task, idx) => {
+                    const todoDef = findTodoDef(task);
                     const isDone = isTaskCompleted(task);
-                    const isAllergens = task === 'enter_allergens' || task === 'allergene_eintragen';
+                    const isAllergens = todoDef
+                      ? todoDef.action === 'fill_allergens'
+                      : task === 'enter_allergens' || task === 'allergene_eintragen';
                     const isCheckable = isToday && canEditInDashboard;
                     const showCheckbox = isDone || isCheckable;
                     const isInteractive = isAllergens ? canEditAllergensOnDashboard : isCheckable;
@@ -1295,6 +1351,9 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                       normalized === 'serve_small_group' ||
                       normalized === 'serve_large_group' ||
                       normalized === 'serve_hort';
+                    const hasInfoContent = todoDef
+                      ? Boolean(todoDef.description_markdown && todoDef.description_markdown.trim().length > 0)
+                      : isServingTask;
                     const isLaundryTask =
                       normalized === 'start_dryer' ||
                       normalized === 'start_washer' ||
@@ -1307,7 +1366,48 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                     );
                     let colorClass = 'kiosk-todo-default';
 
-                    if (normalized === 'yellow_bin_retrieve' || normalized === 'yellow_bin_put_out') {
+                    if (todoDef) {
+                      const validColors = new Set([
+                        'default',
+                        'allergens',
+                        'yellow',
+                        'refrigerator',
+                        'dishwasher',
+                        'serving',
+                        'laundry',
+                        'diaper',
+                      ]);
+                      const c = (todoDef.color || 'default').toLowerCase();
+                      colorClass = validColors.has(c) ? `kiosk-todo-${c}` : 'kiosk-todo-default';
+
+                      const iconKey = (todoDef.icon || '').toLowerCase();
+                      const iconSize = embedded ? 20 : 28;
+                      if (!iconKey || iconKey === 'none') {
+                        icon = null;
+                      } else if (iconKey === 'trash') {
+                        icon = <Trash2 size={iconSize} className="kiosk-todo-icon" />;
+                      } else if (iconKey === 'refrigerator') {
+                        icon = <Refrigerator size={iconSize} className="kiosk-todo-icon" />;
+                      } else if (iconKey === 'sparkles') {
+                        icon = <Sparkles size={iconSize} className="kiosk-todo-icon" />;
+                      } else if (iconKey === 'washer') {
+                        icon = <WasherIcon size={iconSize} className="kiosk-todo-icon" />;
+                      } else if (iconKey === 'dryer') {
+                        icon = <DryerIcon size={iconSize} className="kiosk-todo-icon" />;
+                      } else if (iconKey === 'laundry_bin') {
+                        icon = <LaundryBinIcon size={iconSize} className="kiosk-todo-icon" />;
+                      } else if (iconKey === 'cupboard') {
+                        icon = <CupboardIcon size={iconSize} className="kiosk-todo-icon" />;
+                      } else if (iconKey === 'utensils') {
+                        icon = <UtensilsCrossed size={iconSize} className="kiosk-todo-icon" />;
+                      } else if (iconKey === 'soup') {
+                        icon = <Soup size={iconSize} className="kiosk-todo-icon" />;
+                      } else if (iconKey === 'alert') {
+                        icon = <AlertCircle size={iconSize} className="kiosk-todo-icon" />;
+                      } else {
+                        icon = null;
+                      }
+                    } else if (normalized === 'yellow_bin_retrieve' || normalized === 'yellow_bin_put_out') {
                       icon = <Trash2 size={embedded ? 20 : 28} className="kiosk-todo-icon" />;
                       colorClass = 'kiosk-todo-yellow';
                     } else if (normalized === 'clean_refrigerator') {
@@ -1377,7 +1477,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                             <Pencil size={embedded ? 16 : 22} className="kiosk-todo-icon" />
                           </button>
                         )}
-                        {isServingTask && (
+                        {hasInfoContent && (
                           <button
                             type="button"
                             className="kiosk-todo-info-btn"
@@ -1386,7 +1486,7 @@ export const KioskDashboard: React.FC<KioskDashboardProps> = ({
                             aria-label={`${label} – ${t('taskFurtherInfo')}`}
                             onClick={(e) => {
                               e.stopPropagation();
-                              setTaskInfoKey(normalized);
+                              setTaskInfoKey(task);
                             }}
                             onKeyDown={(e) => {
                               e.stopPropagation();

@@ -398,6 +398,16 @@ func TestApplySchemaMigrations(t *testing.T) {
 			t.Errorf("expected meal_plan_from_sheets.%s data_type %q, got %q", col.name, col.wantType, gotType)
 		}
 	}
+
+	var dashboardTodosTable string
+	err = testDB.QueryRow(`
+		SELECT table_name
+		FROM information_schema.tables
+		WHERE table_schema = 'public' AND table_name = 'dashboard_todos';
+	`).Scan(&dashboardTodosTable)
+	if err != nil {
+		t.Fatalf("expected dashboard_todos table to exist after migrations: %v", err)
+	}
 }
 
 func TestSQLCanonicalEmailParityWithGo(t *testing.T) {

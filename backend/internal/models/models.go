@@ -285,6 +285,7 @@ var AllKnownPermissions = []string{
 	"vaccination.status.manage",
 	"provision.kiosk.cert",
 	"dashboard.use",
+	"dashboard.todos.manage",
 	"permissions.simulate",
 	"jobs.all.read",
 	"jobs.all.write",
@@ -1074,6 +1075,25 @@ type ImportCalendarEventsResponse struct {
 	Events       []CalendarEvent `json:"events"`
 }
 
+type DashboardTodo struct {
+	ID                      string    `json:"id"`
+	Name                    string    `json:"name"`
+	ShortName               string    `json:"short_name"`
+	SortOrder               int       `json:"sort_order"`
+	Color                   string    `json:"color"`
+	Icon                    string    `json:"icon"`
+	OnCookingDays           bool      `json:"on_cooking_days"`
+	OnVolunteerAbsence      bool      `json:"on_volunteer_absence"`
+	OnVesperDays            bool      `json:"on_vesper_days"`
+	OnYellowBagDay          bool      `json:"on_yellow_bag_day"`
+	OnDayBeforeYellowBagDay bool      `json:"on_day_before_yellow_bag_day"`
+	Weekdays                []int     `json:"weekdays"`
+	Action                  string    `json:"action"`
+	DescriptionMarkdown     string    `json:"description_markdown"`
+	CreatedAt               time.Time `json:"created_at,omitempty"`
+	UpdatedAt               time.Time `json:"updated_at,omitempty"`
+}
+
 type DailyBriefResponse struct {
 	Date                   string                  `json:"date"`
 	WhoIsCooking           string                  `json:"who_is_cooking"`
@@ -1083,6 +1103,7 @@ type DailyBriefResponse struct {
 	FoodComponent3         string                  `json:"food_component_3,omitempty"`
 	IsVesperDay            bool                    `json:"is_vesper_day"`
 	TasksAndInfo           []string                `json:"tasks_and_info"`
+	Todos                  []DashboardTodo         `json:"todos,omitempty"`
 	CompletedTasks         []CompletedTask         `json:"completed_tasks,omitempty"`
 	CompletedTaskIDs       []string                `json:"completed_task_ids,omitempty"`
 	HasAllergenRecord      bool                    `json:"has_allergen_record"`
