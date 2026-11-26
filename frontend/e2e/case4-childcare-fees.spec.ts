@@ -494,6 +494,28 @@ test.describe('Test Case 4: Childcare Fees Tooltips & Translations', () => {
     const allRenderedFamilies = await allTable.locator('tbody tr td.sticky-col').allTextContents();
     expect(allRenderedFamilies).toContain('Bauer');
     expect(allRenderedFamilies).toContain('Fischer');
+
+    // - CSV/TSV export and copy buttons must be visible in childcareFeesAll
+    await expect(parentPage.getByTestId('export-grid-csv')).toBeVisible();
+    await expect(parentPage.getByTestId('export-grid-tsv')).toBeVisible();
+    await expect(parentPage.getByTestId('copy-grid-tsv')).toBeVisible();
+
+    // Test CSV download on grid
+    const [csvDownload] = await Promise.all([
+      parentPage.waitForEvent('download'),
+      parentPage.getByTestId('export-grid-csv').click(),
+    ]);
+    expect(csvDownload.suggestedFilename()).toMatch(/^betreuungsgebuehren_.*\.csv$/);
+    const csvStream = await csvDownload.createReadStream();
+    const csvChunks: Buffer[] = [];
+    for await (const chunk of csvStream) {
+      csvChunks.push(Buffer.from(chunk));
+    }
+    const csvText = Buffer.concat(csvChunks).toString('utf-8');
+    expect(csvText).toContain('Familie;');
+    expect(csvText).toContain('Bauer;');
+    expect(csvText).toContain('Fischer;');
+    expect(csvText).toMatch(/,\d{2}/); // German comma decimal separator
   });
 });
 

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { CheckSquare, Square, Info, ChevronDown, ChevronRight, ChevronLeft } from 'lucide-react';
+import { CheckSquare, Square, Info, ChevronDown, ChevronRight, ChevronLeft, Download, Copy, Check } from 'lucide-react';
 import { t, CURRENT_LOCALE } from '../utils/i18n';
 import { getFamilyName as formatFamilyNameHelper } from '../utils/family';
 import { useAuth } from '../context/AuthContext';
@@ -372,6 +372,16 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<CalculationResponse | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [copiedTarget, setCopiedTarget] = useState<'grid' | 'changes' | null>(null);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const hasInitializedRef = useRef(Boolean(families && families.length > 0));
 
@@ -734,6 +744,136 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
 
   const showMobileFamilySelector =
     isMobile && (canSelectFamilies ? mobileSelectableFamilies.length > 0 : mobileSelectableFamilies.length > 1);
+
+  const formatNumberForExport = (num: number) => {
+    return num.toFixed(2).replace('.', ',');
+  };
+
+  const escapeCsvCell = (value: string) => {
+    const normalized = (value || '').replace(/\r?\n/g, ' | ');
+    if (normalized.includes(';') || normalized.includes('"') || normalized.includes('\n')) {
+      return `"${normalized.replace(/"/g, '""')}"`;
+    }
+    return normalized;
+  };
+
+  const escapeTsvCell = (value: string) => {
+    return (value || '').replace(/\t/g, ' ').replace(/\r?\n/g, ' | ');
+  };
+
+  const buildGridRows = (): string[][] => {
+    const headers = [t('family'), ...monthsColumns];
+    const dataRows = sortedFamilyFees.map((res) => {
+      const familyName = getCanonicalFamilyName(res.family_id, res.family_name);
+      const feeCells = monthsColumns.map((m) => {
+        const monthData = (res.monthly_fees || []).find((mf) => mf.month === m);
+        return monthData ? formatNumberForExport(monthData.fee) : '';
+      });
+      return [familyName, ...feeCells];
+    });
+    return [headers, ...dataRows];
+  };
+
+  const buildChangesRows = (): string[][] => {
+    const headers = [
+      t('family'),
+      t('effectiveMonth'),
+      t('previousFee'),
+      t('newFee'),
+      t('reason'),
+    ];
+    const dataRows = sortedFeeChanges.map((chg) => [
+      getCanonicalFamilyName(chg.family_id, chg.family_name),
+      chg.month,
+      formatNumberForExport(chg.previous_fee),
+      formatNumberForExport(chg.new_fee),
+      chg.reason || '',
+    ]);
+    return [headers, ...dataRows];
+  };
+
+  const serializeRows = (rows: string[][], format: 'csv' | 'tsv'): string => {
+    if (format === 'csv') {
+      return rows.map((row) => row.map(escapeCsvCell).join(';')).join('\r\n');
+    }
+    return rows.map((row) => row.map(escapeTsvCell).join('\t')).join('\n');
+  };
+
+  const triggerDownload = (content: string, filename: string, format: 'csv' | 'tsv') => {
+    const mimeType =
+      format === 'csv'
+        ? 'text/csv;charset=utf-8;'
+        : 'text/tab-separated-values;charset=utf-8;';
+    const payload = format === 'csv' ? `\uFEFF${content}` : content;
+    const blob = new Blob([payload], { type: mimeType });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  };
+
+  const rangeSuffix = `${startYear}-${startMonth}_${endYear}-${endMonth}`;
+
+  const handleExportGrid = (format: 'csv' | 'tsv') => {
+    const content = serializeRows(buildGridRows(), format);
+    triggerDownload(content, `betreuungsgebuehren_${rangeSuffix}.${format}`, format);
+  };
+
+  const handleExportChanges = (format: 'csv' | 'tsv') => {
+    const content = serializeRows(buildChangesRows(), format);
+    triggerDownload(content, `gebuehrenaenderungen_${rangeSuffix}.${format}`, format);
+  };
+
+  const handleCopyTsv = async (target: 'grid' | 'changes') => {
+    const rows = target === 'grid' ? buildGridRows() : buildChangesRows();
+    const content = serializeRows(rows, 'tsv');
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedTarget(target);
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = setTimeout(() => {
+        setCopiedTarget((prev) => (prev === target ? null : prev));
+      }, 2000);
+    } catch {
+      // Fallback for environments where navigator.clipboard is unavailable
+      const textarea = document.createElement('textarea');
+      textarea.value = content;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      setCopiedTarget(target);
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = setTimeout(() => {
+        setCopiedTarget((prev) => (prev === target ? null : prev));
+      }, 2000);
+    }
+  };
+
+  const exportBtnStyle: React.CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '0.35rem',
+    padding: '0.3rem 0.6rem',
+    fontSize: '0.78rem',
+    fontWeight: 600,
+    border: '1px solid var(--border)',
+    background: 'var(--bg-subtle)',
+    color: 'var(--text)',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', textAlign: 'left' }}>
@@ -1181,9 +1321,45 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
               boxShadow: 'var(--shadow)',
             }}
           >
-            <h4 style={{ margin: '0 0 1rem 0', color: 'var(--text-h)', fontSize: '1rem', fontWeight: 600 }}>
-              {canSelectFamilies ? t('familyFeesGrid') : (t('monthlyFeesSelf') || 'Monatliche Betreuungsgebühren')}
-            </h4>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+              <h4 style={{ margin: 0, color: 'var(--text-h)', fontSize: '1rem', fontWeight: 600 }}>
+                {canSelectFamilies ? t('familyFeesGrid') : (t('monthlyFeesSelf') || 'Monatliche Betreuungsgebühren')}
+              </h4>
+              {canSelectFamilies && sortedFamilyFees.length > 0 && (
+                <div className="fees-export-actions" data-export-section="grid" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => handleExportGrid('csv')}
+                    title={t('exportCsvTitle')}
+                    style={exportBtnStyle}
+                    data-testid="export-grid-csv"
+                  >
+                    <Download size={13} />
+                    <span>{t('exportCsv')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleExportGrid('tsv')}
+                    title={t('exportTsvTitle')}
+                    style={exportBtnStyle}
+                    data-testid="export-grid-tsv"
+                  >
+                    <Download size={13} />
+                    <span>{t('exportTsv')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyTsv('grid')}
+                    title={t('copyTsvTitle')}
+                    style={exportBtnStyle}
+                    data-testid="copy-grid-tsv"
+                  >
+                    {copiedTarget === 'grid' ? <Check size={13} style={{ color: 'var(--primary)' }} /> : <Copy size={13} />}
+                    <span>{copiedTarget === 'grid' ? t('copiedTsv') : t('copyTsv')}</span>
+                  </button>
+                </div>
+              )}
+            </div>
             {isMobile ? (
               <div style={{ overflowX: 'auto' }}>
                 <table className="data-table fees-mobile-vertical-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -1297,9 +1473,45 @@ export const ChildcareFeesCalculator: React.FC<ChildcareFeesCalculatorProps> = (
               boxShadow: 'var(--shadow)',
             }}
           >
-            <h4 style={{ margin: '0 0 1rem 0', color: 'var(--text-h)', fontSize: '1rem', fontWeight: 600 }}>
-              {t('feeChanges')}
-            </h4>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+              <h4 style={{ margin: 0, color: 'var(--text-h)', fontSize: '1rem', fontWeight: 600 }}>
+                {t('feeChanges')}
+              </h4>
+              {canSelectFamilies && sortedFeeChanges.length > 0 && (
+                <div className="fees-export-actions" data-export-section="changes" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => handleExportChanges('csv')}
+                    title={t('exportCsvTitle')}
+                    style={exportBtnStyle}
+                    data-testid="export-changes-csv"
+                  >
+                    <Download size={13} />
+                    <span>{t('exportCsv')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleExportChanges('tsv')}
+                    title={t('exportTsvTitle')}
+                    style={exportBtnStyle}
+                    data-testid="export-changes-tsv"
+                  >
+                    <Download size={13} />
+                    <span>{t('exportTsv')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyTsv('changes')}
+                    title={t('copyTsvTitle')}
+                    style={exportBtnStyle}
+                    data-testid="copy-changes-tsv"
+                  >
+                    {copiedTarget === 'changes' ? <Check size={13} style={{ color: 'var(--primary)' }} /> : <Copy size={13} />}
+                    <span>{copiedTarget === 'changes' ? t('copiedTsv') : t('copyTsv')}</span>
+                  </button>
+                </div>
+              )}
+            </div>
             {isMobile ? (
               mobileFeeChanges.length === 0 ? (
                 <div style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.85rem', padding: '0.5rem' }}>
