@@ -475,7 +475,7 @@ test.describe('Test Case 23: Essen/Allergene Tab, Calendar/Week View, Editor, an
       await expect(todayBox).toHaveClass(/is-today/);
       await expect(todayBox).toHaveAttribute('data-is-today', 'true');
       await expect(todayBox).toHaveAttribute('aria-current', 'date');
-      await expect(page.locator('.meal-allergens-weekday-header.is-today-weekday')).toHaveCount(1);
+      await expect(page.locator('.meal-allergens-weekday-header.is-today-weekday')).toHaveCount(0);
       await expect(todayBox.locator('[data-testid="meal-allergens-today-badge"]')).toHaveCount(0);
     }
 

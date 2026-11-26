@@ -124,11 +124,6 @@
   padding: 0.55rem 0.35rem;
 }
 
-.meal-allergens-weekday-header.is-today-weekday {
-  color: var(--primary, #2563eb);
-  font-weight: 800;
-}
-
 .meal-allergens-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));

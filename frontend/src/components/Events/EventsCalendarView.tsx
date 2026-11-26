@@ -211,8 +211,6 @@ export const EventsCalendarView: React.FC<EventsCalendarViewProps> = ({
 
   const todayObj = todayDate || new Date();
   const todayKey = formatDateKey(todayObj);
-  const isTodayInVisibleRange = visibleDates.some((d) => formatDateKey(d) === todayKey);
-  const todayWeekdayIndex = (todayObj.getDay() + 6) % 7; // 0 = Mon .. 6 = Sun
   const { week: weekNo, year: weekYear } = getISOWeekNumber(selectedMonday);
   const monthYearLabel = formatMonthYearLabel(selectedYearMonth.year, selectedYearMonth.month);
 
@@ -309,17 +307,11 @@ export const EventsCalendarView: React.FC<EventsCalendarViewProps> = ({
       <div className="events-calendar-sheet" data-testid="events-calendar-sheet">
         {!isMobile && (
           <div className="events-weekday-headers" data-testid="events-weekday-headers">
-            {weekdayHeaders.map((dayLabel, idx) => {
-              const isTodayWeekday = isTodayInVisibleRange && idx === todayWeekdayIndex;
-              return (
-                <div
-                  key={dayLabel}
-                  className={`events-weekday-header${isTodayWeekday ? ' is-today-weekday' : ''}`}
-                >
-                  {dayLabel}
-                </div>
-              );
-            })}
+            {weekdayHeaders.map((dayLabel) => (
+              <div key={dayLabel} className="events-weekday-header">
+                {dayLabel}
+              </div>
+            ))}
           </div>
         )}
 
