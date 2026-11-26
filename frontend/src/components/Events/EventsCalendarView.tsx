@@ -15,7 +15,6 @@ import {
   type CalendarEvent,
   getMonth7ColDays,
   getWeek7Days,
-  format7DayWeekRange,
   getEventTypeMeta,
   getCalendarEventShortLabel,
   getCalendarEventDisplayTitle,
@@ -214,8 +213,7 @@ export const EventsCalendarView: React.FC<EventsCalendarViewProps> = ({
   const todayKey = formatDateKey(todayObj);
   const isTodayInVisibleRange = visibleDates.some((d) => formatDateKey(d) === todayKey);
   const todayWeekdayIndex = (todayObj.getDay() + 6) % 7; // 0 = Mon .. 6 = Sun
-  const { week: weekNo } = getISOWeekNumber(selectedMonday);
-  const weekRangeStr = format7DayWeekRange(selectedMonday);
+  const { week: weekNo, year: weekYear } = getISOWeekNumber(selectedMonday);
   const monthYearLabel = formatMonthYearLabel(selectedYearMonth.year, selectedYearMonth.month);
 
   const weekdayHeaders =
@@ -268,7 +266,7 @@ export const EventsCalendarView: React.FC<EventsCalendarViewProps> = ({
                 <ChevronLeft size={18} />
               </button>
               <div className="events-period-label" data-testid="events-week-label">
-                {t('calendarWeek')} {weekNo} ({weekRangeStr})
+                {t('calendarWeek')} {weekNo}, {weekYear}
               </div>
               <button
                 type="button"

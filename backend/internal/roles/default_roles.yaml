@@ -49,7 +49,6 @@ roles:
       - jobs.all.read
       - jobs.all.write
       - events.all.read
-      - events.all.write
 
   - id: hygieneamt
     name: Hygieneamt

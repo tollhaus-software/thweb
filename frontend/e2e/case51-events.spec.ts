@@ -118,6 +118,10 @@ test.describe('Test Case 51: Events Calendar, Day Editor, TSV Import & Start Pag
     await morePopover.locator('.events-more-popover-item').last().click();
     await expect(page.getByTestId('event-form-modal')).toBeVisible();
     await page.getByTestId('event-form-close-btn').click();
+
+    // Verify mobile week selector displays concise "KW <week>, <year>" format
+    await page.setViewportSize({ width: 375, height: 667 });
+    await expect(page.getByTestId('events-week-label')).toHaveText('KW 41, 2026');
   });
 
   test('filters group Elternabende by child group on Start page, shows max 3 events with Zum Kalender button, and jumps to highlighted event in Termine tab', async ({
