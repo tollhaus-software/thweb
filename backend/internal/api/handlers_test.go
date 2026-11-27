@@ -817,6 +817,103 @@ func TestHandleListContacts_ProjectionAndScoping(t *testing.T) {
 	}
 }
 
+func TestHandleListCaregiverContacts_ProjectionAndScoping(t *testing.T) {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := store.NewStore(pool)
+	s := &Server{Store: appStore}
+
+	testUserID := uuid.New()
+	_, err = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, $2, $2)", testUserID, "test-cg-"+testUserID.String()+"@example.com")
+	if err != nil {
+		t.Fatalf("failed to insert test user: %v", err)
+	}
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", testUserID)
+	}()
+
+	caregiverEmp, err := appStore.CreateEmployee(ctx, testUserID, models.Employee{
+		FirstName:    "Sabine",
+		Nicknames:    models.NicknameList{"Bine"},
+		LastName:     "Erzieherin",
+		EmployeeType: "caregiver",
+		Emails: models.MultiValueList{
+			{Value: "sabine.public@example.com", AddressList: true, IdentifierEmail: true},
+			{Value: "sabine.private@example.com", AddressList: false},
+		},
+		Phones: models.MultiValueList{
+			{Value: "0711-111", Type: "mobile", AddressList: true},
+			{Value: "0711-999", Type: "landline", AddressList: false},
+		},
+		Address: "Kitaweg 1, 70173 Stuttgart",
+	})
+	if err != nil {
+		t.Fatalf("failed to create caregiver employee: %v", err)
+	}
+	defer func() {
+		_ = appStore.DeleteEmployee(ctx, testUserID, caregiverEmp.ID)
+	}()
+
+	cookEmp, err := appStore.CreateEmployee(ctx, testUserID, models.Employee{
+		FirstName:    "Karl",
+		LastName:     "Koch",
+		EmployeeType: "cook",
+		Emails: models.MultiValueList{
+			{Value: "karl.koch@example.com", AddressList: true},
+		},
+	})
+	if err != nil {
+		t.Fatalf("failed to create cook employee: %v", err)
+	}
+	defer func() {
+		_ = appStore.DeleteEmployee(ctx, testUserID, cookEmp.ID)
+	}()
+
+	restrictedUser := &models.UserWithPermissions{
+		Email:                "parent@example.com",
+		Roles:                []string{"parent_default"},
+		EffectivePermissions: []string{"contacts.all.read"},
+	}
+
+	req := httptest.NewRequest("GET", "/api/contacts/caregivers", nil)
+	req = req.WithContext(context.WithValue(req.Context(), auth.UserContextKey, restrictedUser))
+	rec := httptest.NewRecorder()
+
+	s.HandleListCaregiverContacts(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK from HandleListCaregiverContacts, got %d (%s)", rec.Code, rec.Body.String())
+	}
+
+	bodyStr := rec.Body.String()
+	if strings.Contains(bodyStr, "sabine.private@example.com") {
+		t.Errorf("HandleListCaregiverContacts leaked non-address-list email: %s", bodyStr)
+	}
+	if strings.Contains(bodyStr, "0711-999") {
+		t.Errorf("HandleListCaregiverContacts leaked non-address-list phone: %s", bodyStr)
+	}
+	if strings.Contains(bodyStr, "Bine") || strings.Contains(bodyStr, "nicknames") {
+		t.Errorf("HandleListCaregiverContacts leaked nicknames: %s", bodyStr)
+	}
+	if strings.Contains(bodyStr, "karl.koch@example.com") {
+		t.Errorf("HandleListCaregiverContacts included non-caregiver employee: %s", bodyStr)
+	}
+	if !strings.Contains(bodyStr, "sabine.public@example.com") || !strings.Contains(bodyStr, "0711-111") || !strings.Contains(bodyStr, "Kitaweg 1, 70173 Stuttgart") {
+		t.Errorf("expected public caregiver contact info in response, got: %s", bodyStr)
+	}
+}
+
 func TestHandleListContacts_DateFiltering(t *testing.T) {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {

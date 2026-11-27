@@ -33,7 +33,7 @@ interface DataTableProps<TData> {
   getCardActions?: (item: any) => React.ReactNode;
   stickyFirstColumn?: boolean;
   enableSorting?: boolean;
-  familyCardMode?: 'family' | 'group' | 'job';
+  familyCardMode?: 'family' | 'group' | 'job' | 'caregiver';
   initialColumnVisibility?: Record<string, boolean>;
 }
 
@@ -521,7 +521,7 @@ export function DataTable<TData>({
             </thead>
           )}
           {(() => {
-            if (familyCardMode === 'family') {
+            if (familyCardMode === 'family' || familyCardMode === 'caregiver') {
               const topRows = table.getRowModel().rows.filter((r) => r.depth === 0);
               return topRows.map((familyRow, familyIndex) => {
                 const isEven = familyIndex % 2 === 0;
@@ -530,7 +530,7 @@ export function DataTable<TData>({
                     key={familyRow.id}
                     className={`family-card ${isEven ? 'family-card-even' : 'family-card-odd'}`}
                   >
-                    {getSubRows ? (
+                    {getSubRows && familyCardMode !== 'caregiver' ? (
                       <>
                         {renderGroupedRow(familyRow)}
                         {familyRow.subRows && familyRow.subRows.map((subRow) => renderRow(subRow))}

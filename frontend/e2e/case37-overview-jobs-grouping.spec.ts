@@ -154,14 +154,17 @@ test.describe('Test Case 37: familiesOverview Jobs Grouping and Button Renaming'
     const familienBtn = groupingToggle.locator('.overview-grouping-btn', { hasText: 'Familien' });
     const gruppenBtn = groupingToggle.locator('.overview-grouping-btn', { hasText: 'Gruppen' });
     const jobsBtn = groupingToggle.locator('.overview-grouping-btn', { hasText: 'Jobs' });
+    const caregiversBtn = groupingToggle.locator('.overview-grouping-btn', { hasText: 'ErzieherInnen' });
 
     await expect(familienBtn).toBeVisible();
     await expect(gruppenBtn).toBeVisible();
     await expect(jobsBtn).toBeVisible();
+    await expect(caregiversBtn).toBeVisible();
 
     // Default grouping is "Gruppen"
     await expect(gruppenBtn).toHaveAttribute('aria-pressed', 'true');
     await expect(jobsBtn).toHaveAttribute('aria-pressed', 'false');
+    await expect(caregiversBtn).toHaveAttribute('aria-pressed', 'false');
 
     // =========================================================================
     // Part 2: Switch to "Jobs" grouping mode

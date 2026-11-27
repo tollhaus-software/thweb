@@ -92,6 +92,8 @@ export interface OverviewParent {
   jobs?: JobItem[];
 }
 
+export type OverviewCaregiver = OverviewParent;
+
 export interface OverviewChild {
   id: string;
   first_name: string;

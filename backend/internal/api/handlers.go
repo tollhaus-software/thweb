@@ -738,6 +738,54 @@ func (s *Server) HandleListContacts(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, overview)
 }
 
+func (s *Server) HandleListCaregiverContacts(w http.ResponseWriter, r *http.Request) {
+	employees, err := s.Store.ListEmployees(r.Context())
+	if err != nil {
+		httpErrorLog(w, r, "Failed to list caregiver contacts", http.StatusInternalServerError, err)
+		return
+	}
+
+	caregivers := make([]OverviewParent, 0)
+	for _, emp := range employees {
+		if emp.EmployeeType != "caregiver" {
+			continue
+		}
+		var filteredEmails models.MultiValueList
+		for _, em := range emp.Emails {
+			if em.AddressList {
+				filteredEmails = append(filteredEmails, em)
+			}
+		}
+		if filteredEmails == nil {
+			filteredEmails = models.MultiValueList{}
+		}
+		var filteredPhones models.MultiValueList
+		for _, ph := range emp.Phones {
+			if ph.AddressList {
+				filteredPhones = append(filteredPhones, ph)
+			}
+		}
+		if filteredPhones == nil {
+			filteredPhones = models.MultiValueList{}
+		}
+		eJobs := emp.Jobs
+		if eJobs == nil {
+			eJobs = []models.Job{}
+		}
+		caregivers = append(caregivers, OverviewParent{
+			ID:        emp.ID,
+			FirstName: emp.FirstName,
+			LastName:  emp.LastName,
+			Emails:    filteredEmails,
+			Phones:    filteredPhones,
+			Address:   emp.Address,
+			Jobs:      eJobs,
+		})
+	}
+
+	jsonResponse(w, caregivers)
+}
+
 func (s *Server) HandleListFamilies(w http.ResponseWriter, r *http.Request) {
 	families, err := s.Store.ListFamilies(r.Context())
 	if err != nil {

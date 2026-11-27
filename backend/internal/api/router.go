@@ -67,6 +67,7 @@ func SetupRouter(appStore *store.Store, authenticator *auth.Authenticator, hub *
 			ar.HandleClientActivityEvent(w, r)
 		})
 		r.With(auth.RequirePermission("contacts.all.read")).Get("/api/contacts", server.HandleListContacts)
+		r.With(auth.RequirePermission("contacts.all.read")).Get("/api/contacts/caregivers", server.HandleListCaregiverContacts)
 		r.With(auth.RequirePermission("families.all.read")).Get("/api/families", server.HandleListFamilies)
 		r.With(auth.RequirePermission("audit.view")).Get("/api/audit-logs", server.HandleListAuditLogs)
 

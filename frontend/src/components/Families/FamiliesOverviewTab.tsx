@@ -29,7 +29,7 @@ export interface ContactsTabProps {
   data: any[];
   isMobile: boolean;
   canReadFamiliesAll: boolean;
-  overviewGroupBy: 'family' | 'group' | 'job';
+  overviewGroupBy: 'family' | 'group' | 'job' | 'caregiver';
   highlightedRowId?: string | null;
   currentFamilyId?: string | null;
   canSelfService?: boolean;
@@ -153,7 +153,7 @@ export const ContactsTab: React.FC<ContactsTabProps> = ({
                   <Edit3 size={13} />
                 </button>
               )}
-              {canReadFamiliesAll && (
+              {canReadFamiliesAll && !item.is_caregiver && (
                 <button
                   type="button"
                   className="family-parent-link overview-mga-link"
@@ -420,7 +420,7 @@ export const ContactsTab: React.FC<ContactsTabProps> = ({
       className="overview-table"
       data={data}
       columns={overviewColumns}
-      getSubRows={(row: any) => row.subRows}
+      getSubRows={overviewGroupBy === 'caregiver' ? undefined : (row: any) => row.subRows}
       hideHeader
       highlightedRowId={highlightedRowId}
       stickyFirstColumn

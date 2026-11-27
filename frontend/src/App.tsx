@@ -1895,7 +1895,8 @@ const Dashboard: React.FC = () => {
   const [jobsPopoverAnchor, setJobsPopoverAnchor] = React.useState<HTMLElement | null>(null);
   const [activePersonForJobs, setActivePersonForJobs] = React.useState<PersonWithJobs | null>(null);
   const [overviewFamilies, setOverviewFamilies] = React.useState<OverviewFamily[]>([]);
-  const [overviewGroupBy, setOverviewGroupBy] = React.useState<'family' | 'group' | 'job'>('group');
+  const [overviewCaregivers, setOverviewCaregivers] = React.useState<OverviewParent[]>([]);
+  const [overviewGroupBy, setOverviewGroupBy] = React.useState<'family' | 'group' | 'job' | 'caregiver'>('group');
   const [mgaLifecycleFilter, setMgaLifecycleFilter] = React.useState<'all' | 'active' | 'former'>('active');
   const [contactConsentPopoverAnchor, setContactConsentPopoverAnchor] = React.useState<HTMLElement | null>(null);
   const [targetParentForConsent, setTargetParentForConsent] = React.useState<Parent | null>(null);
@@ -2982,7 +2983,25 @@ const Dashboard: React.FC = () => {
       .catch((err) => console.error(err));
   }, [getAuthHeaders]);
 
+  const fetchOverviewCaregivers = React.useCallback(() => {
+    return fetch('/api/contacts/caregivers', {
+      headers: getAuthHeaders(),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch caregiver contacts');
+        return res.json();
+      })
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setOverviewCaregivers(data);
+        }
+        return data;
+      })
+      .catch((err) => console.error(err));
+  }, [getAuthHeaders]);
+
   const fetchOverviewFamilies = React.useCallback(() => {
+    fetchOverviewCaregivers();
     return fetch('/api/contacts', {
       headers: getAuthHeaders(),
     })
@@ -2997,7 +3016,7 @@ const Dashboard: React.FC = () => {
         return data;
       })
       .catch((err) => console.error(err));
-  }, [getAuthHeaders]);
+  }, [getAuthHeaders, fetchOverviewCaregivers]);
 
   const [members, setMembers] = React.useState<MemberRow[]>([]);
   const fetchMembers = React.useCallback(() => {
@@ -3537,6 +3556,9 @@ const Dashboard: React.FC = () => {
       if (activeTab === 'employees' && canReadEmployees) {
         fetchEmployees();
       }
+      if (activeTab === 'contacts' && canReadOverview) {
+        fetchOverviewCaregivers();
+      }
     }
     if (
       message.type === 'JOB_CREATED' ||
@@ -3555,12 +3577,14 @@ const Dashboard: React.FC = () => {
     }
     if (message.type === 'EMPLOYEE_JOBS_UPDATED') {
       if (canReadEmployees) fetchEmployees();
+      if (canReadOverview) fetchOverviewCaregivers();
       if (canReadJobs) fetchJobs();
     }
   }, [
     activeTab,
     fetchFamilies,
     fetchOverviewFamilies,
+    fetchOverviewCaregivers,
     fetchMembers,
     fetchEmployees,
     fetchJobs,
@@ -5270,6 +5294,40 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
   const overviewFamiliesTabData = React.useMemo(() => {
     const query = (globalFilter || '').trim().toLowerCase();
 
+    if (overviewGroupBy === 'caregiver') {
+      const sortedCaregivers = [...overviewCaregivers].sort((a, b) => {
+        const fnA = ((a.first_name_for_address_list || a.first_name) || '').trim();
+        const fnB = ((b.first_name_for_address_list || b.first_name) || '').trim();
+        const cmp = fnA.localeCompare(fnB, CURRENT_LOCALE);
+        if (cmp !== 0) return cmp;
+        return (a.last_name || '').localeCompare(b.last_name || '', CURRENT_LOCALE);
+      });
+
+      const mappedCaregivers = sortedCaregivers.map((c) => ({
+        ...c,
+        original_id: c.id,
+        _rowType: 'parent' as const,
+        is_caregiver: true,
+        indent_name: false,
+        family_id: c.id,
+        family_name: `${((c.first_name_for_address_list || c.first_name) || '').trim()} ${c.last_name || ''}`.trim(),
+      }));
+
+      if (!query) return mappedCaregivers;
+
+      return mappedCaregivers.filter((c) => {
+        const effectiveFn = ((c.first_name_for_address_list || c.first_name) || '').trim();
+        const fullName = `${effectiveFn} ${c.last_name || ''}`.trim().toLowerCase();
+        const fnMatch = effectiveFn.toLowerCase().includes(query) || (c.first_name || '').toLowerCase().includes(query);
+        const lnMatch = (c.last_name || '').toLowerCase().includes(query);
+        const emailMatch = (c.emails || []).some((e: any) => getEntryValue(e).toLowerCase().includes(query));
+        const phoneMatch = (c.phones || []).some((ph: any) => getEntryValue(ph).toLowerCase().includes(query));
+        const addressMatch = (c.address || '').toLowerCase().includes(query);
+        const jobMatch = (c.jobs || []).some((j: any) => (j.name || '').toLowerCase().includes(query));
+        return fnMatch || lnMatch || fullName.includes(query) || emailMatch || phoneMatch || addressMatch || jobMatch;
+      });
+    }
+
     if (overviewGroupBy === 'job') {
       const jobMap = new Map<string, { id: string; name: string }>();
       overviewFamilies.forEach((f) => {
@@ -5632,7 +5690,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
 
     if (!query) return mapped;
     return mapped.filter((f) => f.nameMatch || f.hasMatchingChildren);
-  }, [overviewFamilies, globalFilter, overviewGroupBy]);
+  }, [overviewFamilies, overviewCaregivers, globalFilter, overviewGroupBy]);
 
   const hygieneColumns = React.useMemo<ColumnDef<any>[]>(() => {
     return [
@@ -5718,6 +5776,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
         if (res.ok) {
           const saved = await res.json();
           setEmployees((prev) => prev.map((e) => (e.id === saved.id ? saved : e)));
+          if (canReadOverview) fetchOverviewCaregivers();
           pushAction({
             type: 'UPDATE_EMPLOYEE',
             payload: {
@@ -5758,6 +5817,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
         if (res.ok) {
           const saved = await res.json();
           setEmployees((prev) => prev.map((e) => (e.id === saved.id ? saved : e)));
+          if (canReadOverview) fetchOverviewCaregivers();
           pushAction({
             type: 'UPDATE_EMPLOYEE',
             payload: {
@@ -5795,6 +5855,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
             });
             if (res.ok || res.status === 204) {
               setEmployees((prev) => prev.filter((e) => e.id !== employee.id));
+              if (canReadOverview) fetchOverviewCaregivers();
               purgeActionsForEntity(employee.id);
             } else {
               const errData = await res.json().catch(() => ({}));
@@ -5823,6 +5884,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
         if (res.ok) {
           const created = await res.json();
           setEmployees((prev) => [...prev, created]);
+          if (canReadOverview) fetchOverviewCaregivers();
           setAddEmployeeOpen(false);
           pushAction({
             type: 'ADD_EMPLOYEE',
@@ -6732,6 +6794,14 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                         className={`overview-grouping-btn ${overviewGroupBy === 'job' ? 'active' : ''}`}
                       >
                         {t('groupByJob')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setOverviewGroupBy('caregiver')}
+                        aria-pressed={overviewGroupBy === 'caregiver'}
+                        className={`overview-grouping-btn ${overviewGroupBy === 'caregiver' ? 'active' : ''}`}
+                      >
+                        {t('groupByCaregiver')}
                       </button>
                     </div>
                   )}
