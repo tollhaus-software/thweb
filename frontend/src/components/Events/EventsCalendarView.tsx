@@ -22,6 +22,43 @@ import {
   formatEventTimeRange,
 } from '../../utils/calendarEvents';
 
+const EVENTS_RELOAD_VIEW_STORAGE_KEY = 'thweb_events_reload_view';
+
+interface PersistedEventsReloadView {
+  year: number;
+  month: number;
+  mondayKey: string;
+}
+
+function readPersistedReloadView(): PersistedEventsReloadView | null {
+  if (typeof window === 'undefined' || !window.sessionStorage) return null;
+  try {
+    const raw = window.sessionStorage.getItem(EVENTS_RELOAD_VIEW_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PersistedEventsReloadView>;
+    if (
+      typeof parsed.year === 'number' &&
+      typeof parsed.month === 'number' &&
+      typeof parsed.mondayKey === 'string' &&
+      /^\d{4}-\d{2}-\d{2}$/.test(parsed.mondayKey)
+    ) {
+      return parsed as PersistedEventsReloadView;
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return null;
+}
+
+const INITIAL_RELOAD_VIEW: PersistedEventsReloadView | null = readPersistedReloadView();
+
+let hasUserNavigatedSinceReload = false;
+
+function consumePersistedReloadView(): PersistedEventsReloadView | null {
+  if (hasUserNavigatedSinceReload) return null;
+  return INITIAL_RELOAD_VIEW;
+}
+
 export interface EventsCalendarViewProps {
   initialDate?: Date;
   todayDate?: Date;
@@ -46,21 +83,63 @@ export const EventsCalendarView: React.FC<EventsCalendarViewProps> = ({
   const gridRef = useRef<HTMLDivElement>(null);
   const dayBoxRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
+  const [restoredReloadView] = useState<PersistedEventsReloadView | null>(() => {
+    if (initialDate && !isNaN(initialDate.getTime())) {
+      return null;
+    }
+    return consumePersistedReloadView();
+  });
+
   const [selectedYearMonth, setSelectedYearMonth] = useState<{ year: number; month: number }>(() => {
+    if (restoredReloadView) {
+      return { year: restoredReloadView.year, month: restoredReloadView.month };
+    }
     const base = initialDate || new Date();
     return { year: base.getFullYear(), month: base.getMonth() };
   });
 
   const [selectedMonday, setSelectedMonday] = useState<Date>(() => {
+    if (restoredReloadView) {
+      const [y, m, d] = restoredReloadView.mondayKey.split('-').map(Number);
+      const parsedMonday = new Date(y, m - 1, d);
+      if (!isNaN(parsedMonday.getTime())) {
+        return getMondayOfWeek(parsedMonday);
+      }
+    }
     const base = initialDate || new Date();
     return getMondayOfWeek(base);
   });
 
+  const prevInitialDateTimeRef = useRef<number | undefined>(
+    initialDate && !isNaN(initialDate.getTime()) ? initialDate.getTime() : undefined
+  );
+
   useEffect(() => {
-    if (!initialDate || isNaN(initialDate.getTime())) return;
-    setSelectedYearMonth({ year: initialDate.getFullYear(), month: initialDate.getMonth() });
-    setSelectedMonday(getMondayOfWeek(initialDate));
+    const nextTime = initialDate && !isNaN(initialDate.getTime()) ? initialDate.getTime() : undefined;
+    if (nextTime === undefined || nextTime === prevInitialDateTimeRef.current) {
+      return;
+    }
+    prevInitialDateTimeRef.current = nextTime;
+    if (initialDate) {
+      hasUserNavigatedSinceReload = true;
+      setSelectedYearMonth({ year: initialDate.getFullYear(), month: initialDate.getMonth() });
+      setSelectedMonday(getMondayOfWeek(initialDate));
+    }
   }, [initialDate]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.sessionStorage) return;
+    try {
+      const payload: PersistedEventsReloadView = {
+        year: selectedYearMonth.year,
+        month: selectedYearMonth.month,
+        mondayKey: formatDateKey(selectedMonday),
+      };
+      window.sessionStorage.setItem(EVENTS_RELOAD_VIEW_STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      // ignore storage errors
+    }
+  }, [selectedYearMonth, selectedMonday]);
 
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -177,32 +256,49 @@ export const EventsCalendarView: React.FC<EventsCalendarViewProps> = ({
   }, [recomputeFittingPills, events, isMobile]);
 
   const handlePrevMonth = useCallback(() => {
+    hasUserNavigatedSinceReload = true;
     setMorePopover(null);
     setSelectedYearMonth((prev) => {
       const d = new Date(prev.year, prev.month - 1, 1);
-      return { year: d.getFullYear(), month: d.getMonth() };
+      const next = { year: d.getFullYear(), month: d.getMonth() };
+      setSelectedMonday(getMondayOfWeek(d));
+      return next;
     });
   }, []);
 
   const handleNextMonth = useCallback(() => {
+    hasUserNavigatedSinceReload = true;
     setMorePopover(null);
     setSelectedYearMonth((prev) => {
       const d = new Date(prev.year, prev.month + 1, 1);
-      return { year: d.getFullYear(), month: d.getMonth() };
+      const next = { year: d.getFullYear(), month: d.getMonth() };
+      setSelectedMonday(getMondayOfWeek(d));
+      return next;
     });
   }, []);
 
   const handlePrevWeek = useCallback(() => {
+    hasUserNavigatedSinceReload = true;
     setMorePopover(null);
-    setSelectedMonday((prev) => new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() - 7));
+    setSelectedMonday((prev) => {
+      const next = new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() - 7);
+      setSelectedYearMonth({ year: next.getFullYear(), month: next.getMonth() });
+      return next;
+    });
   }, []);
 
   const handleNextWeek = useCallback(() => {
+    hasUserNavigatedSinceReload = true;
     setMorePopover(null);
-    setSelectedMonday((prev) => new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() + 7));
+    setSelectedMonday((prev) => {
+      const next = new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() + 7);
+      setSelectedYearMonth({ year: next.getFullYear(), month: next.getMonth() });
+      return next;
+    });
   }, []);
 
   const handleJumpToday = useCallback(() => {
+    hasUserNavigatedSinceReload = true;
     setMorePopover(null);
     const now = todayDate || new Date();
     setSelectedYearMonth({ year: now.getFullYear(), month: now.getMonth() });

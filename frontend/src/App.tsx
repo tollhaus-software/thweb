@@ -3409,6 +3409,8 @@ const Dashboard: React.FC = () => {
       if (
         (isMainPageActive && (!hash || hash === 'main' || hash === 'home')) ||
         (!hash && (canReadOverview || canReadFamiliesAll)) ||
+        (hash === 'events' && canReadEvents) ||
+        (hash === 'eventsImport' && canImportEvents) ||
         (hash === 'familiesOverview' && canReadOverview) ||
         (hash === 'parents' && canReadFamiliesAll) ||
         (hash === 'children' && canReadFamiliesAll) ||

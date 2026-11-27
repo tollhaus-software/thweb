@@ -118,10 +118,38 @@ test.describe('Test Case 51: Events Calendar, Day Editor, TSV Import & Start Pag
     await morePopover.locator('.events-more-popover-item').last().click();
     await expect(page.getByTestId('event-form-modal')).toBeVisible();
     await page.getByTestId('event-form-close-btn').click();
+    await page.getByTestId('events-more-popover-close').click();
 
     // Verify mobile week selector displays concise "KW <week>, <year>" format
     await page.setViewportSize({ width: 375, height: 667 });
     await expect(page.getByTestId('events-week-label')).toHaveText('KW 41, 2026');
+
+    // Navigate to next week on mobile (KW 43, 2026) and verify F5 reload retains the viewed week
+    await page.getByTestId('events-next-week').click();
+    await page.getByTestId('events-next-week').click();
+    await expect(page.getByTestId('events-week-label')).toHaveText('KW 43, 2026');
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByTestId('events-week-label')).toHaveText('KW 43, 2026');
+
+    // Switch back to desktop, navigate to March 2027, and verify F5 reload retains March 2027
+    await page.setViewportSize({ width: 1366, height: 860 });
+    for (let i = 0; i < 5; i++) {
+      await page.getByTestId('events-next-month').click();
+    }
+    await expect(page.getByTestId('events-month-label')).toContainText('März 2027');
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByTestId('events-month-label')).toContainText('März 2027');
+
+    // Opening the page freshly (not a reload) resets back to today (Oktober 2026)
+    const freshPage = await page.context().newPage();
+    await freshPage.clock.setFixedTime(new Date('2026-10-05T09:00:00'));
+    await freshPage.setViewportSize({ width: 1366, height: 860 });
+    await freshPage.goto('/#events');
+    await freshPage.waitForLoadState('networkidle');
+    await expect(freshPage.getByTestId('events-month-label')).toContainText('Oktober 2026');
+    await freshPage.close();
   });
 
   test('filters group Elternabende by child group on Start page, shows max 3 events with Zum Kalender button, and jumps to highlighted event in Termine tab', async ({

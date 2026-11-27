@@ -23,13 +23,13 @@ export const EventsTab: React.FC = () => {
   const { hasPermission } = useAuth();
   const canWrite = hasPermission('events.all.write');
 
-  const [anchorDate, setAnchorDate] = useState<Date>(() => {
+  const [anchorDate, setAnchorDate] = useState<Date | undefined>(() => {
     const { date } = parseEventsHashParams();
     if (date) {
       const parsed = parseDateKey(date);
       if (!isNaN(parsed.getTime())) return parsed;
     }
-    return new Date();
+    return undefined;
   });
   const [highlightedEventId, setHighlightedEventId] = useState<string | null>(() => {
     return parseEventsHashParams().highlight || null;
@@ -53,8 +53,18 @@ export const EventsTab: React.FC = () => {
       if (highlight) {
         setHighlightedEventId(highlight);
       }
+      if (
+        (date || highlight) &&
+        typeof window !== 'undefined' &&
+        window.location.hash.startsWith('#events?')
+      ) {
+        window.history.replaceState(null, '', '#events');
+      }
     };
     window.addEventListener('hashchange', handleHashChange);
+    if (typeof window !== 'undefined' && window.location.hash.startsWith('#events?')) {
+      window.history.replaceState(null, '', '#events');
+    }
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
