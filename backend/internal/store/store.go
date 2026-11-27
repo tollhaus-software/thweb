@@ -2819,6 +2819,10 @@ func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*model
 	isVesperDay := targetDate.Weekday() == time.Wednesday || targetDate.Weekday() == time.Thursday
 	resp.IsVesperDay = isVesperDay
 	hasCooking := resp.WhoIsCooking != "" || len(resp.MealComponents) > 0 || (mealDay != nil && (mealDay.HasAllergenRecord || len(mealDay.MealComponents) > 0))
+	isLastCookingDayOfWeek, err := s.IsLastCookingDayOfWeek(ctx, targetDate)
+	if err != nil {
+		isLastCookingDayOfWeek = targetDate.Weekday() == time.Friday
+	}
 
 	evalCtx := &TaskEvaluationContext{
 		Date:                       targetDate,
@@ -2826,6 +2830,7 @@ func (s *Store) GetDailyBrief(ctx context.Context, targetDate time.Time) (*model
 		HasBufdiAbsence:            hasBufdiAbsence,
 		IsVesperDay:                isVesperDay,
 		IsWeekday:                  isWeekday,
+		IsLastCookingDayOfWeek:     isLastCookingDayOfWeek,
 		IsYellowBagToday:           yellowBagToday,
 		IsYellowBagTomorrow:        yellowBagTomorrow,
 		HasCookingScheduled:        hasCooking,

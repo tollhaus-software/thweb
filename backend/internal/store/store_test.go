@@ -893,20 +893,181 @@ func TestDashboardTaskConditions(t *testing.T) {
 		t.Errorf("expected dbTodo to apply on Wednesday with vesper and bufdi absence")
 	}
 
-	// Test OnLastCookingDayOfWeek (Friday)
+	// Test OnLastCookingDayOfWeek
 	lastCookingTodo := models.DashboardTodo{
 		ID:                     "last_cooking_day_task",
 		OnLastCookingDayOfWeek: true,
 	}
-	if TodoApplies(lastCookingTodo, &TaskEvaluationContext{Date: wednesday}) {
-		t.Errorf("expected lastCookingTodo not to apply on Wednesday")
+	if TodoApplies(lastCookingTodo, &TaskEvaluationContext{Date: wednesday, IsLastCookingDayOfWeek: false}) {
+		t.Errorf("expected lastCookingTodo not to apply when IsLastCookingDayOfWeek is false")
 	}
-	if TodoApplies(lastCookingTodo, &TaskEvaluationContext{Date: tuesday}) {
-		t.Errorf("expected lastCookingTodo not to apply on Tuesday")
+	if !TodoApplies(lastCookingTodo, &TaskEvaluationContext{Date: wednesday, IsLastCookingDayOfWeek: true}) {
+		t.Errorf("expected lastCookingTodo to apply on Wednesday when Friday/Thursday are closed (IsLastCookingDayOfWeek=true)")
 	}
-	if !TodoApplies(lastCookingTodo, &TaskEvaluationContext{Date: friday}) {
-		t.Errorf("expected lastCookingTodo to apply on Friday")
+	if !TodoApplies(lastCookingTodo, &TaskEvaluationContext{Date: friday, IsLastCookingDayOfWeek: true}) {
+		t.Errorf("expected lastCookingTodo to apply on Friday when IsLastCookingDayOfWeek=true")
 	}
+
+	// Test DetermineLastCookingDayOfWeek pure function across various closure types
+	refWed := time.Date(2026, 11, 18, 0, 0, 0, 0, time.UTC) // Week of Mon 2026-11-16 .. Fri 2026-11-20
+	if got := DetermineLastCookingDayOfWeek(refWed, nil); got != "2026-11-20" {
+		t.Errorf("expected 2026-11-20 when no closures, got %q", got)
+	}
+	// Non-closing events (ferien, ea_gesamt, custom with IsFacilityClosed=false) on Friday do NOT shift last cooking day
+	nonClosingFri := []models.CalendarEvent{
+		{EventType: "ferien", StartDate: "2026-11-16", EndDate: "2026-11-20"},
+		{EventType: "ea_gesamt", StartDate: "2026-11-20", EndDate: "2026-11-20"},
+		{EventType: "custom", StartDate: "2026-11-20", EndDate: "2026-11-20", Title: "Flohmarkt", IsFacilityClosed: false},
+	}
+	if got := DetermineLastCookingDayOfWeek(refWed, nonClosingFri); got != "2026-11-20" {
+		t.Errorf("expected 2026-11-20 when Friday only has non-closing events, got %q", got)
+	}
+	// Friday has paedagogischer_tag -> Thursday 2026-11-19 is last cooking day
+	paedFri := []models.CalendarEvent{
+		{EventType: "paedagogischer_tag", StartDate: "2026-11-20", EndDate: "2026-11-20", IsFacilityClosed: true},
+	}
+	if got := DetermineLastCookingDayOfWeek(refWed, paedFri); got != "2026-11-19" {
+		t.Errorf("expected 2026-11-19 when Friday is paedagogischer_tag, got %q", got)
+	}
+	// Thursday is feiertag (Christi Himmelfahrt) and Friday is custom with IsFacilityClosed=true (Brückentag) -> Wednesday 2026-11-18 is last cooking day
+	thuFriClosed := []models.CalendarEvent{
+		{EventType: "feiertag", StartDate: "2026-11-19", EndDate: "2026-11-19", Title: "Christi Himmelfahrt", IsFacilityClosed: true},
+		{EventType: "custom", StartDate: "2026-11-20", EndDate: "2026-11-20", Title: "Brückentag", IsFacilityClosed: true},
+	}
+	if got := DetermineLastCookingDayOfWeek(refWed, thuFriClosed); got != "2026-11-18" {
+		t.Errorf("expected 2026-11-18 when Thu+Fri are closed, got %q", got)
+	}
+	// Full week schliesszeit -> "" (no cooking day at all)
+	fullWeekClosed := []models.CalendarEvent{
+		{EventType: "schliesszeit", StartDate: "2026-11-16", EndDate: "2026-11-22", IsFacilityClosed: true},
+	}
+	if got := DetermineLastCookingDayOfWeek(refWed, fullWeekClosed); got != "" {
+		t.Errorf("expected empty string when entire Mon-Fri week is closed, got %q", got)
+	}
+}
+
+func TestGetDailyBrief_OnLastCookingDayOfWeek_WithStateHolidaysAndClosureEvents(t *testing.T) {
+	dbURL := "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		t.Skipf("skipping test: unable to connect to db: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		t.Skipf("skipping test: unable to ping db: %v", err)
+	}
+
+	appStore := NewStore(pool)
+	userID := uuid.New()
+	_, _ = pool.Exec(ctx, "INSERT INTO users (id, email, canonical_email) VALUES ($1, 'last-cook-test@example.com', 'last-cook-test@example.com') ON CONFLICT (id) DO NOTHING", userID)
+
+	const testTodoID = "test_last_cooking_day_todo"
+	_, _ = pool.Exec(ctx, "DELETE FROM dashboard_todos WHERE id = $1", testTodoID)
+	_, err = appStore.CreateDashboardTodo(ctx, userID, "last-cook-test@example.com", models.DashboardTodo{
+		ID:                     testTodoID,
+		Name:                   "Letzter Kochtag Aufgabe",
+		ShortName:              "Letzter Kochtag",
+		SortOrder:              999,
+		Color:                  "default",
+		OnLastCookingDayOfWeek: true,
+	})
+	if err != nil {
+		t.Fatalf("CreateDashboardTodo failed: %v", err)
+	}
+
+	// Clean up test events & todo on exit
+	defer func() {
+		_, _ = pool.Exec(ctx, "DELETE FROM dashboard_todos WHERE id = $1", testTodoID)
+		_, _ = pool.Exec(ctx, "DELETE FROM calendar_events WHERE start_date >= '2098-04-01' AND start_date <= '2098-06-30'")
+		_, _ = pool.Exec(ctx, "DELETE FROM audit_log WHERE changed_by = $1", userID)
+		_, _ = pool.Exec(ctx, "DELETE FROM users WHERE id = $1", userID)
+	}()
+
+	// Case 1: BW state holiday on Friday (Karfreitag in 2098 is 2098-04-18, Friday!)
+	// Without any persisted DB event, derived BW state holiday makes Thursday 2098-04-17 the last cooking day of the week!
+	thuBeforeKarfreitag := time.Date(2098, 4, 17, 0, 0, 0, 0, time.UTC)
+	karfreitag := time.Date(2098, 4, 18, 0, 0, 0, 0, time.UTC)
+
+	briefThu1, err := appStore.GetDailyBrief(ctx, thuBeforeKarfreitag)
+	if err != nil {
+		t.Fatalf("GetDailyBrief(2098-04-17) failed: %v", err)
+	}
+	if !containsTask(briefThu1.TasksAndInfo, testTodoID) {
+		t.Errorf("expected %s to apply on Thursday 2098-04-17 before Karfreitag state holiday, got %+v", testTodoID, briefThu1.TasksAndInfo)
+	}
+
+	briefFri1, err := appStore.GetDailyBrief(ctx, karfreitag)
+	if err != nil {
+		t.Fatalf("GetDailyBrief(2098-04-18) failed: %v", err)
+	}
+	if containsTask(briefFri1.TasksAndInfo, testTodoID) {
+		t.Errorf("expected %s NOT to apply on Karfreitag 2098-04-18, got %+v", testTodoID, briefFri1.TasksAndInfo)
+	}
+
+	// Case 2: Normal week in June 2098 (Mon 2098-06-23 .. Fri 2098-06-27):
+	// Initially Friday 2098-06-27 is the last cooking day.
+	wedJune := time.Date(2098, 6, 25, 0, 0, 0, 0, time.UTC)
+	thuJune := time.Date(2098, 6, 26, 0, 0, 0, 0, time.UTC)
+	friJune := time.Date(2098, 6, 27, 0, 0, 0, 0, time.UTC)
+
+	briefFriNorm, err := appStore.GetDailyBrief(ctx, friJune)
+	if err != nil {
+		t.Fatalf("GetDailyBrief(2098-06-27) failed: %v", err)
+	}
+	if !containsTask(briefFriNorm.TasksAndInfo, testTodoID) {
+		t.Errorf("expected %s to apply on normal Friday 2098-06-27, got %+v", testTodoID, briefFriNorm.TasksAndInfo)
+	}
+
+	// Add a Pädagogischer Tag on Friday 2098-06-27 -> Thursday 2098-06-26 becomes the last cooking day!
+	paedEv, err := appStore.CreateCalendarEvent(ctx, userID, models.CalendarEvent{
+		EventType: "paedagogischer_tag",
+		StartDate: "2098-06-27",
+		EndDate:   "2098-06-27",
+	}, "last-cook-test@example.com")
+	if err != nil {
+		t.Fatalf("CreateCalendarEvent paedagogischer_tag failed: %v", err)
+	}
+
+	briefThuPaed, err := appStore.GetDailyBrief(ctx, thuJune)
+	if err != nil {
+		t.Fatalf("GetDailyBrief(2098-06-26) failed: %v", err)
+	}
+	if !containsTask(briefThuPaed.TasksAndInfo, testTodoID) {
+		t.Errorf("expected %s to apply on Thursday 2098-06-26 when Friday is Pädagogischer Tag, got %+v", testTodoID, briefThuPaed.TasksAndInfo)
+	}
+
+	// Also add a custom closing event on Thursday 2098-06-26 (is_facility_closed=true) -> Wednesday 2098-06-25 becomes the last cooking day!
+	customClosedEv, err := appStore.CreateCalendarEvent(ctx, userID, models.CalendarEvent{
+		EventType:        "custom",
+		Title:            "Teamausflug",
+		StartDate:        "2098-06-26",
+		EndDate:          "2098-06-26",
+		IsFacilityClosed: true,
+	}, "last-cook-test@example.com")
+	if err != nil {
+		t.Fatalf("CreateCalendarEvent custom closed failed: %v", err)
+	}
+
+	briefWedClosed, err := appStore.GetDailyBrief(ctx, wedJune)
+	if err != nil {
+		t.Fatalf("GetDailyBrief(2098-06-25) failed: %v", err)
+	}
+	if !containsTask(briefWedClosed.TasksAndInfo, testTodoID) {
+		t.Errorf("expected %s to apply on Wednesday 2098-06-25 when Thu+Fri are closed, got %+v", testTodoID, briefWedClosed.TasksAndInfo)
+	}
+	briefThuClosed, err := appStore.GetDailyBrief(ctx, thuJune)
+	if err != nil {
+		t.Fatalf("GetDailyBrief(2098-06-26) failed: %v", err)
+	}
+	if containsTask(briefThuClosed.TasksAndInfo, testTodoID) {
+		t.Errorf("expected %s NOT to apply on closed Thursday 2098-06-26, got %+v", testTodoID, briefThuClosed.TasksAndInfo)
+	}
+
+	_ = appStore.DeleteCalendarEvent(ctx, userID, paedEv.ID, "last-cook-test@example.com")
+	_ = appStore.DeleteCalendarEvent(ctx, userID, customClosedEv.ID, "last-cook-test@example.com")
 }
 
 func TestAuditModifications_ExcludesVaccinationStatus(t *testing.T) {

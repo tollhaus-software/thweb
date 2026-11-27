@@ -88,6 +88,7 @@ type TaskEvaluationContext struct {
 	HasBufdiAbsence            bool
 	IsVesperDay                bool
 	IsWeekday                  bool
+	IsLastCookingDayOfWeek     bool
 	IsYellowBagToday           bool
 	IsYellowBagTomorrow        bool
 	HasCookingScheduled        bool
@@ -143,7 +144,7 @@ func TodoApplies(t models.DashboardTodo, ctx *TaskEvaluationContext) bool {
 			return false
 		}
 	}
-	if t.OnLastCookingDayOfWeek && ctx.Date.Weekday() != time.Friday {
+	if t.OnLastCookingDayOfWeek && !ctx.IsLastCookingDayOfWeek {
 		return false
 	}
 	if t.OnVolunteerAbsence && !ctx.HasBufdiAbsence {
@@ -172,6 +173,58 @@ func TodoApplies(t models.DashboardTodo, ctx *TaskEvaluationContext) bool {
 		}
 	}
 	return true
+}
+
+// DetermineLastCookingDayOfWeek returns the YYYY-MM-DD date string of the last open cooking weekday
+// (Monday..Friday) in the ISO week containing targetDate, given the week's calendar events
+// (including derived BW state holidays). A weekday is closed if any event covering that date
+// has ev.IsClosingDay() == true. If all 5 weekdays in the week are closed, it returns "".
+func DetermineLastCookingDayOfWeek(targetDate time.Time, weekEvents []models.CalendarEvent) string {
+	wd := targetDate.Weekday()
+	var offsetToMonday int
+	if wd == time.Sunday {
+		offsetToMonday = -6
+	} else {
+		offsetToMonday = -int(wd - time.Monday)
+	}
+	monday := time.Date(targetDate.Year(), targetDate.Month(), targetDate.Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 0, offsetToMonday)
+
+	isDayClosed := func(dStr string) bool {
+		for _, ev := range weekEvents {
+			if ev.IsClosingDay() && ev.StartDate <= dStr && ev.EndDate >= dStr {
+				return true
+			}
+		}
+		return false
+	}
+
+	lastOpen := ""
+	for i := 0; i < 5; i++ {
+		dStr := monday.AddDate(0, 0, i).Format("2006-01-02")
+		if !isDayClosed(dStr) {
+			lastOpen = dStr
+		}
+	}
+	return lastOpen
+}
+
+// IsLastCookingDayOfWeek queries enriched calendar events (including persisted events and BW state holidays)
+// for the Monday..Friday week of targetDate and returns true if targetDate is the last non-closed weekday of that week.
+func (s *Store) IsLastCookingDayOfWeek(ctx context.Context, targetDate time.Time) (bool, error) {
+	wd := targetDate.Weekday()
+	if wd < time.Monday || wd > time.Friday {
+		return false, nil
+	}
+	offsetToMonday := -int(wd - time.Monday)
+	monday := time.Date(targetDate.Year(), targetDate.Month(), targetDate.Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 0, offsetToMonday)
+	friday := monday.AddDate(0, 0, 4)
+
+	weekEvents, err := s.ListCalendarEvents(ctx, monday.Format("2006-01-02"), friday.Format("2006-01-02"))
+	if err != nil {
+		return false, err
+	}
+	targetStr := targetDate.Format("2006-01-02")
+	return DetermineLastCookingDayOfWeek(targetDate, weekEvents) == targetStr, nil
 }
 
 // DefaultDashboardTodos returns the 12 default dashboard TODO items seeded in the database.
