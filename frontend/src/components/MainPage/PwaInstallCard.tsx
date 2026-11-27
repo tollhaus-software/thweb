@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Smartphone, Download, Copy, Check, Compass, X } from 'lucide-react';
+import { Smartphone, Download, Copy, Check, Compass, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { pwaInstallStore, usePwaInstallState, type PwaInstallSnapshot } from '../../utils/pwaInstall';
 import { t } from '../../utils/i18n';
 import './PwaInstallCard.css';
@@ -212,36 +212,82 @@ export const PwaInstallInstructionsContent: React.FC<PwaInstallInstructionsConte
 
 export const PwaInstallCard: React.FC = () => {
   const state = usePwaInstallState();
-  const { isDismissed, isStandalone, isInstalled, platformInfo } = state;
+  const { isDismissed, isStandalone, isInstalled, deferredPrompt, platformInfo } = state;
+  const [isExpanded, setIsExpanded] = useState(false);
 
   // Do not show if not on a mobile device, already in standalone app, already installed, or dismissed
   if (!platformInfo.isMobile || isStandalone || isDismissed || isInstalled) {
     return null;
   }
 
+  const handlePrimaryBannerAction = async () => {
+    if (!platformInfo.isIos && deferredPrompt) {
+      await pwaInstallStore.promptInstall();
+      return;
+    }
+    setIsExpanded((prev) => !prev);
+  };
+
   return (
-    <section className="main-page-card main-page-pwa-card" data-testid="main-page-pwa-card">
-      <div className="main-page-card-header">
-        <Smartphone size={22} className="main-page-card-icon pwa-card-icon" />
-        <h2 className="main-page-card-title" data-testid="main-page-pwa-title">
-          Tollhaus als App nutzen
-        </h2>
+    <section
+      className={`main-page-card main-page-pwa-card ${isExpanded ? 'is-expanded' : 'is-compact'}`}
+      data-testid="main-page-pwa-card"
+    >
+      <div className="main-page-pwa-banner-row">
+        <button
+          type="button"
+          className="main-page-pwa-banner-toggle"
+          onClick={() => void handlePrimaryBannerAction()}
+          aria-expanded={!platformInfo.isIos && deferredPrompt ? undefined : isExpanded}
+          data-testid="main-page-pwa-toggle-btn"
+        >
+          <Smartphone size={20} className="main-page-card-icon pwa-card-icon" />
+          <h2 className="main-page-card-title main-page-pwa-banner-title" data-testid="main-page-pwa-title">
+            Tollhaus als App nutzen
+          </h2>
+          <span className="main-page-pwa-banner-cta">
+            {!platformInfo.isIos && deferredPrompt ? (
+              <>
+                <Download size={15} />
+                <span>Installieren</span>
+              </>
+            ) : (
+              <>
+                <span>{isExpanded ? 'Schließen' : 'Anleitung'}</span>
+                {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </>
+            )}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          className="main-page-pwa-banner-dismiss-icon"
+          onClick={() => pwaInstallStore.dismiss()}
+          aria-label="Nicht mehr anzeigen"
+          title="Nicht mehr anzeigen"
+          data-testid="main-page-pwa-dismiss-btn"
+        >
+          <X size={18} />
+        </button>
       </div>
 
-      <div className="main-page-card-body main-page-pwa-body">
-        <PwaInstallInstructionsContent state={state} testIdPrefix="main-page-pwa" />
+      {isExpanded && (
+        <div className="main-page-card-body main-page-pwa-body" data-testid="main-page-pwa-expanded-body">
+          <PwaInstallInstructionsContent state={state} testIdPrefix="main-page-pwa" />
 
-        <div className="main-page-pwa-footer">
-          <button
-            type="button"
-            className="main-page-pwa-dismiss-btn"
-            onClick={() => pwaInstallStore.dismiss()}
-            data-testid="main-page-pwa-dismiss-btn"
-          >
-            Nicht mehr anzeigen
-          </button>
+          <div className="main-page-pwa-footer">
+            <button
+              type="button"
+              className="main-page-pwa-dismiss-btn"
+              onClick={() => pwaInstallStore.dismiss()}
+              data-testid="main-page-pwa-dismiss-text-btn"
+            >
+              Nicht mehr anzeigen
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </section>
   );
 };
@@ -269,7 +315,7 @@ export const PwaInstallModal: React.FC<PwaInstallModalProps> = ({ isOpen, onClos
 
   return (
     <div
-      className="modal-overlay"
+      className="modal-overlay pwa-install-modal-overlay"
       data-testid="pwa-install-modal-overlay"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();

@@ -702,6 +702,9 @@ export const MainPage: React.FC<MainPageProps> = ({
         </div>
       )}
 
+      {/* Compact PWA Install Banner at the top of the page (mobile-only) */}
+      <PwaInstallCard />
+
       {/* Independent two-column card stacks on desktop; single ordered stack on tablet/mobile */}
       {!isSingleColumn && visibleDesktopCards.length > 1 ? (
         <div className="main-page-cards-grid main-page-cards-two-col" data-testid="main-page-cards-grid">
@@ -710,7 +713,6 @@ export const MainPage: React.FC<MainPageProps> = ({
           </div>
           <div className="main-page-cards-column" data-testid="main-page-cards-col-right">
             {visibleDesktopCards.filter((_, idx) => idx % 2 === 1)}
-            <PwaInstallCard />
           </div>
         </div>
       ) : (
@@ -718,7 +720,6 @@ export const MainPage: React.FC<MainPageProps> = ({
           {hygieneCardElement}
           {upcomingEventsCardElement}
           {foodCardElement}
-          <PwaInstallCard />
           {quickStartCardElement}
         </div>
       )}

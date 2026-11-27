@@ -595,6 +595,9 @@ test.describe('Test Case 42: Main Page (Default Homepage, Cook, Food, and Rest o
 
     const pwaCard = safariPage.getByTestId('main-page-pwa-card');
     await expect(pwaCard).toBeVisible();
+    // Starts collapsed as a compact top banner
+    await expect(safariPage.getByTestId('pwa-ios-safari-steps')).toHaveCount(0);
+    await safariPage.getByTestId('main-page-pwa-toggle-btn').click();
     await expect(safariPage.getByTestId('pwa-ios-safari-steps')).toBeVisible();
     await expect(safariPage.getByTestId('pwa-ios-safari-steps')).toContainText('•••');
     await expect(safariPage.getByTestId('pwa-ios-safari-steps')).toContainText('Hinzufügen');
@@ -632,6 +635,7 @@ test.describe('Test Case 42: Main Page (Default Homepage, Cook, Food, and Rest o
     await chromeIosPage.goto('/');
     await chromeIosPage.waitForLoadState('networkidle');
 
+    await chromeIosPage.getByTestId('main-page-pwa-toggle-btn').click();
     await expect(chromeIosPage.getByTestId('pwa-ios-chrome-steps')).toBeVisible();
     await expect(chromeIosPage.getByTestId('pwa-ios-chrome-steps')).toContainText('oben rechts');
     await chromeIosContext.close();
@@ -649,6 +653,7 @@ test.describe('Test Case 42: Main Page (Default Homepage, Cook, Food, and Rest o
     await inAppPage.goto('/');
     await inAppPage.waitForLoadState('networkidle');
 
+    await inAppPage.getByTestId('main-page-pwa-toggle-btn').click();
     await expect(inAppPage.getByTestId('pwa-ios-inapp-steps')).toBeVisible();
     await expect(inAppPage.getByTestId('pwa-ios-inapp-steps')).toContainText('In-App-Browser');
     const copyBtn = inAppPage.getByTestId('pwa-copy-link-btn');
