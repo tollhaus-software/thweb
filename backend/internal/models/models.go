@@ -256,11 +256,11 @@ type SimulationCandidate struct {
 var AllKnownPermissions = []string{
 	"*",
 	"contacts.all.read",
+	"contacts.print.group_overview",
 	"families.all.read",
 	"families.all.restrictedread",
 	"families.all.write",
 	"families.self.selfservice",
-	"families.print.group_overview",
 	"children.all.read",
 	"children.all.write",
 	"fees.all.read",

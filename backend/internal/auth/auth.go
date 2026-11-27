@@ -483,11 +483,13 @@ func (a *Authenticator) RolesAndPermissionsForTriggers(triggers []string) ([]str
 				rIDs = []string{"caregiver_default"}
 				perms = []string{
 					"contacts.all.read",
-					"families.print.group_overview",
+					"contacts.print.group_overview",
 					"mealplan.view",
 					"allergies.summary.read",
 					"meal_allergens.read",
 					"meal_allergens.write",
+					"events.all.read",
+					"events.all.write",
 				}
 			case roles.AutoGrantCookIdentifierEmail:
 				rIDs = []string{"cook_default"}

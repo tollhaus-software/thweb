@@ -59,8 +59,8 @@ func TestLoadDefault(t *testing.T) {
 	if len(caregiverRoles) == 0 || caregiverRoles[0] != "caregiver_default" {
 		t.Errorf("expected caregiver_identifier_email trigger to return caregiver_default role, got %v", caregiverRoles)
 	}
-	if len(caregiverPerms) != 7 {
-		t.Errorf("expected 7 permissions for caregiver_identifier_email trigger, got %d (%v)", len(caregiverPerms), caregiverPerms)
+	if len(caregiverPerms) != 8 {
+		t.Errorf("expected 8 permissions for caregiver_identifier_email trigger, got %d (%v)", len(caregiverPerms), caregiverPerms)
 	}
 
 	cookRoles, cookPerms := cfg.RolesForTrigger(AutoGrantCookIdentifierEmail)

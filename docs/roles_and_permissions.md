@@ -91,8 +91,13 @@ roles:
       - caregiver_identifier_email
     permissions:
       - contacts.all.read
-      - families.print.group_overview
+      - contacts.print.group_overview
       - mealplan.view
+      - allergies.summary.read
+      - meal_allergens.read
+      - meal_allergens.write
+      - events.all.read
+      - events.all.write
 ```
 
 ### Auto-Grant Triggers (`auto_grant_on`)
@@ -115,9 +120,9 @@ roles:
 | `*` | Superadmin wildcard; grants access to all features and APIs | Administrators |
 | `families.all.read` | View family cards, parent overview, and parent contact information | Staff, Board, Caregivers |
 | `contacts.all.read` | Scoped read access to view contact list details in the "Kontakte" tab (legacy alias: `families.all.restrictedread`) | Self-service parents, Caregivers |
+| `contacts.print.group_overview` | Print group contact overview (*Gruppenübersicht*) from the Contacts and Families views | Caregivers, Administrators |
 | `families.all.write` | Create, edit, and delete family entities, parents, and address records | Staff, Administrators |
 | `families.self.selfservice` | Scoped write/edit access for parents managing their own family info | Self-service parents |
-| `families.print.group_overview` | Print group contact overview (*Gruppenübersicht*) from the Families views | Caregivers, Administrators |
 | `children.all.read` | View child list and basic child records | Staff, Board, Caregivers |
 | `children.all.write` | Create, edit, and delete children and manage historical group assignments | Caregivers, Board |
 | `fees.all.read` | Global access to childcare fee calculator across all families | Treasurer, Finanzausschuss, Board |

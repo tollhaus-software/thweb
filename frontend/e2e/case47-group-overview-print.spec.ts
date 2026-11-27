@@ -271,8 +271,8 @@ test.describe('Test Case 47: Print Contact Data Per Group (Gruppenübersicht)', 
     await page.emulateMedia({ media: 'screen' });
   });
 
-  test('only shows print button to users with families.print.group_overview permission', async ({ page }) => {
-    // 1. Simulate parent_default role (no families.print.group_overview) -> print button should be hidden
+  test('only shows print button to users with contacts.print.group_overview permission', async ({ page }) => {
+    // 1. Simulate parent_default role (no contacts.print.group_overview) -> print button should be hidden
     const simParentRes = await page.request.post('/api/simulation', {
       headers: { Authorization: 'Bearer developer@example.com' },
       data: {
@@ -286,7 +286,7 @@ test.describe('Test Case 47: Print Contact Data Per Group (Gruppenübersicht)', 
     await page.reload();
     await expect(page.locator('[data-testid="print-toolbar-button"]')).toHaveCount(0);
 
-    // 2. Simulate caregiver_default role (has families.print.group_overview) -> print button should be visible
+    // 2. Simulate caregiver_default role (has contacts.print.group_overview) -> print button should be visible
     const simCaregiverRes = await page.request.post('/api/simulation', {
       headers: { Authorization: 'Bearer developer@example.com' },
       data: {

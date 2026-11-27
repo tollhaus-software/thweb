@@ -1183,11 +1183,11 @@ interface AdminRole {
 const ALL_AVAILABLE_PERMISSIONS = [
   '*',
   'contacts.all.read',
+  'contacts.print.group_overview',
   'families.all.read',
   'families.all.restrictedread',
   'families.all.write',
   'families.self.selfservice',
-  'families.print.group_overview',
   'children.all.read',
   'children.all.write',
   'fees.all.read',
@@ -1855,7 +1855,7 @@ const Dashboard: React.FC = () => {
   const canManageDashboardTodos = hasPermission('dashboard.todos.manage') || hasPermission('*');
   const canReadOverview = hasPermission('contacts.all.read');
   const canReadFamiliesAll = hasPermission('families.all.read');
-  const canPrintGroupOverview = hasPermission('families.print.group_overview');
+  const canPrintGroupOverview = hasPermission('contacts.print.group_overview');
   const canReadFees = hasPermission('fees.all.read') || hasPermission('fees.self.read');
   const canReadFeesAll = hasPermission('fees.all.read');
   const canWriteParents = hasPermission('families.all.write');
