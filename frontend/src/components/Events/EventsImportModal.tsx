@@ -181,6 +181,7 @@ export const EventsImportModal: React.FC<EventsImportModalProps> = ({
         end_date: (r.end_date || r.start_date).trim(),
         start_time: r.start_time.trim() || null,
         end_time: r.end_time.trim() || null,
+        is_facility_closed: Boolean(r.is_facility_closed),
       }));
 
       const res = await fetch('/api/events/import', {

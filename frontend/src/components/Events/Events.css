@@ -267,20 +267,6 @@
   }
 }
 
-.events-day-box.bg-teamausflug {
-  background-color: #dce6f1;
-}
-
-:root[data-theme="dark"] .events-day-box.bg-teamausflug {
-  background-color: rgba(220, 230, 241, 0.2);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .events-day-box.bg-teamausflug {
-    background-color: rgba(220, 230, 241, 0.2);
-  }
-}
-
 .events-day-box.search-match {
   box-shadow: inset 0 0 0 2px #f59e0b;
 }

@@ -70,6 +70,7 @@ interface InitialFormSnapshot {
   endTime: string;
   title: string;
   description: string;
+  isFacilityClosed: boolean;
 }
 
 export const EventFormModal: React.FC<EventFormModalProps> = ({
@@ -94,6 +95,7 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
   const [endTime, setEndTime] = useState<string>('');
   const [title, setTitle] = useState<string>('');
   const [description, setDescription] = useState<string>('');
+  const [isFacilityClosed, setIsFacilityClosed] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<boolean>(false);
   const [confirmingDelete, setConfirmingDelete] = useState<boolean>(false);
@@ -114,6 +116,7 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
       const initEndTime = editingEvent.end_time || '';
       const initTitle = editingEvent.title || '';
       const initDesc = editingEvent.description || '';
+      const initClosed = Boolean(editingEvent.is_facility_closed);
 
       setEventType(editingEvent.event_type);
       setIsAllDay(initAllDay);
@@ -123,6 +126,7 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
       setEndTime(initEndTime);
       setTitle(initTitle);
       setDescription(initDesc);
+      setIsFacilityClosed(initClosed);
       setInitialSnapshot({
         eventType: editingEvent.event_type,
         isAllDay: initAllDay,
@@ -132,6 +136,7 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
         endTime: initEndTime,
         title: initTitle,
         description: initDesc,
+        isFacilityClosed: initClosed,
       });
     } else {
       const todayIso = new Date().toISOString().slice(0, 10);
@@ -144,6 +149,7 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
       setEndTime('');
       setTitle('');
       setDescription('');
+      setIsFacilityClosed(false);
       setInitialSnapshot({
         eventType: 'ea_gesamt',
         isAllDay: true,
@@ -153,6 +159,7 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
         endTime: '',
         title: '',
         description: '',
+        isFacilityClosed: false,
       });
     }
   }, [isOpen, initialDate, editingEvent]);
@@ -187,7 +194,8 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
       (!isAllDay && startTime.trim() !== initialSnapshot.startTime.trim()) ||
       (!isAllDay && endTime.trim() !== initialSnapshot.endTime.trim()) ||
       title !== initialSnapshot.title ||
-      description !== initialSnapshot.description
+      description !== initialSnapshot.description ||
+      (eventType === 'custom' && isFacilityClosed !== initialSnapshot.isFacilityClosed)
     );
   })();
 
@@ -319,6 +327,12 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
         end_date: effectiveEndDate,
         start_time: isAllDay ? null : trimmedStartTime,
         end_time: isAllDay || !trimmedEndTime ? null : trimmedEndTime,
+        is_facility_closed:
+          eventType === 'schliesszeit' || eventType === 'paedagogischer_tag'
+            ? true
+            : eventType === 'custom'
+              ? isFacilityClosed
+              : false,
       };
 
       const url = editingEvent ? `/api/events/${editingEvent.id}` : '/api/events';
@@ -709,6 +723,25 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
                 data-testid="event-form-title"
               />
             </div>
+
+            {eventType === 'custom' && (
+              <div className="events-form-group">
+                <label
+                  htmlFor="event-form-is-facility-closed"
+                  className="events-form-label"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 500 }}
+                >
+                  <input
+                    id="event-form-is-facility-closed"
+                    type="checkbox"
+                    checked={isFacilityClosed}
+                    onChange={(e) => setIsFacilityClosed(e.target.checked)}
+                    data-testid="event-form-is-facility-closed"
+                  />
+                  <span>{t('eventsIsFacilityClosedLabel')}</span>
+                </label>
+              </div>
+            )}
 
             <div className="events-form-group">
               <label htmlFor="event-form-description" className="events-form-label">

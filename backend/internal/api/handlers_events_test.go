@@ -195,6 +195,32 @@ func TestCalendarEvents_CRUD_Import_And_UpcomingFiltering(t *testing.T) {
 		t.Fatalf("expected 204 on delete, got %d", recDel.Code)
 	}
 
+	// Verify custom event with is_facility_closed=true vs false, and removed types rejected
+	reqRemovedType := httptest.NewRequest("POST", "/api/events", strings.NewReader(`{"event_type":"teamausflug","start_date":"2097-10-15","end_date":"2097-10-15"}`))
+	recRemovedType := httptest.NewRecorder()
+	r.ServeHTTP(recRemovedType, reqRemovedType.WithContext(context.WithValue(reqRemovedType.Context(), auth.UserContextKey, uWriter)))
+	if recRemovedType.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for removed event_type teamausflug, got %d", recRemovedType.Code)
+	}
+
+	reqCustomClosed := httptest.NewRequest("POST", "/api/events", strings.NewReader(`{"event_type":"custom","start_date":"2097-10-15","end_date":"2097-10-15","title":"Teamausflug","is_facility_closed":true}`))
+	recCustomClosed := httptest.NewRecorder()
+	r.ServeHTTP(recCustomClosed, reqCustomClosed.WithContext(context.WithValue(reqCustomClosed.Context(), auth.UserContextKey, uWriter)))
+	if recCustomClosed.Code != http.StatusCreated {
+		t.Fatalf("expected 201 on custom closed event, got %d: %s", recCustomClosed.Code, recCustomClosed.Body.String())
+	}
+	var customClosedEv models.CalendarEvent
+	_ = json.Unmarshal(recCustomClosed.Body.Bytes(), &customClosedEv)
+	if !customClosedEv.IsFacilityClosed || !customClosedEv.IsClosingDay() {
+		t.Fatalf("expected custom event with is_facility_closed=true to report IsClosingDay()=true, got %+v", customClosedEv)
+	}
+	reqDelCustom := httptest.NewRequest("DELETE", "/api/events/"+customClosedEv.ID.String(), nil)
+	recDelCustom := httptest.NewRecorder()
+	r.ServeHTTP(recDelCustom, reqDelCustom.WithContext(context.WithValue(reqDelCustom.Context(), auth.UserContextKey, uWriter)))
+	if recDelCustom.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 deleting custom closed event, got %d", recDelCustom.Code)
+	}
+
 	// 4. Bulk import (skip_duplicates) & Upcoming Events group filtering
 	importPayload := `{
 		"mode": "skip_duplicates",

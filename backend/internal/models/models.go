@@ -994,16 +994,17 @@ const (
 )
 
 type UpcomingEvent struct {
-	Type        string  `json:"type"`
-	Date        string  `json:"date"`
-	ID          string  `json:"id,omitempty"`
-	EventType   string  `json:"event_type,omitempty"`
-	EndDate     string  `json:"end_date,omitempty"`
-	StartTime   *string `json:"start_time,omitempty"`
-	EndTime     *string `json:"end_time,omitempty"`
-	Title       string  `json:"title,omitempty"`
-	Description string  `json:"description,omitempty"`
-	Editable    bool    `json:"editable"`
+	Type             string  `json:"type"`
+	Date             string  `json:"date"`
+	ID               string  `json:"id,omitempty"`
+	EventType        string  `json:"event_type,omitempty"`
+	EndDate          string  `json:"end_date,omitempty"`
+	StartTime        *string `json:"start_time,omitempty"`
+	EndTime          *string `json:"end_time,omitempty"`
+	Title            string  `json:"title,omitempty"`
+	Description      string  `json:"description,omitempty"`
+	IsFacilityClosed bool    `json:"is_facility_closed"`
+	Editable         bool    `json:"editable"`
 }
 
 type MyUpcomingEventsResponse struct {
@@ -1011,23 +1012,21 @@ type MyUpcomingEventsResponse struct {
 }
 
 var ValidCalendarEventTypes = map[string]bool{
-	"custom":                true,
-	"schliesszeit":          true,
-	"schliesszeit_halbtags": true,
-	"ferien":                true,
-	"paedagogischer_tag":    true,
-	"teamausflug":           true,
-	"ea_kleine_gruppe":      true,
-	"ea_grosse_gruppe":      true,
-	"ea_hort":               true,
-	"ea_gesamt":             true,
-	"ea_gesamt_and_mgv":     true,
-	"putz_we":               true,
-	"bau_we":                true,
-	"garten_we":             true,
-	"laternenfest":          true,
-	"weihnachtsfeier":       true,
-	"sommerfest":            true,
+	"custom":             true,
+	"schliesszeit":       true,
+	"ferien":             true,
+	"paedagogischer_tag": true,
+	"ea_kleine_gruppe":   true,
+	"ea_grosse_gruppe":   true,
+	"ea_hort":            true,
+	"ea_gesamt":          true,
+	"ea_gesamt_and_mgv":  true,
+	"putz_we":            true,
+	"bau_we":             true,
+	"garten_we":          true,
+	"laternenfest":       true,
+	"weihnachtsfeier":    true,
+	"sommerfest":         true,
 }
 
 var CalendarEventTypesExpectingSpecificTime = map[string]bool{
@@ -1045,20 +1044,34 @@ var CalendarEventTypesExpectingSpecificTime = map[string]bool{
 }
 
 type CalendarEvent struct {
-	ID             uuid.UUID `json:"id"`
-	EventType      string    `json:"event_type"`
-	Title          string    `json:"title"`
-	Description    string    `json:"description"`
-	Location       string    `json:"location"`
-	StartDate      string    `json:"start_date"`
-	EndDate        string    `json:"end_date"`
-	StartTime      *string   `json:"start_time,omitempty"`
-	EndTime        *string   `json:"end_time,omitempty"`
-	Editable       bool      `json:"editable"`
-	CreatedByEmail string    `json:"created_by_email,omitempty"`
-	UpdatedByEmail string    `json:"updated_by_email,omitempty"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID               uuid.UUID `json:"id"`
+	EventType        string    `json:"event_type"`
+	Title            string    `json:"title"`
+	Description      string    `json:"description"`
+	Location         string    `json:"location"`
+	StartDate        string    `json:"start_date"`
+	EndDate          string    `json:"end_date"`
+	StartTime        *string   `json:"start_time,omitempty"`
+	EndTime          *string   `json:"end_time,omitempty"`
+	IsFacilityClosed bool      `json:"is_facility_closed"`
+	Editable         bool      `json:"editable"`
+	CreatedByEmail   string    `json:"created_by_email,omitempty"`
+	UpdatedByEmail   string    `json:"updated_by_email,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
+// IsClosingDay returns true if the facility is closed for this event
+// (always true for schliesszeit, paedagogischer_tag, and feiertag; configurable via IsFacilityClosed for custom).
+func (e CalendarEvent) IsClosingDay() bool {
+	switch e.EventType {
+	case "schliesszeit", "paedagogischer_tag", "feiertag":
+		return true
+	case "custom":
+		return e.IsFacilityClosed
+	default:
+		return false
+	}
 }
 
 type ImportCalendarEventsRequest struct {

@@ -30,7 +30,7 @@ test.describe('Test Case 51: Events Calendar, Day Editor, TSV Import & Start Pag
     await expect(page.getByTestId('events-import-tab')).toBeVisible();
 
     await page.getByTestId('events-import-toggle-spec-btn').click();
-    await expect(page.getByTestId('events-import-spec-text')).toContainText('schliesszeit_halbtags');
+    await expect(page.getByTestId('events-import-spec-text')).toContainText('paedagogischer_tag');
 
     const sampleTsv = [
       '```tsv',

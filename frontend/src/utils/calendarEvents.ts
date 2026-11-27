@@ -3,11 +3,9 @@ import { formatDateKey, getMondayOfWeek, parseDateKey } from './mealPlan';
 
 export type CalendarEventType =
   | 'schliesszeit'
-  | 'schliesszeit_halbtags'
   | 'feiertag'
   | 'ferien'
   | 'paedagogischer_tag'
-  | 'teamausflug'
   | 'ea_kleine_gruppe'
   | 'ea_grosse_gruppe'
   | 'ea_hort'
@@ -32,6 +30,7 @@ export interface CalendarEvent {
   end_date: string;   // YYYY-MM-DD
   start_time?: string | null; // HH:MM or null/undefined
   end_time?: string | null;   // HH:MM or null/undefined
+  is_facility_closed?: boolean;
   editable?: boolean;
   created_by_email?: string;
   updated_by_email?: string;
@@ -67,18 +66,6 @@ export const EVENT_TYPE_LIST: EventTypeMeta[] = [
     borderColor: '#5baec4',
   },
   {
-    type: 'schliesszeit_halbtags',
-    group: 'closing',
-    expectsSpecificTime: false,
-    labelDe: 'Schließzeit Tollhaus (halbtags)',
-    labelEn: 'Half-Day Closing',
-    shortDe: 'Schließzeit (½)',
-    shortEn: 'Half-Day Closed',
-    color: '#0f172a',
-    bgColor: '#b8dfe9',
-    borderColor: '#7bc0d2',
-  },
-  {
     type: 'ferien',
     group: 'closing',
     expectsSpecificTime: false,
@@ -101,18 +88,6 @@ export const EVENT_TYPE_LIST: EventTypeMeta[] = [
     color: '#0f172a',
     bgColor: '#92cddc',
     borderColor: '#5baec4',
-  },
-  {
-    type: 'teamausflug',
-    group: 'closing',
-    expectsSpecificTime: false,
-    labelDe: 'Teamausflug',
-    labelEn: 'Team Outing',
-    shortDe: 'Teamausflug',
-    shortEn: 'Team Outing',
-    color: '#1e293b',
-    bgColor: '#dce6f1',
-    borderColor: '#a6bfd9',
   },
   {
     type: 'ea_kleine_gruppe',
@@ -424,17 +399,25 @@ export function doesCalendarEventMatchSearch(ev: CalendarEvent, query: string): 
   );
 }
 
+export function isCalendarEventClosingDay(
+  ev: Pick<CalendarEvent, 'event_type' | 'is_facility_closed'>
+): boolean {
+  if (
+    ev.event_type === 'schliesszeit' ||
+    ev.event_type === 'paedagogischer_tag' ||
+    ev.event_type === 'feiertag'
+  ) {
+    return true;
+  }
+  if (ev.event_type === 'custom') {
+    return Boolean(ev.is_facility_closed);
+  }
+  return false;
+}
+
 export function getDayEventsBgClass(dayEvents: CalendarEvent[]): string {
-  const hasClosing = dayEvents.some(
-    (e) =>
-      e.event_type === 'schliesszeit' ||
-      e.event_type === 'schliesszeit_halbtags' ||
-      e.event_type === 'paedagogischer_tag' ||
-      e.event_type === 'feiertag'
-  );
+  const hasClosing = dayEvents.some(isCalendarEventClosingDay);
   if (hasClosing) return 'bg-closing';
-  const hasTeamausflug = dayEvents.some((e) => e.event_type === 'teamausflug');
-  if (hasTeamausflug) return 'bg-teamausflug';
   const hasFerien = dayEvents.some((e) => e.event_type === 'ferien');
   if (hasFerien) return 'bg-ferien';
   return 'bg-default';
@@ -455,6 +438,7 @@ export interface ImportPreviewRow {
   end_time: string;
   title: string;
   description: string;
+  is_facility_closed?: boolean;
   errors: string[];
   isDuplicate: boolean;
 }
@@ -607,6 +591,13 @@ export function parseEventsTsv(
     const end_time = (cols[4] || '').trim();
     const title = (cols[5] || '').trim();
     const description = (cols[6] || '').replace(/\\n/g, '\n').trim();
+    const rawClosed = (cols[7] || '').trim().toLowerCase();
+    const is_facility_closed =
+      event_type === 'schliesszeit' || event_type === 'paedagogischer_tag'
+        ? true
+        : event_type === 'custom'
+          ? rawClosed === 'true' || rawClosed === '1' || rawClosed === 'ja' || rawClosed === 'yes'
+          : false;
 
     const baseRow = {
       rowId: `row-${idx}-${Math.random().toString(36).slice(2, 8)}`,
@@ -618,6 +609,7 @@ export function parseEventsTsv(
       end_time,
       title,
       description,
+      is_facility_closed,
     };
 
     const { errors, isDuplicate } = validateImportPreviewRow(baseRow, existingSigs, seenBatch);
@@ -645,10 +637,8 @@ COLUMN RULES:
 2. end_date: YYYY-MM-DD (inclusive last day; equal to start_date for single-day events). Merge consecutive days of the same multi-day block (e.g. Ferien, Schließzeit, TH WE, Hortfreizeit) into ONE row!
 3. event_type: MUST be one of these exact values:
    - schliesszeit           (Tollhaus full-day closing — often shown ONLY via blue-grey cell background color without text!)
-   - schliesszeit_halbtags  (Tollhaus half-day closing — often shown as a diagonal half-filled cell without text!)
    - ferien                 (Stuttgart school holidays / unterrichtsfreie Tage — shown via mauve/rose background on the left side of the day cells)
    - paedagogischer_tag     (Päd. Tag / Pädagogischer Tag)
-   - teamausflug            (Team Ausflug / Teamausflug)
    - ea_kleine_gruppe       (EA kl. Gruppe / Elternabend kleine Gruppe)
    - ea_grosse_gruppe       (EA gr. Gruppe / Elternabend große Gruppe)
    - ea_hort                (EA Hort / Elternabend Hort)
@@ -683,10 +673,8 @@ SPALTEN-REGELN:
 2. end_date: YYYY-MM-DD (einschließlich letzter Tag; bei eintägigen Terminen identisch mit start_date). Aufeinanderfolgende Tage desselben mehrtägigen Zeitraums (z. B. Ferien, Schließzeit, TH WE, Hortfreizeit) zu EINER Zeile zusammenfassen!
 3. event_type: MUSS exakt einer dieser Werte sein:
    - schliesszeit           (Ganztägige Schließzeit Tollhaus – im PDF oft NUR über die blaugraue Hintergrundfarbe der Zelle ohne Text markiert!)
-   - schliesszeit_halbtags  (Halbtägige Schließzeit Tollhaus – im PDF oft durch eine diagonal halb gefüllte Zelle ohne Text markiert!)
    - ferien                 (Ferien / unterrichtsfreie Tage in Stuttgart – im PDF durch altrosa/violette Hintergrundfarbe in der linken Zellhälfte markiert)
    - paedagogischer_tag     (Päd. Tag / Pädagogischer Tag)
-   - teamausflug            (Team Ausflug / Teamausflug)
    - ea_kleine_gruppe       (EA kl. Gruppe / Elternabend kleine Gruppe)
    - ea_grosse_gruppe       (EA gr. Gruppe / Elternabend große Gruppe)
    - ea_hort                (EA Hort / Elternabend Hort)

@@ -86,6 +86,14 @@ func normalizeAndValidateCalendarEvent(ev *models.CalendarEvent) error {
 	}
 	ev.StartTime = startTime
 	ev.EndTime = endTime
+	switch ev.EventType {
+	case "schliesszeit", "paedagogischer_tag":
+		ev.IsFacilityClosed = true
+	case "custom":
+		// Preserve ev.IsFacilityClosed as chosen by the creator
+	default:
+		ev.IsFacilityClosed = false
+	}
 	return nil
 }
 
@@ -191,12 +199,13 @@ func enrichWithBadenWuerttembergHolidays(events []models.CalendarEvent, startDat
 			}
 			detID := uuid.NewSHA1(uuid.NameSpaceOID, []byte("feiertag:"+h.Date))
 			events = append(events, models.CalendarEvent{
-				ID:        detID,
-				EventType: "feiertag",
-				Title:     h.Title,
-				StartDate: h.Date,
-				EndDate:   h.Date,
-				Editable:  false,
+				ID:               detID,
+				EventType:        "feiertag",
+				Title:            h.Title,
+				StartDate:        h.Date,
+				EndDate:          h.Date,
+				IsFacilityClosed: true,
+				Editable:         false,
 			})
 			added = true
 		}
@@ -229,6 +238,7 @@ func (s *Store) ListCalendarEvents(ctx context.Context, startDate, endDate strin
 		TO_CHAR(end_date, 'YYYY-MM-DD'),
 		TO_CHAR(start_time, 'HH24:MI'),
 		TO_CHAR(end_time, 'HH24:MI'),
+		is_facility_closed,
 		created_by_email,
 		updated_by_email,
 		created_at,
@@ -273,6 +283,7 @@ func (s *Store) ListCalendarEvents(ctx context.Context, startDate, endDate strin
 			&ev.EndDate,
 			&ev.StartTime,
 			&ev.EndTime,
+			&ev.IsFacilityClosed,
 			&ev.CreatedByEmail,
 			&ev.UpdatedByEmail,
 			&ev.CreatedAt,
@@ -280,6 +291,7 @@ func (s *Store) ListCalendarEvents(ctx context.Context, startDate, endDate strin
 		); err != nil {
 			return nil, err
 		}
+		ev.IsFacilityClosed = ev.IsClosingDay()
 		ev.Editable = true
 		events = append(events, ev)
 	}
@@ -405,6 +417,7 @@ func (s *Store) GetCalendarEventByID(ctx context.Context, id uuid.UUID) (*models
 			TO_CHAR(end_date, 'YYYY-MM-DD'),
 			TO_CHAR(start_time, 'HH24:MI'),
 			TO_CHAR(end_time, 'HH24:MI'),
+			is_facility_closed,
 			created_by_email,
 			updated_by_email,
 			created_at,
@@ -421,6 +434,7 @@ func (s *Store) GetCalendarEventByID(ctx context.Context, id uuid.UUID) (*models
 		&ev.EndDate,
 		&ev.StartTime,
 		&ev.EndTime,
+		&ev.IsFacilityClosed,
 		&ev.CreatedByEmail,
 		&ev.UpdatedByEmail,
 		&ev.CreatedAt,
@@ -432,6 +446,7 @@ func (s *Store) GetCalendarEventByID(ctx context.Context, id uuid.UUID) (*models
 		}
 		return nil, err
 	}
+	ev.IsFacilityClosed = ev.IsClosingDay()
 	ev.Editable = true
 	return &ev, nil
 }
@@ -541,9 +556,10 @@ func insertCalendarEventTx(ctx context.Context, tx pgx.Tx, ev models.CalendarEve
 		INSERT INTO calendar_events (
 			id, event_type, title, description, location,
 			start_date, end_date, start_time, end_time,
+			is_facility_closed,
 			created_by_email, updated_by_email
 		)
-		VALUES ($1, $2, $3, $4, $5, $6::date, $7::date, $8::time, $9::time, $10, $10)
+		VALUES ($1, $2, $3, $4, $5, $6::date, $7::date, $8::time, $9::time, $10, $11, $11)
 		RETURNING
 			id,
 			event_type,
@@ -554,6 +570,7 @@ func insertCalendarEventTx(ctx context.Context, tx pgx.Tx, ev models.CalendarEve
 			TO_CHAR(end_date, 'YYYY-MM-DD'),
 			TO_CHAR(start_time, 'HH24:MI'),
 			TO_CHAR(end_time, 'HH24:MI'),
+			is_facility_closed,
 			created_by_email,
 			updated_by_email,
 			created_at,
@@ -568,6 +585,7 @@ func insertCalendarEventTx(ctx context.Context, tx pgx.Tx, ev models.CalendarEve
 		ev.EndDate,
 		ev.StartTime,
 		ev.EndTime,
+		ev.IsFacilityClosed,
 		email,
 	).Scan(
 		&created.ID,
@@ -579,11 +597,13 @@ func insertCalendarEventTx(ctx context.Context, tx pgx.Tx, ev models.CalendarEve
 		&created.EndDate,
 		&created.StartTime,
 		&created.EndTime,
+		&created.IsFacilityClosed,
 		&created.CreatedByEmail,
 		&created.UpdatedByEmail,
 		&created.CreatedAt,
 		&created.UpdatedAt,
 	)
+	created.IsFacilityClosed = created.IsClosingDay()
 	created.Editable = true
 	return created, err
 }
@@ -646,8 +666,9 @@ func (s *Store) UpdateCalendarEvent(ctx context.Context, userID uuid.UUID, ev mo
 			    end_date = $6::date,
 			    start_time = $7::time,
 			    end_time = $8::time,
-			    updated_by_email = $9
-			WHERE id = $10
+			    is_facility_closed = $9,
+			    updated_by_email = $10
+			WHERE id = $11
 			RETURNING
 				id,
 				event_type,
@@ -658,6 +679,7 @@ func (s *Store) UpdateCalendarEvent(ctx context.Context, userID uuid.UUID, ev mo
 				TO_CHAR(end_date, 'YYYY-MM-DD'),
 				TO_CHAR(start_time, 'HH24:MI'),
 				TO_CHAR(end_time, 'HH24:MI'),
+				is_facility_closed,
 				created_by_email,
 				updated_by_email,
 				created_at,
@@ -671,6 +693,7 @@ func (s *Store) UpdateCalendarEvent(ctx context.Context, userID uuid.UUID, ev mo
 			ev.EndDate,
 			ev.StartTime,
 			ev.EndTime,
+			ev.IsFacilityClosed,
 			email,
 			ev.ID,
 		).Scan(
@@ -683,6 +706,7 @@ func (s *Store) UpdateCalendarEvent(ctx context.Context, userID uuid.UUID, ev mo
 			&updated.EndDate,
 			&updated.StartTime,
 			&updated.EndTime,
+			&updated.IsFacilityClosed,
 			&updated.CreatedByEmail,
 			&updated.UpdatedByEmail,
 			&updated.CreatedAt,
@@ -691,6 +715,7 @@ func (s *Store) UpdateCalendarEvent(ctx context.Context, userID uuid.UUID, ev mo
 		if err != nil {
 			return err
 		}
+		updated.IsFacilityClosed = updated.IsClosingDay()
 		updated.Editable = true
 		return s.recordAudit(ctx, tx, transactionID, nil, "calendar_event", updated.ID, "UPDATE", *existing, updated, userID, userEmail...)
 	})
@@ -804,6 +829,7 @@ func (s *Store) ImportCalendarEvents(ctx context.Context, userID uuid.UUID, req 
 					TO_CHAR(end_date, 'YYYY-MM-DD'),
 					TO_CHAR(start_time, 'HH24:MI'),
 					TO_CHAR(end_time, 'HH24:MI'),
+					is_facility_closed,
 					created_by_email,
 					updated_by_email,
 					created_at,
@@ -828,6 +854,7 @@ func (s *Store) ImportCalendarEvents(ctx context.Context, userID uuid.UUID, req 
 					&old.EndDate,
 					&old.StartTime,
 					&old.EndTime,
+					&old.IsFacilityClosed,
 					&old.CreatedByEmail,
 					&old.UpdatedByEmail,
 					&old.CreatedAt,
@@ -836,6 +863,7 @@ func (s *Store) ImportCalendarEvents(ctx context.Context, userID uuid.UUID, req 
 					rows.Close()
 					return err
 				}
+				old.IsFacilityClosed = old.IsClosingDay()
 				toDelete = append(toDelete, old)
 			}
 			if err := rows.Err(); err != nil {
@@ -1021,16 +1049,17 @@ func (s *Store) GetMyUpcomingEventsWithCalendar(
 		}
 
 		events = append(events, models.UpcomingEvent{
-			Type:        string(models.UpcomingEventCalendarEvent),
-			Date:        ev.StartDate,
-			ID:          ev.ID.String(),
-			EventType:   ev.EventType,
-			EndDate:     ev.EndDate,
-			StartTime:   ev.StartTime,
-			EndTime:     ev.EndTime,
-			Title:       ev.Title,
-			Description: ev.Description,
-			Editable:    ev.Editable,
+			Type:             string(models.UpcomingEventCalendarEvent),
+			Date:             ev.StartDate,
+			ID:               ev.ID.String(),
+			EventType:        ev.EventType,
+			EndDate:          ev.EndDate,
+			StartTime:        ev.StartTime,
+			EndTime:          ev.EndTime,
+			Title:            ev.Title,
+			Description:      ev.Description,
+			IsFacilityClosed: ev.IsClosingDay(),
+			Editable:         ev.Editable,
 		})
 	}
 

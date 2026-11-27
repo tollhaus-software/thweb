@@ -442,10 +442,8 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     event_type TEXT NOT NULL CHECK (event_type IN (
         'custom',
         'schliesszeit',
-        'schliesszeit_halbtags',
         'ferien',
         'paedagogischer_tag',
-        'teamausflug',
         'ea_kleine_gruppe',
         'ea_grosse_gruppe',
         'ea_hort',
@@ -465,6 +463,7 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     end_date DATE NOT NULL,
     start_time TIME,
     end_time TIME,
+    is_facility_closed BOOLEAN NOT NULL DEFAULT FALSE,
     created_by_email TEXT NOT NULL DEFAULT '',
     updated_by_email TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
