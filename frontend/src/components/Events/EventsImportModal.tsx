@@ -54,7 +54,9 @@ export const EventsImportModal: React.FC<EventsImportModalProps> = ({
         if (res.ok) {
           const data: CalendarEvent[] = await res.json();
           if (!ignore) {
-            setExistingEvents(Array.isArray(data) ? data : []);
+            setExistingEvents(
+              Array.isArray(data) ? data.filter((ev) => ev.editable !== false) : []
+            );
           }
         }
       } catch (err) {

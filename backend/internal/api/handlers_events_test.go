@@ -262,8 +262,8 @@ func TestCalendarEvents_CRUD_Import_And_UpcomingFiltering(t *testing.T) {
 	}
 	var upResp models.MyUpcomingEventsResponse
 	_ = json.Unmarshal(recUpcoming.Body.Bytes(), &upResp)
-	if len(upResp.Events) != 5 {
-		t.Fatalf("expected 5 filtered upcoming events for Kleine Gruppe parent (including beyond 30 days), got %d: %+v", len(upResp.Events), upResp.Events)
+	if len(upResp.Events) < 6 {
+		t.Fatalf("expected at least 6 filtered upcoming events for Kleine Gruppe parent (5 seeded + derived BW feiertag events), got %d: %+v", len(upResp.Events), upResp.Events)
 	}
 	if upResp.Events[0].EventType != "schliesszeit" || !upResp.Events[0].Editable ||
 		upResp.Events[1].Type != "cooking_duty" || upResp.Events[1].Editable ||
@@ -271,8 +271,17 @@ func TestCalendarEvents_CRUD_Import_And_UpcomingFiltering(t *testing.T) {
 		upResp.Events[2].EventType != "ea_kleine_gruppe" || !upResp.Events[2].Editable ||
 		upResp.Events[3].EventType != "custom" || !upResp.Events[3].Editable ||
 		upResp.Events[3].Title != "Hortfreizeit" ||
-		upResp.Events[4].EventType != "sommerfest" || upResp.Events[4].Date != "2097-12-20" {
+		upResp.Events[4].EventType != "sommerfest" || upResp.Events[4].Date != "2097-12-20" ||
+		upResp.Events[5].EventType != "feiertag" || upResp.Events[5].Date != "2097-12-25" || upResp.Events[5].Title != "1. Weihnachtsfeiertag" || upResp.Events[5].Editable {
 		t.Fatalf("unexpected upcoming events order/content: %+v", upResp.Events)
+	}
+	for _, ev := range upResp.Events {
+		if ev.EventType == "ferien" || ev.EventType == "ea_hort" {
+			t.Fatalf("expected ferien and ea_hort to be excluded from upcoming events, got %+v", ev)
+		}
+		if ev.Date == "2097-11-01" && ev.EventType == "feiertag" {
+			t.Fatalf("expected Allerheiligen on 2097-11-01 (covered by schliesszeit) to be suppressed, got %+v", ev)
+		}
 	}
 
 	// Verify GET /api/events for uKleineParent includes her personal cooking_duty on 2097-11-08 with matching ID and Editable=false
@@ -286,12 +295,15 @@ func TestCalendarEvents_CRUD_Import_And_UpcomingFiltering(t *testing.T) {
 	_ = json.Unmarshal(recCalParent.Body.Bytes(), &calList)
 	foundCookingInCal := false
 	for _, ce := range calList {
-		if ce.EventType == "cooking_duty" {
+		if ce.EventType == "cooking_duty" || ce.EventType == "feiertag" {
 			if ce.Editable {
-				t.Fatalf("expected cooking_duty CalendarEvent to have Editable=false, got true")
+				t.Fatalf("expected derived %s CalendarEvent to have Editable=false, got true", ce.EventType)
 			}
-			if ce.StartDate == "2097-11-08" && ce.ID.String() == upResp.Events[1].ID {
+			if ce.EventType == "cooking_duty" && ce.StartDate == "2097-11-08" && ce.ID.String() == upResp.Events[1].ID {
 				foundCookingInCal = true
+			}
+			if ce.EventType == "feiertag" && ce.StartDate == "2097-11-01" {
+				t.Fatalf("expected Allerheiligen on 2097-11-01 to be suppressed by schliesszeit in /api/events")
 			}
 		} else if !ce.Editable {
 			t.Fatalf("expected persisted CalendarEvent %s (%s) to have Editable=true", ce.ID, ce.EventType)
@@ -299,5 +311,53 @@ func TestCalendarEvents_CRUD_Import_And_UpcomingFiltering(t *testing.T) {
 	}
 	if !foundCookingInCal {
 		t.Fatalf("expected personal cooking_duty on 2097-11-08 in /api/events with ID %s, got %+v", upResp.Events[1].ID, calList)
+	}
+
+	// Verify GET /api/events for December 2097 returns non-suppressed weekday BW state holidays (12-25 Wed, 12-26 Thu)
+	// and suppresses them once covered by a schliesszeit block.
+	reqCalDec := httptest.NewRequest("GET", "/api/events?start_date=2097-12-01&end_date=2097-12-31", nil)
+	recCalDec := httptest.NewRecorder()
+	r.ServeHTTP(recCalDec, reqCalDec.WithContext(context.WithValue(reqCalDec.Context(), auth.UserContextKey, uKleineParent)))
+	if recCalDec.Code != http.StatusOK {
+		t.Fatalf("expected 200 on GET /api/events for Dec 2097, got %d", recCalDec.Code)
+	}
+	var decList []models.CalendarEvent
+	_ = json.Unmarshal(recCalDec.Body.Bytes(), &decList)
+	feiertagDates := make(map[string]string)
+	for _, ce := range decList {
+		if ce.EventType == "feiertag" {
+			feiertagDates[ce.StartDate] = ce.Title
+		}
+	}
+	if feiertagDates["2097-12-25"] != "1. Weihnachtsfeiertag" || feiertagDates["2097-12-26"] != "2. Weihnachtsfeiertag" {
+		t.Fatalf("expected 1. & 2. Weihnachtsfeiertag in Dec 2097 events, got %+v", feiertagDates)
+	}
+
+	// Verify weekend holiday suppression: in Oct 2026, Tag der Deutschen Einheit (2026-10-03) is a Saturday -> suppressed!
+	// Whereas in May 2026, Tag der Arbeit (2026-05-01, Friday), Christi Himmelfahrt (2026-05-14, Thursday),
+	// and Pfingstmontag (2026-05-25, Monday) are weekdays -> included!
+	oct2026Events, err := appStore.ListCalendarEvents(ctx, "2026-10-01", "2026-10-31")
+	if err != nil {
+		t.Fatalf("ListCalendarEvents Oct 2026 failed: %v", err)
+	}
+	for _, ce := range oct2026Events {
+		if ce.EventType == "feiertag" && ce.StartDate == "2026-10-03" {
+			t.Fatalf("expected Saturday holiday 2026-10-03 (Tag der Deutschen Einheit) to be suppressed, got %+v", ce)
+		}
+	}
+	may2026Events, err := appStore.ListCalendarEvents(ctx, "2026-05-01", "2026-05-31")
+	if err != nil {
+		t.Fatalf("ListCalendarEvents May 2026 failed: %v", err)
+	}
+	mayHolidays := make(map[string]string)
+	for _, ce := range may2026Events {
+		if ce.EventType == "feiertag" {
+			mayHolidays[ce.StartDate] = ce.Title
+		}
+	}
+	if mayHolidays["2026-05-01"] != "Tag der Arbeit" ||
+		mayHolidays["2026-05-14"] != "Christi Himmelfahrt" ||
+		mayHolidays["2026-05-25"] != "Pfingstmontag" {
+		t.Fatalf("expected weekday May 2026 BW holidays, got %+v", mayHolidays)
 	}
 }

@@ -4,6 +4,7 @@ import { formatDateKey, getMondayOfWeek, parseDateKey } from './mealPlan';
 export type CalendarEventType =
   | 'schliesszeit'
   | 'schliesszeit_halbtags'
+  | 'feiertag'
   | 'ferien'
   | 'paedagogischer_tag'
   | 'teamausflug'
@@ -273,9 +274,24 @@ const COOKING_DUTY_META: EventTypeMeta = {
   borderColor: '#f59e0b',
 };
 
+const FEIERTAG_META: EventTypeMeta = {
+  type: 'feiertag',
+  group: 'closing',
+  expectsSpecificTime: false,
+  editable: false,
+  labelDe: 'Feiertag',
+  labelEn: 'Public Holiday',
+  shortDe: 'Feiertag',
+  shortEn: 'Holiday',
+  color: '#0f172a',
+  bgColor: '#92cddc',
+  borderColor: '#5baec4',
+};
+
 export const EVENT_TYPE_MAP: Record<string, EventTypeMeta> = {
   ...Object.fromEntries(EVENT_TYPE_LIST.map((m) => [m.type, m])),
   cooking_duty: COOKING_DUTY_META,
+  feiertag: FEIERTAG_META,
 };
 
 export function isValidCalendarEventType(val: string): val is CalendarEventType {
@@ -413,7 +429,8 @@ export function getDayEventsBgClass(dayEvents: CalendarEvent[]): string {
     (e) =>
       e.event_type === 'schliesszeit' ||
       e.event_type === 'schliesszeit_halbtags' ||
-      e.event_type === 'paedagogischer_tag'
+      e.event_type === 'paedagogischer_tag' ||
+      e.event_type === 'feiertag'
   );
   if (hasClosing) return 'bg-closing';
   const hasTeamausflug = dayEvents.some((e) => e.event_type === 'teamausflug');

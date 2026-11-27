@@ -96,6 +96,117 @@ func actorEmailFromSlice(userEmail []string) string {
 	return ""
 }
 
+// BadenWuerttembergHoliday represents a statutory public holiday in Baden-Württemberg (§ 1 FTG BW).
+type BadenWuerttembergHoliday struct {
+	Date  string // YYYY-MM-DD
+	Title string // German statutory holiday name
+}
+
+// computeEasterSunday returns the date of Easter Sunday for a given Gregorian year
+// using the Anonymous Gregorian / Meeus-Jones-Butcher algorithm.
+func computeEasterSunday(year int) time.Time {
+	a := year % 19
+	b := year / 100
+	c := year % 100
+	d := b / 4
+	e := b % 4
+	f := (b + 8) / 25
+	g := (b - f + 1) / 3
+	h := (19*a + b - d - g + 15) % 30
+	i := c / 4
+	k := c % 4
+	l := (32 + 2*e + 2*i - h - k) % 7
+	m := (a + 11*h + 22*l) / 451
+	month := (h + l - 7*m + 114) / 31
+	day := ((h + l - 7*m + 114) % 31) + 1
+	return time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
+}
+
+// GetBadenWuerttembergHolidays returns the 12 statutory public holidays (§ 1 FTG BW) for the given year,
+// sorted chronologically.
+func GetBadenWuerttembergHolidays(year int) []BadenWuerttembergHoliday {
+	easter := computeEasterSunday(year)
+	addDays := func(offset int) string {
+		return easter.AddDate(0, 0, offset).Format("2006-01-02")
+	}
+
+	holidays := []BadenWuerttembergHoliday{
+		{Date: fmt.Sprintf("%04d-01-01", year), Title: "Neujahr"},
+		{Date: fmt.Sprintf("%04d-01-06", year), Title: "Heilige Drei Könige"},
+		{Date: addDays(-2), Title: "Karfreitag"},
+		{Date: addDays(1), Title: "Ostermontag"},
+		{Date: fmt.Sprintf("%04d-05-01", year), Title: "Tag der Arbeit"},
+		{Date: addDays(39), Title: "Christi Himmelfahrt"},
+		{Date: addDays(50), Title: "Pfingstmontag"},
+		{Date: addDays(60), Title: "Fronleichnam"},
+		{Date: fmt.Sprintf("%04d-10-03", year), Title: "Tag der Deutschen Einheit"},
+		{Date: fmt.Sprintf("%04d-11-01", year), Title: "Allerheiligen"},
+		{Date: fmt.Sprintf("%04d-12-25", year), Title: "1. Weihnachtsfeiertag"},
+		{Date: fmt.Sprintf("%04d-12-26", year), Title: "2. Weihnachtsfeiertag"},
+	}
+	sort.Slice(holidays, func(i, j int) bool {
+		return holidays[i].Date < holidays[j].Date
+	})
+	return holidays
+}
+
+// enrichWithBadenWuerttembergHolidays appends derived "feiertag" CalendarEvents for all BW statutory
+// public holidays in [startDate, endDate], suppressing any holiday that falls on a weekend (Sat/Sun)
+// or on a day already covered by a full-day schliesszeit event.
+func enrichWithBadenWuerttembergHolidays(events []models.CalendarEvent, startDate, endDate string) []models.CalendarEvent {
+	if startDate == "" || endDate == "" {
+		return events
+	}
+	sd, err1 := time.Parse("2006-01-02", startDate)
+	ed, err2 := time.Parse("2006-01-02", endDate)
+	if err1 != nil || err2 != nil || ed.Before(sd) {
+		return events
+	}
+
+	isCoveredBySchliesszeit := func(dateStr string) bool {
+		for _, ev := range events {
+			if ev.EventType == "schliesszeit" && ev.StartDate <= dateStr && ev.EndDate >= dateStr {
+				return true
+			}
+		}
+		return false
+	}
+
+	added := false
+	for y := sd.Year(); y <= ed.Year(); y++ {
+		for _, h := range GetBadenWuerttembergHolidays(y) {
+			if h.Date < startDate || h.Date > endDate {
+				continue
+			}
+			dt, err := time.Parse("2006-01-02", h.Date)
+			if err != nil {
+				continue
+			}
+			wd := dt.Weekday()
+			if wd == time.Saturday || wd == time.Sunday {
+				continue
+			}
+			if isCoveredBySchliesszeit(h.Date) {
+				continue
+			}
+			detID := uuid.NewSHA1(uuid.NameSpaceOID, []byte("feiertag:"+h.Date))
+			events = append(events, models.CalendarEvent{
+				ID:        detID,
+				EventType: "feiertag",
+				Title:     h.Title,
+				StartDate: h.Date,
+				EndDate:   h.Date,
+				Editable:  false,
+			})
+			added = true
+		}
+	}
+	if added {
+		SortCalendarEvents(events)
+	}
+	return events
+}
+
 func (s *Store) ListCalendarEvents(ctx context.Context, startDate, endDate string) ([]models.CalendarEvent, error) {
 	if s == nil || s.db == nil {
 		return []models.CalendarEvent{}, nil
@@ -175,6 +286,7 @@ func (s *Store) ListCalendarEvents(ctx context.Context, startDate, endDate strin
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	events = enrichWithBadenWuerttembergHolidays(events, startDate, endDate)
 	return events, nil
 }
 
@@ -874,50 +986,26 @@ func (s *Store) GetMyUpcomingEventsWithCalendar(
 	}
 
 	fromStr := fromDate.Format("2006-01-02")
+	endStr := fromDate.AddDate(1, 0, 0).Format("2006-01-02")
 
-	rows, err := s.db.Query(ctx, `
-		SELECT
-			id,
-			event_type,
-			title,
-			description,
-			TO_CHAR(start_date, 'YYYY-MM-DD'),
-			TO_CHAR(end_date, 'YYYY-MM-DD'),
-			TO_CHAR(start_time, 'HH24:MI'),
-			TO_CHAR(end_time, 'HH24:MI')
+	var maxEndDate *string
+	if err := s.db.QueryRow(ctx, `
+		SELECT TO_CHAR(MAX(end_date), 'YYYY-MM-DD')
 		FROM calendar_events
 		WHERE end_date >= $1::date
-		  AND event_type <> 'ferien'
-		ORDER BY start_date ASC, start_time ASC NULLS FIRST, created_at ASC
-	`, fromStr)
+	`, fromStr).Scan(&maxEndDate); err == nil && maxEndDate != nil && *maxEndDate > endStr {
+		endStr = *maxEndDate
+	}
+
+	calEvents, err := s.ListCalendarEvents(ctx, fromStr, endStr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query upcoming calendar events: %w", err)
 	}
-	defer rows.Close()
-
-	calEvents := make([]models.CalendarEvent, 0)
-	for rows.Next() {
-		var ev models.CalendarEvent
-		if err := rows.Scan(
-			&ev.ID,
-			&ev.EventType,
-			&ev.Title,
-			&ev.Description,
-			&ev.StartDate,
-			&ev.EndDate,
-			&ev.StartTime,
-			&ev.EndTime,
-		); err != nil {
-			return nil, err
-		}
-		calEvents = append(calEvents, ev)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	rows.Close()
 
 	for _, ev := range calEvents {
+		if ev.EventType == "ferien" {
+			continue
+		}
 		reqGroup := requiredGroupForEventType(ev.EventType)
 		if reqGroup > 0 && !includeAllGroupEAs {
 			if familyID == nil || *familyID == uuid.Nil {
@@ -942,7 +1030,7 @@ func (s *Store) GetMyUpcomingEventsWithCalendar(
 			EndTime:     ev.EndTime,
 			Title:       ev.Title,
 			Description: ev.Description,
-			Editable:    true,
+			Editable:    ev.Editable,
 		})
 	}
 

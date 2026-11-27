@@ -245,6 +245,7 @@ test.describe('Test Case 51: Events Calendar, Day Editor, TSV Import & Start Pag
     const parentId = fam.parents[0].id;
 
     // 1. Seed 3 non-ferien events where the 2nd and 3rd are >30 days after 2026-11-01, plus a ferien event
+    // and a Christmas schliesszeit covering 2026-12-24..2027-01-06 so the winter state holidays are suppressed
     const impFarRes = await request.post('/api/events/import', {
       headers: { Authorization: 'Bearer developer@example.com' },
       data: {
@@ -255,7 +256,8 @@ test.describe('Test Case 51: Events Calendar, Day Editor, TSV Import & Start Pag
           { event_type: 'ferien', start_date: '2026-11-02', end_date: '2026-11-06' }, // excluded
           { event_type: 'putz_we', start_date: '2026-11-14', end_date: '2026-11-14' }, // within 30 days
           { event_type: 'weihnachtsfeier', start_date: '2026-12-18', end_date: '2026-12-18', start_time: '16:00' }, // >30 days
-          { event_type: 'custom', start_date: '2027-01-15', end_date: '2027-01-15', title: 'Neujahrsempfang' }, // >30 days
+          { event_type: 'custom', start_date: '2026-12-22', end_date: '2026-12-22', title: 'Neujahrsempfang' }, // >30 days
+          { event_type: 'schliesszeit', start_date: '2026-12-24', end_date: '2027-01-06' }, // suppresses 12-25, 01-01, 01-06 state holidays
         ],
       },
     });

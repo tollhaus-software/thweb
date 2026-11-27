@@ -9,6 +9,7 @@ import {
   getEventTypeMeta,
   getEventTypeLabel,
   getCalendarEventDisplayTitle,
+  isCalendarEventEditable,
   formatEventTimeRange,
   formatEventDateRange,
 } from '../../utils/calendarEvents';
@@ -209,7 +210,7 @@ export const EventsDayView: React.FC<EventsDayViewProps> = ({
                   )}
                 </div>
 
-                {canWrite && (
+                {canWrite && isCalendarEventEditable(ev) && (
                   <div className="events-detail-actions">
                     <button
                       type="button"
