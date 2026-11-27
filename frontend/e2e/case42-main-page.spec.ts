@@ -87,14 +87,9 @@ test.describe('Test Case 42: Main Page (Default Homepage, Cook, Food, and Rest o
     await expect(mainTab).toBeVisible();
     await expect(mainTab).toHaveClass(/active/);
 
-    // 5. Verify Header: "Heute ist <day>, <date>" and "Willkommen, <email>!"
-    const pageTitle = page.getByTestId('main-page-title');
-    await expect(pageTitle).toBeVisible();
-    await expect(pageTitle).toContainText('Heute ist');
-
-    const welcomeGreeting = page.getByTestId('main-page-welcome');
-    await expect(welcomeGreeting).toBeVisible();
-    await expect(welcomeGreeting).toHaveText('Willkommen, developer@example.com!');
+    // 5. Verify Header greeting is not shown
+    await expect(page.getByTestId('main-page-title')).toHaveCount(0);
+    await expect(page.getByTestId('main-page-welcome')).toHaveCount(0);
 
     // 6. Verify SINGLE box layout: title is "Essen heute" (or "Essen am Montag" on Sat/Sun)
     const foodCard = page.getByTestId('main-page-food-card');
@@ -211,10 +206,8 @@ test.describe('Test Case 42: Main Page (Default Homepage, Cook, Food, and Rest o
     // 4. Verify main page is displayed
     await expect(page.getByTestId('main-page')).toBeVisible();
 
-    // 5. Verify greeting uses parent first name: "Willkommen, Maria!"
-    const welcomeGreeting = page.getByTestId('main-page-welcome');
-    await expect(welcomeGreeting).toBeVisible();
-    await expect(welcomeGreeting).toHaveText('Willkommen, Maria!');
+    // 5. Verify greeting is not shown
+    await expect(page.getByTestId('main-page-welcome')).toHaveCount(0);
 
     // 6. Verify "Zur Kochansicht" is not shown on the main page itself, while "Kochansicht" IS available under "Kochen" in the sidebar navigation
     await expect(page.getByTestId('main-page-kochansicht-btn')).toHaveCount(0);
@@ -528,29 +521,16 @@ test.describe('Test Case 42: Main Page (Default Homepage, Cook, Food, and Rest o
     const mainPage = page.getByTestId('main-page');
     await expect(mainPage).toBeVisible();
 
-    const pageTitle = page.getByTestId('main-page-title');
-    const welcomeGreeting = page.getByTestId('main-page-welcome');
     const foodCard = page.getByTestId('main-page-food-card');
     const quickStartCard = page.getByTestId('main-page-quickstart-card');
 
     // 1. Verify light mode colors
-    const lightTitleColor = await pageTitle.evaluate((el) => window.getComputedStyle(el).color);
-    const lightWelcomeColor = await welcomeGreeting.evaluate((el) => window.getComputedStyle(el).color);
     const lightCardBg = await foodCard.evaluate((el) => window.getComputedStyle(el).backgroundColor);
 
-    expect(lightTitleColor).toBe('rgb(15, 23, 42)'); // #0f172a
-    expect(lightWelcomeColor).toBe('rgb(71, 85, 105)'); // #475569
     expect(lightCardBg).toBe('rgb(255, 255, 255)'); // #ffffff
 
     // 2. Switch to dark mode
     await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
-
-    // 3. Verify dark mode header contrast
-    const darkTitleColor = await pageTitle.evaluate((el) => window.getComputedStyle(el).color);
-    const darkWelcomeColor = await welcomeGreeting.evaluate((el) => window.getComputedStyle(el).color);
-
-    expect(darkTitleColor).toBe('rgb(241, 243, 244)'); // #f1f3f4 (--text-h)
-    expect(darkWelcomeColor).toBe('rgb(154, 160, 166)'); // #9aa0a6 (--text-secondary)
 
     // 4. Verify dark mode card surfaces are dark (not white)
     const darkFoodCardBg = await foodCard.evaluate((el) => window.getComputedStyle(el).backgroundColor);

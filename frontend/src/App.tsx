@@ -1902,25 +1902,6 @@ const Dashboard: React.FC = () => {
   const [targetParentForConsent, setTargetParentForConsent] = React.useState<Parent | null>(null);
   const [isHistoricalAlumni, setIsHistoricalAlumni] = React.useState<boolean>(false);
 
-  const currentAuthUserFirstName = React.useMemo(() => {
-    if (user?.first_name) return user.first_name;
-    if (!user?.email) return '';
-    const normEmail = user.email.trim().toLowerCase();
-    for (const f of families) {
-      for (const p of f.parents || []) {
-        if (p.emails?.some((e: any) => (e.canonical_value || e.value || '').trim().toLowerCase() === normEmail)) {
-          if (p.first_name) return p.first_name;
-        }
-      }
-    }
-    for (const emp of employees) {
-      if (emp.emails?.some((e: any) => (e.canonical_value || e.value || '').trim().toLowerCase() === normEmail)) {
-        if (emp.first_name) return emp.first_name;
-      }
-    }
-    return '';
-  }, [user?.first_name, user?.email, families, employees]);
-
   const [familySortOrder, setFamilySortOrder] = React.useState<FamilySortOrder>(() => {
     try {
       const saved = localStorage.getItem('thweb_family_sort_order');
@@ -6999,7 +6980,6 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
               canReadMealAllergens={canReadMealAllergens}
               canAccessMga={canReadFamiliesAll || canReadMembers || canReadJobs}
               targetMgaTab={categoryHasLandingPage('mga', navPerms) ? 'mga' : getFirstPermittedTabForCategory('mga', navPerms)}
-              userName={currentAuthUserFirstName}
             />
           </div>
         ) : activeTab === 'contacts' ? (

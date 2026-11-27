@@ -41,7 +41,6 @@ export interface MainPageProps {
   canAccessMga?: boolean;
   targetMgaTab?: string;
   todayDate?: string; // Optional override for testing
-  userName?: string;
 }
 
 interface DailyMealInfo {
@@ -60,7 +59,6 @@ export const MainPage: React.FC<MainPageProps> = ({
   canAccessMga,
   targetMgaTab,
   todayDate,
-  userName,
 }) => {
   const { user, token, hasPermission } = useAuth();
   const isSingleColumn = useIsMobile(1024);
@@ -342,23 +340,6 @@ export const MainPage: React.FC<MainPageProps> = ({
       return dateStr;
     }
   };
-
-  const formattedTodayLong = useMemo(() => {
-    try {
-      return new Intl.DateTimeFormat('de-DE', {
-        weekday: 'long',
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-      }).format(todayObj);
-    } catch {
-      return todayDateStr;
-    }
-  }, [todayObj, todayDateStr]);
-
-  const displayName = useMemo(() => {
-    return userName || user?.first_name || user?.email || '';
-  }, [userName, user?.first_name, user?.email]);
 
   const cookNameFormatted = useMemo(() => {
     const raw = mainMealData?.who_is_cooking?.trim();
@@ -706,19 +687,6 @@ export const MainPage: React.FC<MainPageProps> = ({
 
   return (
     <div className="main-page-container" data-testid="main-page">
-      {/* Welcome / Header Section */}
-      <section className="main-page-header">
-        <div className="main-page-header-text">
-          <h1 className="main-page-title" data-testid="main-page-title">
-            Heute ist {formattedTodayLong}
-          </h1>
-          <p className="main-page-welcome" data-testid="main-page-welcome">
-            Willkommen{displayName ? `, ${displayName}` : ''}!
-          </p>
-          <span className="sr-only" data-testid="main-page-today-date">{formattedTodayLong}</span>
-        </div>
-      </section>
-
       {error && (
         <div className="main-page-error-banner">
           <AlertCircle size={20} />
