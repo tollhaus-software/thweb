@@ -1,8 +1,27 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { GoogleOAuthProvider } from '@react-oauth/google'
+import { registerSW } from 'virtual:pwa-register'
 import './index.css'
 import App from './App.tsx'
+
+// Automatically update the Service Worker and reload when a new deployment takes control.
+// Also check for updates periodically (every 60 minutes) and whenever the app/tab returns to the foreground.
+const SW_UPDATE_INTERVAL_MS = 60 * 60 * 1000;
+registerSW({
+  immediate: true,
+  onRegisteredSW(_swUrl, registration) {
+    if (!registration) return;
+    setInterval(() => {
+      void registration.update();
+    }, SW_UPDATE_INTERVAL_MS);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        void registration.update();
+      }
+    });
+  },
+});
 
 // Global error logger to display runtime errors on the page
 window.addEventListener('error', (event) => {
