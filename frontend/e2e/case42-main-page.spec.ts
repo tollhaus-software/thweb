@@ -595,6 +595,13 @@ test.describe('Test Case 42: Main Page (Default Homepage, Cook, Food, and Rest o
 
     const pwaCard = safariPage.getByTestId('main-page-pwa-card');
     await expect(pwaCard).toBeVisible();
+    const pwaTitle = safariPage.getByTestId('main-page-pwa-title');
+    await expect(pwaTitle).toBeVisible();
+    const titleNotTruncated = await pwaTitle.evaluate((el) => {
+      const style = window.getComputedStyle(el);
+      return style.whiteSpace !== 'nowrap' && el.scrollWidth <= el.clientWidth + 1;
+    });
+    expect(titleNotTruncated).toBe(true);
     // Starts collapsed as a compact top banner
     await expect(safariPage.getByTestId('pwa-ios-safari-steps')).toHaveCount(0);
     await safariPage.getByTestId('main-page-pwa-toggle-btn').click();
