@@ -103,6 +103,7 @@ export const DashboardTodosAdminTab: React.FC = () => {
   const [formColor, setFormColor] = useState<string>('default');
   const [formIcon, setFormIcon] = useState<string>('');
   const [formOnCookingDays, setFormOnCookingDays] = useState<boolean>(false);
+  const [formOnLastCookingDayOfWeek, setFormOnLastCookingDayOfWeek] = useState<boolean>(false);
   const [formOnVolunteerAbsence, setFormOnVolunteerAbsence] = useState<boolean>(false);
   const [formOnVesperDays, setFormOnVesperDays] = useState<boolean>(false);
   const [formOnYellowBagDay, setFormOnYellowBagDay] = useState<boolean>(false);
@@ -162,6 +163,7 @@ export const DashboardTodosAdminTab: React.FC = () => {
     setFormColor('default');
     setFormIcon('');
     setFormOnCookingDays(false);
+    setFormOnLastCookingDayOfWeek(false);
     setFormOnVolunteerAbsence(false);
     setFormOnVesperDays(false);
     setFormOnYellowBagDay(false);
@@ -182,6 +184,7 @@ export const DashboardTodosAdminTab: React.FC = () => {
     setFormColor(todo.color || 'default');
     setFormIcon(todo.icon || '');
     setFormOnCookingDays(Boolean(todo.on_cooking_days));
+    setFormOnLastCookingDayOfWeek(Boolean(todo.on_last_cooking_day_of_week));
     setFormOnVolunteerAbsence(Boolean(todo.on_volunteer_absence));
     setFormOnVesperDays(Boolean(todo.on_vesper_days));
     setFormOnYellowBagDay(Boolean(todo.on_yellow_bag_day));
@@ -224,6 +227,7 @@ export const DashboardTodosAdminTab: React.FC = () => {
         color: formColor,
         icon: formIcon,
         on_cooking_days: formOnCookingDays,
+        on_last_cooking_day_of_week: formOnLastCookingDayOfWeek,
         on_volunteer_absence: formOnVolunteerAbsence,
         on_vesper_days: formOnVesperDays,
         on_yellow_bag_day: formOnYellowBagDay,
@@ -289,6 +293,9 @@ export const DashboardTodosAdminTab: React.FC = () => {
     const badges: string[] = [];
     if (todo.on_cooking_days) {
       badges.push('An Kochtagen');
+    }
+    if (todo.on_last_cooking_day_of_week) {
+      badges.push('Am letzten Kochtag der Woche');
     }
     if (todo.on_volunteer_absence) {
       badges.push('Abwesenheit Freiwillige');
@@ -617,6 +624,15 @@ export const DashboardTodosAdminTab: React.FC = () => {
                         onChange={(e) => setFormOnCookingDays(e.target.checked)}
                       />
                       <span>An allen Kochtagen</span>
+                    </label>
+                    <label className="dashboard-todo-check-label">
+                      <input
+                        type="checkbox"
+                        data-testid="todo-cond-last-cooking-day-of-week"
+                        checked={formOnLastCookingDayOfWeek}
+                        onChange={(e) => setFormOnLastCookingDayOfWeek(e.target.checked)}
+                      />
+                      <span>Am letzten Kochtag der Woche</span>
                     </label>
                     <label className="dashboard-todo-check-label">
                       <input

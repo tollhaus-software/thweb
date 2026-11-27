@@ -55,6 +55,7 @@ export interface DashboardTodoItem {
   color: string;
   icon: string;
   on_cooking_days: boolean;
+  on_last_cooking_day_of_week?: boolean;
   on_volunteer_absence: boolean;
   on_vesper_days: boolean;
   on_yellow_bag_day: boolean;

@@ -495,6 +495,7 @@ CREATE TABLE IF NOT EXISTS dashboard_todos (
     color TEXT NOT NULL DEFAULT 'default',
     icon TEXT NOT NULL DEFAULT '',
     on_cooking_days BOOLEAN NOT NULL DEFAULT FALSE,
+    on_last_cooking_day_of_week BOOLEAN NOT NULL DEFAULT FALSE,
     on_volunteer_absence BOOLEAN NOT NULL DEFAULT FALSE,
     on_vesper_days BOOLEAN NOT NULL DEFAULT FALSE,
     on_yellow_bag_day BOOLEAN NOT NULL DEFAULT FALSE,

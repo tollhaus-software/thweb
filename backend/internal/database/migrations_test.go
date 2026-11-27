@@ -408,6 +408,19 @@ func TestApplySchemaMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected dashboard_todos table to exist after migrations: %v", err)
 	}
+
+	var lastCookingDayColType string
+	err = testDB.QueryRow(`
+		SELECT data_type
+		FROM information_schema.columns
+		WHERE table_name = 'dashboard_todos' AND column_name = 'on_last_cooking_day_of_week';
+	`).Scan(&lastCookingDayColType)
+	if err != nil {
+		t.Fatalf("expected dashboard_todos.on_last_cooking_day_of_week column to exist: %v", err)
+	}
+	if lastCookingDayColType != "boolean" {
+		t.Errorf("expected dashboard_todos.on_last_cooking_day_of_week data_type \"boolean\", got %q", lastCookingDayColType)
+	}
 }
 
 func TestSQLCanonicalEmailParityWithGo(t *testing.T) {

@@ -143,6 +143,9 @@ func TodoApplies(t models.DashboardTodo, ctx *TaskEvaluationContext) bool {
 			return false
 		}
 	}
+	if t.OnLastCookingDayOfWeek && ctx.Date.Weekday() != time.Friday {
+		return false
+	}
 	if t.OnVolunteerAbsence && !ctx.HasBufdiAbsence {
 		return false
 	}
@@ -326,6 +329,7 @@ func (s *Store) EnsureDashboardTodosTable(ctx context.Context) error {
 			color TEXT NOT NULL DEFAULT 'default',
 			icon TEXT NOT NULL DEFAULT '',
 			on_cooking_days BOOLEAN NOT NULL DEFAULT FALSE,
+			on_last_cooking_day_of_week BOOLEAN NOT NULL DEFAULT FALSE,
 			on_volunteer_absence BOOLEAN NOT NULL DEFAULT FALSE,
 			on_vesper_days BOOLEAN NOT NULL DEFAULT FALSE,
 			on_yellow_bag_day BOOLEAN NOT NULL DEFAULT FALSE,
@@ -336,6 +340,7 @@ func (s *Store) EnsureDashboardTodosTable(ctx context.Context) error {
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		);
+		ALTER TABLE dashboard_todos ADD COLUMN IF NOT EXISTS on_last_cooking_day_of_week BOOLEAN NOT NULL DEFAULT FALSE;
 	`)
 	return err
 }
@@ -352,19 +357,19 @@ func (s *Store) SeedDefaultDashboardTodos(ctx context.Context) error {
 		_, err = s.db.Exec(ctx, `
 			INSERT INTO dashboard_todos (
 				id, name, short_name, sort_order, color, icon,
-				on_cooking_days, on_volunteer_absence, on_vesper_days,
+				on_cooking_days, on_last_cooking_day_of_week, on_volunteer_absence, on_vesper_days,
 				on_yellow_bag_day, on_day_before_yellow_bag_day,
 				weekdays, action, description_markdown
 			) VALUES (
 				$1, $2, $3, $4, $5, $6,
-				$7, $8, $9,
-				$10, $11,
-				$12::jsonb, $13, $14
+				$7, $8, $9, $10,
+				$11, $12,
+				$13::jsonb, $14, $15
 			)
 			ON CONFLICT (id) DO NOTHING
 		`,
 			t.ID, t.Name, t.ShortName, t.SortOrder, t.Color, t.Icon,
-			t.OnCookingDays, t.OnVolunteerAbsence, t.OnVesperDays,
+			t.OnCookingDays, t.OnLastCookingDayOfWeek, t.OnVolunteerAbsence, t.OnVesperDays,
 			t.OnYellowBagDay, t.OnDayBeforeYellowBagDay,
 			string(weekdaysJSON), t.Action, t.DescriptionMarkdown,
 		)
@@ -388,6 +393,7 @@ func scanDashboardTodo(scanner interface {
 		&t.Color,
 		&t.Icon,
 		&t.OnCookingDays,
+		&t.OnLastCookingDayOfWeek,
 		&t.OnVolunteerAbsence,
 		&t.OnVesperDays,
 		&t.OnYellowBagDay,
@@ -417,7 +423,7 @@ func (s *Store) ListDashboardTodos(ctx context.Context) ([]models.DashboardTodo,
 	rows, err := s.db.Query(ctx, `
 		SELECT
 			id, name, short_name, sort_order, color, icon,
-			on_cooking_days, on_volunteer_absence, on_vesper_days,
+			on_cooking_days, on_last_cooking_day_of_week, on_volunteer_absence, on_vesper_days,
 			on_yellow_bag_day, on_day_before_yellow_bag_day,
 			weekdays, action, description_markdown,
 			created_at, updated_at
@@ -450,7 +456,7 @@ func (s *Store) GetDashboardTodo(ctx context.Context, id string) (*models.Dashbo
 	row := s.db.QueryRow(ctx, `
 		SELECT
 			id, name, short_name, sort_order, color, icon,
-			on_cooking_days, on_volunteer_absence, on_vesper_days,
+			on_cooking_days, on_last_cooking_day_of_week, on_volunteer_absence, on_vesper_days,
 			on_yellow_bag_day, on_day_before_yellow_bag_day,
 			weekdays, action, description_markdown,
 			created_at, updated_at
@@ -537,24 +543,24 @@ func (s *Store) CreateDashboardTodo(ctx context.Context, actorUserID uuid.UUID, 
 	row := s.db.QueryRow(ctx, `
 		INSERT INTO dashboard_todos (
 			id, name, short_name, sort_order, color, icon,
-			on_cooking_days, on_volunteer_absence, on_vesper_days,
+			on_cooking_days, on_last_cooking_day_of_week, on_volunteer_absence, on_vesper_days,
 			on_yellow_bag_day, on_day_before_yellow_bag_day,
 			weekdays, action, description_markdown
 		) VALUES (
 			$1, $2, $3, $4, $5, $6,
-			$7, $8, $9,
-			$10, $11,
-			$12::jsonb, $13, $14
+			$7, $8, $9, $10,
+			$11, $12,
+			$13::jsonb, $14, $15
 		)
 		RETURNING
 			id, name, short_name, sort_order, color, icon,
-			on_cooking_days, on_volunteer_absence, on_vesper_days,
+			on_cooking_days, on_last_cooking_day_of_week, on_volunteer_absence, on_vesper_days,
 			on_yellow_bag_day, on_day_before_yellow_bag_day,
 			weekdays, action, description_markdown,
 			created_at, updated_at
 	`,
 		todo.ID, todo.Name, todo.ShortName, todo.SortOrder, todo.Color, todo.Icon,
-		todo.OnCookingDays, todo.OnVolunteerAbsence, todo.OnVesperDays,
+		todo.OnCookingDays, todo.OnLastCookingDayOfWeek, todo.OnVolunteerAbsence, todo.OnVesperDays,
 		todo.OnYellowBagDay, todo.OnDayBeforeYellowBagDay,
 		string(weekdaysJSON), todo.Action, todo.DescriptionMarkdown,
 	)
@@ -596,24 +602,25 @@ func (s *Store) UpdateDashboardTodo(ctx context.Context, actorUserID uuid.UUID, 
 			color = $5,
 			icon = $6,
 			on_cooking_days = $7,
-			on_volunteer_absence = $8,
-			on_vesper_days = $9,
-			on_yellow_bag_day = $10,
-			on_day_before_yellow_bag_day = $11,
-			weekdays = $12::jsonb,
-			action = $13,
-			description_markdown = $14,
+			on_last_cooking_day_of_week = $8,
+			on_volunteer_absence = $9,
+			on_vesper_days = $10,
+			on_yellow_bag_day = $11,
+			on_day_before_yellow_bag_day = $12,
+			weekdays = $13::jsonb,
+			action = $14,
+			description_markdown = $15,
 			updated_at = NOW()
 		WHERE id = $1
 		RETURNING
 			id, name, short_name, sort_order, color, icon,
-			on_cooking_days, on_volunteer_absence, on_vesper_days,
+			on_cooking_days, on_last_cooking_day_of_week, on_volunteer_absence, on_vesper_days,
 			on_yellow_bag_day, on_day_before_yellow_bag_day,
 			weekdays, action, description_markdown,
 			created_at, updated_at
 	`,
 		id, todo.Name, todo.ShortName, todo.SortOrder, todo.Color, todo.Icon,
-		todo.OnCookingDays, todo.OnVolunteerAbsence, todo.OnVesperDays,
+		todo.OnCookingDays, todo.OnLastCookingDayOfWeek, todo.OnVolunteerAbsence, todo.OnVesperDays,
 		todo.OnYellowBagDay, todo.OnDayBeforeYellowBagDay,
 		string(weekdaysJSON), todo.Action, todo.DescriptionMarkdown,
 	)

@@ -1083,6 +1083,7 @@ type DashboardTodo struct {
 	Color                   string    `json:"color"`
 	Icon                    string    `json:"icon"`
 	OnCookingDays           bool      `json:"on_cooking_days"`
+	OnLastCookingDayOfWeek  bool      `json:"on_last_cooking_day_of_week"`
 	OnVolunteerAbsence      bool      `json:"on_volunteer_absence"`
 	OnVesperDays            bool      `json:"on_vesper_days"`
 	OnYellowBagDay          bool      `json:"on_yellow_bag_day"`

@@ -2132,5 +2132,32 @@ test.describe('Test Case 10: Embedded Dashboard Tab', () => {
     await page.getByTestId('delete-todo-btn-kaffeemaschine_ausschalten').click();
     await page.getByTestId('confirm-delete-todo-btn').click();
     await expect(page.getByTestId('admin-todo-row-kaffeemaschine_ausschalten')).toHaveCount(0);
+
+    // 5. Create a TODO with "Am letzten Kochtag der Woche" condition and verify it shows only on Friday
+    await adminPage.getByTestId('create-dashboard-todo-btn').click();
+    await expect(editModal).toBeVisible();
+    await editModal.getByTestId('todo-id-input').fill('wochenabschluss_kueche');
+    await editModal.getByTestId('todo-name-input').fill('Wochenabschluss Küche');
+    await editModal.getByTestId('todo-cond-last-cooking-day-of-week').check();
+    await editModal.getByTestId('todo-modal-save-btn').click();
+    await expect(editModal).toHaveCount(0);
+
+    const lastCookingRow = adminPage.getByTestId('admin-todo-row-wochenabschluss_kueche');
+    await expect(lastCookingRow).toBeVisible();
+    await expect(lastCookingRow).toContainText('Am letzten Kochtag der Woche');
+
+    const friBriefRes = await request.get('/api/dashboard/daily-brief?date=2026-11-27', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+    });
+    expect(friBriefRes.ok()).toBeTruthy();
+    const friBrief = await friBriefRes.json();
+    expect(friBrief.tasks_and_info).toContain('wochenabschluss_kueche');
+
+    const thuBriefRes = await request.get('/api/dashboard/daily-brief?date=2026-11-26', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+    });
+    expect(thuBriefRes.ok()).toBeTruthy();
+    const thuBrief = await thuBriefRes.json();
+    expect(thuBrief.tasks_and_info).not.toContain('wochenabschluss_kueche');
   });
 });

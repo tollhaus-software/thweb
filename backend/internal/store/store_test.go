@@ -892,6 +892,21 @@ func TestDashboardTaskConditions(t *testing.T) {
 	if !TodoApplies(dbTodo, &TaskEvaluationContext{Date: wednesday, IsVesperDay: true, HasBufdiAbsence: true}) {
 		t.Errorf("expected dbTodo to apply on Wednesday with vesper and bufdi absence")
 	}
+
+	// Test OnLastCookingDayOfWeek (Friday)
+	lastCookingTodo := models.DashboardTodo{
+		ID:                     "last_cooking_day_task",
+		OnLastCookingDayOfWeek: true,
+	}
+	if TodoApplies(lastCookingTodo, &TaskEvaluationContext{Date: wednesday}) {
+		t.Errorf("expected lastCookingTodo not to apply on Wednesday")
+	}
+	if TodoApplies(lastCookingTodo, &TaskEvaluationContext{Date: tuesday}) {
+		t.Errorf("expected lastCookingTodo not to apply on Tuesday")
+	}
+	if !TodoApplies(lastCookingTodo, &TaskEvaluationContext{Date: friday}) {
+		t.Errorf("expected lastCookingTodo to apply on Friday")
+	}
 }
 
 func TestAuditModifications_ExcludesVaccinationStatus(t *testing.T) {
