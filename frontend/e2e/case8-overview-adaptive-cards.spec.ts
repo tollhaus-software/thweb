@@ -159,6 +159,44 @@ test.describe('Test Case 8: Adaptive Card Layout for familiesOverview Tab', () =
     // Verify default grouping is "Gruppen"
     await expect(page.locator('.overview-grouping-btn', { hasText: 'Gruppen' })).toHaveAttribute('aria-pressed', 'true');
 
+    // Verify mobile expandable search button behavior on Contacts tab:
+    // Clicking the magnifying glass slides open the search field between the toolbar and content with focus inside,
+    // while keeping the grouping toggle visible; clicking the magnifying glass again collapses it.
+    const mobileSearchBtn = page.getByTestId('overview-mobile-search-btn');
+    await expect(mobileSearchBtn).toBeVisible();
+    await expect(mobileSearchBtn).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.locator('.overview-search-input')).not.toBeVisible();
+
+    await mobileSearchBtn.click();
+    await expect(mobileSearchBtn).toHaveAttribute('aria-expanded', 'true');
+    const mobileSearchInput = page.locator('.overview-search-input');
+    await expect(mobileSearchInput).toBeVisible();
+    await expect(mobileSearchInput).toBeFocused();
+    // Grouping toggle stays visible above the search drawer
+    await expect(page.locator('.overview-grouping-toggle')).toBeVisible();
+
+    // Verify search drawer is positioned vertically between the toolbar row and the content table
+    const controlsRowBox = await page.locator('.controls-row').boundingBox();
+    const searchDrawerBox = await page.getByTestId('overview-mobile-search-expanded').boundingBox();
+    const contentBox = await tableContainer.boundingBox();
+    expect(controlsRowBox).not.toBeNull();
+    expect(searchDrawerBox).not.toBeNull();
+    expect(contentBox).not.toBeNull();
+    if (controlsRowBox && searchDrawerBox && contentBox) {
+      expect(searchDrawerBox.y).toBeGreaterThanOrEqual(controlsRowBox.y + controlsRowBox.height - 2);
+      expect(contentBox.y).toBeGreaterThanOrEqual(searchDrawerBox.y + searchDrawerBox.height - 2);
+    }
+
+    await mobileSearchInput.fill('Weber');
+    await expect(page.locator('tr.overview-parent-row', { hasText: 'Thomas Weber' })).toBeVisible();
+    await expect(page.locator('tr.overview-parent-row', { hasText: 'Hans Schmidt' })).toHaveCount(0);
+
+    // Clicking the magnifying glass again collapses the search bar and resets the filter
+    await mobileSearchBtn.click();
+    await expect(mobileSearchBtn).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.locator('.overview-search-input')).not.toBeVisible();
+    await expect(page.locator('tr.overview-parent-row', { hasText: 'Hans Schmidt' })).toBeVisible();
+
     // Switch to "Familien" grouping mode to verify parent and child card rendering in family mode
     await page.locator('.overview-grouping-btn', { hasText: 'Familien' }).click();
 

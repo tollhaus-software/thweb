@@ -1482,9 +1482,79 @@ tr.family-group-row td {
 
   .overview-controls-left {
     flex-wrap: nowrap !important;
-    gap: 1.25rem !important;
+    gap: 0.4rem !important;
     width: 100% !important;
     justify-content: space-between !important;
+  }
+
+  .overview-mobile-search-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    height: 34px !important;
+    width: 34px !important;
+    min-width: 34px !important;
+    padding: 0 !important;
+    border-radius: 4px !important;
+    cursor: pointer !important;
+    border: 1px solid var(--border) !important;
+    background: var(--surface, var(--bg-surface, #ffffff)) !important;
+    color: var(--text, #1f2937) !important;
+    box-sizing: border-box !important;
+    flex-shrink: 0 !important;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease !important;
+  }
+
+  .overview-mobile-search-btn.active {
+    border-color: var(--primary) !important;
+    color: var(--primary) !important;
+    background: var(--primary-subtle, rgba(37, 99, 235, 0.1)) !important;
+  }
+
+  .overview-mobile-search-drawer {
+    display: grid !important;
+    grid-template-rows: 0fr !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    width: 100% !important;
+    flex-shrink: 0 !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    transition:
+      grid-template-rows 0.24s cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 0.18s ease,
+      margin-top 0.24s cubic-bezier(0.22, 1, 0.36, 1),
+      margin-bottom 0.24s cubic-bezier(0.22, 1, 0.36, 1),
+      visibility 0s linear 0.24s !important;
+  }
+
+  .overview-mobile-search-drawer.open {
+    grid-template-rows: 1fr !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+    margin-top: -0.25rem !important;
+    margin-bottom: 0.75rem !important;
+    transition:
+      grid-template-rows 0.24s cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 0.2s ease 0.03s,
+      margin-top 0.24s cubic-bezier(0.22, 1, 0.36, 1),
+      margin-bottom 0.24s cubic-bezier(0.22, 1, 0.36, 1),
+      visibility 0s linear 0s !important;
+  }
+
+  .overview-mobile-search-drawer-inner {
+    overflow: hidden !important;
+    display: flex !important;
+    align-items: center !important;
+    width: 100% !important;
+    min-height: 0 !important;
+  }
+
+  .overview-mobile-search-drawer.open .overview-mobile-search-drawer-inner {
+    padding: 2px !important;
+    margin: -2px !important;
   }
 
   .overview-search-input {
@@ -1492,14 +1562,14 @@ tr.family-group-row td {
     width: 100% !important;
     min-width: 0 !important;
     max-width: none !important;
-    font-size: 0.8rem !important;
-    padding: 0.35rem 0.45rem !important;
-    height: 30px !important;
+    font-size: 0.85rem !important;
+    padding: 0.4rem 0.65rem !important;
+    height: 34px !important;
   }
 
   .overview-grouping-toggle {
     flex-shrink: 0 !important;
-    margin-left: auto !important;
+    margin-left: 0 !important;
     gap: 0.2rem !important;
   }
 

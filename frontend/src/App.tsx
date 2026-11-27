@@ -6,7 +6,7 @@ import './App.css';
 
 import { DataTable } from './components/Table/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, X, AlertCircle, ChevronLeft, ChevronRight, Plus, ArrowUpDown, Check, Eye, RefreshCw, Menu, Filter, Printer, Users } from 'lucide-react';
+import { Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, X, AlertCircle, ChevronLeft, ChevronRight, Plus, ArrowUpDown, Check, Eye, RefreshCw, Menu, Filter, Printer, Users, Search } from 'lucide-react';
 import { GroupOverviewPrintModal } from './components/Print/GroupOverviewPrintModal';
 import { useGoogleLogin } from '@react-oauth/google';
 import { MultiValueListEditor, type MultiValueFlagConfig, type MultiValueEntry, type MultiValueItem, getEntryValue, isFlagActive, PHONE_TYPES, getPhoneTypeSymbol, getPhoneTypeLabel } from './components/Table/MultiValueListEditor';
@@ -1999,6 +1999,8 @@ const Dashboard: React.FC = () => {
   ]);
 
   const [globalFilter, setGlobalFilter] = React.useState('');
+  const [isMobileContactsSearchOpen, setIsMobileContactsSearchOpen] = React.useState(false);
+  const mobileContactsSearchInputRef = React.useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = React.useState<
     'main' | 'contacts' | 'families' | 'parents' | 'children' | 'alumni' | 'members' | 'jobs' | 'employees' | 'childcareFees' | 'childcareFeesAll' | 'hygieneBelehrung' | 'hygieneDocument' | 'kochenHygiene' | 'mealPlan' | 'mealAllergens' | 'audit' | 'admin' | 'activity' | 'kiosk' | 'dashboard' | 'dashboardTodos' | string
   >(() => {
@@ -2402,6 +2404,7 @@ const Dashboard: React.FC = () => {
 
   const handleTabClick = React.useCallback((tab: typeof activeTab) => {
     setGlobalFilter('');
+    setIsMobileContactsSearchOpen(false);
     setReturnNav(null);
     setHighlightTarget(null);
     setActiveTab(tab);
@@ -6664,6 +6667,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                 </div>
               </div>
             ) : (
+              <>
               <div className="controls-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                 <div
                   className={`controls-left ${activeTab === 'contacts' ? 'overview-controls-left' : ''}`}
@@ -6674,21 +6678,48 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                     flexWrap: activeTab === 'contacts' ? 'nowrap' : 'wrap',
                   }}
                 >
-                  <input
-                    value={globalFilter ?? ''}
-                    onChange={(e) => setGlobalFilter(e.target.value)}
-                    className={`search-input ${activeTab === 'contacts' ? 'overview-search-input' : ''}`}
-                    placeholder={
-                      activeTab === 'employees'
-                        ? (t('searchEmployees') || 'Mitarbeiter suchen...')
-                        : activeTab === 'jobs'
-                        ? (t('searchJobs') || 'Jobs suchen...')
-                        : activeTab === 'members'
-                        ? t('searchMembers')
-                        : (t('search') || 'Suche')
-                    }
-                    style={{ marginBottom: 0 }}
-                  />
+                  {activeTab === 'contacts' && isMobile ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const isExpanded = isMobileContactsSearchOpen || Boolean(globalFilter);
+                        if (isExpanded) {
+                          setGlobalFilter('');
+                          setIsMobileContactsSearchOpen(false);
+                          mobileContactsSearchInputRef.current?.blur();
+                        } else {
+                          setIsMobileContactsSearchOpen(true);
+                          requestAnimationFrame(() => {
+                            mobileContactsSearchInputRef.current?.focus();
+                          });
+                        }
+                      }}
+                      className={`secondary-button overview-mobile-search-btn ${isMobileContactsSearchOpen || Boolean(globalFilter) ? 'active' : ''}`}
+                      data-testid="overview-mobile-search-btn"
+                      title={t('search') || 'Suche'}
+                      aria-label={t('search') || 'Suche'}
+                      aria-expanded={isMobileContactsSearchOpen || Boolean(globalFilter)}
+                      aria-pressed={isMobileContactsSearchOpen || Boolean(globalFilter)}
+                    >
+                      <Search size={16} />
+                    </button>
+                  ) : (
+                    <input
+                      value={globalFilter ?? ''}
+                      onChange={(e) => setGlobalFilter(e.target.value)}
+                      className={`search-input ${activeTab === 'contacts' ? 'overview-search-input' : ''}`}
+                      placeholder={
+                        activeTab === 'employees'
+                          ? (t('searchEmployees') || 'Mitarbeiter suchen...')
+                          : activeTab === 'jobs'
+                          ? (t('searchJobs') || 'Jobs suchen...')
+                          : activeTab === 'members'
+                          ? t('searchMembers')
+                          : (t('search') || 'Suche')
+                      }
+                      style={{ marginBottom: 0 }}
+                    />
+                  )}
 
                   {activeTab === 'employees' && canWriteEmployees && (
                     <button
@@ -6926,6 +6957,33 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                   <TableZoomControl />
                 </div>
               </div>
+              {activeTab === 'contacts' && isMobile && (
+                <div
+                  className={`overview-mobile-search-drawer ${isMobileContactsSearchOpen || Boolean(globalFilter) ? 'open' : ''}`}
+                  data-testid="overview-mobile-search-expanded"
+                  aria-hidden={!(isMobileContactsSearchOpen || Boolean(globalFilter))}
+                >
+                  <div className="overview-mobile-search-drawer-inner">
+                    <input
+                      ref={mobileContactsSearchInputRef}
+                      value={globalFilter ?? ''}
+                      onChange={(e) => setGlobalFilter(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                          setGlobalFilter('');
+                          setIsMobileContactsSearchOpen(false);
+                          mobileContactsSearchInputRef.current?.blur();
+                        }
+                      }}
+                      className="search-input overview-search-input"
+                      placeholder={t('search') || 'Suche'}
+                      style={{ marginBottom: 0 }}
+                      tabIndex={isMobileContactsSearchOpen || Boolean(globalFilter) ? 0 : -1}
+                    />
+                  </div>
+                </div>
+              )}
+              </>
             )
           );
         })()}
