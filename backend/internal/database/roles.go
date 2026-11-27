@@ -10,15 +10,15 @@ import (
 	"github.com/pavolmarko/thweb-backend/internal/roles"
 )
 
-// SyncRoles synchronizes role definitions from the deployment YAML configuration
-// into the PostgreSQL 'roles' table using an idempotent upsert.
+// SyncRoles seeds initial role definitions from the deployment YAML configuration
+// into the PostgreSQL 'roles' table without overwriting existing database roles.
 func SyncRoles(ctx context.Context, pool *pgxpool.Pool, cfg *roles.Config) error {
 	if cfg == nil || len(cfg.Roles) == 0 {
 		log.Println("[ROLES] No roles to synchronize.")
 		return nil
 	}
 
-	log.Printf("[ROLES] Synchronizing %d role(s) into database...", len(cfg.Roles))
+	log.Printf("[ROLES] Ensuring %d default role(s) exist in database...", len(cfg.Roles))
 	for _, r := range cfg.Roles {
 		perms := r.Permissions
 		if perms == nil {
@@ -41,19 +41,14 @@ func SyncRoles(ctx context.Context, pool *pgxpool.Pool, cfg *roles.Config) error
 		_, err = pool.Exec(ctx, `
 			INSERT INTO roles (id, name, description, permissions, deny_permissions, updated_at)
 			VALUES ($1, $2, $3, $4, $5, NOW())
-			ON CONFLICT (id) DO UPDATE SET
-				name = EXCLUDED.name,
-				description = EXCLUDED.description,
-				permissions = EXCLUDED.permissions,
-				deny_permissions = EXCLUDED.deny_permissions,
-				updated_at = NOW()
+			ON CONFLICT (id) DO NOTHING
 		`, r.ID, r.Name, r.Description, permsJSON, denyPermsJSON)
 		if err != nil {
-			return fmt.Errorf("failed to upsert role %q: %w", r.ID, err)
+			return fmt.Errorf("failed to seed role %q: %w", r.ID, err)
 		}
 	}
 
-	log.Println("[ROLES] All role definitions synchronized successfully.")
+	log.Println("[ROLES] All default role definitions verified in database.")
 	return nil
 }
 

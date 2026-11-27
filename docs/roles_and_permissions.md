@@ -19,10 +19,10 @@ A user can only access an application feature or API endpoint if their effective
    - `volunteers.absences.write` implies `volunteers.absences.read`.
    - `events.all.write` implies `events.all.read`.
    - `events.all.import` implies `events.all.read`.
-3. **Dynamic Roles**: Roles are defined declaratively in a YAML file (`local_dev_roles.yaml` for local development, or `roles.yaml` on deployment side) and loaded via `ROLES_FILE` (falling back to built-in `default_roles.yaml`).
+3. **System & Default-Grant Roles**: Initial role definitions and `auto_grant_on` trigger mappings are defined declaratively in a YAML file (`local_dev_roles.yaml` for local development, or `roles.yaml` on deployment side) and loaded via `ROLES_FILE` (falling back to built-in `default_roles.yaml`).
 4. **Explicit Denials (`deny_permissions`)**: Roles can define `deny_permissions` to explicitly strip specific permissions from a user's effective permissions. This takes precedence over additive permissions (such as auto-granted parent self-service permissions), allowing educators who are also parents to retain self-service access without gaining access to fee calculation.
-5. **Database Synchronization**: Upon startup, the Go backend reads `ROLES_FILE` (or falls back to built-in defaults) and performs an idempotent upsert into the PostgreSQL `roles` table.
-6. **Auto-Granted Roles (`auto_grant_on`)**: Certain roles are dynamically assigned at runtime or seeded without manual user intervention.
+5. **Initial Database Seeding & Admin Panel Persistence**: Upon startup, the Go backend reads `ROLES_FILE` (or falls back to built-in defaults) and seeds any missing roles into the PostgreSQL `roles` table (`ON CONFLICT (id) DO NOTHING`). Once a role exists in the database, PostgreSQL is the single source of truth for its permissions—changes made on the Admin Roles page take effect immediately (including for auto-granted roles like `caregiver_default` and `parent_default`) and persist across container restarts and new deployments.
+6. **Protected System Roles (`auto_grant_on`)**: Roles with `auto_grant_on` triggers (and `admin`) are marked as protected system roles (`is_system: true`). Their permissions can be edited in the Admin Panel (except the `*` wildcard on `admin`, which is locked to prevent lockout), but the roles themselves cannot be deleted.
 
 ---
 

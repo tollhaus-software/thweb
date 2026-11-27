@@ -12,15 +12,28 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/pavolmarko/thweb-backend/internal/models"
+	"github.com/pavolmarko/thweb-backend/internal/roles"
 )
 
+func (s *Server) enrichRolesMetadata(rolesList []models.Role) {
+	var rolesCfg *roles.Config
+	if s.Authenticator != nil {
+		rolesCfg = s.Authenticator.RolesConfig
+	}
+	for i := range rolesList {
+		rolesList[i].AutoGrantOn = rolesCfg.AutoGrantTriggersForRole(rolesList[i].ID)
+		rolesList[i].IsSystem = rolesCfg.IsSystemRole(rolesList[i].ID)
+	}
+}
+
 func (s *Server) HandleListRoles(w http.ResponseWriter, r *http.Request) {
-	roles, err := s.Store.ListRoles(r.Context())
+	rolesList, err := s.Store.ListRoles(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	jsonResponse(w, roles)
+	s.enrichRolesMetadata(rolesList)
+	jsonResponse(w, rolesList)
 }
 
 func (s *Server) HandleCreateRole(w http.ResponseWriter, r *http.Request) {
@@ -38,6 +51,12 @@ func (s *Server) HandleCreateRole(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	var rolesCfg *roles.Config
+	if s.Authenticator != nil {
+		rolesCfg = s.Authenticator.RolesConfig
+	}
+	created.AutoGrantOn = rolesCfg.AutoGrantTriggersForRole(created.ID)
+	created.IsSystem = rolesCfg.IsSystemRole(created.ID)
 	jsonResponse(w, created)
 }
 
@@ -49,6 +68,19 @@ func (s *Server) HandleUpdateRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	role.ID = id
+	if id == "admin" {
+		hasWildcard := false
+		for _, p := range role.Permissions {
+			if p == "*" {
+				hasWildcard = true
+				break
+			}
+		}
+		if !hasWildcard {
+			http.Error(w, "The admin role must retain the '*' wildcard permission", http.StatusBadRequest)
+			return
+		}
+	}
 	if err := s.Store.UpdateRole(r.Context(), role); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -58,6 +90,14 @@ func (s *Server) HandleUpdateRole(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) HandleDeleteRole(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	var rolesCfg *roles.Config
+	if s.Authenticator != nil {
+		rolesCfg = s.Authenticator.RolesConfig
+	}
+	if rolesCfg.IsSystemRole(id) {
+		http.Error(w, "System and default auto-grant roles cannot be deleted", http.StatusForbidden)
+		return
+	}
 	if err := s.Store.DeleteRole(r.Context(), id); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

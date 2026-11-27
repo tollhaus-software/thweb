@@ -352,12 +352,15 @@ func IntersectPermissions(actual, simulated []string) []string {
 }
 
 type Role struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	Permissions []string  `json:"permissions"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	Description     string    `json:"description"`
+	Permissions     []string  `json:"permissions"`
+	DenyPermissions []string  `json:"deny_permissions,omitempty"`
+	AutoGrantOn     []string  `json:"auto_grant_on,omitempty"`
+	IsSystem        bool      `json:"is_system"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 type Family struct {

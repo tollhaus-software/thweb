@@ -1056,6 +1056,34 @@ func TestAuthenticator_EmployeeIdentifierEmail(t *testing.T) {
 	if !simUser.HasPermission("mealplan.view") {
 		t.Error("expected simulated caregiver to have mealplan.view")
 	}
+
+	// 3. Modify caregiver_default permissions in database (simulating Admin Roles UI edit)
+	// and verify that auto-granted caregiver login immediately reflects the database permissions.
+	origRole, err := appStore.GetRole(ctx, "caregiver_default")
+	if err == nil && origRole != nil {
+		defer func() {
+			_ = appStore.UpdateRole(ctx, *origRole)
+		}()
+		updatedRole := *origRole
+		updatedRole.Permissions = append(append([]string{}, origRole.Permissions...), "hygiene.all.read")
+		if err := appStore.UpdateRole(ctx, updatedRole); err != nil {
+			t.Fatalf("failed to update caregiver_default role in DB: %v", err)
+		}
+
+		recordedUser = nil
+		reqUpdated := httptest.NewRequest("GET", "/api/contacts", nil)
+		reqUpdated.Header.Set("X-Proxy-Secret", "secret123")
+		reqUpdated.Header.Set("X-Forwarded-Email", caregiverEmail)
+		recUpdated := httptest.NewRecorder()
+		handler.ServeHTTP(recUpdated, reqUpdated)
+
+		if recUpdated.Code != http.StatusOK || recordedUser == nil {
+			t.Fatalf("expected 200 OK after DB role update, got %d", recUpdated.Code)
+		}
+		if !recordedUser.HasPermission("hygiene.all.read") {
+			t.Errorf("expected caregiver login to receive newly added DB permission hygiene.all.read, got %v", recordedUser.EffectivePermissions)
+		}
+	}
 }
 
 func TestAuthenticator_Simulation_UserMode(t *testing.T) {

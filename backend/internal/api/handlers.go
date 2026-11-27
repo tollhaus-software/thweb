@@ -228,7 +228,7 @@ func (s *Server) HandleGetSimulationOptions(w http.ResponseWriter, r *http.Reque
 			if len(triggers) > 0 {
 				cand.Source = "both"
 			}
-			identRoles, implicitPerms := s.Authenticator.RolesAndPermissionsForTriggers(triggers)
+			identRoles, implicitPerms := s.Authenticator.RolesAndPermissionsForTriggers(triggers, r.Context())
 			for _, ir := range append(identRoles, jobRoles...) {
 				found := false
 				for _, r := range cand.Roles {
@@ -265,8 +265,8 @@ func (s *Server) HandleGetSimulationOptions(w http.ResponseWriter, r *http.Reque
 			EffectivePermissions: cand.EffectivePermissions,
 		}
 		uModel.EnsureImpliedPermissions()
-		if s.Authenticator.RolesConfig != nil && len(uModel.Roles) > 0 {
-			denied := s.Authenticator.RolesConfig.DeniedPermissionsForRoles(uModel.Roles)
+		if len(uModel.Roles) > 0 {
+			denied := s.Authenticator.DeniedPermissionsForRoles(r.Context(), uModel.Roles)
 			uModel.RemovePermissions(denied)
 		}
 		cand.EffectivePermissions = uModel.EffectivePermissions
@@ -290,7 +290,7 @@ func (s *Server) HandleGetSimulationOptions(w http.ResponseWriter, r *http.Reque
 			}
 			empTypes := empIdentEmails[norm]
 			triggers := s.Authenticator.TriggersForIdentifierEmail(famIDPtr, empTypes)
-			identRoles, identPerms := s.Authenticator.RolesAndPermissionsForTriggers(triggers)
+			identRoles, identPerms := s.Authenticator.RolesAndPermissionsForTriggers(triggers, r.Context())
 
 			var jobRoles []string
 			if pID, _, err := s.Store.GetParentInfoByIdentifierEmail(r.Context(), norm); err == nil && pID != nil {
@@ -337,8 +337,8 @@ func (s *Server) HandleGetSimulationOptions(w http.ResponseWriter, r *http.Reque
 				FamilyID:             famIDPtr,
 			}
 			uModel.EnsureImpliedPermissions()
-			if s.Authenticator.RolesConfig != nil && len(uModel.Roles) > 0 {
-				denied := s.Authenticator.RolesConfig.DeniedPermissionsForRoles(uModel.Roles)
+			if len(uModel.Roles) > 0 {
+				denied := s.Authenticator.DeniedPermissionsForRoles(r.Context(), uModel.Roles)
 				uModel.RemovePermissions(denied)
 			}
 			candidatesMap[norm] = &models.SimulationCandidate{
@@ -364,6 +364,7 @@ func (s *Server) HandleGetSimulationOptions(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		allRoles = []models.Role{}
 	}
+	s.enrichRolesMetadata(allRoles)
 
 	jsonResponse(w, map[string]interface{}{
 		"users":       candidates,

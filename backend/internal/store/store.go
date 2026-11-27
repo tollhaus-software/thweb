@@ -2307,7 +2307,7 @@ func (s *Store) ListAuditLogsForUser(ctx context.Context, user *models.UserWithP
 }
 
 func (s *Store) ListRoles(ctx context.Context) ([]models.Role, error) {
-	rows, err := s.db.Query(ctx, "SELECT id, name, description, permissions, created_at, updated_at FROM roles ORDER BY id ASC")
+	rows, err := s.db.Query(ctx, "SELECT id, name, description, permissions, deny_permissions, created_at, updated_at FROM roles ORDER BY id ASC")
 	if err != nil {
 		return nil, err
 	}
@@ -2316,8 +2316,8 @@ func (s *Store) ListRoles(ctx context.Context) ([]models.Role, error) {
 	var roles []models.Role
 	for rows.Next() {
 		var r models.Role
-		var permsJSON []byte
-		if err := rows.Scan(&r.ID, &r.Name, &r.Description, &permsJSON, &r.CreatedAt, &r.UpdatedAt); err != nil {
+		var permsJSON, denyPermsJSON []byte
+		if err := rows.Scan(&r.ID, &r.Name, &r.Description, &permsJSON, &denyPermsJSON, &r.CreatedAt, &r.UpdatedAt); err != nil {
 			return nil, err
 		}
 		if len(permsJSON) > 0 {
@@ -2326,6 +2326,9 @@ func (s *Store) ListRoles(ctx context.Context) ([]models.Role, error) {
 		if r.Permissions == nil {
 			r.Permissions = []string{}
 		}
+		if len(denyPermsJSON) > 0 {
+			_ = json.Unmarshal(denyPermsJSON, &r.DenyPermissions)
+		}
 		roles = append(roles, r)
 	}
 	return roles, nil
@@ -2333,9 +2336,9 @@ func (s *Store) ListRoles(ctx context.Context) ([]models.Role, error) {
 
 func (s *Store) GetRole(ctx context.Context, id string) (*models.Role, error) {
 	var r models.Role
-	var permsJSON []byte
-	err := s.db.QueryRow(ctx, "SELECT id, name, description, permissions, created_at, updated_at FROM roles WHERE id = $1", id).
-		Scan(&r.ID, &r.Name, &r.Description, &permsJSON, &r.CreatedAt, &r.UpdatedAt)
+	var permsJSON, denyPermsJSON []byte
+	err := s.db.QueryRow(ctx, "SELECT id, name, description, permissions, deny_permissions, created_at, updated_at FROM roles WHERE id = $1", id).
+		Scan(&r.ID, &r.Name, &r.Description, &permsJSON, &denyPermsJSON, &r.CreatedAt, &r.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -2344,6 +2347,9 @@ func (s *Store) GetRole(ctx context.Context, id string) (*models.Role, error) {
 	}
 	if r.Permissions == nil {
 		r.Permissions = []string{}
+	}
+	if len(denyPermsJSON) > 0 {
+		_ = json.Unmarshal(denyPermsJSON, &r.DenyPermissions)
 	}
 	return &r, nil
 }

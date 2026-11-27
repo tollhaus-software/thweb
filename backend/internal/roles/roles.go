@@ -139,6 +139,29 @@ func (c *Config) GetRole(id string) *RoleConfig {
 	return nil
 }
 
+// AutoGrantTriggersForRole returns the configured auto_grant_on triggers for the given role ID.
+func (c *Config) AutoGrantTriggersForRole(id string) []string {
+	cfg := c
+	if cfg == nil {
+		cfg = LoadDefault()
+	}
+	if r := cfg.GetRole(id); r != nil && len(r.AutoGrantOn) > 0 {
+		out := make([]string, len(r.AutoGrantOn))
+		copy(out, r.AutoGrantOn)
+		return out
+	}
+	return nil
+}
+
+// IsSystemRole returns true if the role ID is a protected system/auto-grant role
+// (such as "admin" or any role configured with auto_grant_on triggers) that cannot be deleted.
+func (c *Config) IsSystemRole(id string) bool {
+	if id == "admin" {
+		return true
+	}
+	return len(c.AutoGrantTriggersForRole(id)) > 0
+}
+
 // DeniedPermissionsForRoles returns a slice of unique denied permissions
 // configured across any of the given role IDs.
 func (c *Config) DeniedPermissionsForRoles(roleIDs []string) []string {

@@ -98,13 +98,7 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 			if dn != "" {
 				kioskEmail = "kiosk+" + dn + "@internal"
 			}
-			kioskRoles, kioskPerms := a.RolesConfig.RolesForTrigger(roles.AutoGrantKioskCert)
-			if len(kioskRoles) == 0 {
-				kioskRoles = []string{"kiosk"}
-			}
-			if len(kioskPerms) == 0 {
-				kioskPerms = []string{"dashboard.use", "allergies.summary.read", "meal_allergens.read", "meal_allergens.write"}
-			}
+			kioskRoles, kioskPerms := a.RolesAndPermissionsForTriggers([]string{roles.AutoGrantKioskCert}, r.Context())
 			kioskUser := &models.UserWithPermissions{
 				Email:                kioskEmail,
 				Roles:                kioskRoles,
@@ -114,8 +108,8 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 				KioskName:            kioskName,
 			}
 			kioskUser.ActualUser = kioskUser
-			if a.RolesConfig != nil && len(kioskUser.Roles) > 0 {
-				denied := a.RolesConfig.DeniedPermissionsForRoles(kioskUser.Roles)
+			if len(kioskUser.Roles) > 0 {
+				denied := a.DeniedPermissionsForRoles(r.Context(), kioskUser.Roles)
 				kioskUser.RemovePermissions(denied)
 			}
 			if a.ActivityRecorder != nil {
@@ -221,7 +215,7 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 						})
 						return
 					}
-					identRoles, identPerms := a.RolesAndPermissionsForTriggers(triggers)
+					identRoles, identPerms := a.RolesAndPermissionsForTriggers(triggers, r.Context())
 
 					allRolesMap := make(map[string]bool)
 					for _, r := range identRoles {
@@ -288,7 +282,7 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 				}
 
 				if len(triggers) > 0 || len(jobRoles) > 0 {
-					identRoles, implicitPerms := a.RolesAndPermissionsForTriggers(triggers)
+					identRoles, implicitPerms := a.RolesAndPermissionsForTriggers(triggers, r.Context())
 					for _, ir := range append(identRoles, jobRoles...) {
 						found := false
 						for _, r := range user.Roles {
@@ -326,8 +320,8 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 
 		user.EnsureImpliedPermissions()
 
-		if a.RolesConfig != nil && len(user.Roles) > 0 {
-			denied := a.RolesConfig.DeniedPermissionsForRoles(user.Roles)
+		if len(user.Roles) > 0 {
+			denied := a.DeniedPermissionsForRoles(r.Context(), user.Roles)
 			user.RemovePermissions(denied)
 		}
 
@@ -455,21 +449,38 @@ func (a *Authenticator) TriggersForIdentifierEmail(familyID *uuid.UUID, empTypes
 }
 
 // RolesAndPermissionsForTriggers resolves configured (or fallback) roles and deduplicated permissions for the given triggers.
-func (a *Authenticator) RolesAndPermissionsForTriggers(triggers []string) ([]string, []string) {
+// Permissions for the triggered role IDs are resolved from the database Store (roles table) first,
+// falling back to RolesConfig or built-in defaults only if a role does not exist in the database.
+func (a *Authenticator) RolesAndPermissionsForTriggers(triggers []string, ctx ...context.Context) ([]string, []string) {
+	var c context.Context
+	if len(ctx) > 0 && ctx[0] != nil {
+		c = ctx[0]
+	} else {
+		c = context.Background()
+	}
+
 	var allRoles []string
 	seenRoles := make(map[string]bool)
 	permSet := make(map[string]bool)
 
 	for _, trigger := range triggers {
-		var rIDs, perms []string
+		var rIDs, fallbackPerms []string
 		if a.RolesConfig != nil {
-			rIDs, perms = a.RolesConfig.RolesForTrigger(trigger)
+			rIDs, fallbackPerms = a.RolesConfig.RolesForTrigger(trigger)
 		}
 		if len(rIDs) == 0 {
 			switch trigger {
+			case roles.AutoGrantKioskCert:
+				rIDs = []string{"kiosk"}
+				fallbackPerms = []string{
+					"dashboard.use",
+					"allergies.summary.read",
+					"meal_allergens.read",
+					"meal_allergens.write",
+				}
 			case roles.AutoGrantParentIdentifierEmail:
 				rIDs = []string{"parent_default"}
-				perms = []string{
+				fallbackPerms = []string{
 					"contacts.all.read",
 					"fees.self.read",
 					"families.self.selfservice",
@@ -481,7 +492,7 @@ func (a *Authenticator) RolesAndPermissionsForTriggers(triggers []string) ([]str
 				}
 			case roles.AutoGrantCaregiverIdentifierEmail:
 				rIDs = []string{"caregiver_default"}
-				perms = []string{
+				fallbackPerms = []string{
 					"contacts.all.read",
 					"contacts.print.group_overview",
 					"mealplan.view",
@@ -493,7 +504,7 @@ func (a *Authenticator) RolesAndPermissionsForTriggers(triggers []string) ([]str
 				}
 			case roles.AutoGrantCookIdentifierEmail:
 				rIDs = []string{"cook_default"}
-				perms = []string{
+				fallbackPerms = []string{
 					"mealplan.view",
 					"allergies.summary.read",
 					"meal_allergens.read",
@@ -501,14 +512,36 @@ func (a *Authenticator) RolesAndPermissionsForTriggers(triggers []string) ([]str
 				}
 			}
 		}
-		for _, r := range rIDs {
-			if !seenRoles[r] {
-				seenRoles[r] = true
-				allRoles = append(allRoles, r)
+
+		usedFallback := false
+		for _, rID := range rIDs {
+			if !seenRoles[rID] {
+				seenRoles[rID] = true
+				allRoles = append(allRoles, rID)
 			}
+			if a.Store != nil {
+				dbRole, err := a.Store.GetRole(c, rID)
+				if err == nil && dbRole != nil {
+					for _, p := range dbRole.Permissions {
+						permSet[p] = true
+					}
+					continue
+				}
+			}
+			if a.RolesConfig != nil {
+				if rc := a.RolesConfig.GetRole(rID); rc != nil {
+					for _, p := range rc.Permissions {
+						permSet[p] = true
+					}
+					continue
+				}
+			}
+			usedFallback = true
 		}
-		for _, p := range perms {
-			permSet[p] = true
+		if usedFallback {
+			for _, p := range fallbackPerms {
+				permSet[p] = true
+			}
 		}
 	}
 
@@ -517,6 +550,40 @@ func (a *Authenticator) RolesAndPermissionsForTriggers(triggers []string) ([]str
 		allPerms = append(allPerms, p)
 	}
 	return allRoles, allPerms
+}
+
+// DeniedPermissionsForRoles resolves all denied permissions configured for the given role IDs
+// from the Store (roles table) first, falling back to RolesConfig.
+func (a *Authenticator) DeniedPermissionsForRoles(ctx context.Context, roleIDs []string) []string {
+	if len(roleIDs) == 0 {
+		return nil
+	}
+	denyMap := make(map[string]bool)
+	for _, roleID := range roleIDs {
+		if a.Store != nil {
+			r, err := a.Store.GetRole(ctx, roleID)
+			if err == nil && r != nil {
+				for _, dp := range r.DenyPermissions {
+					denyMap[dp] = true
+				}
+				if len(r.DenyPermissions) > 0 {
+					continue
+				}
+			}
+		}
+		if a.RolesConfig != nil {
+			if rc := a.RolesConfig.GetRole(roleID); rc != nil {
+				for _, dp := range rc.DenyPermissions {
+					denyMap[dp] = true
+				}
+			}
+		}
+	}
+	res := make([]string, 0, len(denyMap))
+	for dp := range denyMap {
+		res = append(res, dp)
+	}
+	return res
 }
 
 // PermissionsForRoles resolves all permissions granted by the given role IDs
@@ -593,7 +660,7 @@ func (a *Authenticator) ResolveSimulatedUser(ctx context.Context, cfg models.Sim
 
 			if simUser == nil {
 				// Pure identifying parent or employee
-				identRoles, identPerms := a.RolesAndPermissionsForTriggers(triggers)
+				identRoles, identPerms := a.RolesAndPermissionsForTriggers(triggers, ctx)
 
 				allRolesMap := make(map[string]bool)
 				for _, r := range identRoles {
@@ -638,7 +705,7 @@ func (a *Authenticator) ResolveSimulatedUser(ctx context.Context, cfg models.Sim
 				if empID != nil {
 					simUser.EmployeeID = empID
 				}
-				identRoles, implicitPerms := a.RolesAndPermissionsForTriggers(triggers)
+				identRoles, implicitPerms := a.RolesAndPermissionsForTriggers(triggers, ctx)
 				for _, ir := range append(identRoles, jobRoles...) {
 					found := false
 					for _, r := range simUser.Roles {
@@ -672,8 +739,8 @@ func (a *Authenticator) ResolveSimulatedUser(ctx context.Context, cfg models.Sim
 		}
 
 		simUser.EnsureImpliedPermissions()
-		if a.RolesConfig != nil && len(simUser.Roles) > 0 {
-			denied := a.RolesConfig.DeniedPermissionsForRoles(simUser.Roles)
+		if len(simUser.Roles) > 0 {
+			denied := a.DeniedPermissionsForRoles(ctx, simUser.Roles)
 			simUser.RemovePermissions(denied)
 		}
 		if simUser != nil && simUser.FirstName == "" && a.Store != nil {
@@ -732,8 +799,8 @@ func (a *Authenticator) ResolveSimulatedUser(ctx context.Context, cfg models.Sim
 		EffectivePermissions: perms,
 	}
 	simUser.EnsureImpliedPermissions()
-	if a.RolesConfig != nil && len(cfg.Roles) > 0 {
-		denied := a.RolesConfig.DeniedPermissionsForRoles(cfg.Roles)
+	if len(cfg.Roles) > 0 {
+		denied := a.DeniedPermissionsForRoles(ctx, cfg.Roles)
 		simUser.RemovePermissions(denied)
 	}
 	return simUser, nil

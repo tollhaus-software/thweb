@@ -1178,6 +1178,8 @@ interface AdminRole {
   name: string;
   description: string;
   permissions: string[];
+  auto_grant_on?: string[];
+  is_system?: boolean;
 }
 
 const ALL_AVAILABLE_PERMISSIONS = [
@@ -1616,7 +1618,17 @@ const AdminView: React.FC<AdminViewProps> = ({ onOpenSimulator }) => {
             <tbody>
               {roles.map(r => (
                 <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                  <td style={{ padding: '0.75rem 0.5rem', fontFamily: 'monospace', fontWeight: 'bold' }}>{r.id}</td>
+                  <td style={{ padding: '0.75rem 0.5rem', fontFamily: 'monospace', fontWeight: 'bold' }}>
+                    <div>{r.id}</div>
+                    {r.is_system && (
+                      <span
+                        title={r.auto_grant_on && r.auto_grant_on.length > 0 ? `Auto-Grant: ${r.auto_grant_on.join(', ')}` : 'Systemrolle'}
+                        style={{ display: 'inline-block', marginTop: '0.2rem', background: '#e2e8f0', color: '#475569', padding: '0.1rem 0.35rem', borderRadius: '4px', fontSize: '0.68rem', fontFamily: 'sans-serif', fontWeight: 600 }}
+                      >
+                        {r.auto_grant_on && r.auto_grant_on.length > 0 ? `Auto: ${r.auto_grant_on.join(', ')}` : 'System'}
+                      </span>
+                    )}
+                  </td>
                   <td style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>{r.name}</td>
                   <td style={{ padding: '0.75rem 0.5rem', color: '#64748b', fontSize: '0.85rem' }}>{r.description || '-'}</td>
                   <td style={{ padding: '0.75rem 0.5rem' }}>
@@ -1629,12 +1641,14 @@ const AdminView: React.FC<AdminViewProps> = ({ onOpenSimulator }) => {
                     </div>
                   </td>
                   <td style={{ padding: '0.75rem 0.5rem', textAlign: 'right' }}>
-                    <button onClick={() => openEditRoleModal(r)} style={{ background: 'none', border: '1px solid #cbd5e1', padding: '0.25rem 0.5rem', borderRadius: '4px', cursor: 'pointer', marginRight: '0.5rem', fontSize: '0.8rem' }}>
+                    <button onClick={() => openEditRoleModal(r)} style={{ background: 'none', border: '1px solid #cbd5e1', padding: '0.25rem 0.5rem', borderRadius: '4px', cursor: 'pointer', marginRight: r.is_system ? 0 : '0.5rem', fontSize: '0.8rem' }}>
                       Bearbeiten
                     </button>
-                    <button onClick={() => handleDeleteRole(r.id)} style={{ background: 'none', border: '1px solid #fca5a5', color: '#dc2626', padding: '0.25rem 0.5rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}>
-                      Löschen
-                    </button>
+                    {!r.is_system && (
+                      <button onClick={() => handleDeleteRole(r.id)} style={{ background: 'none', border: '1px solid #fca5a5', color: '#dc2626', padding: '0.25rem 0.5rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}>
+                        Löschen
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -1756,17 +1770,23 @@ const AdminView: React.FC<AdminViewProps> = ({ onOpenSimulator }) => {
               <div style={{ marginBottom: '1.5rem' }}>
                 <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--text-secondary)', textAlign: 'left' }}>{t('permissions')}</label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.35rem', maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border)', background: 'var(--bg-subtle)', padding: '0.5rem', borderRadius: '4px', textAlign: 'left' }}>
-                  {displayedRolePerms.map(p => (
-                    <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontFamily: 'monospace', textAlign: 'left' }}>
-                      <input
-                        type="checkbox"
-                        checked={selectedRolePerms.includes(p)}
-                        onChange={() => toggleRolePerm(p)}
-                        style={{ flexShrink: 0 }}
-                      />
-                      <span style={{ textAlign: 'left' }}>{p}</span>
-                    </label>
-                  ))}
+                  {displayedRolePerms.map(p => {
+                    const isLockedAdminWildcard = editingRole?.id === 'admin' && p === '*';
+                    return (
+                      <label key={p} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: isLockedAdminWildcard ? 'not-allowed' : 'pointer', fontSize: '0.85rem', fontFamily: 'monospace', textAlign: 'left', opacity: isLockedAdminWildcard ? 0.7 : 1 }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedRolePerms.includes(p)}
+                          disabled={isLockedAdminWildcard}
+                          onChange={() => {
+                            if (!isLockedAdminWildcard) toggleRolePerm(p);
+                          }}
+                          style={{ flexShrink: 0 }}
+                        />
+                        <span style={{ textAlign: 'left' }}>{p}</span>
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
 

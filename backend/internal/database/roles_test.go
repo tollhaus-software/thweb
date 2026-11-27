@@ -74,14 +74,29 @@ func TestSyncRolesAndSeedMockUsers(t *testing.T) {
 		t.Errorf("expected %d roles synced, got %d", len(cfg.Roles), syncedRoleCount)
 	}
 
-	// 3. Test idempotent update
+	// 3. Test that SyncRoles preserves existing database roles (e.g. modified via Admin UI)
+	// while still seeding any new roles introduced in YAML.
+	_, err = pool.Exec(ctx, `
+		UPDATE roles
+		SET name = 'Caregiver Custom', permissions = '["contacts.all.read", "hygiene.all.read"]'::jsonb
+		WHERE id = 'caregiver_default'
+	`)
+	if err != nil {
+		t.Fatalf("failed to simulate admin UI role update: %v", err)
+	}
+
 	customYAML := `
 roles:
-  - id: viewer
-    name: Viewer Updated
-    description: Updated description
+  - id: caregiver_default
+    name: Caregiver (default)
+    description: Default access for caregivers
     permissions:
-      - families.all.read
+      - contacts.all.read
+  - id: newly_introduced_role
+    name: Newly Introduced Role
+    description: Seeded on new deployment
+    permissions:
+      - audit.view
 `
 	customCfg, err := roles.LoadFromBytes([]byte(customYAML))
 	if err != nil {
@@ -91,13 +106,22 @@ roles:
 		t.Fatalf("SyncRoles update failed: %v", err)
 	}
 
-	var updatedName, updatedDesc string
-	err = pool.QueryRow(ctx, "SELECT name, description FROM roles WHERE id = 'viewer'").Scan(&updatedName, &updatedDesc)
+	var preservedName, preservedPerms string
+	err = pool.QueryRow(ctx, "SELECT name, permissions::text FROM roles WHERE id = 'caregiver_default'").Scan(&preservedName, &preservedPerms)
 	if err != nil {
-		t.Fatalf("failed to query updated role: %v", err)
+		t.Fatalf("failed to query preserved role: %v", err)
 	}
-	if updatedName != "Viewer Updated" || updatedDesc != "Updated description" {
-		t.Errorf("expected updated role name & description, got %q, %q", updatedName, updatedDesc)
+	if preservedName != "Caregiver Custom" || !strings.Contains(preservedPerms, "hygiene.all.read") {
+		t.Errorf("expected existing role customization to be preserved across SyncRoles, got name=%q perms=%s", preservedName, preservedPerms)
+	}
+
+	var newRoleName string
+	err = pool.QueryRow(ctx, "SELECT name FROM roles WHERE id = 'newly_introduced_role'").Scan(&newRoleName)
+	if err != nil {
+		t.Fatalf("expected newly_introduced_role to be seeded: %v", err)
+	}
+	if newRoleName != "Newly Introduced Role" {
+		t.Errorf("expected 'Newly Introduced Role', got %q", newRoleName)
 	}
 
 	// 4. Test SeedMockUsers
