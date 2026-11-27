@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { Plus, Trash, X, Pencil } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Plus, Trash, X, Pencil, Search } from 'lucide-react';
 import { t } from '../../utils/i18n';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { CellPopover } from './CellPopover';
 
 export interface JobItem {
@@ -38,24 +39,58 @@ export const JobsPopover: React.FC<JobsPopoverProps> = ({
   onSaveJobs,
   readOnly = false,
 }) => {
-  const [selectedJobId, setSelectedJobId] = useState<string>('');
+  const isMobile = useIsMobile();
+  const [isAdding, setIsAdding] = useState(false);
+  const [filterText, setFilterText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const filterInputRef = useRef<HTMLInputElement>(null);
 
-  const assignedJobs = person?.jobs || [];
-  const assignedJobIds = new Set(assignedJobs.map((j) => j.id));
+  useEffect(() => {
+    if (isOpen) {
+      setIsAdding(false);
+      setFilterText('');
+      setError(null);
+    }
+  }, [isOpen, person?.id]);
+
+  // Auto-focus filter input on desktop when opening selector
+  useEffect(() => {
+    if (isOpen && isAdding && !isMobile) {
+      const timer = setTimeout(() => {
+        filterInputRef.current?.focus();
+      }, 40);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, isAdding, isMobile]);
+
+  const assignedJobs = useMemo(() => person?.jobs || [], [person?.jobs]);
 
   // Available jobs that are not yet assigned to this person
-  const unassignedJobs = availableJobs.filter((j) => !assignedJobIds.has(j.id));
+  const unassignedJobs = useMemo(() => {
+    const assignedJobIds = new Set(assignedJobs.map((j) => j.id));
+    return availableJobs.filter((j) => !assignedJobIds.has(j.id));
+  }, [availableJobs, assignedJobs]);
 
-  const handleAddJob = async () => {
-    if (!person || !selectedJobId || isSubmitting) return;
+  const filteredUnassignedJobs = useMemo(() => {
+    const query = filterText.trim().toLowerCase();
+    if (!query) return unassignedJobs;
+    return unassignedJobs.filter(
+      (j) =>
+        j.name.toLowerCase().includes(query) ||
+        (j.description && j.description.toLowerCase().includes(query))
+    );
+  }, [unassignedJobs, filterText]);
+
+  const handleSelectJobToAdd = async (jobIdToAdd: string) => {
+    if (!person || !jobIdToAdd || isSubmitting) return;
     setIsSubmitting(true);
     setError(null);
     try {
-      const nextJobIds = [...assignedJobs.map((j) => j.id), selectedJobId];
+      const nextJobIds = [...assignedJobs.map((j) => j.id), jobIdToAdd];
       await onSaveJobs(person.id, nextJobIds, person.type);
-      setSelectedJobId('');
+      setIsAdding(false);
+      setFilterText('');
     } catch (err: any) {
       setError(err?.message || 'Fehler beim Zuordnen des Jobs');
     } finally {
@@ -63,12 +98,18 @@ export const JobsPopover: React.FC<JobsPopoverProps> = ({
     }
   };
 
-  const handleRemoveJob = async (jobIdToRemove: string) => {
+  const handleRemoveJob = async (jobToRemove: JobItem) => {
     if (!person || isSubmitting) return;
+    const confirmTemplate = t('removeJobConfirm') || 'Möchten Sie den Job „{job}“ wirklich entfernen?';
+    const confirmMsg = confirmTemplate.replace('{job}', jobToRemove.name);
+    if (!window.confirm(confirmMsg)) {
+      return;
+    }
+
     setIsSubmitting(true);
     setError(null);
     try {
-      const nextJobIds = assignedJobs.filter((j) => j.id !== jobIdToRemove).map((j) => j.id);
+      const nextJobIds = assignedJobs.filter((j) => j.id !== jobToRemove.id).map((j) => j.id);
       await onSaveJobs(person.id, nextJobIds, person.type);
     } catch (err: any) {
       setError(err?.message || 'Fehler beim Entfernen des Jobs');
@@ -90,14 +131,13 @@ export const JobsPopover: React.FC<JobsPopoverProps> = ({
       minWidth={320}
       className="glass-popup jobs-popover"
     >
-      <div className="popup-inner" style={{ padding: '0.85rem' }}>
+      <div className="popup-inner" style={{ padding: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
         <div
           className="popup-header"
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            marginBottom: '0.75rem',
             paddingBottom: '0.5rem',
             borderBottom: '1px solid var(--border)',
           }}
@@ -132,7 +172,6 @@ export const JobsPopover: React.FC<JobsPopoverProps> = ({
           <div
             style={{
               padding: '0.4rem 0.6rem',
-              marginBottom: '0.6rem',
               backgroundColor: 'rgba(239, 68, 68, 0.1)',
               color: '#ef4444',
               borderRadius: '4px',
@@ -144,53 +183,67 @@ export const JobsPopover: React.FC<JobsPopoverProps> = ({
         )}
 
         {/* Assigned Jobs List */}
-        <div style={{ marginBottom: '1rem' }}>
-          <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.4rem', color: 'var(--text-muted)' }}>
-            {t('assignedJobs') || 'Zugeordnete Jobs'}:
-          </div>
+        <div>
           {assignedJobs.length === 0 ? (
-            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontStyle: 'italic', padding: '0.25rem 0' }}>
-              {t('noJobs') || 'Keine Jobs'}
+            <div
+              data-testid="no-jobs-placeholder"
+              style={{
+                fontSize: '0.85rem',
+                color: 'var(--text-muted)',
+                fontStyle: 'italic',
+                padding: '0.5rem 0.25rem',
+                textAlign: 'center',
+              }}
+            >
+              {t('noJobs') || 'Noch kein Job zugeordnet'}
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
               {assignedJobs.map((job) => (
                 <div
                   key={job.id}
+                  data-testid={`assigned-job-item-${job.id}`}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    padding: '0.35rem 0.5rem',
-                    backgroundColor: 'var(--bg-subtle, rgba(0,0,0,0.03))',
-                    border: '1px solid var(--border)',
-                    borderRadius: '4px',
+                    padding: '0.3rem 0.25rem',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', minWidth: 0 }}>
-                    <span style={{ userSelect: 'none', fontSize: '0.9rem' }}>🔨</span>
-                    <span style={{ fontWeight: 500, fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={job.description || job.name}>
+                  <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
+                    <span
+                      style={{
+                        fontWeight: 500,
+                        fontSize: '0.85rem',
+                        color: 'var(--text-h)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                      title={job.description || job.name}
+                    >
                       {job.name}
                     </span>
                   </div>
                   {!readOnly && (
                     <button
                       type="button"
+                      className="easy-edit-button delete-entry-btn"
                       disabled={isSubmitting}
-                      onClick={() => handleRemoveJob(job.id)}
+                      onClick={() => handleRemoveJob(job)}
                       title={t('deleteJob') || 'Job entfernen'}
                       aria-label={`${job.name} entfernen`}
                       style={{
                         background: 'transparent',
                         border: 'none',
-                        cursor: 'pointer',
-                        color: 'var(--text-muted)',
-                        padding: '2px',
-                        display: 'flex',
+                        cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                        color: '#ef4444',
+                        padding: '3px',
+                        display: 'inline-flex',
                         alignItems: 'center',
+                        borderRadius: '4px',
+                        opacity: isSubmitting ? 0.5 : 1,
                       }}
-                      onMouseEnter={(e) => (e.currentTarget.style.color = '#ef4444')}
-                      onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
                     >
                       <Trash size={14} />
                     </button>
@@ -201,52 +254,266 @@ export const JobsPopover: React.FC<JobsPopoverProps> = ({
           )}
         </div>
 
-        {/* Add Job section */}
+        {/* Add Job Section: '+' button or inline job selector list */}
         {!readOnly && (
-          <div style={{ borderTop: '1px solid var(--border)', paddingTop: '0.75rem' }}>
-            <div style={{ display: 'flex', gap: '0.4rem' }}>
-              <select
-                value={selectedJobId}
-                onChange={(e) => setSelectedJobId(e.target.value)}
-                disabled={isSubmitting || unassignedJobs.length === 0}
-                style={{
-                  flex: 1,
-                  padding: '0.35rem 0.5rem',
-                  fontSize: '0.85rem',
-                  borderRadius: '4px',
-                  border: '1px solid var(--border)',
-                  backgroundColor: 'var(--bg-surface)',
-                  color: 'var(--text)',
-                }}
-              >
-                <option value="">{t('selectJob') || 'Job auswählen...'}</option>
-                {unassignedJobs.map((j) => (
-                  <option key={j.id} value={j.id}>
-                    {j.name}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className="btn-primary"
-                disabled={!selectedJobId || isSubmitting}
-                onClick={handleAddJob}
+          <>
+            {!isAdding ? (
+              <div
                 style={{
                   display: 'flex',
+                  justifyContent: 'center',
                   alignItems: 'center',
-                  gap: '0.25rem',
-                  padding: '0.35rem 0.65rem',
-                  fontSize: '0.85rem',
-                  borderRadius: '4px',
-                  cursor: !selectedJobId || isSubmitting ? 'not-allowed' : 'pointer',
-                  opacity: !selectedJobId || isSubmitting ? 0.6 : 1,
+                  padding: '2px 0',
                 }}
               >
-                <Plus size={14} />
-                <span>{t('assignJob') || 'Zuordnen'}</span>
-              </button>
-            </div>
-          </div>
+                <button
+                  type="button"
+                  className="easy-edit-button add-value-btn"
+                  data-testid="add-job-plus-btn"
+                  disabled={isSubmitting}
+                  onClick={() => {
+                    setError(null);
+                    setFilterText('');
+                    setIsAdding(true);
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '4px 16px',
+                    fontSize: '0.85rem',
+                    fontWeight: 500,
+                    background: 'var(--bg-subtle)',
+                    color: 'var(--text)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '6px',
+                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    transition: 'background-color 0.15s ease, border-color 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isSubmitting) {
+                      e.currentTarget.style.backgroundColor = 'var(--border)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--bg-subtle)';
+                  }}
+                  title={t('addJob') || 'Job hinzufügen'}
+                  aria-label={t('addJob') || 'Job hinzufügen'}
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
+            ) : (
+              <div
+                data-testid="job-selector-panel"
+                style={{
+                  border: '1px solid var(--border)',
+                  borderRadius: '6px',
+                  backgroundColor: 'var(--bg-surface)',
+                  overflow: 'hidden',
+                  display: 'flex',
+                  flexDirection: 'column',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '0.4rem 0.6rem',
+                    backgroundColor: 'var(--bg-subtle, rgba(0,0,0,0.03))',
+                    borderBottom: '1px solid var(--border)',
+                  }}
+                >
+                  <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-h)' }}>
+                    {t('selectJob') || 'Job auswählen...'}
+                  </span>
+                  <button
+                    type="button"
+                    data-testid="cancel-add-job-btn"
+                    onClick={() => {
+                      setIsAdding(false);
+                      setFilterText('');
+                    }}
+                    disabled={isSubmitting}
+                    title={t('cancel') || 'Abbrechen'}
+                    aria-label={t('cancel') || 'Abbrechen'}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.2rem',
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                      color: 'var(--text-muted)',
+                      fontSize: '0.78rem',
+                      padding: '2px 4px',
+                      borderRadius: '4px',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = 'var(--text-h)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = 'var(--text-muted)';
+                    }}
+                  >
+                    <X size={14} />
+                    <span>{t('cancel') || 'Abbrechen'}</span>
+                  </button>
+                </div>
+
+                {unassignedJobs.length > 0 && (
+                  <div
+                    style={{
+                      padding: '0.4rem 0.5rem',
+                      borderBottom: '1px solid var(--border)',
+                      position: 'relative',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Search
+                      size={13}
+                      style={{
+                        position: 'absolute',
+                        left: '0.85rem',
+                        color: 'var(--text-muted)',
+                        pointerEvents: 'none',
+                      }}
+                    />
+                    <input
+                      ref={filterInputRef}
+                      type="text"
+                      data-testid="job-selector-filter-input"
+                      placeholder={t('searchJobs') || 'Jobs suchen...'}
+                      value={filterText}
+                      onChange={(e) => setFilterText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                          e.stopPropagation();
+                          setIsAdding(false);
+                          setFilterText('');
+                        } else if (e.key === 'Enter' && filteredUnassignedJobs.length === 1) {
+                          e.preventDefault();
+                          handleSelectJobToAdd(filteredUnassignedJobs[0].id);
+                        }
+                      }}
+                      disabled={isSubmitting}
+                      style={{
+                        width: '100%',
+                        padding: '0.3rem 0.5rem 0.3rem 1.65rem',
+                        fontSize: '0.825rem',
+                        border: '1px solid var(--border)',
+                        borderRadius: '4px',
+                        backgroundColor: 'var(--input-bg, var(--bg-surface))',
+                        color: 'var(--text)',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                )}
+
+                {unassignedJobs.length === 0 ? (
+                  <div
+                    style={{
+                      padding: '0.75rem',
+                      fontSize: '0.825rem',
+                      color: 'var(--text-muted)',
+                      fontStyle: 'italic',
+                      textAlign: 'center',
+                    }}
+                  >
+                    {t('noMoreJobsAvailable') || 'Keine weiteren Jobs verfügbar'}
+                  </div>
+                ) : filteredUnassignedJobs.length === 0 ? (
+                  <div
+                    data-testid="no-matching-jobs-placeholder"
+                    style={{
+                      padding: '0.75rem',
+                      fontSize: '0.825rem',
+                      color: 'var(--text-muted)',
+                      fontStyle: 'italic',
+                      textAlign: 'center',
+                    }}
+                  >
+                    {t('noMatchingJobs') || 'Keine passenden Jobs gefunden'}
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      maxHeight: '200px',
+                      overflowY: 'auto',
+                    }}
+                  >
+                    {filteredUnassignedJobs.map((j, idx) => (
+                      <button
+                        key={j.id}
+                        type="button"
+                        className="job-selector-option"
+                        data-testid={`job-selector-option-${j.name}`}
+                        disabled={isSubmitting}
+                        onClick={() => handleSelectJobToAdd(j.id)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.45rem',
+                          width: '100%',
+                          padding: '0.5rem 0.65rem',
+                          textAlign: 'left',
+                          background: 'transparent',
+                          border: 'none',
+                          borderBottom: idx === filteredUnassignedJobs.length - 1 ? 'none' : '1px solid var(--border)',
+                          cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                          color: 'var(--text-h)',
+                          fontSize: '0.85rem',
+                          transition: 'background-color 0.12s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isSubmitting) {
+                            e.currentTarget.style.backgroundColor = 'var(--bg-hover, rgba(0,0,0,0.04))';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = 'transparent';
+                        }}
+                        title={j.description || j.name}
+                      >
+                        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                          <span
+                            style={{
+                              fontWeight: 500,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {j.name}
+                          </span>
+                          {j.description && (
+                            <span
+                              style={{
+                                fontSize: '0.75rem',
+                                color: 'var(--text-muted)',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {j.description}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
     </CellPopover>

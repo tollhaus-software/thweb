@@ -283,13 +283,34 @@ test.describe('Test Case 28: Jobs and Assignments (MGA)', () => {
     const jobsPopover = page.locator('.jobs-popover');
     await expect(jobsPopover).toBeVisible();
 
-    // Select "Hygiene" and click "Zuordnen"
-    await jobsPopover.locator('select').selectOption({ label: 'Hygiene' });
-    await jobsPopover.getByRole('button', { name: 'Zuordnen' }).click();
+    // Verify empty placeholder "Noch kein Job zugeordnet" and "+" button are shown
+    await expect(jobsPopover.getByTestId('no-jobs-placeholder')).toHaveText('Noch kein Job zugeordnet');
+    const addJobPlusBtn = jobsPopover.getByTestId('add-job-plus-btn');
+    await expect(addJobPlusBtn).toBeVisible();
 
-    // Also select "Garten" and click "Zuordnen"
-    await jobsPopover.locator('select').selectOption({ label: 'Garten' });
-    await jobsPopover.getByRole('button', { name: 'Zuordnen' }).click();
+    // Press "+" to open the job selector list, test abort ("Abbrechen")
+    await addJobPlusBtn.click();
+    await expect(jobsPopover.getByTestId('job-selector-panel')).toBeVisible();
+    await jobsPopover.getByTestId('cancel-add-job-btn').click();
+    await expect(jobsPopover.getByTestId('job-selector-panel')).toBeHidden();
+    await expect(addJobPlusBtn).toBeVisible();
+
+    // Press "+" and filter/select "Hygiene" from the list (verify no hammer icon in selector)
+    await addJobPlusBtn.click();
+    await expect(jobsPopover).not.toContainText('🔨');
+    const filterInput = jobsPopover.getByTestId('job-selector-filter-input');
+    await expect(filterInput).toBeVisible();
+    await filterInput.fill('Hyg');
+    await expect(jobsPopover.getByTestId('job-selector-option-Hygiene')).toBeVisible();
+    await expect(jobsPopover.getByTestId('job-selector-option-Garten')).toBeHidden();
+    await jobsPopover.getByTestId('job-selector-option-Hygiene').click();
+    await expect(jobsPopover.getByTestId('job-selector-panel')).toBeHidden();
+    await expect(jobsPopover).not.toContainText('🔨');
+
+    // Press "+" again and select "Garten" from the list
+    await addJobPlusBtn.click();
+    await jobsPopover.getByTestId('job-selector-option-Garten').click();
+    await expect(jobsPopover.getByTestId('job-selector-panel')).toBeHidden();
 
     // Close the popover
     await jobsPopover.locator('button[title="Schließen"]').click();
@@ -321,9 +342,9 @@ test.describe('Test Case 28: Jobs and Assignments (MGA)', () => {
     await empJobsCell.click();
 
     await expect(jobsPopover).toBeVisible();
-    // Select "Hygiene" and click "Zuordnen"
-    await jobsPopover.locator('select').selectOption({ label: 'Hygiene' });
-    await jobsPopover.getByRole('button', { name: 'Zuordnen' }).click();
+    // Click "+" and select "Hygiene"
+    await jobsPopover.getByTestId('add-job-plus-btn').click();
+    await jobsPopover.getByTestId('job-selector-option-Hygiene').click();
     await jobsPopover.locator('button[title="Schließen"]').click();
     await expect(jobsPopover).toBeHidden();
 
@@ -491,8 +512,20 @@ test.describe('Test Case 28: Jobs and Assignments (MGA)', () => {
     await parentRow2.locator('.jobs-cell-wrapper').click();
 
     await expect(jobsPopover).toBeVisible();
-    // Remove "Garten"
+    // Remove "Garten" - first dismiss the confirmation dialog to verify it asks before deleting
     const removeGartenBtn = jobsPopover.getByRole('button', { name: 'Garten entfernen' });
+    page.once('dialog', async (dialog) => {
+      expect(dialog.message()).toContain('Garten');
+      await dialog.dismiss();
+    });
+    await removeGartenBtn.click();
+    await expect(jobsPopover).toContainText('Garten');
+
+    // Now accept the confirmation dialog to actually remove "Garten"
+    page.once('dialog', async (dialog) => {
+      expect(dialog.message()).toContain('Garten');
+      await dialog.accept();
+    });
     await removeGartenBtn.click();
     await jobsPopover.locator('button[title="Schließen"]').click();
     await expect(jobsPopover).toBeHidden();
