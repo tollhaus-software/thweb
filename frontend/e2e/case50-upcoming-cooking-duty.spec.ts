@@ -55,7 +55,7 @@ test.describe('Test Case 50: Start Page Upcoming Cooking Duty Box (Kochdienst)',
     await page.waitForLoadState('networkidle');
 
     await expect(page.getByTestId('main-page')).toBeVisible();
-    await expect(page.getByTestId('main-page-upcoming-events-card')).toHaveCount(0);
+    await expect(page.getByTestId('main-page-event-item-cooking_duty')).toHaveCount(0);
   });
 
   test('formats today, tomorrow (morgen), day after tomorrow (übermorgen), and future weekday date accurately', async ({ request, page }) => {
@@ -213,7 +213,8 @@ test.describe('Test Case 50: Start Page Upcoming Cooking Duty Box (Kochdienst)',
     const darkCardBg = await card.evaluate((el) => window.getComputedStyle(el).backgroundColor);
     expect(darkCardBg).toBe('rgb(41, 42, 45)');
 
-    const darkEventTextColor = await card
+    const darkEventTextColor = await page
+      .getByTestId('main-page-event-item-cooking_duty')
       .locator('.main-page-event-text')
       .evaluate((el) => window.getComputedStyle(el).color);
     expect(darkEventTextColor).toBe('rgb(232, 234, 237)');
