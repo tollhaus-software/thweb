@@ -213,7 +213,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (user.effective_permissions.includes('*') || user.effective_permissions.includes(perm)) {
       return true;
     }
-    if (perm === 'families.all.restrictedread' && user.effective_permissions.includes('families.all.read')) {
+    if (
+      (perm === 'contacts.all.read' || perm === 'families.all.restrictedread') &&
+      (user.effective_permissions.includes('contacts.all.read') ||
+        user.effective_permissions.includes('families.all.restrictedread') ||
+        user.effective_permissions.includes('families.all.read'))
+    ) {
       return true;
     }
     if (perm === 'fees.self.read' && user.effective_permissions.includes('fees.all.read')) {

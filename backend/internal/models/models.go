@@ -48,7 +48,7 @@ func (s *UserWithPermissions) HasPermission(perm string) bool {
 		if p == "*" || p == perm {
 			return true
 		}
-		if perm == "families.all.restrictedread" && (p == "families.all.read" || p == "*") {
+		if (perm == "contacts.all.read" || perm == "families.all.restrictedread") && (p == "contacts.all.read" || p == "families.all.restrictedread" || p == "families.all.read" || p == "*") {
 			return true
 		}
 		if perm == "fees.self.read" && (p == "fees.all.read" || p == "*") {
@@ -110,7 +110,7 @@ func (s *UserWithPermissions) EnsureImpliedPermissions() {
 	permSet := make(map[string]bool)
 	for _, p := range s.EffectivePermissions {
 		permSet[p] = true
-		if p == "*" || p == "families.all.read" {
+		if p == "*" || p == "families.all.read" || p == "contacts.all.read" || p == "families.all.restrictedread" {
 			hasFamiliesAll = true
 		}
 		if p == "*" || p == "fees.all.read" {
@@ -145,6 +145,7 @@ func (s *UserWithPermissions) EnsureImpliedPermissions() {
 		}
 	}
 	if hasFamiliesAll {
+		permSet["contacts.all.read"] = true
 		permSet["families.all.restrictedread"] = true
 	}
 	if hasFeesAll {
@@ -254,6 +255,7 @@ type SimulationCandidate struct {
 // AllKnownPermissions lists all granular permissions defined in the application.
 var AllKnownPermissions = []string{
 	"*",
+	"contacts.all.read",
 	"families.all.read",
 	"families.all.restrictedread",
 	"families.all.write",

@@ -338,7 +338,7 @@ test.describe('Test Case 42: Main Page (Default Homepage, Cook, Food, and Rest o
     await expect(quickStartTitle).toHaveText('Schnellstart');
 
     // 2. Verify all 4 links are present for admin
-    const addressLink = page.getByTestId('main-page-quickstart-familiesOverview');
+    const addressLink = page.getByTestId('main-page-quickstart-contacts');
     await expect(addressLink).toBeVisible();
     await expect(addressLink).toContainText('Adressliste');
 
@@ -354,10 +354,10 @@ test.describe('Test Case 42: Main Page (Default Homepage, Cook, Food, and Rest o
     await expect(mgaLink).toBeVisible();
     await expect(mgaLink).toContainText('MGA Verwaltung');
 
-    // 3. Test navigation: Adressliste -> #familiesOverview
+    // 3. Test navigation: Adressliste -> #contacts
     await addressLink.click();
     await page.waitForLoadState('networkidle');
-    expect(page.url()).toContain('#familiesOverview');
+    expect(page.url()).toContain('#contacts');
 
     // 4. Test navigation: Betreuungsgebühren -> #childcareFees
     await page.goto('/?exp_main=1');
@@ -413,7 +413,7 @@ test.describe('Test Case 42: Main Page (Default Homepage, Cook, Food, and Rest o
     await expect(quickStartCard).toBeVisible();
 
     // 4. Address list, fees, allergens are present
-    await expect(page.getByTestId('main-page-quickstart-familiesOverview')).toBeVisible();
+    await expect(page.getByTestId('main-page-quickstart-contacts')).toBeVisible();
     await expect(page.getByTestId('main-page-quickstart-childcareFees')).toBeVisible();
     await expect(page.getByTestId('main-page-quickstart-mealAllergens')).toBeVisible();
 
@@ -448,7 +448,7 @@ test.describe('Test Case 42: Main Page (Default Homepage, Cook, Food, and Rest o
     await expect(quickStartCard).toBeVisible();
 
     // MGA role has overview, fees, and MGA
-    await expect(page.getByTestId('main-page-quickstart-familiesOverview')).toBeVisible();
+    await expect(page.getByTestId('main-page-quickstart-contacts')).toBeVisible();
     await expect(page.getByTestId('main-page-quickstart-childcareFees')).toBeVisible();
     await expect(page.getByTestId('main-page-quickstart-mga')).toBeVisible();
 
@@ -486,7 +486,7 @@ test.describe('Test Case 42: Main Page (Default Homepage, Cook, Food, and Rest o
     await expect(page.getByTestId('main-page-quickstart-mealAllergens')).toBeVisible();
 
     // The other 3 links are NOT present
-    await expect(page.getByTestId('main-page-quickstart-familiesOverview')).toHaveCount(0);
+    await expect(page.getByTestId('main-page-quickstart-contacts')).toHaveCount(0);
     await expect(page.getByTestId('main-page-quickstart-childcareFees')).toHaveCount(0);
     await expect(page.getByTestId('main-page-quickstart-mga')).toHaveCount(0);
   });

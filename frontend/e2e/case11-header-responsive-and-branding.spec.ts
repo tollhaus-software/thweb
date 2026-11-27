@@ -257,7 +257,7 @@ test.describe('Test Case 11: Header Responsive Sign Out Overflow Menu & Branding
       localStorage.setItem('token', 'developer@example.com');
     });
 
-    const testHashes = ['#familiesOverview', '#mealPlan', '#mealAllergens', '#childcareFees', '#members', '#audit', '#admin'];
+    const testHashes = ['#contacts', '#mealPlan', '#mealAllergens', '#childcareFees', '#members', '#audit', '#admin'];
 
     for (const hash of testHashes) {
       await page.goto('/' + hash);

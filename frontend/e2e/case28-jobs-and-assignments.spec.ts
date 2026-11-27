@@ -458,9 +458,9 @@ test.describe('Test Case 28: Jobs and Assignments (MGA)', () => {
     await expect(hygieneRowUpdated.locator('.person-badge', { hasText: 'Sabine Koch' })).toBeVisible();
 
     // =========================================================================
-    // Part 7: Check familiesOverview: Hammer icon and multiple rows
+    // Part 7: Check contacts: Hammer icon and multiple rows
     // =========================================================================
-    const overviewTabBtn = page.locator('.sidebar-nav-item', { hasText: 'Familien' });
+    const overviewTabBtn = page.locator('.sidebar-nav-item', { hasText: 'Kontakte' });
     await expect(overviewTabBtn).toBeVisible();
     await overviewTabBtn.click();
     const nachFamilieBtn = page.locator('.overview-grouping-btn', { hasText: 'Familien' });

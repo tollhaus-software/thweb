@@ -71,6 +71,7 @@ var (
 var AllowedClientFeatures = map[string]bool{
 	"dashboard":      true,
 	"meal_allergens": true,
+	"contacts":       true,
 	"families":       true,
 	"hygiene":        true,
 	"memberships":    true,
@@ -143,7 +144,8 @@ func MapRouteToFeature(routePattern, rawPath string) string {
 		return "employees"
 	case strings.HasPrefix(p, "/api/fees"):
 		return "fees"
-	case strings.HasPrefix(p, "/api/families") ||
+	case strings.HasPrefix(p, "/api/contacts") ||
+		strings.HasPrefix(p, "/api/families") ||
 		strings.HasPrefix(p, "/api/parents") ||
 		strings.HasPrefix(p, "/api/children"):
 		return "families"

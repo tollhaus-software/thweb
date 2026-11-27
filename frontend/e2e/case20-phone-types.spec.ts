@@ -152,8 +152,8 @@ test.describe('Test Case 20: Phone Number Types (Mobile, Landline, Work)', () =>
     await page.keyboard.press('Escape');
     await expect(popover).not.toBeVisible();
 
-    // 8. Check Overview tab (Familien)
-    const overviewTabBtn = page.locator('.sidebar-nav-item', { hasText: 'Familien' });
+    // 8. Check Overview tab (Kontakte)
+    const overviewTabBtn = page.locator('.sidebar-nav-item', { hasText: 'Kontakte' });
     await overviewTabBtn.click();
     const nachFamilieBtn = page.locator('.overview-grouping-btn', { hasText: 'Familien' });
     if (await nachFamilieBtn.isVisible()) {

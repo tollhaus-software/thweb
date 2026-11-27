@@ -141,14 +141,14 @@ test.describe('Test Case 49: Parent and Employee Nicknames (MGA/PA Scoped)', () 
     await expect(page.locator('table')).toContainText('Eva-Maria Beispiel');
     await expect(page.locator('table')).not.toContainText('Mimi');
 
-    // Verify Familien (Overview / Address List) does NOT display the nickname
-    await page.locator('.sidebar-nav-item', { hasText: 'Familien' }).click();
+    // Verify Kontakte (Overview / Address List) does NOT display the nickname
+    await page.locator('.sidebar-nav-item', { hasText: 'Kontakte' }).click();
     const overviewTable = page.locator('.overview-table');
     await expect(overviewTable).toContainText('Eva-Maria');
     await expect(overviewTable).not.toContainText('Mimi');
 
-    // Verify API /api/families/overview does NOT expose nicknames
-    const ovRes = await request.get('/api/families/overview', {
+    // Verify API /api/contacts does NOT expose nicknames
+    const ovRes = await request.get('/api/contacts', {
       headers: { Authorization: 'Bearer eva-maria@example.com' },
     });
     expect(ovRes.ok()).toBeTruthy();

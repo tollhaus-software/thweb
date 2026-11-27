@@ -10,7 +10,7 @@ A user can only access an application feature or API endpoint if their effective
 1. **Permissions First**: Application handlers and UI components never hardcode checks against role names—they check granular permissions (e.g. `families.all.read`, `memberships.all.read`, `children.all.write`, `users.all.manage`).
 2. **Permission Implication Hierarchy**:
    - `*` (Superadmin) implies all permissions.
-   - `families.all.read` implies `families.all.restrictedread`.
+   - `families.all.read` implies `contacts.all.read` (and legacy `families.all.restrictedread`, which is equivalent to `contacts.all.read`).
    - `fees.all.read` implies `fees.self.read`.
    - `memberships.all.write` implies `memberships.all.read`.
    - `memberships.all.read` implies `memberships.self.read`.
@@ -75,7 +75,7 @@ roles:
     auto_grant_on:
       - parent_identifier_email
     permissions:
-      - families.all.restrictedread
+      - contacts.all.read
       - fees.self.read
       - families.self.selfservice
       - memberships.self.read
@@ -90,7 +90,7 @@ roles:
     auto_grant_on:
       - caregiver_identifier_email
     permissions:
-      - families.all.restrictedread
+      - contacts.all.read
       - families.print.group_overview
       - mealplan.view
 ```
@@ -114,7 +114,7 @@ roles:
 | :--- | :--- | :--- |
 | `*` | Superadmin wildcard; grants access to all features and APIs | Administrators |
 | `families.all.read` | View family cards, parent overview, and parent contact information | Staff, Board, Caregivers |
-| `families.all.restrictedread` | Scoped read access for parents to view contact list details | Self-service parents |
+| `contacts.all.read` | Scoped read access to view contact list details in the "Kontakte" tab (legacy alias: `families.all.restrictedread`) | Self-service parents, Caregivers |
 | `families.all.write` | Create, edit, and delete family entities, parents, and address records | Staff, Administrators |
 | `families.self.selfservice` | Scoped write/edit access for parents managing their own family info | Self-service parents |
 | `families.print.group_overview` | Print group contact overview (*Gruppenübersicht*) from the Families views | Caregivers, Administrators |

@@ -11,9 +11,9 @@ test.describe('Test Case 47: Print Contact Data Per Group (Gruppenübersicht)', 
       localStorage.setItem('token', 'developer@example.com');
     });
 
-    // 3. Load application directly at families overview
-    await page.goto('/#familiesOverview');
-    await expect(page.locator('.sidebar-nav-item', { hasText: 'Familien' })).toBeVisible();
+    // 3. Load application directly at contacts overview
+    await page.goto('/#contacts');
+    await expect(page.locator('.sidebar-nav-item', { hasText: 'Kontakte' })).toBeVisible();
   });
 
   test('verifies print toolbar button, menu, options dialog, preview tables and formatting', async ({ request, page }) => {

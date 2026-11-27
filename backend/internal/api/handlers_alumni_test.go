@@ -87,21 +87,21 @@ func TestAlumniAndContactConsents(t *testing.T) {
 	}
 	parentID := createdFam.Parents[0].ID
 
-	// 2. Ensure historical_alumni does NOT appear in /api/families/overview
-	reqOverview := httptest.NewRequest("GET", "/api/families/overview", nil)
+	// 2. Ensure historical_alumni does NOT appear in /api/contacts
+	reqOverview := httptest.NewRequest("GET", "/api/contacts", nil)
 	reqOverview.Header.Set("X-Forwarded-Email", adminEmail)
 	recOverview := httptest.NewRecorder()
 	router.ServeHTTP(recOverview, reqOverview)
 	if recOverview.Code != http.StatusOK {
-		t.Fatalf("expected 200 on families/overview, got %d", recOverview.Code)
+		t.Fatalf("expected 200 on contacts, got %d", recOverview.Code)
 	}
 	var overviewFams []OverviewFamily
 	if err := json.Unmarshal(recOverview.Body.Bytes(), &overviewFams); err != nil {
-		t.Fatalf("failed to decode overview families: %v", err)
+		t.Fatalf("failed to decode contacts: %v", err)
 	}
 	for _, of := range overviewFams {
 		if of.ID == createdFam.ID {
-			t.Fatalf("historical_alumni family %s should NOT be in families/overview", createdFam.ID)
+			t.Fatalf("historical_alumni family %s should NOT be in contacts", createdFam.ID)
 		}
 	}
 

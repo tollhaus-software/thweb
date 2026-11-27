@@ -118,5 +118,5 @@ All arguments passed to `run-e2e-isolated.sh` are forwarded directly to `npx pla
 
 ## 4. Key UI & Layout Conventions
 
-- **familiesOverview Tab**:
+- **contacts Tab ("Kontakte")**:
   - Switches between a desktop "table" view (> 768px) and a mobile adaptive "card" view (<= 768px).

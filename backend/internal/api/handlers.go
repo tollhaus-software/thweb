@@ -541,7 +541,7 @@ func parseDateOnly(t time.Time) time.Time {
 	return d
 }
 
-// shouldIncludeChildInOverview determines whether an individual child should be shown in familiesOverview.
+// shouldIncludeChildInOverview determines whether an individual child should be shown in contacts.
 // Rules:
 // 1. If child is actively enrolled in a group today (TargetGroup > 0): included.
 // 2. If child exited (TargetGroup == 0 after prior enrollment): included if exit date was within the last 1 year.
@@ -611,8 +611,8 @@ func shouldIncludeChildInOverview(c models.Child, now time.Time) bool {
 	return false
 }
 
-// shouldIncludeFamilyInOverview determines whether a family should be shown in familiesOverview.
-// A family is only shown if it has at least one child that is eligible to be displayed in familiesOverview.
+// shouldIncludeFamilyInOverview determines whether a family should be shown in contacts.
+// A family is only shown if it has at least one child that is eligible to be displayed in contacts.
 func shouldIncludeFamilyInOverview(fam models.Family, now time.Time) bool {
 	for _, c := range fam.Children {
 		if shouldIncludeChildInOverview(c, now) {
@@ -622,10 +622,10 @@ func shouldIncludeFamilyInOverview(fam models.Family, now time.Time) bool {
 	return false
 }
 
-func (s *Server) HandleListFamiliesOverview(w http.ResponseWriter, r *http.Request) {
+func (s *Server) HandleListContacts(w http.ResponseWriter, r *http.Request) {
 	families, err := s.Store.ListFamilies(r.Context())
 	if err != nil {
-		httpErrorLog(w, r, "Failed to list families overview", http.StatusInternalServerError, err)
+		httpErrorLog(w, r, "Failed to list contacts", http.StatusInternalServerError, err)
 		return
 	}
 

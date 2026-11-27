@@ -192,7 +192,7 @@ func TestRequirePermission_DashboardUse(t *testing.T) {
 			name: "forbidden for regular parent without dashboard.use",
 			user: &models.UserWithPermissions{
 				Email:                "parent@example.com",
-				EffectivePermissions: []string{"families.all.restrictedread", "fees.self.read", "mealplan.view"},
+				EffectivePermissions: []string{"contacts.all.read", "fees.self.read", "mealplan.view"},
 			},
 			wantStatus: http.StatusForbidden,
 		},
@@ -732,7 +732,7 @@ func TestAuthenticator_Middleware_RestrictedUser(t *testing.T) {
 	handler := authenticator.Middleware(next)
 
 	// 1. Request as identifier email (not in users table) -> 200 OK, restricted role & permissions
-	req := httptest.NewRequest("GET", "/api/families/overview", nil)
+	req := httptest.NewRequest("GET", "/api/contacts", nil)
 	req.Header.Set("X-Proxy-Secret", "secret123")
 	req.Header.Set("X-Forwarded-Email", identEmail)
 	rec := httptest.NewRecorder()
@@ -748,8 +748,8 @@ func TestAuthenticator_Middleware_RestrictedUser(t *testing.T) {
 	if recordedUser.FamilyID == nil || *recordedUser.FamilyID != familyID {
 		t.Errorf("expected FamilyID %s, got %v", familyID, recordedUser.FamilyID)
 	}
-	if !recordedUser.HasPermission("families.all.restrictedread") {
-		t.Error("expected user to have families.all.restrictedread")
+	if !recordedUser.HasPermission("contacts.all.read") {
+		t.Error("expected user to have contacts.all.read")
 	}
 	if !recordedUser.HasPermission("fees.self.read") {
 		t.Error("expected user to have fees.self.read")
@@ -759,7 +759,7 @@ func TestAuthenticator_Middleware_RestrictedUser(t *testing.T) {
 	}
 
 	// 2. Request as unknown email (neither in users nor parents identifier email) -> 403 Forbidden
-	reqUnknown := httptest.NewRequest("GET", "/api/families/overview", nil)
+	reqUnknown := httptest.NewRequest("GET", "/api/contacts", nil)
 	reqUnknown.Header.Set("X-Proxy-Secret", "secret123")
 	reqUnknown.Header.Set("X-Forwarded-Email", "stranger@example.com")
 	recUnknown := httptest.NewRecorder()
@@ -837,7 +837,7 @@ roles:
     name: ErzieherInnenTeam
     description: Erzieher/Erzieherinnen
     permissions:
-      - families.all.restrictedread
+      - contacts.all.read
       - mealplan.view
     deny_permissions:
       - fees.self.read
@@ -847,7 +847,7 @@ roles:
     auto_grant_on:
       - parent_identifier_email
     permissions:
-      - families.all.restrictedread
+      - contacts.all.read
       - fees.self.read
       - families.self.selfservice
       - memberships.self.read
@@ -857,7 +857,7 @@ roles:
     auto_grant_on:
       - caregiver_identifier_email
     permissions:
-      - families.all.restrictedread
+      - contacts.all.read
       - mealplan.view
 `
 	cfg, err := roles.LoadFromBytes([]byte(customYAML))
@@ -874,7 +874,7 @@ roles:
 	erzieherID := uuid.New()
 
 	// Ensure role exists in roles table
-	if _, err := pool.Exec(ctx, "INSERT INTO roles (id, name, permissions, deny_permissions) VALUES ('erzieher', 'Erzieher', '[\"families.all.restrictedread\", \"mealplan.view\"]'::jsonb, '[\"fees.self.read\"]'::jsonb) ON CONFLICT (id) DO UPDATE SET deny_permissions = '[\"fees.self.read\"]'::jsonb"); err != nil {
+	if _, err := pool.Exec(ctx, "INSERT INTO roles (id, name, permissions, deny_permissions) VALUES ('erzieher', 'Erzieher', '[\"contacts.all.read\", \"mealplan.view\"]'::jsonb, '[\"fees.self.read\"]'::jsonb) ON CONFLICT (id) DO UPDATE SET deny_permissions = '[\"fees.self.read\"]'::jsonb"); err != nil {
 		t.Fatalf("failed to insert erzieher role: %v", err)
 	}
 
@@ -918,7 +918,7 @@ roles:
 	})
 	handler := authenticator.Middleware(next)
 
-	req := httptest.NewRequest("GET", "/api/families/overview", nil)
+	req := httptest.NewRequest("GET", "/api/contacts", nil)
 	req.Header.Set("X-Proxy-Secret", "secret123")
 	req.Header.Set("X-Forwarded-Email", erzieherEmail)
 	rec := httptest.NewRecorder()
@@ -998,7 +998,7 @@ func TestAuthenticator_EmployeeIdentifierEmail(t *testing.T) {
 	handler := authenticator.Middleware(next)
 
 	// 1. Request as caregiver identifier email -> 200 OK, caregiver_default role & permissions
-	req := httptest.NewRequest("GET", "/api/families/overview", nil)
+	req := httptest.NewRequest("GET", "/api/contacts", nil)
 	req.Header.Set("X-Proxy-Secret", "secret123")
 	req.Header.Set("X-Forwarded-Email", caregiverEmail)
 	rec := httptest.NewRecorder()
@@ -1021,8 +1021,8 @@ func TestAuthenticator_EmployeeIdentifierEmail(t *testing.T) {
 	if !foundRole {
 		t.Errorf("expected caregiver_default role, got roles: %v", recordedUser.Roles)
 	}
-	if !recordedUser.HasPermission("families.all.restrictedread") {
-		t.Error("expected caregiver to have families.all.restrictedread")
+	if !recordedUser.HasPermission("contacts.all.read") {
+		t.Error("expected caregiver to have contacts.all.read")
 	}
 	if !recordedUser.HasPermission("mealplan.view") {
 		t.Error("expected caregiver to have mealplan.view")
@@ -1106,7 +1106,7 @@ func TestAuthenticator_Simulation_UserMode(t *testing.T) {
 	}
 	simBytes, _ := json.Marshal(simCfg)
 
-	req := httptest.NewRequest("GET", "/api/families/overview", nil)
+	req := httptest.NewRequest("GET", "/api/contacts", nil)
 	req.Header.Set("Authorization", "Bearer developer@example.com")
 	req.AddCookie(&http.Cookie{
 		Name:  "thweb_sim",
@@ -1144,8 +1144,8 @@ func TestAuthenticator_Simulation_UserMode(t *testing.T) {
 	}
 
 	// 4. Effective permissions are intersection
-	if !recordedUser.HasPermission("families.all.restrictedread") {
-		t.Error("expected user to have simulated families.all.restrictedread")
+	if !recordedUser.HasPermission("contacts.all.read") {
+		t.Error("expected user to have simulated contacts.all.read")
 	}
 	if !recordedUser.HasPermission("fees.self.read") {
 		t.Error("expected user to have simulated fees.self.read")

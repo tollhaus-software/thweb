@@ -370,7 +370,7 @@ export const MainPage: React.FC<MainPageProps> = ({
 
   const effectiveCanReadOverview = canReadOverview !== undefined
     ? canReadOverview
-    : hasPermission('families.all.restrictedread');
+    : hasPermission('contacts.all.read');
 
   const effectiveCanReadFees = canReadFees !== undefined
     ? canReadFees
@@ -390,11 +390,11 @@ export const MainPage: React.FC<MainPageProps> = ({
     const links = [];
     if (effectiveCanReadOverview) {
       links.push({
-        id: 'familiesOverview',
-        tab: 'familiesOverview',
+        id: 'contacts',
+        tab: 'contacts',
         label: t('quickStartAddressList') || 'Adressliste',
         icon: Users,
-        testId: 'main-page-quickstart-familiesOverview',
+        testId: 'main-page-quickstart-contacts',
         altTestId: 'main-page-quickstart-address-list',
       });
     }

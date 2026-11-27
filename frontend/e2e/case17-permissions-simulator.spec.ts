@@ -107,8 +107,8 @@ test.describe('Test Case 17: Role and Permissions Simulator', () => {
     await expect(leaveBtn).toBeVisible();
 
     // 7. Verify system behaves as restricted parent (intersection with admin = restricted permissions)
-    // "Familien" overview tab is visible
-    await expect(page.locator('.sidebar-nav-item', { hasText: 'Familien' })).toBeVisible();
+    // "Kontakte" overview tab is visible
+    await expect(page.locator('.sidebar-nav-item', { hasText: 'Kontakte' })).toBeVisible();
     // "Betreuungsgebühren" is visible
     await expect(page.getByRole('button', { name: 'Betreuungsgebühren', exact: true })).toBeVisible();
     // MGA and Admin tabs must NOT be visible

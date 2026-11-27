@@ -175,7 +175,7 @@ test.describe('Test Case 48: Parent Contact Self-Service', () => {
       localStorage.setItem('token', 'julia.bauer@example.com');
     });
 
-    await page.goto('/#familiesOverview');
+    await page.goto('/#contacts');
     await page.waitForLoadState('networkidle');
 
     // Verify parents are on overview tab

@@ -62,7 +62,7 @@ test.describe('Test Case 30: Job Role Assignments', () => {
       data: {
         email: 'bernd.becker@example.com',
         roles: [],
-        permissions: ['families.all.restrictedread'],
+        permissions: ['contacts.all.read'],
       },
     });
     expect(berndUserRes.ok()).toBeTruthy();

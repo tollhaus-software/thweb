@@ -113,8 +113,8 @@ test.describe('Test Case 3: Families View Add Buttons (+ Kind and + Elternteil)'
     await savePromise;
     await page.keyboard.press('Escape');
 
-    // --- Step 7: Switch to Familien (familiesOverview) and verify data is fetched and updates are present ---
-    const overviewTab = page.locator('.sidebar-nav-item', { hasText: 'Familien' });
+    // --- Step 7: Switch to Kontakte (contacts) and verify data is fetched and updates are present ---
+    const overviewTab = page.locator('.sidebar-nav-item', { hasText: 'Kontakte' });
     await overviewTab.click();
     await expect(overviewTab).toHaveClass(/active/);
     const nachFamilieBtn = page.locator('.overview-grouping-btn', { hasText: 'Familien' });

@@ -148,9 +148,9 @@ test.describe('Test Case 21: Custom Address List Given Name for Parents and Chil
     await expect(bartFirstNameCell).toContainText('Bart');
 
     // ==========================================
-    // STEP 3: Verify display on Address list ("Familien")
+    // STEP 3: Verify display on Address list ("Kontakte")
     // ==========================================
-    const overviewTabBtn = page.locator('.sidebar-nav-item', { hasText: 'Familien' });
+    const overviewTabBtn = page.locator('.sidebar-nav-item', { hasText: 'Kontakte' });
     await overviewTabBtn.click();
     await expect(overviewTabBtn).toHaveClass(/active/);
     const nachFamilieBtn = page.locator('.overview-grouping-btn', { hasText: 'Familien' });

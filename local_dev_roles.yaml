@@ -81,7 +81,7 @@ roles:
     auto_grant_on:
       - parent_identifier_email
     permissions:
-      - families.all.restrictedread
+      - contacts.all.read
       - fees.self.read
       - families.self.selfservice
       - memberships.self.read
@@ -98,7 +98,7 @@ roles:
     auto_grant_on:
       - caregiver_identifier_email
     permissions:
-      - families.all.restrictedread
+      - contacts.all.read
       - families.print.group_overview
       - mealplan.view
       - allergies.summary.read

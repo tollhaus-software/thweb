@@ -470,7 +470,7 @@ func (a *Authenticator) RolesAndPermissionsForTriggers(triggers []string) ([]str
 			case roles.AutoGrantParentIdentifierEmail:
 				rIDs = []string{"parent_default"}
 				perms = []string{
-					"families.all.restrictedread",
+					"contacts.all.read",
 					"fees.self.read",
 					"families.self.selfservice",
 					"memberships.self.read",
@@ -482,7 +482,7 @@ func (a *Authenticator) RolesAndPermissionsForTriggers(triggers []string) ([]str
 			case roles.AutoGrantCaregiverIdentifierEmail:
 				rIDs = []string{"caregiver_default"}
 				perms = []string{
-					"families.all.restrictedread",
+					"contacts.all.read",
 					"families.print.group_overview",
 					"mealplan.view",
 					"allergies.summary.read",

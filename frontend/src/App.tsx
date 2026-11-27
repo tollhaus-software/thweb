@@ -64,7 +64,7 @@ import { MembersTab, type MemberRow } from './components/Members/MembersTab';
 import { ChildrenTab } from './components/Children/ChildrenTab';
 import { ParentsTab } from './components/Parents/ParentsTab';
 import { FamiliesTab } from './components/Families/FamiliesTab';
-import { FamiliesOverviewTab } from './components/Families/FamiliesOverviewTab';
+import { ContactsTab } from './components/Families/FamiliesOverviewTab';
 import {
   type Family,
   type Parent,
@@ -1182,6 +1182,7 @@ interface AdminRole {
 
 const ALL_AVAILABLE_PERMISSIONS = [
   '*',
+  'contacts.all.read',
   'families.all.read',
   'families.all.restrictedread',
   'families.all.write',
@@ -1852,7 +1853,7 @@ const Dashboard: React.FC = () => {
   const canProvisionKiosk = hasPermission('provision.kiosk.cert') || hasPermission('*');
   const canUseDashboard = hasPermission('dashboard.use');
   const canManageDashboardTodos = hasPermission('dashboard.todos.manage') || hasPermission('*');
-  const canReadOverview = hasPermission('families.all.restrictedread');
+  const canReadOverview = hasPermission('contacts.all.read');
   const canReadFamiliesAll = hasPermission('families.all.read');
   const canPrintGroupOverview = hasPermission('families.print.group_overview');
   const canReadFees = hasPermission('fees.all.read') || hasPermission('fees.self.read');
@@ -2017,7 +2018,7 @@ const Dashboard: React.FC = () => {
 
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [activeTab, setActiveTab] = React.useState<
-    'main' | 'familiesOverview' | 'families' | 'parents' | 'children' | 'alumni' | 'members' | 'jobs' | 'employees' | 'childcareFees' | 'childcareFeesAll' | 'hygieneBelehrung' | 'hygieneDocument' | 'kochenHygiene' | 'mealPlan' | 'mealAllergens' | 'audit' | 'admin' | 'activity' | 'kiosk' | 'dashboard' | 'dashboardTodos' | string
+    'main' | 'contacts' | 'families' | 'parents' | 'children' | 'alumni' | 'members' | 'jobs' | 'employees' | 'childcareFees' | 'childcareFeesAll' | 'hygieneBelehrung' | 'hygieneDocument' | 'kochenHygiene' | 'mealPlan' | 'mealAllergens' | 'audit' | 'admin' | 'activity' | 'kiosk' | 'dashboard' | 'dashboardTodos' | string
   >(() => {
     const rawHash = window.location.hash.replace('#', '');
     const hash = rawHash.split('?')[0];
@@ -2055,13 +2056,13 @@ const Dashboard: React.FC = () => {
       return 'main';
     }
     if (hash === 'alumni') {
-      return canReadFamiliesAll ? 'parents' : 'familiesOverview';
+      return canReadFamiliesAll ? 'parents' : 'contacts';
     }
     if (
       (hash === 'main' && isMainPageActiveInitial) ||
       (hash === 'events' && canReadEvents) ||
       (hash === 'eventsImport' && canImportEvents) ||
-      (hash === 'familiesOverview' && canReadOverview) ||
+      (hash === 'contacts' && canReadOverview) ||
       (hash === 'families' && canReadFamiliesAll) ||
       (hash === 'parents' && canReadFamiliesAll) ||
       (hash === 'children' && canReadFamiliesAll) ||
@@ -2088,13 +2089,13 @@ const Dashboard: React.FC = () => {
     }
     const saved = localStorage.getItem('thweb_active_tab');
     if (saved === 'alumni') {
-      return canReadFamiliesAll ? 'parents' : 'familiesOverview';
+      return canReadFamiliesAll ? 'parents' : 'contacts';
     }
     if (
       (saved === 'main' && isMainPageActiveInitial) ||
       (saved === 'events' && canReadEvents) ||
       (saved === 'eventsImport' && canImportEvents) ||
-      (saved === 'familiesOverview' && canReadOverview) ||
+      (saved === 'contacts' && canReadOverview) ||
       (saved === 'families' && canReadFamiliesAll) ||
       (saved === 'parents' && canReadFamiliesAll) ||
       (saved === 'children' && canReadFamiliesAll) ||
@@ -2126,7 +2127,7 @@ const Dashboard: React.FC = () => {
       return 'families';
     }
     if (canReadOverview) {
-      return 'familiesOverview';
+      return 'contacts';
     }
     if (canReadFees) {
       return 'childcareFees';
@@ -2164,7 +2165,7 @@ const Dashboard: React.FC = () => {
     if (canUseDashboard) {
       return 'dashboard';
     }
-    return isMainPageActiveInitial ? 'main' : 'familiesOverview';
+    return isMainPageActiveInitial ? 'main' : 'contacts';
   });
 
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState<boolean>(() => {
@@ -2176,7 +2177,7 @@ const Dashboard: React.FC = () => {
     let fallback: typeof activeTab | null = null;
     if (activeTab === 'main' && !isMainPageActive) {
       if (canReadOverview) {
-        fallback = 'familiesOverview';
+        fallback = 'contacts';
       } else if (canReadFamiliesAll) {
         fallback = 'families';
       } else if (canReadFees) {
@@ -2184,19 +2185,19 @@ const Dashboard: React.FC = () => {
       }
     } else if (activeTab === 'families' && !canReadFamiliesAll) {
       if (canReadOverview) {
-        fallback = 'familiesOverview';
+        fallback = 'contacts';
       } else if (canReadFees) {
         fallback = 'childcareFees';
       }
     } else if ((activeTab === 'parents' || activeTab === 'children') && !canReadFamiliesAll) {
       if (canReadOverview) {
-        fallback = 'familiesOverview';
+        fallback = 'contacts';
       } else if (canReadFees) {
         fallback = 'childcareFees';
       }
     } else if (activeTab === 'members' && !canReadMembers) {
       if (canReadOverview) {
-        fallback = 'familiesOverview';
+        fallback = 'contacts';
       } else if (canReadFees) {
         fallback = 'childcareFees';
       } else if (canReadFamiliesAll) {
@@ -2204,7 +2205,7 @@ const Dashboard: React.FC = () => {
       }
     } else if (activeTab === 'jobs' && !canReadJobs) {
       if (canReadOverview) {
-        fallback = 'familiesOverview';
+        fallback = 'contacts';
       } else if (canReadFees) {
         fallback = 'childcareFees';
       } else if (canReadFamiliesAll) {
@@ -2212,7 +2213,7 @@ const Dashboard: React.FC = () => {
       }
     } else if (activeTab === 'employees' && !canReadEmployees) {
       if (canReadOverview) {
-        fallback = 'familiesOverview';
+        fallback = 'contacts';
       } else if (canReadFees) {
         fallback = 'childcareFees';
       } else if (canReadFamiliesAll) {
@@ -2220,7 +2221,7 @@ const Dashboard: React.FC = () => {
       }
     } else if (activeTab === 'volunteerAbsences' && !canReadVolunteerAbsences) {
       if (canReadOverview) {
-        fallback = 'familiesOverview';
+        fallback = 'contacts';
       } else if (canReadFees) {
         fallback = 'childcareFees';
       } else if (canReadFamiliesAll) {
@@ -2228,7 +2229,7 @@ const Dashboard: React.FC = () => {
       }
     } else if (activeTab === 'events' && !canReadEvents) {
       if (canReadOverview) {
-        fallback = 'familiesOverview';
+        fallback = 'contacts';
       } else if (canReadFees) {
         fallback = 'childcareFees';
       } else if (canReadFamiliesAll) {
@@ -2238,7 +2239,7 @@ const Dashboard: React.FC = () => {
       if (canReadEvents) {
         fallback = 'events';
       } else if (canReadOverview) {
-        fallback = 'familiesOverview';
+        fallback = 'contacts';
       } else if (canReadFees) {
         fallback = 'childcareFees';
       } else if (canReadFamiliesAll) {
@@ -2246,7 +2247,7 @@ const Dashboard: React.FC = () => {
       }
     } else if (activeTab === 'mealPlan' && !canViewMealPlan) {
       if (canReadOverview) {
-        fallback = 'familiesOverview';
+        fallback = 'contacts';
       } else if (canReadFees) {
         fallback = 'childcareFees';
       } else if (canReadFamiliesAll) {
@@ -2254,7 +2255,7 @@ const Dashboard: React.FC = () => {
       }
     } else if (activeTab === 'mealAllergens' && !canReadMealAllergens) {
       if (canReadOverview) {
-        fallback = 'familiesOverview';
+        fallback = 'contacts';
       } else if (canReadFees) {
         fallback = 'childcareFees';
       } else if (canReadFamiliesAll) {
@@ -2262,18 +2263,18 @@ const Dashboard: React.FC = () => {
       }
     } else if (activeTab === 'hygieneBelehrung' && !canManageHygiene && !hasPermission('hygiene.all.write')) {
       if (canReadOverview) {
-        fallback = 'familiesOverview';
+        fallback = 'contacts';
       } else if (canReadFees) {
         fallback = 'childcareFees';
       } else if (canReadFamiliesAll) {
         fallback = 'families';
       }
     } else if (activeTab === 'hygieneDocument' && !canManageHygiene) {
-      fallback = getFirstPermittedTabForCategory('hygiene', navPerms) || 'familiesOverview';
+      fallback = getFirstPermittedTabForCategory('hygiene', navPerms) || 'contacts';
     } else if (activeTab === 'kochenHygiene' && !canAccessPersonalHygiene) {
-      fallback = getFirstPermittedTabForCategory('kochen', navPerms) || 'familiesOverview';
+      fallback = getFirstPermittedTabForCategory('kochen', navPerms) || 'contacts';
     } else if (activeTab === 'dashboardTodos' && !canManageDashboardTodos) {
-      fallback = getFirstPermittedTabForCategory('kochen', navPerms) || 'familiesOverview';
+      fallback = getFirstPermittedTabForCategory('kochen', navPerms) || 'contacts';
     } else if (activeTab === 'mga' && !categoryHasLandingPage('mga', navPerms)) {
       fallback = getFirstPermittedTabForCategory('mga', navPerms);
     } else if (activeTab === 'kochen' && !categoryHasLandingPage('kochen', navPerms)) {
@@ -2281,7 +2282,7 @@ const Dashboard: React.FC = () => {
     } else if (activeTab === 'hygiene' && !categoryHasLandingPage('hygiene', navPerms)) {
       fallback = getFirstPermittedTabForCategory('hygiene', navPerms);
     } else if (activeTab === 'childcareFeesAll' && !canReadFeesAll) {
-      fallback = canReadFees ? 'childcareFees' : (canReadOverview ? 'familiesOverview' : 'families');
+      fallback = canReadFees ? 'childcareFees' : (canReadOverview ? 'contacts' : 'families');
     }
     if (fallback && fallback !== activeTab) {
       setActiveTab(fallback);
@@ -2297,7 +2298,7 @@ const Dashboard: React.FC = () => {
     familyId: string;
     familyName: string;
     type: 'parent' | 'child' | 'family';
-    fromTab?: 'families' | 'familiesOverview' | 'parents' | 'children' | 'members';
+    fromTab?: 'families' | 'contacts' | 'parents' | 'children' | 'members';
   } | null>(null);
 
   const handleJumpToParent = React.useCallback(
@@ -2305,7 +2306,7 @@ const Dashboard: React.FC = () => {
       parentId: string,
       familyId: string,
       familyName: string,
-      fromTab: 'families' | 'familiesOverview' | 'members' = 'families'
+      fromTab: 'families' | 'contacts' | 'members' = 'families'
     ) => {
       setGlobalFilter('');
       setActiveTab('parents');
@@ -2328,7 +2329,7 @@ const Dashboard: React.FC = () => {
       childId: string,
       familyId: string,
       familyName: string,
-      fromTab: 'families' | 'familiesOverview' | 'members' = 'families'
+      fromTab: 'families' | 'contacts' | 'members' = 'families'
     ) => {
       setGlobalFilter('');
       setActiveTab('children');
@@ -2379,7 +2380,7 @@ const Dashboard: React.FC = () => {
   const handleJumpToFamily = React.useCallback(
     (
       familyId: string,
-      fromTab: 'families' | 'familiesOverview' | 'members' | 'parents' | 'children' = 'families'
+      fromTab: 'families' | 'contacts' | 'members' | 'parents' | 'children' = 'families'
     ) => {
       setGlobalFilter('');
       setActiveTab('families');
@@ -2982,11 +2983,11 @@ const Dashboard: React.FC = () => {
   }, [getAuthHeaders]);
 
   const fetchOverviewFamilies = React.useCallback(() => {
-    return fetch('/api/families/overview', {
+    return fetch('/api/contacts', {
       headers: getAuthHeaders(),
     })
       .then((res) => {
-        if (!res.ok) throw new Error('Failed to fetch families overview');
+        if (!res.ok) throw new Error('Failed to fetch contacts');
         return res.json();
       })
       .then((data) => {
@@ -3273,7 +3274,7 @@ const Dashboard: React.FC = () => {
   // Fetch data on demand based on the active tab
   React.useEffect(() => {
     switch (activeTab) {
-      case 'familiesOverview':
+      case 'contacts':
         if (canReadOverview) {
           fetchOverviewFamilies();
         }
@@ -3328,7 +3329,7 @@ const Dashboard: React.FC = () => {
             }
           }
         } else {
-          const fallback = canReadFamiliesAll ? 'families' : canReadOverview ? 'familiesOverview' : 'childcareFees';
+          const fallback = canReadFamiliesAll ? 'families' : canReadOverview ? 'contacts' : 'childcareFees';
           setActiveTab(fallback as any);
           localStorage.setItem('thweb_active_tab', fallback);
           window.location.hash = fallback;
@@ -3398,10 +3399,10 @@ const Dashboard: React.FC = () => {
       const fromFamily = searchParams.get('fromFamily');
       const familyName = searchParams.get('familyName');
       const type = searchParams.get('type') as 'parent' | 'child' | 'family' | null;
-      const fromTab = searchParams.get('fromTab') as 'families' | 'familiesOverview' | 'parents' | 'children' | 'members' | null;
+      const fromTab = searchParams.get('fromTab') as 'families' | 'contacts' | 'parents' | 'children' | 'members' | null;
 
       if (hash === 'alumni') {
-        const targetTab = canReadFamiliesAll ? 'parents' : (canReadOverview ? 'familiesOverview' : 'main');
+        const targetTab = canReadFamiliesAll ? 'parents' : (canReadOverview ? 'contacts' : 'main');
         setActiveTab(targetTab as any);
         localStorage.setItem('thweb_active_tab', targetTab);
         window.location.hash = targetTab;
@@ -3413,7 +3414,7 @@ const Dashboard: React.FC = () => {
         (!hash && (canReadOverview || canReadFamiliesAll)) ||
         (hash === 'events' && canReadEvents) ||
         (hash === 'eventsImport' && canImportEvents) ||
-        (hash === 'familiesOverview' && canReadOverview) ||
+        (hash === 'contacts' && canReadOverview) ||
         (hash === 'parents' && canReadFamiliesAll) ||
         (hash === 'children' && canReadFamiliesAll) ||
         (hash === 'families' && canReadFamiliesAll) ||
@@ -3437,7 +3438,7 @@ const Dashboard: React.FC = () => {
         (hash === 'dashboardTodos' && canManageDashboardTodos)
       ) {
         const targetTab = (!hash || hash === 'home')
-          ? (isMainPageActive ? 'main' : (canReadOverview ? 'familiesOverview' : 'families'))
+          ? (isMainPageActive ? 'main' : (canReadOverview ? 'contacts' : 'families'))
           : hash;
         setActiveTab(targetTab as any);
         localStorage.setItem('thweb_active_tab', targetTab);
@@ -3459,29 +3460,29 @@ const Dashboard: React.FC = () => {
           setReturnNav(null);
         }
       } else if (hash === 'families' && !canReadFamiliesAll && canReadOverview) {
-        setActiveTab('familiesOverview');
-        localStorage.setItem('thweb_active_tab', 'familiesOverview');
-        window.location.hash = 'familiesOverview';
+        setActiveTab('contacts');
+        localStorage.setItem('thweb_active_tab', 'contacts');
+        window.location.hash = 'contacts';
       } else if (
         (hash === 'parents' || hash === 'children') &&
         !canReadFamiliesAll
       ) {
-        const fallback = canReadOverview ? 'familiesOverview' : canReadFees ? 'childcareFees' : 'familiesOverview';
+        const fallback = canReadOverview ? 'contacts' : canReadFees ? 'childcareFees' : 'contacts';
         setActiveTab(fallback as any);
         localStorage.setItem('thweb_active_tab', fallback);
         window.location.hash = fallback;
       } else if ((hash === 'main' || hash === 'home') && !isMainPageActive) {
-        const fallback = canReadOverview ? 'familiesOverview' : canReadFamiliesAll ? 'families' : 'childcareFees';
+        const fallback = canReadOverview ? 'contacts' : canReadFamiliesAll ? 'families' : 'childcareFees';
         setActiveTab(fallback as any);
         localStorage.setItem('thweb_active_tab', fallback);
         window.location.hash = fallback;
       } else if (hash === 'audit' || hash === 'admin' || hash === 'activity' || hash === 'kiosk' || hash === 'mealPlan' || hash === 'mealAllergens' || hash === 'dashboard' || hash === 'dashboardTodos') {
-        const fallback = canReadFamiliesAll ? 'families' : canReadOverview ? 'familiesOverview' : 'childcareFees';
+        const fallback = canReadFamiliesAll ? 'families' : canReadOverview ? 'contacts' : 'childcareFees';
         setActiveTab(fallback as any);
         localStorage.setItem('thweb_active_tab', fallback);
         window.location.hash = fallback;
       } else if (hash === 'volunteerAbsences' && !canReadVolunteerAbsences) {
-        const fallback = canReadOverview ? 'familiesOverview' : canReadFamiliesAll ? 'families' : 'childcareFees';
+        const fallback = canReadOverview ? 'contacts' : canReadFamiliesAll ? 'families' : 'childcareFees';
         setActiveTab(fallback as any);
         localStorage.setItem('thweb_active_tab', fallback);
         window.location.hash = fallback;
@@ -3492,7 +3493,7 @@ const Dashboard: React.FC = () => {
       if (canUseDashboard) {
         window.history.replaceState(null, '', '/#dashboard');
       } else {
-        const fallback = canReadFamiliesAll ? 'families' : canReadOverview ? 'familiesOverview' : 'childcareFees';
+        const fallback = canReadFamiliesAll ? 'families' : canReadOverview ? 'contacts' : 'childcareFees';
         window.history.replaceState(null, '', '/#' + fallback);
       }
     }
@@ -3510,7 +3511,7 @@ const Dashboard: React.FC = () => {
       message.type === 'FAMILY_UPDATED' || 
       message.type === 'CHILD_UPDATED'
     ) {
-      if (activeTab === 'familiesOverview') {
+      if (activeTab === 'contacts') {
         if (canReadOverview) fetchOverviewFamilies();
       } else if (
         activeTab === 'families' ||
@@ -5851,7 +5852,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
   const shouldShowSubTabInBreadcrumbs = hasLandingPage && !isLandingActive && Boolean(currentSubItem);
   const subTabLabel = shouldShowSubTabInBreadcrumbs && currentSubItem ? getSubItemLabel(currentSubItem) : null;
 
-  const isTableTab = !isLandingActive && (activeTab === 'familiesOverview' || activeTab === 'parents' || activeTab === 'children' || activeTab === 'families' || activeTab === 'hygieneBelehrung' || activeTab === 'members' || activeTab === 'employees' || activeTab === 'jobs');
+  const isTableTab = !isLandingActive && (activeTab === 'contacts' || activeTab === 'parents' || activeTab === 'children' || activeTab === 'families' || activeTab === 'hygieneBelehrung' || activeTab === 'members' || activeTab === 'employees' || activeTab === 'jobs');
 
   return (
     <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
@@ -5921,7 +5922,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                     alt={appTitle}
                     title={appTitle}
                     className="app-header-logo desktop-only"
-                    onClick={() => handleTabClick(isMainPageActive ? 'main' : (canReadOverview ? 'familiesOverview' : 'families'))}
+                    onClick={() => handleTabClick(isMainPageActive ? 'main' : (canReadOverview ? 'contacts' : 'families'))}
                     style={{ cursor: 'pointer' }}
                   />
                   <img
@@ -5929,13 +5930,13 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                     alt={appTitle}
                     title={appTitle}
                     className="app-header-favicon mobile-only"
-                    onClick={() => handleTabClick(isMainPageActive ? 'main' : (canReadOverview ? 'familiesOverview' : 'families'))}
+                    onClick={() => handleTabClick(isMainPageActive ? 'main' : (canReadOverview ? 'contacts' : 'families'))}
                     style={{ cursor: 'pointer' }}
                   />
                 </>
               ) : (
                 <h1
-                  onClick={() => handleTabClick(isMainPageActive ? 'main' : (canReadOverview ? 'familiesOverview' : 'families'))}
+                  onClick={() => handleTabClick(isMainPageActive ? 'main' : (canReadOverview ? 'contacts' : 'families'))}
                   style={{ cursor: 'pointer' }}
                 >
                   {displayTitle}
@@ -6077,6 +6078,8 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                     ? t('backToParents')
                     : returnNav.fromTab === 'children'
                     ? t('backToChildren')
+                    : returnNav.fromTab === 'contacts'
+                    ? t('backToContacts')
                     : t('backToFamilies')}
                 </span>
               </button>
@@ -6620,18 +6623,18 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
             ) : (
               <div className="controls-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                 <div
-                  className={`controls-left ${activeTab === 'familiesOverview' ? 'overview-controls-left' : ''}`}
+                  className={`controls-left ${activeTab === 'contacts' ? 'overview-controls-left' : ''}`}
                   style={{
                     display: 'flex',
-                    gap: activeTab === 'familiesOverview' ? '1.25rem' : '0.75rem',
+                    gap: activeTab === 'contacts' ? '1.25rem' : '0.75rem',
                     alignItems: 'center',
-                    flexWrap: activeTab === 'familiesOverview' ? 'nowrap' : 'wrap',
+                    flexWrap: activeTab === 'contacts' ? 'nowrap' : 'wrap',
                   }}
                 >
                   <input
                     value={globalFilter ?? ''}
                     onChange={(e) => setGlobalFilter(e.target.value)}
-                    className={`search-input ${activeTab === 'familiesOverview' ? 'overview-search-input' : ''}`}
+                    className={`search-input ${activeTab === 'contacts' ? 'overview-search-input' : ''}`}
                     placeholder={
                       activeTab === 'employees'
                         ? (t('searchEmployees') || 'Mitarbeiter suchen...')
@@ -6700,7 +6703,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                     </button>
                   )}
 
-                  {activeTab === 'familiesOverview' && (
+                  {activeTab === 'contacts' && (
                     <div
                       className="overview-grouping-toggle"
                       role="group"
@@ -6733,7 +6736,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                     </div>
                   )}
 
-                  {activeTab === 'familiesOverview' && canPrintGroupOverview && (
+                  {activeTab === 'contacts' && canPrintGroupOverview && (
                     <div style={{ position: 'relative', display: 'inline-flex' }}>
                       <button
                         ref={printButtonRef}
@@ -6815,7 +6818,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                     </div>
                   )}
 
-                  {activeTab !== 'familiesOverview' && (
+                  {activeTab !== 'contacts' && (
                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                       <button
                         onClick={handleUndo}
@@ -6929,8 +6932,8 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
               userName={currentAuthUserFirstName}
             />
           </div>
-        ) : activeTab === 'familiesOverview' ? (
-          <FamiliesOverviewTab
+        ) : activeTab === 'contacts' ? (
+          <ContactsTab
             data={overviewFamiliesTabData}
             isMobile={isMobile}
             canReadFamiliesAll={canReadFamiliesAll}

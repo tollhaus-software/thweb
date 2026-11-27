@@ -141,12 +141,12 @@ test.describe('Test Case 8: Adaptive Card Layout for familiesOverview Tab', () =
     if (await toggleSidebarBtn.isVisible()) {
       await toggleSidebarBtn.click();
     }
-    const overviewTab = page.locator('.sidebar-nav-item', { hasText: 'Familien' });
+    const overviewTab = page.locator('.sidebar-nav-item', { hasText: 'Kontakte' });
     await expect(overviewTab).toBeVisible();
     await overviewTab.click();
     await expect(overviewTab).toHaveClass(/active/);
 
-    // Verify undo/redo buttons are NOT present on familiesOverview tab
+    // Verify undo/redo buttons are NOT present on contacts tab
     await expect(page.getByTitle('Undo')).not.toBeVisible();
     await expect(page.getByTitle('Redo')).not.toBeVisible();
 

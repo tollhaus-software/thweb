@@ -38,8 +38,20 @@ func TestUserWithPermissions_HasPermission(t *testing.T) {
 			want:        false,
 		},
 		{
-			name:        "families.all.read implies families.all.restrictedread",
+			name:        "families.all.read implies contacts.all.read and families.all.restrictedread",
 			effective:   []string{"families.all.read"},
+			permToCheck: "contacts.all.read",
+			want:        true,
+		},
+		{
+			name:        "families.all.restrictedread implies contacts.all.read (backwards compatibility)",
+			effective:   []string{"families.all.restrictedread"},
+			permToCheck: "contacts.all.read",
+			want:        true,
+		},
+		{
+			name:        "contacts.all.read implies families.all.restrictedread (backwards compatibility)",
+			effective:   []string{"contacts.all.read"},
 			permToCheck: "families.all.restrictedread",
 			want:        true,
 		},
@@ -122,8 +134,8 @@ func TestUserWithPermissions_HasPermission(t *testing.T) {
 			want:        false,
 		},
 		{
-			name:        "restricted read does not imply families.all.read",
-			effective:   []string{"families.all.restrictedread"},
+			name:        "contacts.all.read does not imply families.all.read",
+			effective:   []string{"contacts.all.read"},
 			permToCheck: "families.all.read",
 			want:        false,
 		},

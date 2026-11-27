@@ -107,8 +107,8 @@ test.describe('Test Case 33: Alternating Family Backgrounds in Tables & Cards, S
       await toggleSidebarBtn.click();
     }
 
-    // --- A. familiesOverview Tab in Table View ---
-    const overviewTab = page.locator('.sidebar-nav-item', { hasText: 'Familien' });
+    // --- A. contacts Tab in Table View ---
+    const overviewTab = page.locator('.sidebar-nav-item', { hasText: 'Kontakte' });
     await expect(overviewTab).toBeVisible();
     await overviewTab.click();
 

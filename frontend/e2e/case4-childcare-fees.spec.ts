@@ -440,7 +440,7 @@ test.describe('Test Case 4: Childcare Fees Tooltips & Translations', () => {
       data: {
         email: 'board.bauer@tollhaus-stuttgart.de',
         roles: [],
-        permissions: ['fees.all.read', 'families.all.read', 'families.all.restrictedread'],
+        permissions: ['fees.all.read', 'families.all.read', 'contacts.all.read'],
       },
     });
     expect(userRes.ok()).toBeTruthy();

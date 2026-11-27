@@ -498,7 +498,7 @@ func TestHandleSelfServiceParents(t *testing.T) {
 	parentUser := &models.UserWithPermissions{
 		ID:                   uuid.Nil,
 		Email:                "self.id@example.com",
-		EffectivePermissions: []string{"families.self.selfservice", "families.all.restrictedread"},
+		EffectivePermissions: []string{"families.self.selfservice", "contacts.all.read"},
 		FamilyID:             &familyID,
 		ParentID:             &parentID,
 	}
@@ -623,7 +623,7 @@ func TestHandleSelfServiceParents(t *testing.T) {
 	}
 }
 
-func TestHandleListFamiliesOverview_ProjectionAndScoping(t *testing.T) {
+func TestHandleListContacts_ProjectionAndScoping(t *testing.T) {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		dbURL = "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
@@ -746,34 +746,34 @@ func TestHandleListFamiliesOverview_ProjectionAndScoping(t *testing.T) {
 	restrictedUser := &models.UserWithPermissions{
 		Email:                "alice.public@example.com",
 		Roles:                []string{"parent_default"},
-		EffectivePermissions: []string{"families.all.restrictedread", "fees.self.read", "families.self.selfservice"},
+		EffectivePermissions: []string{"contacts.all.read", "fees.self.read", "families.self.selfservice"},
 		FamilyID:             &familyID1,
 	}
 
-	req := httptest.NewRequest("GET", "/api/families/overview", nil)
+	req := httptest.NewRequest("GET", "/api/contacts", nil)
 	reqCtx := context.WithValue(req.Context(), auth.UserContextKey, restrictedUser)
 	req = req.WithContext(reqCtx)
 	rec := httptest.NewRecorder()
 
-	s.HandleListFamiliesOverview(rec, req)
+	s.HandleListContacts(rec, req)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200 OK from HandleListFamiliesOverview, got %d (%s)", rec.Code, rec.Body.String())
+		t.Fatalf("expected 200 OK from HandleListContacts, got %d (%s)", rec.Code, rec.Body.String())
 	}
 
 	bodyStr := rec.Body.String()
 	// Must NOT contain sensitive notes
 	if strings.Contains(bodyStr, "Sensitive parent notes") {
-		t.Errorf("HandleListFamiliesOverview leaked parent notes: %s", bodyStr)
+		t.Errorf("HandleListContacts leaked parent notes: %s", bodyStr)
 	}
 	if strings.Contains(bodyStr, "Secret child notes") {
-		t.Errorf("HandleListFamiliesOverview leaked child notes: %s", bodyStr)
+		t.Errorf("HandleListContacts leaked child notes: %s", bodyStr)
 	}
 	// Must NOT contain unlisted emails/phones
 	if strings.Contains(bodyStr, "alice.secret@example.com") {
-		t.Errorf("HandleListFamiliesOverview leaked non-address-list email: %s", bodyStr)
+		t.Errorf("HandleListContacts leaked non-address-list email: %s", bodyStr)
 	}
 	if strings.Contains(bodyStr, "111-private") {
-		t.Errorf("HandleListFamiliesOverview leaked non-address-list phone: %s", bodyStr)
+		t.Errorf("HandleListContacts leaked non-address-list phone: %s", bodyStr)
 	}
 	// MUST contain public email, phone, and address
 	if !strings.Contains(bodyStr, "alice.public@example.com") {
@@ -817,7 +817,7 @@ func TestHandleListFamiliesOverview_ProjectionAndScoping(t *testing.T) {
 	}
 }
 
-func TestHandleListFamiliesOverview_DateFiltering(t *testing.T) {
+func TestHandleListContacts_DateFiltering(t *testing.T) {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		dbURL = "postgres://postgres:postgres@localhost:5432/thweb?sslmode=disable"
@@ -898,14 +898,14 @@ func TestHandleListFamiliesOverview_DateFiltering(t *testing.T) {
 	user := &models.UserWithPermissions{
 		ID:                   testUserID,
 		Email:                "staff@example.com",
-		EffectivePermissions: []string{"families.all.read", "families.all.restrictedread"},
+		EffectivePermissions: []string{"families.all.read", "contacts.all.read"},
 	}
 
-	// 1. Check HandleListFamiliesOverview
-	reqOv := httptest.NewRequest("GET", "/api/families/overview", nil)
+	// 1. Check HandleListContacts
+	reqOv := httptest.NewRequest("GET", "/api/contacts", nil)
 	reqOv = reqOv.WithContext(context.WithValue(reqOv.Context(), auth.UserContextKey, user))
 	recOv := httptest.NewRecorder()
-	s.HandleListFamiliesOverview(recOv, reqOv)
+	s.HandleListContacts(recOv, reqOv)
 
 	if recOv.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for overview, got %d", recOv.Code)
@@ -1015,7 +1015,7 @@ func TestHandleCalculateFees_RestrictedUser(t *testing.T) {
 	// 1. Restricted user with fees.self.read: only returns familyID1
 	userSelf := &models.UserWithPermissions{
 		Email:                "f1@example.com",
-		EffectivePermissions: []string{"families.all.restrictedread", "fees.self.read"},
+		EffectivePermissions: []string{"contacts.all.read", "fees.self.read"},
 		FamilyID:             &familyID1,
 	}
 	req := httptest.NewRequest("POST", "/api/fees/calculate", strings.NewReader(calcBody))
@@ -1058,7 +1058,7 @@ func TestHandleCalculateFees_RestrictedUser(t *testing.T) {
 	// 3. User without fees permissions -> 403 Forbidden
 	userNoFees := &models.UserWithPermissions{
 		Email:                "nofees@example.com",
-		EffectivePermissions: []string{"families.all.restrictedread"},
+		EffectivePermissions: []string{"contacts.all.read"},
 	}
 	reqNoFees := httptest.NewRequest("POST", "/api/fees/calculate", strings.NewReader(calcBody))
 	reqNoFees = reqNoFees.WithContext(context.WithValue(reqNoFees.Context(), auth.UserContextKey, userNoFees))
@@ -2132,7 +2132,7 @@ func TestAllergies_ChildrenEmployeesSummaryAndAudit(t *testing.T) {
 		Email: userEmail,
 		EffectivePermissions: []string{
 			"families.all.read",
-			"families.all.restrictedread",
+			"contacts.all.read",
 			"allergies.children.read",
 			"allergies.children.write",
 			"allergies.summary.read",
@@ -2173,24 +2173,24 @@ func TestAllergies_ChildrenEmployeesSummaryAndAudit(t *testing.T) {
 		t.Fatalf("expected 200 OK when MGA updates child2 allergies, got %d (%s)", rec2.Code, rec2.Body.String())
 	}
 
-	// 2. Overview endpoint (/api/families/overview):
-	//    Due to privacy constraints, /api/families/overview must NOT serve allergies per person (not even for own child or admin).
+	// 2. Contacts endpoint (/api/contacts):
+	//    Due to privacy constraints, /api/contacts must NOT serve allergies per person (not even for own child or admin).
 	parentUser1 := &models.UserWithPermissions{
 		ID:                   testUserID,
 		Email:                "parent1@example.com",
 		FamilyID:             &fam1.ID,
-		EffectivePermissions: []string{"families.all.restrictedread", "allergies.summary.read"},
+		EffectivePermissions: []string{"contacts.all.read", "allergies.summary.read"},
 	}
-	reqOv := httptest.NewRequest("GET", "/api/families/overview", nil)
+	reqOv := httptest.NewRequest("GET", "/api/contacts", nil)
 	reqOv = reqOv.WithContext(context.WithValue(reqOv.Context(), auth.UserContextKey, parentUser1))
 	recOv := httptest.NewRecorder()
-	server.HandleListFamiliesOverview(recOv, reqOv)
+	server.HandleListContacts(recOv, reqOv)
 	if recOv.Code != http.StatusOK {
-		t.Fatalf("expected 200 OK for overview, got %d", recOv.Code)
+		t.Fatalf("expected 200 OK for contacts, got %d", recOv.Code)
 	}
 	ovBodyStr := recOv.Body.String()
 	if strings.Contains(ovBodyStr, "Erdnuss") || strings.Contains(ovBodyStr, "Laktose") || strings.Contains(ovBodyStr, "allergies") {
-		t.Errorf("expected overview endpoint NOT to serve allergies per person to parent, got: %s", ovBodyStr)
+		t.Errorf("expected contacts endpoint NOT to serve allergies per person to parent, got: %s", ovBodyStr)
 	}
 
 	adminUser := &models.UserWithPermissions{
@@ -2198,10 +2198,10 @@ func TestAllergies_ChildrenEmployeesSummaryAndAudit(t *testing.T) {
 		Email:                userEmail,
 		EffectivePermissions: []string{"*"},
 	}
-	reqAdminOv := httptest.NewRequest("GET", "/api/families/overview", nil)
+	reqAdminOv := httptest.NewRequest("GET", "/api/contacts", nil)
 	reqAdminOv = reqAdminOv.WithContext(context.WithValue(reqAdminOv.Context(), auth.UserContextKey, adminUser))
 	recAdminOv := httptest.NewRecorder()
-	server.HandleListFamiliesOverview(recAdminOv, reqAdminOv)
+	server.HandleListContacts(recAdminOv, reqAdminOv)
 	if recAdminOv.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK for admin overview, got %d", recAdminOv.Code)
 	}
@@ -2839,13 +2839,13 @@ func TestJobs_APIHandlersAndPermissions(t *testing.T) {
 		t.Fatalf("expected 400 Bad Request when deleting job with active assignments, got %d", recDelBlocked.Code)
 	}
 
-	// 6. Verify HandleListFamiliesOverview includes the job
-	reqOv := httptest.NewRequest("GET", "/api/families/overview", nil)
+	// 6. Verify HandleListContacts includes the job
+	reqOv := httptest.NewRequest("GET", "/api/contacts", nil)
 	reqOv.Header.Set("X-Forwarded-Email", "developer@example.com")
 	recOv := httptest.NewRecorder()
 	router.ServeHTTP(recOv, reqOv)
 	if recOv.Code != http.StatusOK {
-		t.Fatalf("expected 200 OK from /api/families/overview, got %d", recOv.Code)
+		t.Fatalf("expected 200 OK from /api/contacts, got %d", recOv.Code)
 	}
 	var ovData []OverviewFamily
 	_ = json.Unmarshal(recOv.Body.Bytes(), &ovData)
@@ -2859,7 +2859,7 @@ func TestJobs_APIHandlersAndPermissions(t *testing.T) {
 		}
 	}
 	if foundOvParent == nil {
-		t.Fatalf("parent not found in /api/families/overview")
+		t.Fatalf("parent not found in /api/contacts")
 	}
 	if len(foundOvParent.Jobs) != 1 || foundOvParent.Jobs[0].ID != createdJob.ID {
 		t.Fatalf("expected 1 job on parent in overview, got %+v", foundOvParent.Jobs)

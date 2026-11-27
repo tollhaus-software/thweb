@@ -173,8 +173,8 @@ test.describe('Test Case 24: Families Overview Date-based Filtering', () => {
     });
     await page.goto('/');
 
-    // 2. Navigate to Familien (familiesOverview)
-    const overviewTab = page.locator('.sidebar-nav-item', { hasText: 'Familien' });
+    // 2. Navigate to Kontakte (contacts)
+    const overviewTab = page.locator('.sidebar-nav-item', { hasText: 'Kontakte' });
     await expect(overviewTab).toBeVisible();
     await overviewTab.click();
     await expect(overviewTab).toHaveClass(/active/);

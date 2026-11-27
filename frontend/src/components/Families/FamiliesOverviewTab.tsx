@@ -25,7 +25,7 @@ export interface ChildGroupStatus {
   groupLabel: string;
 }
 
-export interface FamiliesOverviewTabProps {
+export interface ContactsTabProps {
   data: any[];
   isMobile: boolean;
   canReadFamiliesAll: boolean;
@@ -38,6 +38,8 @@ export interface FamiliesOverviewTabProps {
   onJumpToChild: (childId: string, familyId: string, familyName: string, fromTab?: any) => void;
   getChildGroupStatus: (child: any) => ChildGroupStatus;
 }
+
+export type FamiliesOverviewTabProps = ContactsTabProps;
 
 export interface OverviewRowItem {
   id: string;
@@ -58,7 +60,7 @@ export interface OverviewRowItem {
   subRows?: OverviewRowItem[];
 }
 
-export const FamiliesOverviewTab: React.FC<FamiliesOverviewTabProps> = ({
+export const ContactsTab: React.FC<ContactsTabProps> = ({
   data,
   isMobile,
   canReadFamiliesAll,
@@ -112,7 +114,7 @@ export const FamiliesOverviewTab: React.FC<FamiliesOverviewTabProps> = ({
                     className="family-child-link overview-mga-link"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onJumpToChild(item.original_id || item.id, item.family_id, item.family_name || '', 'familiesOverview');
+                      onJumpToChild(item.original_id || item.id, item.family_id, item.family_name || '', 'contacts');
                     }}
                     title={t('jumpToChild')}
                     aria-label={t('jumpToChild')}
@@ -157,7 +159,7 @@ export const FamiliesOverviewTab: React.FC<FamiliesOverviewTabProps> = ({
                   className="family-parent-link overview-mga-link"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onJumpToParent(item.original_id || item.id, item.family_id, item.family_name || '', 'familiesOverview');
+                    onJumpToParent(item.original_id || item.id, item.family_id, item.family_name || '', 'contacts');
                   }}
                   title={t('jumpToParent')}
                   aria-label={t('jumpToParent')}
@@ -414,7 +416,7 @@ export const FamiliesOverviewTab: React.FC<FamiliesOverviewTabProps> = ({
 
   return (
     <DataTable
-      key="familiesOverview"
+      key="contacts"
       className="overview-table"
       data={data}
       columns={overviewColumns}
@@ -426,3 +428,5 @@ export const FamiliesOverviewTab: React.FC<FamiliesOverviewTabProps> = ({
     />
   );
 };
+
+export const FamiliesOverviewTab = ContactsTab;

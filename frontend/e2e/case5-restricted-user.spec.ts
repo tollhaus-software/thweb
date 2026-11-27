@@ -137,12 +137,12 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     });
 
     // Step 4: Load application
-    await page.goto('/#familiesOverview');
+    await page.goto('/#contacts');
 
     // Verify Tab visibility:
-    // - "Familien" (familiesOverview) must be visible
-    const familiesOverviewTab = page.locator('.sidebar-nav-item', { hasText: 'Familien' });
-    await expect(familiesOverviewTab).toBeVisible();
+    // - "Kontakte" (contacts) must be visible
+    const contactsTab = page.locator('.sidebar-nav-item', { hasText: 'Kontakte' });
+    await expect(contactsTab).toBeVisible();
 
     // - MGA tabs must NOT be visible
     await expect(page.getByRole('button', { name: 'Familien(MGA)' })).toHaveCount(0);
@@ -396,9 +396,9 @@ test.describe('Test Case 5: Restricted Users Support', () => {
     await page.addInitScript(() => {
       localStorage.setItem('token', 'zack.becker@example.com');
     });
-    await page.goto('/#familiesOverview');
+    await page.goto('/#contacts');
 
-    const overviewTab = page.locator('.sidebar-nav-item', { hasText: 'Familien' });
+    const overviewTab = page.locator('.sidebar-nav-item', { hasText: 'Kontakte' });
     await expect(overviewTab).toBeVisible();
 
     // Verify default grouping is "By Group"

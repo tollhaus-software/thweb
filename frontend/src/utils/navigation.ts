@@ -28,7 +28,7 @@ export type TabId =
   | 'main'
   | 'events'
   | 'eventsImport'
-  | 'familiesOverview'
+  | 'contacts'
   | 'families'
   | 'parents'
   | 'children'
@@ -51,7 +51,7 @@ export type TabId =
   | 'dashboard'
   | 'dashboardTodos';
 
-export type NavigationCategory = 'main' | 'events' | 'families' | 'mga' | 'fees' | 'pa' | 'kochen' | 'hygiene' | 'more';
+export type NavigationCategory = 'main' | 'events' | 'contacts' | 'mga' | 'fees' | 'pa' | 'kochen' | 'hygiene' | 'more';
 
 export interface UserPermissionsContext {
   canReadOverview: boolean;
@@ -156,20 +156,20 @@ export const NAVIGATION_CATEGORIES: NavCategory[] = [
     ],
   },
   {
-    id: 'families',
-    labelKey: 'navFamilies',
-    defaultLabel: 'Familien',
-    descriptionKey: 'catDescFamilies',
-    defaultDescription: 'Tagesaktuelle Übersicht aller Kita-Familien und Gruppen.',
+    id: 'contacts',
+    labelKey: 'navContacts',
+    defaultLabel: 'Kontakte',
+    descriptionKey: 'catDescContacts',
+    defaultDescription: 'Tagesaktuelle Übersicht aller Kita-Kontakte und Gruppen.',
     icon: Users,
     items: [
       {
-        id: 'familiesOverview',
-        labelKey: 'subtabFamilies',
-        defaultLabel: 'Familien',
-        accessibleName: 'Familien',
-        descriptionKey: 'subtabDescOverview',
-        defaultDescription: 'Tagesaktuelle Übersicht der Kita-Gruppen und Familien.',
+        id: 'contacts',
+        labelKey: 'subtabContacts',
+        defaultLabel: 'Kontakte',
+        accessibleName: 'Kontakte',
+        descriptionKey: 'subtabDescContacts',
+        defaultDescription: 'Tagesaktuelle Übersicht der Kita-Gruppen und Kontakte.',
         icon: Users,
         isVisible: (ctx) => ctx.canReadOverview,
       },
@@ -501,7 +501,7 @@ export const getFirstPermittedTabForCategory = (
   const visible = getVisibleSubTabsForCategory(catId, perms);
   if (visible.length > 0) return visible[0].id;
   // Fallbacks if no visible tab
-  return perms.canViewMainPage ? 'main' : 'familiesOverview';
+  return perms.canViewMainPage ? 'main' : 'contacts';
 };
 
 export const getCategoryLabel = (cat: NavCategory): string => {

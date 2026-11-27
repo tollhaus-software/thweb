@@ -139,11 +139,11 @@ test.describe('Test Case 37: familiesOverview Jobs Grouping and Button Renaming'
     });
 
     // =========================================================================
-    // Part 1: Verify Toggle Buttons on familiesOverview
+    // Part 1: Verify Toggle Buttons on contacts
     // =========================================================================
     await page.goto('/');
 
-    const overviewTab = page.locator('.sidebar-nav-item', { hasText: 'Familien' });
+    const overviewTab = page.locator('.sidebar-nav-item', { hasText: 'Kontakte' });
     await expect(overviewTab).toBeVisible();
     await overviewTab.click();
 

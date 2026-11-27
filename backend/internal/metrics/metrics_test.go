@@ -25,6 +25,7 @@ func TestMapRouteToFeature(t *testing.T) {
 		{"/api/dashboard/daily-brief", "/api/dashboard/daily-brief", "dashboard"},
 		{"/api/allergies/summary", "/api/allergies/summary", "dashboard"},
 		{"/api/meal-allergens/{date}", "/api/meal-allergens/2026-11-03", "meal_allergens"},
+		{"/api/contacts", "/api/contacts", "families"},
 		{"/api/families/{id}", "/api/families/123", "families"},
 		{"/api/children/{id}", "/api/children/123", "families"},
 		{"/api/parents/{id}/hygiene-events", "/api/parents/123/hygiene-events", "hygiene"},

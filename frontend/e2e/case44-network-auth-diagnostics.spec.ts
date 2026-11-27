@@ -11,7 +11,7 @@ test.describe('Test Case 44: Network & Auth Reachability Diagnostics', () => {
       route.abort('connectionreset');
     });
 
-    await page.goto('/#familiesOverview');
+    await page.goto('/#contacts');
     await page.waitForLoadState('networkidle');
 
     // Trigger fetch to the failing endpoint from within the app
@@ -49,20 +49,20 @@ test.describe('Test Case 44: Network & Auth Reachability Diagnostics', () => {
       localStorage.setItem('token', 'developer@example.com');
     });
 
-    await page.goto('/#familiesOverview');
+    await page.goto('/#contacts');
     await page.waitForLoadState('networkidle');
 
     // Simulate complete network loss: unauth probe fails as well as API call
     await page.route('**/favicon.svg**', (route) => {
       route.abort('failed');
     });
-    await page.route('**/api/families/overview**', (route) => {
+    await page.route('**/api/contacts**', (route) => {
       route.abort('failed');
     });
 
     // Trigger API call
     await page.evaluate(() => {
-      fetch('/api/families/overview').catch(() => {});
+      fetch('/api/contacts').catch(() => {});
     });
 
     // Verify: "Sitzung abgelaufen" is NOT shown
@@ -83,20 +83,20 @@ test.describe('Test Case 44: Network & Auth Reachability Diagnostics', () => {
       localStorage.setItem('token', 'developer@example.com');
     });
 
-    await page.goto('/#familiesOverview');
+    await page.goto('/#contacts');
     await page.waitForLoadState('networkidle');
 
     // Simulate expired session: unauth probe (/favicon.svg) succeeds, but /api/me probe fails with 401
     await page.route('**/api/me**', (route) => {
       route.fulfill({ status: 401, contentType: 'application/json', body: '{"error":"Unauthorized"}' });
     });
-    await page.route('**/api/families/overview**', (route) => {
+    await page.route('**/api/contacts**', (route) => {
       route.abort('failed');
     });
 
     // Trigger API call
     await page.evaluate(() => {
-      fetch('/api/families/overview').catch(() => {});
+      fetch('/api/contacts').catch(() => {});
     });
 
     // Verify: "Sitzung abgelaufen" IS shown

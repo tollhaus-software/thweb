@@ -165,7 +165,7 @@ test.describe('Test Case 15: Members Tab and Read-Only Membership Permissions', 
       localStorage.setItem('token', 'max.muster@example.com');
     });
 
-    await restrictedPage.goto('/#familiesOverview');
+    await restrictedPage.goto('/#contacts');
 
     // Restricted parent must NOT see 'Vereinsmitglieder' tab
     const restrictedMembersTab = restrictedPage.getByRole('button', { name: 'Vereinsmitglieder' });
