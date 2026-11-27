@@ -91,6 +91,7 @@ roles:
       - caregiver_identifier_email
     permissions:
       - families.all.restrictedread
+      - families.print.group_overview
       - mealplan.view
 ```
 
@@ -116,6 +117,7 @@ roles:
 | `families.all.restrictedread` | Scoped read access for parents to view contact list details | Self-service parents |
 | `families.all.write` | Create, edit, and delete family entities, parents, and address records | Staff, Administrators |
 | `families.self.selfservice` | Scoped write/edit access for parents managing their own family info | Self-service parents |
+| `families.print.group_overview` | Print group contact overview (*Gruppenübersicht*) from the Families views | Caregivers, Administrators |
 | `children.all.read` | View child list and basic child records | Staff, Board, Caregivers |
 | `children.all.write` | Create, edit, and delete children and manage historical group assignments | Caregivers, Board |
 | `fees.all.read` | Global access to childcare fee calculator across all families | Treasurer, Finanzausschuss, Board |

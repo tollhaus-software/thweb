@@ -483,6 +483,7 @@ func (a *Authenticator) RolesAndPermissionsForTriggers(triggers []string) ([]str
 				rIDs = []string{"caregiver_default"}
 				perms = []string{
 					"families.all.restrictedread",
+					"families.print.group_overview",
 					"mealplan.view",
 					"allergies.summary.read",
 					"meal_allergens.read",

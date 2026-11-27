@@ -97,10 +97,11 @@ test.describe('Test Case 47: Print Contact Data Per Group (Gruppenübersicht)', 
     // Reload page to see new data in overview
     await page.reload();
 
-    // 2. Verify Print button is present in the toolbar of the "Families" tab
+    // 2. Verify Print icon button is present in the toolbar of the "Families" tab (icon only, no text)
     const printBtn = page.locator('[data-testid="print-toolbar-button"]');
     await expect(printBtn).toBeVisible();
-    await expect(printBtn).toContainText('Drucken');
+    await expect(printBtn).toHaveAttribute('aria-label', 'Drucken');
+    await expect(printBtn).toHaveText('');
 
     // 3. When pressing the print button, a menu pops up with option "Gruppenübersicht"
     await printBtn.click();
@@ -268,5 +269,37 @@ test.describe('Test Case 47: Print Contact Data Per Group (Gruppenübersicht)', 
     await page.emulateMedia({ media: 'print' });
     await expect(page.locator('#root')).toBeVisible();
     await page.emulateMedia({ media: 'screen' });
+  });
+
+  test('only shows print button to users with families.print.group_overview permission', async ({ request, page }) => {
+    // 1. Simulate parent_default role (no families.print.group_overview) -> print button should be hidden
+    const simParentRes = await request.post('/api/auth/simulate', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        mode: 'custom',
+        roles: ['parent_default'],
+        permissions: [],
+      },
+    });
+    expect(simParentRes.ok()).toBeTruthy();
+
+    await page.reload();
+    await expect(page.locator('[data-testid="print-toolbar-button"]')).toHaveCount(0);
+
+    // 2. Simulate caregiver_default role (has families.print.group_overview) -> print button should be visible
+    const simCaregiverRes = await request.post('/api/auth/simulate', {
+      headers: { Authorization: 'Bearer developer@example.com' },
+      data: {
+        mode: 'custom',
+        roles: ['caregiver_default'],
+        permissions: [],
+      },
+    });
+    expect(simCaregiverRes.ok()).toBeTruthy();
+
+    await page.reload();
+    const printBtn = page.locator('[data-testid="print-toolbar-button"]');
+    await expect(printBtn).toBeVisible();
+    await expect(printBtn).toHaveText('');
   });
 });

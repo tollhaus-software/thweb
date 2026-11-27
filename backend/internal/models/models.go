@@ -258,6 +258,7 @@ var AllKnownPermissions = []string{
 	"families.all.restrictedread",
 	"families.all.write",
 	"families.self.selfservice",
+	"families.print.group_overview",
 	"children.all.read",
 	"children.all.write",
 	"fees.all.read",

@@ -1186,6 +1186,7 @@ const ALL_AVAILABLE_PERMISSIONS = [
   'families.all.restrictedread',
   'families.all.write',
   'families.self.selfservice',
+  'families.print.group_overview',
   'children.all.read',
   'children.all.write',
   'fees.all.read',
@@ -1853,6 +1854,7 @@ const Dashboard: React.FC = () => {
   const canManageDashboardTodos = hasPermission('dashboard.todos.manage') || hasPermission('*');
   const canReadOverview = hasPermission('families.all.restrictedread');
   const canReadFamiliesAll = hasPermission('families.all.read');
+  const canPrintGroupOverview = hasPermission('families.print.group_overview');
   const canReadFees = hasPermission('fees.all.read') || hasPermission('fees.self.read');
   const canReadFeesAll = hasPermission('fees.all.read');
   const canWriteParents = hasPermission('families.all.write');
@@ -6525,7 +6527,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                       </button>
                     </div>
 
-                    {activeTab === 'families' && (
+                    {activeTab === 'families' && canPrintGroupOverview && (
                       <div style={{ position: 'relative', display: 'inline-flex' }}>
                         <button
                           ref={printMgaButtonRef}
@@ -6540,22 +6542,21 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                           style={{
                             display: 'inline-flex',
                             alignItems: 'center',
-                            gap: '0.4rem',
+                            justifyContent: 'center',
                             height: '34px',
-                            padding: '0.45rem 0.85rem',
-                            fontSize: '0.85rem',
-                            fontWeight: 500,
+                            width: '34px',
+                            minWidth: '34px',
+                            padding: 0,
                             borderRadius: '4px',
                             cursor: 'pointer',
                             border: '1px solid var(--border)',
                             background: 'var(--surface, #ffffff)',
                             color: 'var(--text, #1f2937)',
-                            whiteSpace: 'nowrap',
                             boxSizing: 'border-box',
+                            flexShrink: 0,
                           }}
                         >
-                          <Printer size={15} />
-                          <span>{t('print') || 'Drucken'}</span>
+                          <Printer size={16} />
                         </button>
 
                         <CellPopover
@@ -6732,7 +6733,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                     </div>
                   )}
 
-                  {activeTab === 'familiesOverview' && (
+                  {activeTab === 'familiesOverview' && canPrintGroupOverview && (
                     <div style={{ position: 'relative', display: 'inline-flex' }}>
                       <button
                         ref={printButtonRef}
@@ -6747,22 +6748,21 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '0.4rem',
+                          justifyContent: 'center',
                           height: '34px',
-                          padding: '0.45rem 0.85rem',
-                          fontSize: '0.85rem',
-                          fontWeight: 500,
+                          width: '34px',
+                          minWidth: '34px',
+                          padding: 0,
                           borderRadius: '4px',
                           cursor: 'pointer',
                           border: '1px solid var(--border)',
                           background: 'var(--surface, #ffffff)',
                           color: 'var(--text, #1f2937)',
-                          whiteSpace: 'nowrap',
                           boxSizing: 'border-box',
+                          flexShrink: 0,
                         }}
                       >
-                        <Printer size={15} />
-                        <span>{t('print') || 'Drucken'}</span>
+                        <Printer size={16} />
                       </button>
 
                       <CellPopover
