@@ -490,14 +490,6 @@ export const getFirstPermittedTabForCategory = (
   catId: NavigationCategory | string,
   perms: UserPermissionsContext
 ): TabId => {
-  if (catId === 'fees') {
-    if (perms.canReadFeesAll && perms.hasFamily === false) {
-      return 'childcareFeesAll';
-    }
-    if (perms.canReadFees) {
-      return 'childcareFees';
-    }
-  }
   const visible = getVisibleSubTabsForCategory(catId, perms);
   if (visible.length > 0) return visible[0].id;
   // Fallbacks if no visible tab

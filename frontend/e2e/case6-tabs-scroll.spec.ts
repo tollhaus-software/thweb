@@ -16,7 +16,7 @@ test.describe('Test Case 6: Horizontal Tabs Scrolling on Narrow Viewports', () =
 
     // 4. Load application
     await page.goto('/#families');
-    await expect(page.getByRole('button', { name: 'Familie hinzufügen' })).toBeVisible();
+    await expect(page.getByTestId('mga-mobile-overflow-btn')).toBeVisible();
 
     // 5. Open responsive drawer on narrow viewport
     const toggleSidebarBtn = page.getByRole('button', { name: 'Seitenleiste umschalten' });
@@ -79,7 +79,7 @@ test.describe('Test Case 6: Horizontal Tabs Scrolling on Narrow Viewports', () =
 
     await page.setViewportSize({ width: 600, height: 800 });
     await page.goto('/#families');
-    await expect(page.getByRole('button', { name: 'Familie hinzufügen' })).toBeVisible();
+    await expect(page.getByTestId('mga-mobile-overflow-btn')).toBeVisible();
 
     const tabBtn = page.locator('.tab-btn').first();
     const styles = await tabBtn.evaluate((el) => {

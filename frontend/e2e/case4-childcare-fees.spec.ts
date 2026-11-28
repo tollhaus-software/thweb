@@ -451,9 +451,11 @@ test.describe('Test Case 4: Childcare Fees Tooltips & Translations', () => {
       localStorage.setItem('token', 'board.bauer@tollhaus-stuttgart.de');
     });
 
-    // 5. Navigate to #childcareFees ("Meine Gebühren")
-    await parentPage.goto('/#childcareFees');
+    // 5. Click "Betreuungsgebühren" category in the sidebar and verify it lands on "Meine Gebühren" (#childcareFees)
+    await parentPage.goto('/#contacts');
     await parentPage.waitForLoadState('networkidle');
+    await parentPage.getByRole('button', { name: 'Betreuungsgebühren' }).click();
+    await expect(parentPage).toHaveURL(/.*#childcareFees$/);
 
     // Both subtabs "Meine Gebühren" and "Betreuungsgebühren (alle)" must be available
     const personalSubTab = parentPage.getByRole('button', { name: 'Meine Gebühren' });
