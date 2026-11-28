@@ -19,11 +19,11 @@ test.describe('Test Case 51: Events Calendar, Day Editor, TSV Import & Start Pag
     await expect(page.getByTestId('events-tab')).toBeVisible();
     await expect(page.getByTestId('events-month-label')).toContainText('Oktober 2026');
 
-    // Verify 7-column weekday header including Samstag & Sonntag
+    // Verify 7-column weekday header including Sam & Son (3-letter weekday abbreviations)
     const headers = page.getByTestId('events-weekday-headers');
-    await expect(headers).toContainText('Montag');
-    await expect(headers).toContainText('Samstag');
-    await expect(headers).toContainText('Sonntag');
+    await expect(headers).toContainText('Mon');
+    await expect(headers).toContainText('Sam');
+    await expect(headers).toContainText('Son');
 
     // 1. Navigate to Termine > TSV Import tab, verify copyable LLM prompt spec, paste TSV with 1 invalid row, fix inline, and import
     await page.getByTestId('sidebar-subtab-eventsImport').click();

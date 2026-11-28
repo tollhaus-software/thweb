@@ -313,7 +313,7 @@ export const EventsCalendarView: React.FC<EventsCalendarViewProps> = ({
   const weekdayHeaders =
     CURRENT_LOCALE === 'en'
       ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-      : ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'];
+      : ['Mon', 'Die', 'Mit', 'Don', 'Fre', 'Sam', 'Son'];
 
   const morePopoverEvents = morePopover ? eventsByDate[morePopover.dateKey] || [] : [];
 
@@ -421,10 +421,9 @@ export const EventsCalendarView: React.FC<EventsCalendarViewProps> = ({
             const dateKey = formatDateKey(dateObj);
             const dayEvents = eventsByDate[dateKey] || [];
             const bgClass = getDayEventsBgClass(dayEvents);
-            const { dayName } = formatDayHeader(dateObj);
-            const fullDateStr = formatDisplayDate(dateObj);
+            const { dayName, dateStr } = formatDayHeader(dateObj);
+            const shortDayName = dayName.slice(0, 3);
             const dayOfWeek = dateObj.getDay(); // 0 = Sun, 1 = Mon
-            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
             const isOutsideMonth = !isMobile && dateObj.getMonth() !== selectedYearMonth.month;
             const isToday = dateKey === todayKey;
 
@@ -456,7 +455,6 @@ export const EventsCalendarView: React.FC<EventsCalendarViewProps> = ({
                   'events-day-box',
                   bgClass,
                   canWrite || isMobile ? 'can-create' : '',
-                  isWeekend && bgClass === 'bg-default' ? 'is-weekend' : '',
                   isToday ? 'is-today' : '',
                   isOutsideMonth ? 'outside-month' : '',
                 ]
@@ -478,7 +476,7 @@ export const EventsCalendarView: React.FC<EventsCalendarViewProps> = ({
                 <div className="events-day-header">
                   <span className="events-day-date">
                     <span className={`events-day-date-num ${isToday ? 'is-today-num' : ''}`}>
-                      {isMobile ? `${dayName}, ${fullDateStr}` : fullDateStr}
+                      {isMobile ? `${shortDayName}, ${dateStr}` : dateStr}
                     </span>
                   </span>
                 </div>
