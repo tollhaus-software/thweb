@@ -208,8 +208,17 @@ test.describe('Test Case 18: Employees Tab and Permissions', () => {
     await expect(addrPopover).toBeHidden();
     await expect(felixRow.locator('td', { hasText: 'Bergstr. 10, 70178 Stuttgart' })).toBeVisible();
 
-    // --- Test Cards Small Screen Layout (overflow menu in card header on the right) ---
+    // --- Test Cards Small Screen Layout (streamlined mobile toolbar + overflow menu in card header on the right) ---
     await page.setViewportSize({ width: 500, height: 800 });
+    const empMobileSearchBtn = page.getByTestId('overview-mobile-search-btn');
+    const empMobileOverflowBtn = page.getByTestId('mga-mobile-overflow-btn');
+    await expect(empMobileSearchBtn).toBeVisible();
+    await expect(empMobileOverflowBtn).toBeVisible();
+    await empMobileOverflowBtn.click();
+    await expect(page.getByTestId('mga-overflow-columns-btn')).toBeVisible();
+    await expect(page.getByTestId('mga-overflow-add-employee-btn')).toBeVisible();
+    await page.keyboard.press('Escape');
+
     const felixCardHeader = page.locator('.card-person-header', { hasText: 'Felix Mueller' });
     await expect(felixCardHeader).toBeVisible();
     const cardActionsTrigger = felixCardHeader.locator('.card-person-header-actions .row-actions-menu-trigger');

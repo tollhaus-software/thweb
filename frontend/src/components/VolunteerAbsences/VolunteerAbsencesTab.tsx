@@ -7,13 +7,17 @@ import {
   Pencil,
   Trash2,
   X,
+  Check,
   List,
   AlertCircle,
+  MoreHorizontal,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useRealtime, type RealtimeMessage } from '../../hooks/useRealtime';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { t, CURRENT_LOCALE } from '../../utils/i18n';
 import { CalendarDropdown, type MarkedDateRange } from '../CalendarDropdown';
+import { CellPopover } from '../Table/CellPopover';
 import './VolunteerAbsences.css';
 
 export interface VolunteerAbsence {
@@ -97,6 +101,7 @@ const getClampedRange = (
 export const VolunteerAbsencesTab: React.FC = () => {
   const { token, hasPermission } = useAuth();
   const canWrite = hasPermission('volunteers.absences.write');
+  const isMobile = useIsMobile();
 
   const [absences, setAbsences] = useState<VolunteerAbsence[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -132,6 +137,11 @@ export const VolunteerAbsencesTab: React.FC = () => {
   const [savedBufdiName, setSavedBufdiName] = useState<string>('BuFDI');
   const [savingSettings, setSavingSettings] = useState<boolean>(false);
   const [settingsSavedSuccess, setSettingsSavedSuccess] = useState<boolean>(false);
+  const [bufdiPopoverOpen, setBufdiPopoverOpen] = useState<boolean>(false);
+  const [mobileOverflowOpen, setMobileOverflowOpen] = useState<boolean>(false);
+  const bufdiEditBtnRef = useRef<HTMLButtonElement>(null);
+  const mobileOverflowBtnRef = useRef<HTMLButtonElement>(null);
+  const bufdiInputRef = useRef<HTMLInputElement>(null);
 
   // Range marking mode states
   const [selectionStart, setSelectionStart] = useState<string | null>(null);
@@ -198,6 +208,20 @@ export const VolunteerAbsencesTab: React.FC = () => {
     fetchSettings();
   }, [fetchAbsences, fetchSettings]);
 
+  const openBufdiPopover = () => {
+    setBufdiName(savedBufdiName || 'BuFDI');
+    setBufdiPopoverOpen(true);
+    setTimeout(() => {
+      bufdiInputRef.current?.focus();
+      bufdiInputRef.current?.select();
+    }, 50);
+  };
+
+  const closeBufdiPopover = () => {
+    setBufdiName(savedBufdiName || 'BuFDI');
+    setBufdiPopoverOpen(false);
+  };
+
   const handleSaveBufdiName = async () => {
     if (!canWrite || savingSettings) return;
     setSavingSettings(true);
@@ -218,6 +242,7 @@ export const VolunteerAbsencesTab: React.FC = () => {
         const updated = data.bufdi_name || trimmed;
         setBufdiName(updated);
         setSavedBufdiName(updated);
+        setBufdiPopoverOpen(false);
         setSettingsSavedSuccess(true);
         setTimeout(() => setSettingsSavedSuccess(false), 2500);
       }
@@ -244,7 +269,11 @@ export const VolunteerAbsencesTab: React.FC = () => {
   useRealtime(handleRealtimeMessage);
 
   // Navigation handlers
-  const handlePrevMonth = () => {
+  const handlePrevPeriod = () => {
+    if (viewMode === 'list') {
+      setCurrentYear((y) => y - 1);
+      return;
+    }
     if (currentMonth === 0) {
       setCurrentMonth(11);
       setCurrentYear((y) => y - 1);
@@ -253,7 +282,11 @@ export const VolunteerAbsencesTab: React.FC = () => {
     }
   };
 
-  const handleNextMonth = () => {
+  const handleNextPeriod = () => {
+    if (viewMode === 'list') {
+      setCurrentYear((y) => y + 1);
+      return;
+    }
     if (currentMonth === 11) {
       setCurrentMonth(0);
       setCurrentYear((y) => y + 1);
@@ -271,6 +304,10 @@ export const VolunteerAbsencesTab: React.FC = () => {
   const monthNames = CURRENT_LOCALE === 'de'
     ? ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember']
     : ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+  const shortMonthNames = CURRENT_LOCALE === 'de'
+    ? ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
+    : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
   const weekdays = CURRENT_LOCALE === 'de'
     ? ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
@@ -298,12 +335,14 @@ export const VolunteerAbsencesTab: React.FC = () => {
       }));
   }, [absences, editingAbsence]);
 
-  // Sorted and limited for List view (newer first, top 40)
+  // Sorted and filtered for List view (all absences that have at least one day in currentYear)
   const listAbsences = useMemo(() => {
-    return [...absences]
-      .sort((a, b) => b.start_date.localeCompare(a.start_date))
-      .slice(0, 40);
-  }, [absences]);
+    const yearStart = `${currentYear}-01-01`;
+    const yearEnd = `${currentYear}-12-31`;
+    return absences
+      .filter((a) => a.start_date <= yearEnd && a.end_date >= yearStart)
+      .sort((a, b) => b.start_date.localeCompare(a.start_date));
+  }, [absences, currentYear]);
 
   // Modal open handlers
   const openCreateModal = (prefillStartDate?: string, prefillEndDate?: string) => {
@@ -444,42 +483,6 @@ export const VolunteerAbsencesTab: React.FC = () => {
       {/* Top Header */}
       <div className="va-header">
         <div className="va-header-left">
-          <h2 className="va-header-title">
-            {t('volunteerAbsencesTitle') || 'Abwesenheiten Freiwillige'}
-          </h2>
-
-          <div className="va-month-nav">
-            <button
-              type="button"
-              onClick={handlePrevMonth}
-              title={t('absencePrevMonth') || 'Vorheriger Monat'}
-              aria-label={t('absencePrevMonth') || 'Vorheriger Monat'}
-            >
-              <ChevronLeft size={18} />
-            </button>
-            <span className="va-month-label">
-              {monthNames[currentMonth]} {currentYear}
-            </span>
-            <button
-              type="button"
-              onClick={handleNextMonth}
-              title={t('absenceNextMonth') || 'Nächster Monat'}
-              aria-label={t('absenceNextMonth') || 'Nächster Monat'}
-            >
-              <ChevronRight size={18} />
-            </button>
-          </div>
-
-          <button
-            type="button"
-            className="va-today-btn"
-            onClick={handleToday}
-          >
-            {t('absenceToday') || 'Heute'}
-          </button>
-        </div>
-
-        <div className="va-header-right">
           <div className="va-view-toggle">
             <button
               type="button"
@@ -499,26 +502,140 @@ export const VolunteerAbsencesTab: React.FC = () => {
             </button>
           </div>
 
-          {canWrite && (
+          {canWrite && isMobile && (
             <button
               type="button"
               className="va-add-btn"
               onClick={() => openCreateModal()}
+              title={t('addVolunteerAbsence') || 'Abwesenheit eintragen'}
+              aria-label={t('addVolunteerAbsence') || 'Abwesenheit eintragen'}
             >
-              <Plus size={16} />
-              <span>{t('addVolunteerAbsence') || 'Abwesenheit eintragen'}</span>
+              <Plus size={14} />
+              <span>Abwesenheit</span>
+            </button>
+          )}
+        </div>
+
+        <div className="va-header-right">
+          {!isMobile ? (
+            <div className="va-settings-inline" data-testid="va-settings-bar">
+              <span className="va-settings-label">
+                {t('bufdiNameLabel') || 'BuFDI Name(n) (für Kochansicht):'}
+              </span>
+              <span className="va-bufdi-name-display" data-testid="va-bufdi-name-display">
+                {savedBufdiName}
+              </span>
+              {canWrite && (
+                <button
+                  ref={bufdiEditBtnRef}
+                  type="button"
+                  className="cell-edit-pencil-btn easy-edit-button"
+                  data-testid="va-bufdi-name-edit-btn"
+                  onClick={openBufdiPopover}
+                  title="BuFDI Name für Kochansicht bearbeiten"
+                  aria-label="BuFDI Name für Kochansicht bearbeiten"
+                  style={{ opacity: 1 }}
+                >
+                  <Pencil size={13} />
+                </button>
+              )}
+              {settingsSavedSuccess && (
+                <span className="va-settings-saved-badge" data-testid="va-bufdi-name-saved-badge">
+                  ✓ {t('bufdiNameSaved') || 'Gespeichert'}
+                </span>
+              )}
+            </div>
+          ) : (
+            <button
+              ref={mobileOverflowBtnRef}
+              type="button"
+              onClick={() => setMobileOverflowOpen((prev) => !prev)}
+              className={`secondary-button overview-mobile-search-btn va-mobile-overflow-btn ${mobileOverflowOpen ? 'active' : ''}`}
+              data-testid="va-mobile-overflow-btn"
+              title="Weitere Optionen"
+              aria-label="Weitere Optionen"
+              aria-haspopup="menu"
+              aria-expanded={mobileOverflowOpen}
+            >
+              <MoreHorizontal size={16} />
             </button>
           )}
         </div>
       </div>
 
-      {/* BuFDI Name Configuration Bar */}
-      <div className="va-settings-bar" data-testid="va-settings-bar">
-        <label htmlFor="va-bufdi-name-input" className="va-settings-label">
-          {t('bufdiNameLabel') || 'BuFDI Name(n) (für Kochansicht):'}
+      {/* Mobile ... Overflow Menu */}
+      {isMobile && (
+        <CellPopover
+          isOpen={mobileOverflowOpen}
+          onClose={() => setMobileOverflowOpen(false)}
+          anchorEl={mobileOverflowBtnRef}
+          width={220}
+          minWidth={180}
+        >
+          <div role="menu" style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+            <button
+              type="button"
+              role="menuitem"
+              data-testid="va-overflow-bufdi-name-btn"
+              onClick={() => {
+                setMobileOverflowOpen(false);
+                requestAnimationFrame(() => {
+                  openBufdiPopover();
+                });
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                width: '100%',
+                textAlign: 'left',
+                gap: '0.6rem',
+                padding: '0.55rem 0.65rem',
+                fontSize: '0.9rem',
+                fontWeight: 500,
+                cursor: 'pointer',
+                borderRadius: '4px',
+                border: 'none',
+                background: 'transparent',
+                color: 'var(--text)',
+              }}
+            >
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Pencil size={15} />
+                <span>BuFDI Name</span>
+              </span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                {savedBufdiName}
+              </span>
+            </button>
+          </div>
+        </CellPopover>
+      )}
+
+      {/* BuFDI Name Edit Popover (Shared between desktop pencil and mobile ... menu) */}
+      <CellPopover
+        isOpen={bufdiPopoverOpen}
+        onClose={closeBufdiPopover}
+        anchorEl={isMobile ? mobileOverflowBtnRef : bufdiEditBtnRef}
+        width={340}
+        minWidth={280}
+        style={{
+          padding: isMobile ? '14px 16px 20px 16px' : '12px 14px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px',
+        }}
+      >
+        <label
+          htmlFor="va-bufdi-name-input"
+          className="va-settings-label"
+          style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-h)' }}
+        >
+          BuFDI Name für Kochansicht
         </label>
-        <div className="va-settings-input-wrapper">
+        <div className="va-settings-input-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', width: '100%' }}>
           <input
+            ref={bufdiInputRef}
             id="va-bufdi-name-input"
             data-testid="va-bufdi-name-input"
             type="text"
@@ -531,26 +648,118 @@ export const VolunteerAbsencesTab: React.FC = () => {
               if (e.key === 'Enter') {
                 e.preventDefault();
                 void handleSaveBufdiName();
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                closeBufdiPopover();
               }
             }}
           />
           {canWrite && (
-            <button
-              type="button"
-              className="va-settings-save-btn"
-              data-testid="va-bufdi-name-save-btn"
-              onClick={() => void handleSaveBufdiName()}
-              disabled={savingSettings || bufdiName.trim() === savedBufdiName.trim()}
-            >
-              {savingSettings ? '...' : (t('save') || 'Speichern')}
-            </button>
-          )}
-          {settingsSavedSuccess && (
-            <span className="va-settings-saved-badge" data-testid="va-bufdi-name-saved-badge">
-              ✓ {t('bufdiNameSaved') || 'Gespeichert'}
-            </span>
+            <>
+              <button
+                type="button"
+                className="secondary-button va-popover-icon-btn va-popover-ok-btn"
+                data-testid="va-bufdi-name-save-btn"
+                onClick={() => void handleSaveBufdiName()}
+                disabled={savingSettings}
+                title={t('save') || 'Speichern'}
+                aria-label={t('save') || 'Speichern'}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '32px',
+                  width: '32px',
+                  minWidth: '32px',
+                  padding: 0,
+                  borderRadius: '6px',
+                  border: '1px solid var(--primary)',
+                  background: 'var(--primary)',
+                  color: 'var(--primary-contrast, #ffffff)',
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+              >
+                <Check size={16} />
+              </button>
+              <button
+                type="button"
+                className="secondary-button va-popover-icon-btn va-popover-cancel-btn"
+                data-testid="va-bufdi-name-cancel-btn"
+                onClick={closeBufdiPopover}
+                disabled={savingSettings}
+                title={t('cancel') || 'Abbrechen'}
+                aria-label={t('cancel') || 'Abbrechen'}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '32px',
+                  width: '32px',
+                  minWidth: '32px',
+                  padding: 0,
+                  borderRadius: '6px',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-surface)',
+                  color: 'var(--text)',
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+              >
+                <X size={16} />
+              </button>
+            </>
           )}
         </div>
+      </CellPopover>
+
+      {/* Month / Year Selector & Today Button right above Calendar / List */}
+      <div className="va-period-bar" data-testid="va-period-bar">
+        <div className="va-month-nav" data-testid="va-period-selector">
+          <button
+            type="button"
+            onClick={handlePrevPeriod}
+            title={viewMode === 'list' ? 'Vorheriges Jahr' : (t('absencePrevMonth') || 'Vorheriger Monat')}
+            aria-label={viewMode === 'list' ? 'Vorheriges Jahr' : (t('absencePrevMonth') || 'Vorheriger Monat')}
+          >
+            <ChevronLeft size={18} />
+          </button>
+          <span className="va-month-label" data-testid="va-period-label">
+            {viewMode === 'list'
+              ? `${currentYear}`
+              : `${isMobile ? shortMonthNames[currentMonth] : monthNames[currentMonth]} ${currentYear}`}
+          </span>
+          <button
+            type="button"
+            onClick={handleNextPeriod}
+            title={viewMode === 'list' ? 'Nächstes Jahr' : (t('absenceNextMonth') || 'Nächster Monat')}
+            aria-label={viewMode === 'list' ? 'Nächstes Jahr' : (t('absenceNextMonth') || 'Nächster Monat')}
+          >
+            <ChevronRight size={18} />
+          </button>
+        </div>
+
+        <button
+          type="button"
+          className="va-today-btn"
+          onClick={handleToday}
+        >
+          {t('absenceToday') || 'Heute'}
+        </button>
+
+        {canWrite && !isMobile && (
+          <button
+            type="button"
+            className="va-add-btn"
+            style={{ marginLeft: 'auto' }}
+            onClick={() => openCreateModal()}
+            title={t('addVolunteerAbsence') || 'Abwesenheit eintragen'}
+            aria-label={t('addVolunteerAbsence') || 'Abwesenheit eintragen'}
+          >
+            <Plus size={15} />
+            <span>{t('addVolunteerAbsence') || 'Abwesenheit eintragen'}</span>
+          </button>
+        )}
       </div>
 
       {/* Main Content Area */}

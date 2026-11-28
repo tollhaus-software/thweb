@@ -56,10 +56,9 @@ test.describe('Test Case 45: Volunteer Absences (Abwesenheit Freiwillige)', () =
 
     // Verify "+ Abwesenheit eintragen" is NOT visible for read-only user
     await expect(readerPage.getByRole('button', { name: /(Abwesenheit eintragen|Add Absence)/i })).toBeHidden();
-    // Verify "BuFDI Name(n) (für Kochansicht):" field is present and disabled for read-only user
-    await expect(readerPage.getByTestId('va-bufdi-name-input')).toBeVisible();
-    await expect(readerPage.getByTestId('va-bufdi-name-input')).toBeDisabled();
-    await expect(readerPage.getByTestId('va-bufdi-name-save-btn')).toBeHidden();
+    // Verify "BuFDI Name(n) (für Kochansicht):" text is present, and edit pencil is hidden for read-only user
+    await expect(readerPage.getByTestId('va-bufdi-name-display')).toBeVisible();
+    await expect(readerPage.getByTestId('va-bufdi-name-edit-btn')).toBeHidden();
     await readerPage.close();
 
     // =========================================================================
@@ -72,20 +71,44 @@ test.describe('Test Case 45: Volunteer Absences (Abwesenheit Freiwillige)', () =
     await page.goto('/#volunteerAbsences');
     await expect(page.getByTestId('volunteer-absences-tab')).toBeVisible();
 
-    // Verify search bar and Undo/Redo are hidden on this view
+    // Verify search bar and Undo/Redo are hidden on this view, and old sub-header is removed
     await expect(page.locator('.controls-row')).toBeHidden();
     await expect(page.locator('button[title="Undo"]')).toBeHidden();
+    await expect(page.locator('.va-header-title')).toHaveCount(0);
 
-    // Verify "BuFDI Name(n) (für Kochansicht):" field is editable and can be saved
+    // Verify "BuFDI Name(n) (für Kochansicht):" is displayed as text with a pencil icon on desktop,
+    // and clicking the pencil icon opens the popover with OK/Cancel icons after the edit box
+    await expect(page.getByTestId('va-bufdi-name-display')).toHaveText('BuFDI');
+    const bufdiEditBtn = page.getByTestId('va-bufdi-name-edit-btn');
+    await expect(bufdiEditBtn).toBeVisible();
+    await bufdiEditBtn.click();
+
     const bufdiNameInput = page.getByTestId('va-bufdi-name-input');
     await expect(bufdiNameInput).toBeVisible();
     await expect(bufdiNameInput).toBeEnabled();
     await bufdiNameInput.fill('Max');
     const bufdiSaveBtn = page.getByTestId('va-bufdi-name-save-btn');
-    await expect(bufdiSaveBtn).toBeEnabled();
+    const bufdiCancelBtn = page.getByTestId('va-bufdi-name-cancel-btn');
+    await expect(bufdiSaveBtn).toBeVisible();
+    await expect(bufdiCancelBtn).toBeVisible();
     await bufdiSaveBtn.click();
+    await expect(bufdiNameInput).toBeHidden();
     await expect(page.getByTestId('va-bufdi-name-saved-badge')).toBeVisible();
-    await expect(bufdiNameInput).toHaveValue('Max');
+    await expect(page.getByTestId('va-bufdi-name-display')).toHaveText('Max');
+
+    // Verify period selector and Today button are right above the calendar (below the header)
+    const headerBox = await page.locator('.va-header').boundingBox();
+    const periodBarBox = await page.getByTestId('va-period-bar').boundingBox();
+    const calBox = await page.locator('.va-calendar-card').boundingBox();
+    expect(headerBox).not.toBeNull();
+    expect(periodBarBox).not.toBeNull();
+    expect(calBox).not.toBeNull();
+    if (headerBox && periodBarBox && calBox) {
+      expect(periodBarBox.y).toBeGreaterThanOrEqual(headerBox.y + headerBox.height - 2);
+      expect(calBox.y).toBeGreaterThanOrEqual(periodBarBox.y + periodBarBox.height - 2);
+    }
+    // On desktop in Calendar view, full month name is displayed (November 2026)
+    await expect(page.getByTestId('va-period-label')).toHaveText('November 2026');
 
     // Verify "+ Abwesenheit eintragen" IS visible
     const addBtn = page.getByRole('button', { name: /(Abwesenheit eintragen|Add Absence)/i });
@@ -110,11 +133,21 @@ test.describe('Test Case 45: Volunteer Absences (Abwesenheit Freiwillige)', () =
 
     // Switch to List view (Desktop)
     await page.getByRole('button', { name: /(Liste|List)/i }).click();
+    // In List view, the selector is a year selector showing "2026"
+    await expect(page.getByTestId('va-period-label')).toHaveText('2026');
     await expect(page.locator('.va-desktop-table')).toBeVisible();
     await expect(page.locator('.va-mobile-cards')).toBeHidden();
     await expect(page.locator('.va-desktop-table').getByText('10.11.2026 – 15.11.2026')).toBeVisible();
     await expect(page.locator('.va-desktop-table').getByText('Bufdi Seminar A')).toBeVisible();
     await expect(page.locator('.va-desktop-table').getByText(/6 (Tage|days)/i)).toBeVisible();
+
+    // Navigating to previous year (2025) filters out the 2026 absence; Today button restores 2026
+    await page.getByTestId('va-period-selector').getByRole('button', { name: 'Vorheriges Jahr' }).click();
+    await expect(page.getByTestId('va-period-label')).toHaveText('2025');
+    await expect(page.locator('.va-desktop-table')).toBeHidden();
+    await page.locator('.va-today-btn').click();
+    await expect(page.getByTestId('va-period-label')).toHaveText('2026');
+    await expect(page.locator('.va-desktop-table').getByText('Bufdi Seminar A')).toBeVisible();
 
     // Switch back to Calendar view to test markings, colors, and hover
     await page.getByRole('button', { name: /(Kalender|Calendar)/i }).click();
@@ -162,13 +195,27 @@ test.describe('Test Case 45: Volunteer Absences (Abwesenheit Freiwillige)', () =
     await page.getByRole('button', { name: /(Abbrechen|Cancel)/i }).click();
     await expect(page.getByRole('heading', { name: /(Abwesenheit eintragen|Add Absence)/i })).toBeHidden();
 
-    // Mobile viewport verification: badge text should be hidden in calendar, and cards shown in List view
+    // Mobile viewport verification: badge text should be hidden in calendar, 3-letter month name shown, "..." menu edits BuFDI name, and cards shown in List view
     await page.setViewportSize({ width: 375, height: 667 });
     const mobileBadgeText = page.locator('.va-badge-type').first();
     await expect(mobileBadgeText).toBeHidden();
+    await expect(page.getByTestId('va-period-label')).toHaveText('Nov 2026');
 
-    // In List view on mobile, cards should be displayed and desktop table hidden
+    // Test mobile "..." overflow menu -> BuFDI Name popover with OK/Cancel buttons
+    const mobileOverflowBtn = page.getByTestId('va-mobile-overflow-btn');
+    await expect(mobileOverflowBtn).toBeVisible();
+    await mobileOverflowBtn.click();
+    const overflowBufdiBtn = page.getByTestId('va-overflow-bufdi-name-btn');
+    await expect(overflowBufdiBtn).toBeVisible();
+    await overflowBufdiBtn.click();
+    await expect(bufdiNameInput).toBeVisible();
+    await expect(bufdiNameInput).toHaveValue('Max');
+    await page.getByTestId('va-bufdi-name-cancel-btn').click();
+    await expect(bufdiNameInput).toBeHidden();
+
+    // In List view on mobile, year selector is shown ("2026"), cards should be displayed and desktop table hidden
     await page.getByRole('button', { name: /(Liste|List)/i }).click();
+    await expect(page.getByTestId('va-period-label')).toHaveText('2026');
     await expect(page.locator('.va-mobile-cards')).toBeVisible();
     await expect(page.locator('.va-desktop-table')).toBeHidden();
     const firstCard = page.locator('.va-card').first();
@@ -272,11 +319,13 @@ test.describe('Test Case 45: Volunteer Absences (Abwesenheit Freiwillige)', () =
     await page.goto('/#volunteerAbsences');
     await expect(page.getByTestId('volunteer-absences-tab')).toBeVisible();
 
+    await page.getByTestId('va-bufdi-name-edit-btn').click();
     const bufdiNameInput = page.getByTestId('va-bufdi-name-input');
     await expect(bufdiNameInput).toBeVisible();
     await bufdiNameInput.fill('Max Mustermann');
     await page.getByTestId('va-bufdi-name-save-btn').click();
     await expect(page.getByTestId('va-bufdi-name-saved-badge')).toBeVisible();
+    await expect(page.getByTestId('va-bufdi-name-display')).toHaveText('Max Mustermann');
 
     // 4. Create a volunteer absence covering today
     const addBtn = page.getByRole('button', { name: /(Abwesenheit eintragen|Add Absence)/i });

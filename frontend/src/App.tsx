@@ -6357,15 +6357,16 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
               </div>
             ) : null;
 
-          const isMgaTab =
+          const isMgaOrEmployeesTab =
             activeTab === 'families' ||
             activeTab === 'parents' ||
             activeTab === 'children' ||
             activeTab === 'members' ||
-            activeTab === 'jobs';
+            activeTab === 'jobs' ||
+            activeTab === 'employees';
 
           const renderMgaMobileOverflowMenu = () => {
-            if (!isMobile || !isMgaTab) return null;
+            if (!isMobile || !isMgaOrEmployeesTab) return null;
             const isFamParChild = activeTab === 'families' || activeTab === 'parents' || activeTab === 'children';
             return (
               <>
@@ -6512,6 +6513,37 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                       >
                         <Plus size={15} />
                         <span>{t('addJobBtn') || 'Job'}</span>
+                      </button>
+                    )}
+
+                    {activeTab === 'employees' && canWriteEmployees && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="add-employee-button"
+                        data-testid="mga-overflow-add-employee-btn"
+                        onClick={() => {
+                          setMgaMobileOverflowOpen(false);
+                          setAddEmployeeOpen(true);
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          width: '100%',
+                          textAlign: 'left',
+                          gap: '0.6rem',
+                          padding: '0.55rem 0.65rem',
+                          fontSize: '0.9rem',
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                          borderRadius: '4px',
+                          border: 'none',
+                          background: 'transparent',
+                          color: 'var(--text)',
+                        }}
+                      >
+                        <Plus size={15} />
+                        <span>{t('addEmployee') || 'Mitarbeiter/-in hinzufügen'}</span>
                       </button>
                     )}
                   </div>
@@ -6919,7 +6951,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                 >
                   {isMobile ? renderMobileSearchToggleButton() : renderDesktopSearchInput()}
 
-                  {activeTab === 'employees' && canWriteEmployees && (
+                  {activeTab === 'employees' && canWriteEmployees && !isMobile && (
                     <button
                       type="button"
                       onClick={() => setAddEmployeeOpen(true)}
@@ -7147,7 +7179,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                     </div>
                   )}
 
-                  {isMobile && isMgaTab ? (
+                  {isMobile && isMgaOrEmployeesTab ? (
                     <div style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 'auto', flexShrink: 0 }}>
                       {renderMgaMobileOverflowMenu()}
                     </div>
