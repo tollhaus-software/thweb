@@ -197,6 +197,15 @@ test.describe('Test Case 8: Adaptive Card Layout for familiesOverview Tab', () =
     await expect(page.locator('.overview-search-input')).not.toBeVisible();
     await expect(page.locator('tr.overview-parent-row', { hasText: 'Hans Schmidt' })).toBeVisible();
 
+    // Pressing Ctrl+F on mobile Contacts tab expands the search drawer and focuses the input
+    await page.keyboard.press('Control+f');
+    await expect(mobileSearchBtn).toHaveAttribute('aria-expanded', 'true');
+    await expect(mobileSearchInput).toBeVisible();
+    await expect(mobileSearchInput).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(mobileSearchBtn).toHaveAttribute('aria-expanded', 'false');
+    await expect(mobileSearchInput).not.toBeVisible();
+
     // Switch to "Familien" grouping mode to verify parent and child card rendering in family mode
     await page.locator('.overview-grouping-btn', { hasText: 'Familien' }).click();
 

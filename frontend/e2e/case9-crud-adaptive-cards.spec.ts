@@ -150,18 +150,30 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
       expect(Math.abs(fnBox.x - emailBox.x)).toBeLessThan(1.5);
     }
 
-    // Verify "Add family" is next to the search box ("Familien suchen" text box)
+    // Verify "Add family" is below the search toggle button on mobile, and clicking search button or Ctrl+F opens the search drawer
     const parentsAddFamilyBtn = page.getByRole('button', { name: 'Familie hinzufügen' });
-    const searchInput = page.locator('.search-input');
+    const parentsSearchBtn = page.getByTestId('overview-mobile-search-btn');
     await expect(parentsAddFamilyBtn).toBeVisible();
-    await expect(searchInput).toBeVisible();
+    await expect(parentsSearchBtn).toBeVisible();
+    await expect(parentsSearchBtn).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.locator('.search-input')).not.toBeVisible();
     const pAddBox = await parentsAddFamilyBtn.boundingBox();
-    const searchBox = await searchInput.boundingBox();
+    const pSearchBtnBox = await parentsSearchBtn.boundingBox();
     expect(pAddBox).not.toBeNull();
-    expect(searchBox).not.toBeNull();
-    if (pAddBox && searchBox) {
-      expect(pAddBox.y).toBeGreaterThan(searchBox.y);
+    expect(pSearchBtnBox).not.toBeNull();
+    if (pAddBox && pSearchBtnBox) {
+      expect(pAddBox.y).toBeGreaterThan(pSearchBtnBox.y);
     }
+
+    // Pressing Ctrl+F on mobile expands the search drawer and focuses the input
+    await page.keyboard.press('Control+f');
+    await expect(parentsSearchBtn).toHaveAttribute('aria-expanded', 'true');
+    const searchInput = page.locator('.search-input');
+    await expect(searchInput).toBeVisible();
+    await expect(searchInput).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(parentsSearchBtn).toHaveAttribute('aria-expanded', 'false');
+    await expect(searchInput).not.toBeVisible();
 
     // Verify Impfstatus button label says "Impfstatus"
     const impfBtn = page.getByRole('button', { name: 'Impfstatus' });
@@ -231,13 +243,13 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     await expect(childrenTab).toHaveClass(/active/);
     await page.waitForLoadState('networkidle');
 
-    // Verify "Add family" is next to the search box in Children tab
+    // Verify "Add family" is below the search toggle button in Children tab
     const childrenAddFamilyBtn = page.getByRole('button', { name: 'Familie hinzufügen' });
-    const cSearchInput = page.locator('.search-input');
+    const cSearchBtn = page.getByTestId('overview-mobile-search-btn');
     await expect(childrenAddFamilyBtn).toBeVisible();
-    await expect(cSearchInput).toBeVisible();
+    await expect(cSearchBtn).toBeVisible();
     const cAddBox = await childrenAddFamilyBtn.boundingBox();
-    const cSearchBox = await cSearchInput.boundingBox();
+    const cSearchBox = await cSearchBtn.boundingBox();
     expect(cAddBox).not.toBeNull();
     expect(cSearchBox).not.toBeNull();
     if (cAddBox && cSearchBox) {
@@ -367,13 +379,13 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     await expect(familiesTab).toHaveClass(/active/);
     await page.waitForLoadState('networkidle');
 
-    // Verify "Add family" is next to the search box in Families tab
+    // Verify "Add family" is below the search toggle button in Families tab
     const familiesAddFamilyBtn = page.getByRole('button', { name: 'Familie hinzufügen' });
-    const fSearchInput = page.locator('.search-input');
+    const fSearchBtn = page.getByTestId('overview-mobile-search-btn');
     await expect(familiesAddFamilyBtn).toBeVisible();
-    await expect(fSearchInput).toBeVisible();
+    await expect(fSearchBtn).toBeVisible();
     const fAddBox = await familiesAddFamilyBtn.boundingBox();
-    const fSearchBox = await fSearchInput.boundingBox();
+    const fSearchBox = await fSearchBtn.boundingBox();
     expect(fAddBox).not.toBeNull();
     expect(fSearchBox).not.toBeNull();
     if (fAddBox && fSearchBox) {
@@ -427,6 +439,12 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     if (dtAddBox && dtSearchBox) {
       expect(dtAddBox.y).toBeGreaterThan(dtSearchBox.y);
     }
+
+    // Pressing Ctrl+F on desktop focuses the search input
+    await page.keyboard.press('Control+f');
+    await expect(dtSearchInput).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(dtSearchInput).not.toBeFocused();
 
     // In table view on desktop: "Columns" is in the header of the table (thead)
     const dtThead = page.locator('.families-table thead');

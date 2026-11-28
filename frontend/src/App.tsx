@@ -2019,8 +2019,9 @@ const Dashboard: React.FC = () => {
   ]);
 
   const [globalFilter, setGlobalFilter] = React.useState('');
-  const [isMobileContactsSearchOpen, setIsMobileContactsSearchOpen] = React.useState(false);
-  const mobileContactsSearchInputRef = React.useRef<HTMLInputElement>(null);
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = React.useState(false);
+  const mobileSearchInputRef = React.useRef<HTMLInputElement>(null);
+  const desktopSearchInputRef = React.useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = React.useState<
     'main' | 'contacts' | 'families' | 'parents' | 'children' | 'alumni' | 'members' | 'jobs' | 'employees' | 'childcareFees' | 'childcareFeesAll' | 'hygieneBelehrung' | 'hygieneDocument' | 'kochenHygiene' | 'mealPlan' | 'mealAllergens' | 'audit' | 'admin' | 'activity' | 'kiosk' | 'dashboard' | 'dashboardTodos' | string
   >(() => {
@@ -2424,7 +2425,7 @@ const Dashboard: React.FC = () => {
 
   const handleTabClick = React.useCallback((tab: typeof activeTab) => {
     setGlobalFilter('');
-    setIsMobileContactsSearchOpen(false);
+    setIsMobileSearchOpen(false);
     setReturnNav(null);
     setHighlightTarget(null);
     setActiveTab(tab);
@@ -5920,6 +5921,40 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
 
   const isTableTab = !isLandingActive && (activeTab === 'contacts' || activeTab === 'parents' || activeTab === 'children' || activeTab === 'families' || activeTab === 'hygieneBelehrung' || activeTab === 'members' || activeTab === 'employees' || activeTab === 'jobs');
 
+  React.useEffect(() => {
+    if (!isTableTab) return;
+
+    const handleFindShortcut = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') {
+        const hasOpenOverlay = document.querySelector(
+          '.modal-overlay, .cell-popover-bottom-sheet, .glass-popup, [role="dialog"]'
+        );
+        if (hasOpenOverlay) return;
+
+        const targetInput = isMobile ? mobileSearchInputRef.current : desktopSearchInputRef.current;
+        if (targetInput && document.activeElement === targetInput) {
+          // If our search input is already focused, let a second Ctrl+F / Cmd+F trigger native browser find
+          return;
+        }
+
+        e.preventDefault();
+        if (isMobile) {
+          setIsMobileSearchOpen(true);
+          requestAnimationFrame(() => {
+            mobileSearchInputRef.current?.focus();
+            mobileSearchInputRef.current?.select();
+          });
+        } else {
+          desktopSearchInputRef.current?.focus();
+          desktopSearchInputRef.current?.select();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleFindShortcut);
+    return () => window.removeEventListener('keydown', handleFindShortcut);
+  }, [isTableTab, isMobile]);
+
   return (
     <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       {isMobileSidebarOpen && (
@@ -6232,25 +6267,102 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
             );
           };
 
+          const searchPlaceholder =
+            activeTab === 'families'
+              ? t('searchFamilies')
+              : activeTab === 'children'
+              ? t('searchChildren')
+              : activeTab === 'parents'
+              ? t('searchParents')
+              : activeTab === 'employees'
+              ? (t('searchEmployees') || 'Mitarbeiter suchen...')
+              : activeTab === 'jobs'
+              ? (t('searchJobs') || 'Jobs suchen...')
+              : activeTab === 'members'
+              ? t('searchMembers')
+              : (t('search') || 'Suche');
+
+          const isMobileSearchExpanded = isMobileSearchOpen || Boolean(globalFilter);
+
+          const renderMobileSearchToggleButton = () => (
+            <button
+              type="button"
+              onClick={() => {
+                if (isMobileSearchExpanded) {
+                  setGlobalFilter('');
+                  setIsMobileSearchOpen(false);
+                  mobileSearchInputRef.current?.blur();
+                } else {
+                  setIsMobileSearchOpen(true);
+                  requestAnimationFrame(() => {
+                    mobileSearchInputRef.current?.focus();
+                  });
+                }
+              }}
+              className={`secondary-button overview-mobile-search-btn ${isMobileSearchExpanded ? 'active' : ''}`}
+              data-testid="overview-mobile-search-btn"
+              title={searchPlaceholder}
+              aria-label={t('search') || 'Suche'}
+              aria-expanded={isMobileSearchExpanded}
+              aria-pressed={isMobileSearchExpanded}
+            >
+              <Search size={16} />
+            </button>
+          );
+
+          const renderDesktopSearchInput = () => (
+            <input
+              ref={desktopSearchInputRef}
+              value={globalFilter ?? ''}
+              onChange={(e) => setGlobalFilter(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setGlobalFilter('');
+                  desktopSearchInputRef.current?.blur();
+                }
+              }}
+              className={`search-input ${activeTab === 'contacts' ? 'overview-search-input' : ''}`}
+              placeholder={searchPlaceholder}
+              style={{ marginBottom: 0 }}
+            />
+          );
+
+          const renderMobileSearchDrawer = () =>
+            isMobile ? (
+              <div
+                className={`overview-mobile-search-drawer ${isMobileSearchExpanded ? 'open' : ''}`}
+                data-testid="overview-mobile-search-expanded"
+                aria-hidden={!isMobileSearchExpanded}
+              >
+                <div className="overview-mobile-search-drawer-inner">
+                  <input
+                    ref={mobileSearchInputRef}
+                    value={globalFilter ?? ''}
+                    onChange={(e) => setGlobalFilter(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        setGlobalFilter('');
+                        setIsMobileSearchOpen(false);
+                        mobileSearchInputRef.current?.blur();
+                      }
+                    }}
+                    className="search-input overview-search-input"
+                    placeholder={searchPlaceholder}
+                    style={{ marginBottom: 0 }}
+                    tabIndex={isMobileSearchExpanded ? 0 : -1}
+                  />
+                </div>
+              </div>
+            ) : null;
+
           return !isLandingActive && activeTab !== 'main' && activeTab !== 'events' && activeTab !== 'eventsImport' && activeTab !== 'childcareFees' && activeTab !== 'childcareFeesAll' && activeTab !== 'audit' && activeTab !== 'admin' && activeTab !== 'kiosk' && activeTab !== 'dashboard' && activeTab !== 'dashboardTodos' && activeTab !== 'mealPlan' && activeTab !== 'mealAllergens' && activeTab !== 'hygieneDocument' && activeTab !== 'kochenHygiene' && activeTab !== 'volunteerAbsences' && (
             (activeTab === 'families' || activeTab === 'parents' || activeTab === 'children') ? (
+              <>
               <div className="mga-controls-container">
                 {/* Row 1: Search, Sort, Filter, Zoom (desktop), and Impfstatus (desktop far right) */}
                 <div className="controls-row mga-controls-row-1">
                   <div className="controls-left">
-                    <input
-                      value={globalFilter ?? ''}
-                      onChange={(e) => setGlobalFilter(e.target.value)}
-                      className="search-input"
-                      placeholder={
-                        activeTab === 'families'
-                          ? t('searchFamilies')
-                          : activeTab === 'children'
-                          ? t('searchChildren')
-                          : t('searchParents')
-                      }
-                      style={{ marginBottom: 0 }}
-                    />
+                    {isMobile ? renderMobileSearchToggleButton() : renderDesktopSearchInput()}
 
                     <button
                       ref={sortButtonRef}
@@ -6686,6 +6798,8 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                   </div>
                 </div>
               </div>
+              {renderMobileSearchDrawer()}
+              </>
             ) : (
               <>
               <div className="controls-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
@@ -6698,48 +6812,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                     flexWrap: activeTab === 'contacts' ? 'nowrap' : 'wrap',
                   }}
                 >
-                  {activeTab === 'contacts' && isMobile ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const isExpanded = isMobileContactsSearchOpen || Boolean(globalFilter);
-                        if (isExpanded) {
-                          setGlobalFilter('');
-                          setIsMobileContactsSearchOpen(false);
-                          mobileContactsSearchInputRef.current?.blur();
-                        } else {
-                          setIsMobileContactsSearchOpen(true);
-                          requestAnimationFrame(() => {
-                            mobileContactsSearchInputRef.current?.focus();
-                          });
-                        }
-                      }}
-                      className={`secondary-button overview-mobile-search-btn ${isMobileContactsSearchOpen || Boolean(globalFilter) ? 'active' : ''}`}
-                      data-testid="overview-mobile-search-btn"
-                      title={t('search') || 'Suche'}
-                      aria-label={t('search') || 'Suche'}
-                      aria-expanded={isMobileContactsSearchOpen || Boolean(globalFilter)}
-                      aria-pressed={isMobileContactsSearchOpen || Boolean(globalFilter)}
-                    >
-                      <Search size={16} />
-                    </button>
-                  ) : (
-                    <input
-                      value={globalFilter ?? ''}
-                      onChange={(e) => setGlobalFilter(e.target.value)}
-                      className={`search-input ${activeTab === 'contacts' ? 'overview-search-input' : ''}`}
-                      placeholder={
-                        activeTab === 'employees'
-                          ? (t('searchEmployees') || 'Mitarbeiter suchen...')
-                          : activeTab === 'jobs'
-                          ? (t('searchJobs') || 'Jobs suchen...')
-                          : activeTab === 'members'
-                          ? t('searchMembers')
-                          : (t('search') || 'Suche')
-                      }
-                      style={{ marginBottom: 0 }}
-                    />
-                  )}
+                  {isMobile ? renderMobileSearchToggleButton() : renderDesktopSearchInput()}
 
                   {activeTab === 'employees' && canWriteEmployees && (
                     <button
@@ -6967,7 +7040,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                     </div>
                   )}
 
-                  <div id="cards-view-columns-slot" style={{ display: 'inline-flex', alignItems: 'center' }} />
+                  <div id="cards-view-columns-slot" style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 'auto' }} />
                 </div>
 
                 <div
@@ -6977,32 +7050,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                   <TableZoomControl />
                 </div>
               </div>
-              {activeTab === 'contacts' && isMobile && (
-                <div
-                  className={`overview-mobile-search-drawer ${isMobileContactsSearchOpen || Boolean(globalFilter) ? 'open' : ''}`}
-                  data-testid="overview-mobile-search-expanded"
-                  aria-hidden={!(isMobileContactsSearchOpen || Boolean(globalFilter))}
-                >
-                  <div className="overview-mobile-search-drawer-inner">
-                    <input
-                      ref={mobileContactsSearchInputRef}
-                      value={globalFilter ?? ''}
-                      onChange={(e) => setGlobalFilter(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Escape') {
-                          setGlobalFilter('');
-                          setIsMobileContactsSearchOpen(false);
-                          mobileContactsSearchInputRef.current?.blur();
-                        }
-                      }}
-                      className="search-input overview-search-input"
-                      placeholder={t('search') || 'Suche'}
-                      style={{ marginBottom: 0 }}
-                      tabIndex={isMobileContactsSearchOpen || Boolean(globalFilter) ? 0 : -1}
-                    />
-                  </div>
-                </div>
-              )}
+              {renderMobileSearchDrawer()}
               </>
             )
           );

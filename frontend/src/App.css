@@ -1544,6 +1544,11 @@ tr.family-group-row td {
       visibility 0s linear 0s !important;
   }
 
+  .mga-controls-container + .overview-mobile-search-drawer.open {
+    margin-top: 0 !important;
+    margin-bottom: 0.5rem !important;
+  }
+
   .overview-mobile-search-drawer-inner {
     overflow: hidden !important;
     display: flex !important;
