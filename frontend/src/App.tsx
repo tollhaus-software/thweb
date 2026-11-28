@@ -6,7 +6,7 @@ import './App.css';
 
 import { DataTable } from './components/Table/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, X, AlertCircle, ChevronLeft, ChevronRight, Plus, ArrowUpDown, Check, Eye, RefreshCw, Menu, Filter, Printer, Users, Search } from 'lucide-react';
+import { Undo, Redo, Calendar, Lock, Unlock, ArrowLeft, X, AlertCircle, ChevronLeft, ChevronRight, Plus, ArrowUpDown, Check, Eye, RefreshCw, Menu, Filter, Printer, Users, Search, MoreHorizontal, SlidersHorizontal } from 'lucide-react';
 import { GroupOverviewPrintModal } from './components/Print/GroupOverviewPrintModal';
 import { useGoogleLogin } from '@react-oauth/google';
 import { MultiValueListEditor, type MultiValueFlagConfig, type MultiValueEntry, type MultiValueItem, getEntryValue, isFlagActive, PHONE_TYPES, getPhoneTypeSymbol, getPhoneTypeLabel } from './components/Table/MultiValueListEditor';
@@ -1959,9 +1959,9 @@ const Dashboard: React.FC = () => {
   const lifecycleFilterButtonRef = React.useRef<HTMLButtonElement>(null);
   const [printMenuOpen, setPrintMenuOpen] = React.useState(false);
   const printButtonRef = React.useRef<HTMLButtonElement>(null);
-  const [printMgaMenuOpen, setPrintMgaMenuOpen] = React.useState(false);
-  const printMgaButtonRef = React.useRef<HTMLButtonElement>(null);
   const [groupPrintModalOpen, setGroupPrintModalOpen] = React.useState(false);
+  const [mgaMobileOverflowOpen, setMgaMobileOverflowOpen] = React.useState(false);
+  const mgaMobileOverflowBtnRef = React.useRef<HTMLButtonElement>(null);
 
   const isMainPageActive = React.useMemo(() => {
     return isExperimentActive('main_page', { user });
@@ -2426,6 +2426,7 @@ const Dashboard: React.FC = () => {
   const handleTabClick = React.useCallback((tab: typeof activeTab) => {
     setGlobalFilter('');
     setIsMobileSearchOpen(false);
+    setMgaMobileOverflowOpen(false);
     setReturnNav(null);
     setHighlightTarget(null);
     setActiveTab(tab);
@@ -6201,6 +6202,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
             if (!hasPermission('vaccination.status.manage') || (activeTab !== 'parents' && activeTab !== 'children')) {
               return null;
             }
+            const labelText = isMobile ? (t('vaccinationStatusShort') || 'Impf.') : t('vaccinationStatus');
             return (
               <div
                 className={`controls-right vaccination-controls-slot ${extraClass || ''}`}
@@ -6215,7 +6217,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: '0.35rem',
-                      padding: '0.4rem 0.75rem',
+                      padding: isMobile ? '0.4rem 0.6rem' : '0.4rem 0.75rem',
                       borderRadius: '4px',
                       background: 'var(--bg-surface)',
                       border: '1px solid var(--border)',
@@ -6232,7 +6234,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                     title="Klicken zum Sperren"
                   >
                     <Unlock size={15} color="var(--primary)" />
-                    <span>{t('vaccinationStatus')}</span>
+                    <span>{labelText}</span>
                   </button>
                 ) : (
                   <button
@@ -6243,7 +6245,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: '0.4rem',
-                      padding: '0.4rem 0.75rem',
+                      padding: isMobile ? '0.4rem 0.6rem' : '0.4rem 0.75rem',
                       borderRadius: '4px',
                       background: 'var(--bg-surface)',
                       border: '1px solid var(--border)',
@@ -6260,7 +6262,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                     title={t('showVaccinationStatus')}
                   >
                     <Lock size={15} color="var(--text-muted)" />
-                    <span>{t('vaccinationStatus')}</span>
+                    <span>{labelText}</span>
                   </button>
                 )}
               </div>
@@ -6355,31 +6357,196 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
               </div>
             ) : null;
 
+          const isMgaTab =
+            activeTab === 'families' ||
+            activeTab === 'parents' ||
+            activeTab === 'children' ||
+            activeTab === 'members' ||
+            activeTab === 'jobs';
+
+          const renderMgaMobileOverflowMenu = () => {
+            if (!isMobile || !isMgaTab) return null;
+            const isFamParChild = activeTab === 'families' || activeTab === 'parents' || activeTab === 'children';
+            return (
+              <>
+                <button
+                  ref={mgaMobileOverflowBtnRef}
+                  type="button"
+                  onClick={() => setMgaMobileOverflowOpen((prev) => !prev)}
+                  className={`secondary-button overview-mobile-search-btn mga-mobile-overflow-btn ${mgaMobileOverflowOpen ? 'active' : ''}`}
+                  data-testid="mga-mobile-overflow-btn"
+                  title="Weitere Optionen"
+                  aria-label="Weitere Optionen"
+                  aria-haspopup="menu"
+                  aria-expanded={mgaMobileOverflowOpen}
+                >
+                  <MoreHorizontal size={16} />
+                </button>
+                <CellPopover
+                  isOpen={mgaMobileOverflowOpen}
+                  onClose={() => setMgaMobileOverflowOpen(false)}
+                  anchorEl={mgaMobileOverflowBtnRef}
+                  width={220}
+                  minWidth={180}
+                >
+                  <div role="menu" style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      data-testid="mga-overflow-columns-btn"
+                      onClick={() => {
+                        setMgaMobileOverflowOpen(false);
+                        requestAnimationFrame(() => {
+                          window.dispatchEvent(new CustomEvent('thweb:open-columns-picker'));
+                        });
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        width: '100%',
+                        textAlign: 'left',
+                        gap: '0.6rem',
+                        padding: '0.55rem 0.65rem',
+                        fontSize: '0.9rem',
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                        borderRadius: '4px',
+                        border: 'none',
+                        background: 'transparent',
+                        color: 'var(--text)',
+                      }}
+                    >
+                      <SlidersHorizontal size={15} />
+                      <span>{t('columns')}</span>
+                    </button>
+
+                    {isFamParChild && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="family-sort-button-menu-item"
+                        data-testid="mga-overflow-sort-btn"
+                        onClick={() => {
+                          setMgaMobileOverflowOpen(false);
+                          requestAnimationFrame(() => {
+                            setSortPopoverOpen(true);
+                          });
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          width: '100%',
+                          textAlign: 'left',
+                          gap: '0.6rem',
+                          padding: '0.55rem 0.65rem',
+                          fontSize: '0.9rem',
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                          borderRadius: '4px',
+                          border: 'none',
+                          background: 'transparent',
+                          color: 'var(--text)',
+                        }}
+                      >
+                        <ArrowUpDown size={15} />
+                        <span>{t('sort')}: {getSortOptionLabel(familySortOrder)}</span>
+                      </button>
+                    )}
+
+                    {isFamParChild && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="add-family-button"
+                        data-testid="mga-overflow-add-family-btn"
+                        onClick={() => {
+                          setMgaMobileOverflowOpen(false);
+                          openAddFamily();
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          width: '100%',
+                          textAlign: 'left',
+                          gap: '0.6rem',
+                          padding: '0.55rem 0.65rem',
+                          fontSize: '0.9rem',
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                          borderRadius: '4px',
+                          border: 'none',
+                          background: 'transparent',
+                          color: 'var(--text)',
+                        }}
+                      >
+                        <Plus size={15} />
+                        <span>{t('addFamily')}</span>
+                      </button>
+                    )}
+
+                    {activeTab === 'jobs' && canWriteJobs && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="add-job-button"
+                        data-testid="mga-overflow-add-job-btn"
+                        onClick={() => {
+                          setMgaMobileOverflowOpen(false);
+                          setAddJobOpen(true);
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          width: '100%',
+                          textAlign: 'left',
+                          gap: '0.6rem',
+                          padding: '0.55rem 0.65rem',
+                          fontSize: '0.9rem',
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                          borderRadius: '4px',
+                          border: 'none',
+                          background: 'transparent',
+                          color: 'var(--text)',
+                        }}
+                      >
+                        <Plus size={15} />
+                        <span>{t('addJobBtn') || 'Job'}</span>
+                      </button>
+                    )}
+                  </div>
+                </CellPopover>
+              </>
+            );
+          };
+
           return !isLandingActive && activeTab !== 'main' && activeTab !== 'events' && activeTab !== 'eventsImport' && activeTab !== 'childcareFees' && activeTab !== 'childcareFeesAll' && activeTab !== 'audit' && activeTab !== 'admin' && activeTab !== 'kiosk' && activeTab !== 'dashboard' && activeTab !== 'dashboardTodos' && activeTab !== 'mealPlan' && activeTab !== 'mealAllergens' && activeTab !== 'hygieneDocument' && activeTab !== 'kochenHygiene' && activeTab !== 'volunteerAbsences' && (
             (activeTab === 'families' || activeTab === 'parents' || activeTab === 'children') ? (
               <>
               <div className="mga-controls-container">
-                {/* Row 1: Search, Sort, Filter, Zoom (desktop), and Impfstatus (desktop far right) */}
+                {/* Row 1: Search, Sort (desktop), Filter, Undo/Redo (mobile), Zoom (desktop), and Impfstatus / ... */}
                 <div className="controls-row mga-controls-row-1">
                   <div className="controls-left">
                     {isMobile ? renderMobileSearchToggleButton() : renderDesktopSearchInput()}
 
-                    <button
-                      ref={sortButtonRef}
-                      type="button"
-                      onClick={() => setSortPopoverOpen((prev) => !prev)}
-                      className="secondary-button family-sort-button"
-                      title={`${t('sort')}: ${getSortOptionLabel(familySortOrder)}`}
-                      aria-label={t('sortFamiliesTitle')}
-                    >
-                      <ArrowUpDown size={14} />
-                      <span className="family-sort-label">{t('sort')}: {getSortOptionLabel(familySortOrder)}</span>
-                    </button>
+                    {!isMobile && (
+                      <button
+                        ref={sortButtonRef}
+                        type="button"
+                        onClick={() => setSortPopoverOpen((prev) => !prev)}
+                        className="secondary-button family-sort-button"
+                        title={`${t('sort')}: ${getSortOptionLabel(familySortOrder)}`}
+                        aria-label={t('sortFamiliesTitle')}
+                      >
+                        <ArrowUpDown size={14} />
+                        <span className="family-sort-label">{t('sort')}: {getSortOptionLabel(familySortOrder)}</span>
+                      </button>
+                    )}
 
                     <CellPopover
                       isOpen={sortPopoverOpen}
                       onClose={() => setSortPopoverOpen(false)}
-                      anchorEl={sortButtonRef}
+                      anchorEl={isMobile ? mgaMobileOverflowBtnRef : sortButtonRef}
                       width={320}
                       minWidth={280}
                     >
@@ -6530,38 +6697,23 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                         </button>
                       </div>
 
-                    {/* Mobile Filter Button (same size as sort button, filter icon, opens popover) */}
+                    {/* Mobile Filter Button (same size as search button, filter icon, opens popover) */}
                     <button
                       ref={lifecycleFilterButtonRef}
                       type="button"
                       onClick={() => setLifecycleFilterPopoverOpen((prev) => !prev)}
-                      className="secondary-button lifecycle-filter-button mobile-only"
-                          title={`${t('filterLifecycle') || 'Filter'}: ${
-                            mgaLifecycleFilter === 'active'
-                              ? t('filterActive')
-                              : mgaLifecycleFilter === 'former'
-                              ? t('filterFormer')
-                              : t('filterAll')
-                          }`}
-                          aria-label={t('filterLifecycle') || 'Filter'}
-                          style={{
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            padding: '0.45rem',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            border: '1px solid var(--border)',
-                            background: mgaLifecycleFilter !== 'all' ? 'var(--primary-subtle, rgba(0, 100, 200, 0.08))' : 'var(--bg-surface)',
-                            color: mgaLifecycleFilter !== 'all' ? 'var(--primary)' : 'var(--text)',
-                            height: '34px',
-                            width: '34px',
-                            minWidth: '34px',
-                            boxSizing: 'border-box',
-                            flexShrink: 0,
-                          }}
-                        >
-                          <Filter size={14} />
-                        </button>
+                      className={`secondary-button overview-mobile-search-btn lifecycle-filter-button mobile-only ${lifecycleFilterPopoverOpen || mgaLifecycleFilter !== 'active' ? 'active' : ''}`}
+                      title={`${t('filterLifecycle') || 'Filter'}: ${
+                        mgaLifecycleFilter === 'active'
+                          ? t('filterActive')
+                          : mgaLifecycleFilter === 'former'
+                          ? t('filterFormer')
+                          : t('filterAll')
+                      }`}
+                      aria-label={t('filterLifecycle') || 'Filter'}
+                    >
+                      <Filter size={16} />
+                    </button>
 
                         <CellPopover
                           isOpen={lifecycleFilterPopoverOpen}
@@ -6625,6 +6777,35 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                           })}
                         </CellPopover>
 
+                    {isMobile && (
+                      <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                        <button
+                          onClick={handleUndo}
+                          disabled={undoStack.length === 0}
+                          className="secondary-button overview-mobile-search-btn"
+                          style={{
+                            opacity: undoStack.length === 0 ? 0.4 : 1,
+                            cursor: undoStack.length === 0 ? 'default' : 'pointer',
+                          }}
+                          title="Undo"
+                        >
+                          <Undo size={16} />
+                        </button>
+                        <button
+                          onClick={handleRedo}
+                          disabled={redoStack.length === 0}
+                          className="secondary-button overview-mobile-search-btn"
+                          style={{
+                            opacity: redoStack.length === 0 ? 0.4 : 1,
+                            cursor: redoStack.length === 0 ? 'default' : 'pointer',
+                          }}
+                          title="Redo"
+                        >
+                          <Redo size={16} />
+                        </button>
+                      </div>
+                    )}
+
                     <div className="table-zoom-control-container desktop-only">
                       <TableZoomControl />
                     </div>
@@ -6632,171 +6813,95 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
 
                   {/* Impfstatus on Row 1 (desktop only) */}
                   {renderVaccinationButton('desktop-only')}
+
+                  {/* Impfstatus and ... overflow menu on Row 1 (mobile only, far right) */}
+                  {isMobile && (
+                    <div className="mga-controls-row-1-right" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', marginLeft: 'auto', flexShrink: 0 }}>
+                      {renderVaccinationButton('mobile-only')}
+                      {renderMgaMobileOverflowMenu()}
+                    </div>
+                  )}
                 </div>
 
-                {/* Row 2: Familie hinzufügen & Undo/Redo on left, Impfstatus on mobile far right */}
-                <div className="controls-row mga-controls-row-2">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'nowrap' }}>
-                    <button
-                      type="button"
-                      onClick={openAddFamily}
-                      className="primary-button add-family-button"
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.35rem',
-                        padding: '0.45rem 0.85rem',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontWeight: 600,
-                        border: 'none',
-                        background: 'var(--primary)',
-                        color: 'var(--primary-contrast, #ffffff)',
-                        whiteSpace: 'nowrap',
-                        flexShrink: 0,
-                        height: '34px',
-                        boxSizing: 'border-box',
-                        fontSize: '0.85rem',
-                      }}
-                    >
-                      <Plus size={14} />
-                      <span>{t('addFamily')}</span>
-                    </button>
-
-                    <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                {/* Row 2 (desktop only): Familie hinzufügen & Undo/Redo on left */}
+                {!isMobile && (
+                  <div className="controls-row mga-controls-row-2">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'nowrap' }}>
                       <button
-                        onClick={handleUndo}
-                        disabled={undoStack.length === 0}
-                        className="easy-edit-button"
+                        type="button"
+                        onClick={openAddFamily}
+                        className="primary-button add-family-button"
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
-                          justifyContent: 'center',
-                          height: '34px',
-                          width: '34px',
-                          opacity: undoStack.length === 0 ? 0.4 : 1,
-                          cursor: undoStack.length === 0 ? 'default' : 'pointer',
-                          border: '1px solid var(--border)',
+                          gap: '0.35rem',
+                          padding: '0.45rem 0.85rem',
                           borderRadius: '4px',
-                          background: 'transparent',
-                          color: 'var(--text)',
-                        }}
-                        title="Undo"
-                      >
-                        <Undo size={16} />
-                      </button>
-                      <button
-                        onClick={handleRedo}
-                        disabled={redoStack.length === 0}
-                        className="easy-edit-button"
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          fontWeight: 600,
+                          border: 'none',
+                          background: 'var(--primary)',
+                          color: 'var(--primary-contrast, #ffffff)',
+                          whiteSpace: 'nowrap',
+                          flexShrink: 0,
                           height: '34px',
-                          width: '34px',
-                          opacity: redoStack.length === 0 ? 0.4 : 1,
-                          cursor: redoStack.length === 0 ? 'default' : 'pointer',
-                          border: '1px solid var(--border)',
-                          borderRadius: '4px',
-                          background: 'transparent',
-                          color: 'var(--text)',
+                          boxSizing: 'border-box',
+                          fontSize: '0.85rem',
                         }}
-                        title="Redo"
                       >
-                        <Redo size={16} />
+                        <Plus size={14} />
+                        <span>{t('addFamily')}</span>
                       </button>
-                    </div>
 
-                    {activeTab === 'families' && canPrintGroupOverview && (
-                      <div style={{ position: 'relative', display: 'inline-flex' }}>
+                      <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
                         <button
-                          ref={printMgaButtonRef}
-                          type="button"
-                          onClick={() => setPrintMgaMenuOpen((prev) => !prev)}
-                          className="secondary-button print-toolbar-button"
-                          data-testid="print-toolbar-button-mga"
-                          title={t('print') || 'Drucken'}
-                          aria-label={t('print') || 'Drucken'}
-                          aria-haspopup="menu"
-                          aria-expanded={printMgaMenuOpen}
+                          onClick={handleUndo}
+                          disabled={undoStack.length === 0}
+                          className="secondary-button"
                           style={{
                             display: 'inline-flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             height: '34px',
                             width: '34px',
-                            minWidth: '34px',
-                            padding: 0,
-                            borderRadius: '4px',
-                            cursor: 'pointer',
+                            opacity: undoStack.length === 0 ? 0.4 : 1,
+                            cursor: undoStack.length === 0 ? 'default' : 'pointer',
                             border: '1px solid var(--border)',
-                            background: 'var(--surface, #ffffff)',
-                            color: 'var(--text, #1f2937)',
+                            borderRadius: '4px',
+                            background: 'var(--bg-surface)',
+                            color: 'var(--text)',
                             boxSizing: 'border-box',
-                            flexShrink: 0,
                           }}
+                          title="Undo"
                         >
-                          <Printer size={16} />
+                          <Undo size={16} />
                         </button>
-
-                        <CellPopover
-                          isOpen={printMgaMenuOpen}
-                          onClose={() => setPrintMgaMenuOpen(false)}
-                          anchorEl={printMgaButtonRef}
-                          width={200}
-                          minWidth={180}
+                        <button
+                          onClick={handleRedo}
+                          disabled={redoStack.length === 0}
+                          className="secondary-button"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            height: '34px',
+                            width: '34px',
+                            opacity: redoStack.length === 0 ? 0.4 : 1,
+                            cursor: redoStack.length === 0 ? 'default' : 'pointer',
+                            border: '1px solid var(--border)',
+                            borderRadius: '4px',
+                            background: 'var(--bg-surface)',
+                            color: 'var(--text)',
+                            boxSizing: 'border-box',
+                          }}
+                          title="Redo"
                         >
-                          <div role="menu" style={{ padding: '0.25rem 0' }}>
-                            <button
-                              type="button"
-                              role="menuitem"
-                              data-testid="print-menu-item-group-overview-mga"
-                              onClick={() => {
-                                setPrintMgaMenuOpen(false);
-                                if (canReadFamiliesAll && families.length === 0) {
-                                  fetchFamilies();
-                                } else if (overviewFamilies.length === 0 && canReadOverview) {
-                                  fetchOverviewFamilies();
-                                }
-                                setGroupPrintModalOpen(true);
-                              }}
-                              style={{
-                                width: '100%',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.5rem',
-                                padding: '0.5rem 0.75rem',
-                                fontSize: '0.875rem',
-                                border: 'none',
-                                background: 'transparent',
-                                color: 'var(--text, #1e293b)',
-                                cursor: 'pointer',
-                                textAlign: 'left',
-                                borderRadius: '2px',
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.backgroundColor = 'var(--bg-hover, rgba(0, 0, 0, 0.04))';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.backgroundColor = 'transparent';
-                              }}
-                            >
-                              <Users size={16} />
-                              <span>{t('groupOverview') || 'Gruppenübersicht'}</span>
-                            </button>
-                          </div>
-                        </CellPopover>
+                          <Redo size={16} />
+                        </button>
                       </div>
-                    )}
+                    </div>
                   </div>
-
-                  {/* Impfstatus and Column Picker on Row 2 (mobile only, far right) */}
-                  <div className="mga-controls-row-2-right" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', marginLeft: 'auto' }}>
-                    {renderVaccinationButton('mobile-only')}
-                    <div id="cards-view-columns-slot" style={{ display: 'inline-flex', alignItems: 'center' }} />
-                  </div>
-                </div>
+                )}
               </div>
               {renderMobileSearchDrawer()}
               </>
@@ -6807,9 +6912,9 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                   className={`controls-left ${activeTab === 'contacts' ? 'overview-controls-left' : ''}`}
                   style={{
                     display: 'flex',
-                    gap: activeTab === 'contacts' ? '1.25rem' : '0.75rem',
+                    gap: activeTab === 'contacts' ? '1.25rem' : (isMobile ? '0.35rem' : '0.75rem'),
                     alignItems: 'center',
-                    flexWrap: activeTab === 'contacts' ? 'nowrap' : 'wrap',
+                    flexWrap: (activeTab === 'contacts' || isMobile) ? 'nowrap' : 'wrap',
                   }}
                 >
                   {isMobile ? renderMobileSearchToggleButton() : renderDesktopSearchInput()}
@@ -6842,7 +6947,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                     </button>
                   )}
 
-                  {activeTab === 'jobs' && canWriteJobs && (
+                  {activeTab === 'jobs' && canWriteJobs && !isMobile && (
                     <button
                       type="button"
                       onClick={() => setAddJobOpen(true)}
@@ -6994,11 +7099,11 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                   )}
 
                   {activeTab !== 'contacts' && (
-                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: isMobile ? '0.35rem' : '0.5rem', alignItems: 'center' }}>
                       <button
                         onClick={handleUndo}
                         disabled={undoStack.length === 0}
-                        className="easy-edit-button"
+                        className="secondary-button overview-mobile-search-btn"
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -7009,8 +7114,9 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                           cursor: undoStack.length === 0 ? 'default' : 'pointer',
                           border: '1px solid var(--border)',
                           borderRadius: '4px',
-                          background: 'transparent',
+                          background: 'var(--bg-surface)',
                           color: 'var(--text)',
+                          boxSizing: 'border-box',
                         }}
                         title="Undo"
                       >
@@ -7019,7 +7125,7 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                       <button
                         onClick={handleRedo}
                         disabled={redoStack.length === 0}
-                        className="easy-edit-button"
+                        className="secondary-button overview-mobile-search-btn"
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -7030,8 +7136,9 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                           cursor: redoStack.length === 0 ? 'default' : 'pointer',
                           border: '1px solid var(--border)',
                           borderRadius: '4px',
-                          background: 'transparent',
+                          background: 'var(--bg-surface)',
                           color: 'var(--text)',
+                          boxSizing: 'border-box',
                         }}
                         title="Redo"
                       >
@@ -7040,7 +7147,13 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                     </div>
                   )}
 
-                  <div id="cards-view-columns-slot" style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 'auto' }} />
+                  {isMobile && isMgaTab ? (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 'auto', flexShrink: 0 }}>
+                      {renderMgaMobileOverflowMenu()}
+                    </div>
+                  ) : (
+                    <div id="cards-view-columns-slot" style={{ display: 'inline-flex', alignItems: 'center', marginLeft: 'auto' }} />
+                  )}
                 </div>
 
                 <div

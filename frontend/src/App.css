@@ -1445,7 +1445,8 @@ tr.family-group-row td {
 
   .mga-controls-row-1 .controls-left {
     gap: 0.35rem !important;
-    width: 100% !important;
+    width: auto !important;
+    flex: 1 1 auto !important;
     flex-wrap: nowrap !important;
   }
 

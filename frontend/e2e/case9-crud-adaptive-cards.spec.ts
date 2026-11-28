@@ -150,20 +150,17 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
       expect(Math.abs(fnBox.x - emailBox.x)).toBeLessThan(1.5);
     }
 
-    // Verify "Add family" is below the search toggle button on mobile, and clicking search button or Ctrl+F opens the search drawer
-    const parentsAddFamilyBtn = page.getByRole('button', { name: 'Familie hinzufügen' });
+    // Verify streamlined single-row mobile toolbar on Parents tab:
+    // Left: Search icon, Filter icon, Undo, Redo
+    // Right: Impf. button, ... overflow menu button (containing Spalten, Sortierung, Familie hinzufügen)
     const parentsSearchBtn = page.getByTestId('overview-mobile-search-btn');
-    await expect(parentsAddFamilyBtn).toBeVisible();
+    const parentsFilterBtn = page.locator('.lifecycle-filter-button.mobile-only');
+    const parentsOverflowBtn = page.getByTestId('mga-mobile-overflow-btn');
     await expect(parentsSearchBtn).toBeVisible();
+    await expect(parentsFilterBtn).toBeVisible();
+    await expect(parentsOverflowBtn).toBeVisible();
     await expect(parentsSearchBtn).toHaveAttribute('aria-expanded', 'false');
     await expect(page.locator('.search-input')).not.toBeVisible();
-    const pAddBox = await parentsAddFamilyBtn.boundingBox();
-    const pSearchBtnBox = await parentsSearchBtn.boundingBox();
-    expect(pAddBox).not.toBeNull();
-    expect(pSearchBtnBox).not.toBeNull();
-    if (pAddBox && pSearchBtnBox) {
-      expect(pAddBox.y).toBeGreaterThan(pSearchBtnBox.y);
-    }
 
     // Pressing Ctrl+F on mobile expands the search drawer and focuses the input
     await page.keyboard.press('Control+f');
@@ -175,25 +172,33 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     await expect(parentsSearchBtn).toHaveAttribute('aria-expanded', 'false');
     await expect(searchInput).not.toBeVisible();
 
-    // Verify Impfstatus button label says "Impfstatus"
-    const impfBtn = page.getByRole('button', { name: 'Impfstatus' });
+    // Verify Impfstatus button label is abbreviated "Impf." on mobile
+    const impfBtn = page.locator('.vaccination-status-btn.mobile-only, .vaccination-controls-slot.mobile-only .vaccination-status-btn');
     await expect(impfBtn).toBeVisible();
-    await expect(impfBtn).toHaveText('Impfstatus');
+    await expect(impfBtn).toHaveText('Impf.');
 
-    // In cards view: verify "Columns" is to the right of the "Impfstatus" button
-    const parentsColumnsBtn = page.getByRole('button', { name: 'Spalten' });
-    await expect(parentsColumnsBtn).toBeVisible();
+    // In cards view: verify "..." overflow button is to the right of the "Impf." button on the same single row
+    const pSearchBtnBox = await parentsSearchBtn.boundingBox();
     const impfBox = await impfBtn.boundingBox();
-    const pColBox = await parentsColumnsBtn.boundingBox();
+    const pOverflowBox = await parentsOverflowBtn.boundingBox();
+    expect(pSearchBtnBox).not.toBeNull();
     expect(impfBox).not.toBeNull();
-    expect(pColBox).not.toBeNull();
-    if (impfBox && pColBox) {
-      expect(pColBox.x).toBeGreaterThan(impfBox.x);
-      expect(Math.abs(pColBox.y - impfBox.y)).toBeLessThan(6);
+    expect(pOverflowBox).not.toBeNull();
+    if (pSearchBtnBox && impfBox && pOverflowBox) {
+      expect(pOverflowBox.x).toBeGreaterThan(impfBox.x);
+      expect(Math.abs(pOverflowBox.y - impfBox.y)).toBeLessThan(6);
+      expect(Math.abs(pSearchBtnBox.y - impfBox.y)).toBeLessThan(6);
     }
 
-    // Test opening column selector on mobile
-    await parentsColumnsBtn.click();
+    // Test opening "..." overflow menu and then column selector on mobile
+    await parentsOverflowBtn.click();
+    const overflowSheet = page.locator('.cell-popover-bottom-sheet');
+    await expect(overflowSheet).toBeVisible();
+    await expect(page.getByTestId('mga-overflow-columns-btn')).toBeVisible();
+    await expect(page.getByTestId('mga-overflow-sort-btn')).toBeVisible();
+    await expect(page.getByTestId('mga-overflow-add-family-btn')).toBeVisible();
+    await page.getByTestId('mga-overflow-columns-btn').click();
+
     const colSheet = page.locator('.cell-popover-bottom-sheet');
     await expect(colSheet).toBeVisible();
     await expect(colSheet).toContainText(/Spalten.*ausblenden/i);
@@ -243,31 +248,24 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     await expect(childrenTab).toHaveClass(/active/);
     await page.waitForLoadState('networkidle');
 
-    // Verify "Add family" is below the search toggle button in Children tab
-    const childrenAddFamilyBtn = page.getByRole('button', { name: 'Familie hinzufügen' });
+    // In cards view: verify "..." overflow button is to the right of the "Impf." button on the same single row in Children tab
     const cSearchBtn = page.getByTestId('overview-mobile-search-btn');
-    await expect(childrenAddFamilyBtn).toBeVisible();
+    const cImpfBtn = page.locator('.vaccination-controls-slot.mobile-only .vaccination-status-btn');
+    const childrenOverflowBtn = page.getByTestId('mga-mobile-overflow-btn');
     await expect(cSearchBtn).toBeVisible();
-    const cAddBox = await childrenAddFamilyBtn.boundingBox();
-    const cSearchBox = await cSearchBtn.boundingBox();
-    expect(cAddBox).not.toBeNull();
-    expect(cSearchBox).not.toBeNull();
-    if (cAddBox && cSearchBox) {
-      expect(cAddBox.y).toBeGreaterThan(cSearchBox.y);
-    }
-
-    // In cards view: verify "Columns" is to the right of the "Impfstatus" button in Children tab
-    const cImpfBtn = page.getByRole('button', { name: 'Impfstatus' });
-    const childrenColumnsBtn = page.getByRole('button', { name: 'Spalten' });
     await expect(cImpfBtn).toBeVisible();
-    await expect(childrenColumnsBtn).toBeVisible();
+    await expect(cImpfBtn).toHaveText('Impf.');
+    await expect(childrenOverflowBtn).toBeVisible();
+    const cSearchBox = await cSearchBtn.boundingBox();
     const cImpfBox = await cImpfBtn.boundingBox();
-    const cColBox = await childrenColumnsBtn.boundingBox();
+    const cOverflowBox = await childrenOverflowBtn.boundingBox();
+    expect(cSearchBox).not.toBeNull();
     expect(cImpfBox).not.toBeNull();
-    expect(cColBox).not.toBeNull();
-    if (cImpfBox && cColBox) {
-      expect(cColBox.x).toBeGreaterThan(cImpfBox.x);
-      expect(Math.abs(cColBox.y - cImpfBox.y)).toBeLessThan(6);
+    expect(cOverflowBox).not.toBeNull();
+    if (cSearchBox && cImpfBox && cOverflowBox) {
+      expect(cOverflowBox.x).toBeGreaterThan(cImpfBox.x);
+      expect(Math.abs(cOverflowBox.y - cImpfBox.y)).toBeLessThan(6);
+      expect(Math.abs(cSearchBox.y - cImpfBox.y)).toBeLessThan(6);
     }
 
     // Verify child row renders as a card
@@ -379,22 +377,19 @@ test.describe('Test Case 9: Adaptive Cards & Bottom-Sheet Popovers for Parents, 
     await expect(familiesTab).toHaveClass(/active/);
     await page.waitForLoadState('networkidle');
 
-    // Verify "Add family" is below the search toggle button in Families tab
-    const familiesAddFamilyBtn = page.getByRole('button', { name: 'Familie hinzufügen' });
+    // Verify single-row toolbar in Families tab on mobile (and no accidental Print button)
     const fSearchBtn = page.getByTestId('overview-mobile-search-btn');
-    await expect(familiesAddFamilyBtn).toBeVisible();
+    const familiesOverflowBtn = page.getByTestId('mga-mobile-overflow-btn');
     await expect(fSearchBtn).toBeVisible();
-    const fAddBox = await familiesAddFamilyBtn.boundingBox();
+    await expect(familiesOverflowBtn).toBeVisible();
+    await expect(page.getByTestId('print-toolbar-button-mga')).toHaveCount(0);
     const fSearchBox = await fSearchBtn.boundingBox();
-    expect(fAddBox).not.toBeNull();
+    const fOverflowBox = await familiesOverflowBtn.boundingBox();
     expect(fSearchBox).not.toBeNull();
-    if (fAddBox && fSearchBox) {
-      expect(fAddBox.y).toBeGreaterThan(fSearchBox.y);
+    expect(fOverflowBox).not.toBeNull();
+    if (fSearchBox && fOverflowBox) {
+      expect(Math.abs(fOverflowBox.y - fSearchBox.y)).toBeLessThan(6);
     }
-
-    // In cards view: verify "Columns" button is visible in controls row
-    const familiesColumnsBtn = page.getByRole('button', { name: 'Spalten' });
-    await expect(familiesColumnsBtn).toBeVisible();
 
     // Verify families table renders family row as a card
     const famRow = page.locator('.families-table tbody tr', { hasText: 'Müller' });

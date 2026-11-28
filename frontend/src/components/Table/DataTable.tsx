@@ -82,6 +82,12 @@ export function DataTable<TData>({
     setCardsSlotEl(document.getElementById('cards-view-columns-slot'));
   }, []);
 
+  useEffect(() => {
+    const handleOpenColumns = () => setIsOpen(true);
+    window.addEventListener('thweb:open-columns-picker', handleOpenColumns);
+    return () => window.removeEventListener('thweb:open-columns-picker', handleOpenColumns);
+  }, []);
+
   const table = useReactTable({
     data,
     columns,
