@@ -2456,6 +2456,8 @@ const Dashboard: React.FC = () => {
   const [isP2LastNameDirty, setIsP2LastNameDirty] = React.useState(false);
 
   const [addChildOpen, setAddChildOpen] = React.useState(false);
+  const [selectFamilyForChildOpen, setSelectFamilyForChildOpen] = React.useState(false);
+  const [selectFamilyForChildFilter, setSelectFamilyForChildFilter] = React.useState('');
   const [newChildFirstName, setNewChildFirstName] = React.useState('');
   const [newChildLastName, setNewChildLastName] = React.useState('');
   const [newChildBirthDate, setNewChildBirthDate] = React.useState('');
@@ -3608,17 +3610,18 @@ const Dashboard: React.FC = () => {
         setAddParentOpen(false);
         setAddFamilyOpen(false);
         setAddChildOpen(false);
+        setSelectFamilyForChildOpen(false);
         setAddEmployeeOpen(false);
         setAddJobOpen(false);
       }
     };
-    if (addParentOpen || addFamilyOpen || addChildOpen || addEmployeeOpen || addJobOpen) {
+    if (addParentOpen || addFamilyOpen || addChildOpen || selectFamilyForChildOpen || addEmployeeOpen || addJobOpen) {
       window.addEventListener('keydown', handleKeyDown);
     }
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [addParentOpen, addFamilyOpen, addChildOpen, addEmployeeOpen, addJobOpen]);
+  }, [addParentOpen, addFamilyOpen, addChildOpen, selectFamilyForChildOpen, addEmployeeOpen, addJobOpen]);
 
   const openAddParent = (familyId: string, familyName: string) => {
     setTargetFamily({ id: familyId, name: familyName });
@@ -3691,6 +3694,11 @@ const Dashboard: React.FC = () => {
       .catch((err) => alert(err.message));
   };
 
+  const openSelectFamilyForChild = () => {
+    setSelectFamilyForChildFilter('');
+    setSelectFamilyForChildOpen(true);
+  };
+
   const openAddChild = (familyId: string, familyName: string) => {
     setTargetFamily({ id: familyId, name: familyName });
     setNewChildFirstName('');
@@ -3742,6 +3750,7 @@ const Dashboard: React.FC = () => {
     if (canReadMembers) fetchMembers();
     if (canReadOverview) fetchOverviewFamilies();
         setAddChildOpen(false);
+        setHighlightTarget({ id: newChildId, key: Date.now() });
       })
       .catch((err) => alert(err.message));
   };
@@ -6455,34 +6464,65 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                     )}
 
                     {isFamParChild && (
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="add-family-button"
-                        data-testid="mga-overflow-add-family-btn"
-                        onClick={() => {
-                          setMgaMobileOverflowOpen(false);
-                          openAddFamily();
-                        }}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          width: '100%',
-                          textAlign: 'left',
-                          gap: '0.6rem',
-                          padding: '0.55rem 0.65rem',
-                          fontSize: '0.9rem',
-                          fontWeight: 500,
-                          cursor: 'pointer',
-                          borderRadius: '4px',
-                          border: 'none',
-                          background: 'transparent',
-                          color: 'var(--text)',
-                        }}
-                      >
-                        <Plus size={15} />
-                        <span>{t('addFamily')}</span>
-                      </button>
+                      activeTab === 'children' ? (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="add-child-button"
+                          data-testid="mga-overflow-add-child-btn"
+                          onClick={() => {
+                            setMgaMobileOverflowOpen(false);
+                            openSelectFamilyForChild();
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            width: '100%',
+                            textAlign: 'left',
+                            gap: '0.6rem',
+                            padding: '0.55rem 0.65rem',
+                            fontSize: '0.9rem',
+                            fontWeight: 500,
+                            cursor: 'pointer',
+                            borderRadius: '4px',
+                            border: 'none',
+                            background: 'transparent',
+                            color: 'var(--text)',
+                          }}
+                        >
+                          <Plus size={15} />
+                          <span>{t('addChild')}</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="add-family-button"
+                          data-testid="mga-overflow-add-family-btn"
+                          onClick={() => {
+                            setMgaMobileOverflowOpen(false);
+                            openAddFamily();
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            width: '100%',
+                            textAlign: 'left',
+                            gap: '0.6rem',
+                            padding: '0.55rem 0.65rem',
+                            fontSize: '0.9rem',
+                            fontWeight: 500,
+                            cursor: 'pointer',
+                            borderRadius: '4px',
+                            border: 'none',
+                            background: 'transparent',
+                            color: 'var(--text)',
+                          }}
+                        >
+                          <Plus size={15} />
+                          <span>{t('addFamily')}</span>
+                        </button>
+                      )
                     )}
 
                     {activeTab === 'jobs' && canWriteJobs && (
@@ -6855,35 +6895,63 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
                   )}
                 </div>
 
-                {/* Row 2 (desktop only): Familie hinzufügen & Undo/Redo on left */}
+                {/* Row 2 (desktop only): Familie hinzufügen / Kind hinzufügen & Undo/Redo on left */}
                 {!isMobile && (
                   <div className="controls-row mga-controls-row-2">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'nowrap' }}>
-                      <button
-                        type="button"
-                        onClick={openAddFamily}
-                        className="primary-button add-family-button"
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '0.35rem',
-                          padding: '0.45rem 0.85rem',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontWeight: 600,
-                          border: 'none',
-                          background: 'var(--primary)',
-                          color: 'var(--primary-contrast, #ffffff)',
-                          whiteSpace: 'nowrap',
-                          flexShrink: 0,
-                          height: '34px',
-                          boxSizing: 'border-box',
-                          fontSize: '0.85rem',
-                        }}
-                      >
-                        <Plus size={14} />
-                        <span>{t('addFamily')}</span>
-                      </button>
+                      {activeTab === 'children' ? (
+                        <button
+                          type="button"
+                          onClick={openSelectFamilyForChild}
+                          className="primary-button add-child-button"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.35rem',
+                            padding: '0.45rem 0.85rem',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                            border: 'none',
+                            background: 'var(--primary)',
+                            color: 'var(--primary-contrast, #ffffff)',
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0,
+                            height: '34px',
+                            boxSizing: 'border-box',
+                            fontSize: '0.85rem',
+                          }}
+                        >
+                          <Plus size={14} />
+                          <span>{t('addChild')}</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={openAddFamily}
+                          className="primary-button add-family-button"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.35rem',
+                            padding: '0.45rem 0.85rem',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                            border: 'none',
+                            background: 'var(--primary)',
+                            color: 'var(--primary-contrast, #ffffff)',
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0,
+                            height: '34px',
+                            boxSizing: 'border-box',
+                            fontSize: '0.85rem',
+                          }}
+                        >
+                          <Plus size={14} />
+                          <span>{t('addFamily')}</span>
+                        </button>
+                      )}
 
                       <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
                         <button
@@ -7657,6 +7725,198 @@ function sortFamilyBlocks<T extends { id: string; family_name: string; originalF
           </div>
         </div>
       )}
+
+      {/* Select Family For Child Modal */}
+      {selectFamilyForChildOpen && (() => {
+        const filterQuery = selectFamilyForChildFilter.trim().toLowerCase();
+        const familyItems = families.map((f) => {
+          const familyName = getFamilyName(f);
+          const sortedParents = [...(f.parents || [])].sort((a, b) => {
+            const cmp = (a.first_name || '').localeCompare(b.first_name || '', CURRENT_LOCALE);
+            if (cmp !== 0) return cmp;
+            return (a.last_name || '').localeCompare(b.last_name || '', CURRENT_LOCALE);
+          });
+          const parentGivenNames = sortedParents
+            .map((p) => (p.first_name || '').trim())
+            .filter(Boolean)
+            .join(', ');
+          const row1Text = parentGivenNames ? `${familyName} (${parentGivenNames})` : familyName;
+
+          const sortedChildren = [...(f.children || [])].sort((a, b) => {
+            const cmp = compareBirthDates(a.birth_date, b.birth_date);
+            if (cmp !== 0) return cmp;
+            return (a.first_name || '').localeCompare(b.first_name || '', CURRENT_LOCALE);
+          });
+          const childGivenNames = sortedChildren
+            .map((c) => (c.first_name || '').trim())
+            .filter(Boolean)
+            .join(', ');
+          const row2Text = childGivenNames;
+
+          return {
+            id: f.id,
+            family_name: familyName,
+            originalFamily: f,
+            row1Text,
+            row2Text,
+          };
+        });
+
+        const sortedFamilyItems = sortFamilyBlocks(familyItems, familySortOrder, CURRENT_LOCALE);
+        const filteredFamilyItems = filterQuery
+          ? sortedFamilyItems.filter((item) => {
+              const allText = `${item.row1Text} ${item.row2Text}`.toLowerCase();
+              return allText.includes(filterQuery);
+            })
+          : sortedFamilyItems;
+
+        return (
+          <div className="modal-overlay">
+            <div className="modal-container select-family-for-child-modal" data-testid="select-family-for-child-modal">
+              <h2>{t('selectFamilyForNewChild')}</h2>
+              <div className="modal-form-group" style={{ marginBottom: '0.75rem' }}>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <Search
+                    size={16}
+                    style={{
+                      position: 'absolute',
+                      left: '0.75rem',
+                      color: 'var(--text-muted)',
+                      pointerEvents: 'none',
+                    }}
+                  />
+                  <input
+                    id="select-family-filter-input"
+                    data-testid="select-family-filter-input"
+                    type="text"
+                    value={selectFamilyForChildFilter}
+                    onChange={(e) => setSelectFamilyForChildFilter(e.target.value)}
+                    placeholder={t('filterFamiliesPlaceholder') || t('searchFamilies')}
+                    style={{ paddingLeft: '2.25rem', paddingRight: selectFamilyForChildFilter ? '2rem' : '0.875rem' }}
+                    autoFocus
+                  />
+                  {selectFamilyForChildFilter && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectFamilyForChildFilter('')}
+                      aria-label={t('dismiss')}
+                      style={{
+                        position: 'absolute',
+                        right: '0.5rem',
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '4px',
+                        color: 'var(--text-muted)',
+                      }}
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div
+                className="select-family-list"
+                data-testid="select-family-list"
+                style={{
+                  maxHeight: '340px',
+                  overflowY: 'auto',
+                  border: '1px solid var(--border)',
+                  borderRadius: '6px',
+                  background: 'var(--bg-surface)',
+                }}
+              >
+                {filteredFamilyItems.length === 0 ? (
+                  <div
+                    style={{
+                      padding: '1.25rem',
+                      textAlign: 'center',
+                      color: 'var(--text-muted)',
+                      fontSize: '0.9rem',
+                    }}
+                  >
+                    {t('noFamiliesFound')}
+                  </div>
+                ) : (
+                  filteredFamilyItems.map((item, idx) => (
+                    <div
+                      key={item.id}
+                      role="button"
+                      tabIndex={0}
+                      className="select-family-list-item"
+                      data-testid="select-family-list-item"
+                      data-family-id={item.id}
+                      onClick={() => {
+                        setSelectFamilyForChildOpen(false);
+                        openAddChild(item.id, item.family_name);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setSelectFamilyForChildOpen(false);
+                          openAddChild(item.id, item.family_name);
+                        }
+                      }}
+                      style={{
+                        padding: '0.6rem 0.85rem',
+                        borderBottom: idx < filteredFamilyItems.length - 1 ? '1px solid var(--border)' : 'none',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.15rem',
+                        transition: 'background-color 0.12s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }}
+                    >
+                      <div
+                        className="select-family-row-1"
+                        data-testid="select-family-row-1"
+                        style={{
+                          fontSize: '0.95rem',
+                          fontWeight: 500,
+                          color: 'var(--text-h)',
+                        }}
+                      >
+                        {item.row1Text}
+                      </div>
+                      <div
+                        className="select-family-row-2"
+                        data-testid="select-family-row-2"
+                        style={{
+                          fontSize: '0.82rem',
+                          color: 'var(--text-secondary)',
+                          minHeight: '1.1em',
+                        }}
+                      >
+                        {item.row2Text}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="cancel-btn"
+                  onClick={() => setSelectFamilyForChildOpen(false)}
+                >
+                  {t('cancel')}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Add Child Modal */}
       {addChildOpen && targetFamily && (
